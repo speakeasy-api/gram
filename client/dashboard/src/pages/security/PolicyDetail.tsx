@@ -25,11 +25,9 @@ import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import {
-  invalidateAllRiskListPolicies,
-  useRiskCreatePolicyMutation,
-  useRiskPoliciesUpdateMutation,
-} from "@gram/client/react-query/index.js";
+import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
+import { invalidateAllRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import { useRiskPoliciesUpdateMutation } from "@gram/client/react-query/riskPoliciesUpdate.js";
 import {
   invalidateAllRiskPoliciesGet,
   useRiskPoliciesGet,

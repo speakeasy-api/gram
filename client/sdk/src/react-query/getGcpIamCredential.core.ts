@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { externalCredentialsGetGcpIam } from "../funcs/externalCredentialsGetGcpIam.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GcpIamCredential } from "../models/components/gcpiamcredential.js";
+import {
+  GetGcpIamCredentialRequest,
+  GetGcpIamCredentialSecurity,
+} from "../models/operations/getgcpiamcredential.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetGcpIamCredentialQueryData = components.GcpIamCredential;
+export type GetGcpIamCredentialQueryData = GcpIamCredential;
 
 export function prefetchGetGcpIamCredential(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetGcpIamCredentialRequest,
-  security?: operations.GetGcpIamCredentialSecurity | undefined,
+  request: GetGcpIamCredentialRequest,
+  security?: GetGcpIamCredentialSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGetGcpIamCredential(
 
 export function buildGetGcpIamCredentialQuery(
   client$: GramCore,
-  request: operations.GetGcpIamCredentialRequest,
-  security?: operations.GetGcpIamCredentialSecurity | undefined,
+  request: GetGcpIamCredentialRequest,
+  security?: GetGcpIamCredentialSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

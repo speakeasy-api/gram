@@ -23,12 +23,12 @@ import { UpdatedAt } from "@/components/updated-at";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useRoutes } from "@/routes";
 import { Assistant } from "@gram/client/models/components/assistant.js";
+import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
 import {
   invalidateAllAssistantsList,
-  useAssistantsDeleteMutation,
   useAssistantsList,
-  useGetPeriodUsage,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/assistantsList.js";
+import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, Boxes, Cpu, Info, Plus } from "lucide-react";

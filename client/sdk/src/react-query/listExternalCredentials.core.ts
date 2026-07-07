@@ -11,17 +11,20 @@ import { GramCore } from "../core.js";
 import { externalCredentialsList } from "../funcs/externalCredentialsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListExternalCredentialsResult } from "../models/components/listexternalcredentialsresult.js";
+import {
+  ListExternalCredentialsRequest,
+  ListExternalCredentialsSecurity,
+  Provider,
+} from "../models/operations/listexternalcredentials.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListExternalCredentialsQueryData =
-  components.ListExternalCredentialsResult;
+export type ListExternalCredentialsQueryData = ListExternalCredentialsResult;
 
 export function prefetchListExternalCredentials(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListExternalCredentialsRequest | undefined,
-  security?: operations.ListExternalCredentialsSecurity | undefined,
+  request?: ListExternalCredentialsRequest | undefined,
+  security?: ListExternalCredentialsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +39,8 @@ export function prefetchListExternalCredentials(
 
 export function buildListExternalCredentialsQuery(
   client$: GramCore,
-  request?: operations.ListExternalCredentialsRequest | undefined,
-  security?: operations.ListExternalCredentialsSecurity | undefined,
+  request?: ListExternalCredentialsRequest | undefined,
+  security?: ListExternalCredentialsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -76,7 +79,7 @@ export function buildListExternalCredentialsQuery(
 
 export function queryKeyListExternalCredentials(
   parameters: {
-    provider?: operations.Provider | undefined;
+    provider?: Provider | undefined;
     gramSession?: string | undefined;
   },
 ): QueryKey {

@@ -18,10 +18,14 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListExternalCredentialsRequest,
+  ListExternalCredentialsSecurity,
+  Provider,
+} from "../models/operations/listexternalcredentials.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +46,7 @@ export {
 };
 
 export type ListExternalCredentialsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +63,8 @@ export type ListExternalCredentialsQueryError =
  * List the organization's external credentials (provider-independent summary). Optionally filter by provider. Requires org:read.
  */
 export function useListExternalCredentials(
-  request?: operations.ListExternalCredentialsRequest | undefined,
-  security?: operations.ListExternalCredentialsSecurity | undefined,
+  request?: ListExternalCredentialsRequest | undefined,
+  security?: ListExternalCredentialsSecurity | undefined,
   options?: QueryHookOptions<
     ListExternalCredentialsQueryData,
     ListExternalCredentialsQueryError
@@ -88,8 +92,8 @@ export function useListExternalCredentials(
  * List the organization's external credentials (provider-independent summary). Optionally filter by provider. Requires org:read.
  */
 export function useListExternalCredentialsSuspense(
-  request?: operations.ListExternalCredentialsRequest | undefined,
-  security?: operations.ListExternalCredentialsSecurity | undefined,
+  request?: ListExternalCredentialsRequest | undefined,
+  security?: ListExternalCredentialsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListExternalCredentialsQueryData,
     ListExternalCredentialsQueryError
@@ -114,7 +118,7 @@ export function setListExternalCredentialsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      provider?: operations.Provider | undefined;
+      provider?: Provider | undefined;
       gramSession?: string | undefined;
     },
   ],
@@ -129,7 +133,7 @@ export function invalidateListExternalCredentials(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      provider?: operations.Provider | undefined;
+      provider?: Provider | undefined;
       gramSession?: string | undefined;
     }]
   >,

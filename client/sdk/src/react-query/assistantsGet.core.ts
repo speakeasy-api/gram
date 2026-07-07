@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { assistantsGet } from "../funcs/assistantsGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { Assistant } from "../models/components/assistant.js";
+import {
+  GetAssistantRequest,
+  GetAssistantSecurity,
+} from "../models/operations/getassistant.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AssistantsGetQueryData = components.Assistant;
+export type AssistantsGetQueryData = Assistant;
 
 export function prefetchAssistantsGet(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetAssistantRequest,
-  security?: operations.GetAssistantSecurity | undefined,
+  request: GetAssistantRequest,
+  security?: GetAssistantSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchAssistantsGet(
 
 export function buildAssistantsGetQuery(
   client$: GramCore,
-  request: operations.GetAssistantRequest,
-  security?: operations.GetAssistantSecurity | undefined,
+  request: GetAssistantRequest,
+  security?: GetAssistantSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

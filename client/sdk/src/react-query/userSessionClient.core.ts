@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { userSessionClientsGet } from "../funcs/userSessionClientsGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { UserSessionClient } from "../models/components/usersessionclient.js";
+import {
+  GetUserSessionClientRequest,
+  GetUserSessionClientSecurity,
+} from "../models/operations/getusersessionclient.js";
 import { unwrapAsync } from "../types/fp.js";
-export type UserSessionClientQueryData = components.UserSessionClient;
+export type UserSessionClientQueryData = UserSessionClient;
 
 export function prefetchUserSessionClient(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetUserSessionClientRequest,
-  security?: operations.GetUserSessionClientSecurity | undefined,
+  request: GetUserSessionClientRequest,
+  security?: GetUserSessionClientSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchUserSessionClient(
 
 export function buildUserSessionClientQuery(
   client$: GramCore,
-  request: operations.GetUserSessionClientRequest,
-  security?: operations.GetUserSessionClientSecurity | undefined,
+  request: GetUserSessionClientRequest,
+  security?: GetUserSessionClientSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

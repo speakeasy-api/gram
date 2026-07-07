@@ -24,10 +24,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListOrganizationRemoteSessionClientSessionsRequest,
+  ListOrganizationRemoteSessionClientSessionsSecurity,
+} from "../models/operations/listorganizationremotesessionclientsessions.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -60,7 +63,7 @@ export {
 };
 
 export type OrganizationRemoteSessionClientSessionsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -77,10 +80,8 @@ export type OrganizationRemoteSessionClientSessionsQueryError =
  * List the remote_sessions minted against a remote_session_client in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned. Requires org:read.
  */
 export function useOrganizationRemoteSessionClientSessions(
-  request: operations.ListOrganizationRemoteSessionClientSessionsRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientSessionsSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientSessionsRequest,
+  security?: ListOrganizationRemoteSessionClientSessionsSecurity | undefined,
   options?: QueryHookOptions<
     OrganizationRemoteSessionClientSessionsQueryData,
     OrganizationRemoteSessionClientSessionsQueryError
@@ -108,10 +109,8 @@ export function useOrganizationRemoteSessionClientSessions(
  * List the remote_sessions minted against a remote_session_client in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned. Requires org:read.
  */
 export function useOrganizationRemoteSessionClientSessionsSuspense(
-  request: operations.ListOrganizationRemoteSessionClientSessionsRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientSessionsSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientSessionsRequest,
+  security?: ListOrganizationRemoteSessionClientSessionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     OrganizationRemoteSessionClientSessionsQueryData,
     OrganizationRemoteSessionClientSessionsQueryError
@@ -139,10 +138,8 @@ export function useOrganizationRemoteSessionClientSessionsSuspense(
  * List the remote_sessions minted against a remote_session_client in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned. Requires org:read.
  */
 export function useOrganizationRemoteSessionClientSessionsInfinite(
-  request: operations.ListOrganizationRemoteSessionClientSessionsRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientSessionsSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientSessionsRequest,
+  security?: ListOrganizationRemoteSessionClientSessionsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     OrganizationRemoteSessionClientSessionsInfiniteQueryData,
     OrganizationRemoteSessionClientSessionsQueryError
@@ -184,10 +181,8 @@ export function useOrganizationRemoteSessionClientSessionsInfinite(
  * List the remote_sessions minted against a remote_session_client in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned. Requires org:read.
  */
 export function useOrganizationRemoteSessionClientSessionsInfiniteSuspense(
-  request: operations.ListOrganizationRemoteSessionClientSessionsRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientSessionsSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientSessionsRequest,
+  security?: ListOrganizationRemoteSessionClientSessionsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     OrganizationRemoteSessionClientSessionsInfiniteQueryData,
     OrganizationRemoteSessionClientSessionsQueryError

@@ -13,17 +13,19 @@ import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariable
 import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
-import type { McpEnvironmentConfigInput } from "@gram/client/models/components";
+import type { McpEnvironmentConfigInput } from "@gram/client/models/components/mcpenvironmentconfiginput.js";
+import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnvironment.js";
 import {
   invalidateAllGetMcpMetadata,
-  invalidateAllListEnvironments,
-  invalidateAllToolset,
-  useCreateEnvironmentMutation,
   useGetMcpMetadata,
+} from "@gram/client/react-query/getMcpMetadata.js";
+import {
+  invalidateAllListEnvironments,
   useListEnvironments,
-  useMcpMetadataSetMutation,
-  useUpdateEnvironmentMutation,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/listEnvironments.js";
+import { useMcpMetadataSetMutation } from "@gram/client/react-query/mcpMetadataSet.js";
+import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
+import { useUpdateEnvironmentMutation } from "@gram/client/react-query/updateEnvironment.js";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle, Link, Plus, Shield } from "lucide-react";

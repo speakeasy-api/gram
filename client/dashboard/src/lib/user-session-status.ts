@@ -1,6 +1,6 @@
 import { format, formatDistanceToNow } from "date-fns";
 
-import type { UserSession } from "@gram/client/models/components";
+import type { UserSession } from "@gram/client/models/components/usersession.js";
 
 export type SessionStatus = "active" | "expired" | "revoked";
 

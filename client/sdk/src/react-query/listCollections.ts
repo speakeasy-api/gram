@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListCollectionsRequest,
+  ListCollectionsSecurity,
+} from "../models/operations/listcollections.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListCollectionsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListCollectionsQueryError =
  * List MCP collections in the organization
  */
 export function useListCollections(
-  request?: operations.ListCollectionsRequest | undefined,
-  security?: operations.ListCollectionsSecurity | undefined,
+  request?: ListCollectionsRequest | undefined,
+  security?: ListCollectionsSecurity | undefined,
   options?: QueryHookOptions<
     ListCollectionsQueryData,
     ListCollectionsQueryError
@@ -85,8 +88,8 @@ export function useListCollections(
  * List MCP collections in the organization
  */
 export function useListCollectionsSuspense(
-  request?: operations.ListCollectionsRequest | undefined,
-  security?: operations.ListCollectionsSecurity | undefined,
+  request?: ListCollectionsRequest | undefined,
+  security?: ListCollectionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListCollectionsQueryData,
     ListCollectionsQueryError

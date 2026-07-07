@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { tunneledMcpRotateServerKey } from "../funcs/tunneledMcpRotateServerKey.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { RotateTunneledMcpServerKeyResult } from "../models/components/rotatetunneledmcpserverkeyresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,25 +20,28 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  RotateTunneledMcpServerKeyRequest,
+  RotateTunneledMcpServerKeySecurity,
+} from "../models/operations/rotatetunneledmcpserverkey.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RotateTunneledMcpServerKeyMutationVariables = {
-  request: operations.RotateTunneledMcpServerKeyRequest;
-  security?: operations.RotateTunneledMcpServerKeySecurity | undefined;
+  request: RotateTunneledMcpServerKeyRequest;
+  security?: RotateTunneledMcpServerKeySecurity | undefined;
   options?: RequestOptions;
 };
 
 export type RotateTunneledMcpServerKeyMutationData =
-  components.RotateTunneledMcpServerKeyResult;
+  RotateTunneledMcpServerKeyResult;
 
 export type RotateTunneledMcpServerKeyMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

@@ -22,7 +22,7 @@ import { subjectHref } from "@/components/auditlogs/subject-href";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
-import type { AuditLog } from "@gram/client/models/components";
+import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 
 type Props = {
   logs: AuditLog[];

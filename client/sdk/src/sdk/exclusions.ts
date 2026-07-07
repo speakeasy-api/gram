@@ -8,8 +8,29 @@ import { riskExclusionsList } from "../funcs/riskExclusionsList.js";
 import { riskExclusionsListBuiltinExclusions } from "../funcs/riskExclusionsListBuiltinExclusions.js";
 import { riskExclusionsUpdate } from "../funcs/riskExclusionsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListBuiltinExclusionsResult } from "../models/components/listbuiltinexclusionsresult.js";
+import { ListRiskExclusionsResult } from "../models/components/listriskexclusionsresult.js";
+import { RiskExclusion } from "../models/components/riskexclusion.js";
+import {
+  CreateRiskExclusionRequest,
+  CreateRiskExclusionSecurity,
+} from "../models/operations/createriskexclusion.js";
+import {
+  DeleteRiskExclusionRequest,
+  DeleteRiskExclusionSecurity,
+} from "../models/operations/deleteriskexclusion.js";
+import {
+  ListBuiltinExclusionsRequest,
+  ListBuiltinExclusionsSecurity,
+} from "../models/operations/listbuiltinexclusions.js";
+import {
+  ListRiskExclusionsRequest,
+  ListRiskExclusionsSecurity,
+} from "../models/operations/listriskexclusions.js";
+import {
+  UpdateRiskExclusionRequest,
+  UpdateRiskExclusionSecurity,
+} from "../models/operations/updateriskexclusion.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Exclusions extends ClientSDK {
@@ -20,10 +41,10 @@ export class Exclusions extends ClientSDK {
    * Create a risk exclusion. Omit risk_policy_id to create a global exclusion that applies to every policy in the project.
    */
   async create(
-    request: operations.CreateRiskExclusionRequest,
-    security?: operations.CreateRiskExclusionSecurity | undefined,
+    request: CreateRiskExclusionRequest,
+    security?: CreateRiskExclusionSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskExclusion> {
+  ): Promise<RiskExclusion> {
     return unwrapAsync(riskExclusionsCreate(
       this,
       request,
@@ -39,8 +60,8 @@ export class Exclusions extends ClientSDK {
    * Delete a risk exclusion. Previously suppressed findings are restored.
    */
   async delete(
-    request: operations.DeleteRiskExclusionRequest,
-    security?: operations.DeleteRiskExclusionSecurity | undefined,
+    request: DeleteRiskExclusionRequest,
+    security?: DeleteRiskExclusionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(riskExclusionsDelete(
@@ -58,10 +79,10 @@ export class Exclusions extends ClientSDK {
    * List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
    */
   async listBuiltinExclusions(
-    request?: operations.ListBuiltinExclusionsRequest | undefined,
-    security?: operations.ListBuiltinExclusionsSecurity | undefined,
+    request?: ListBuiltinExclusionsRequest | undefined,
+    security?: ListBuiltinExclusionsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListBuiltinExclusionsResult> {
+  ): Promise<ListBuiltinExclusionsResult> {
     return unwrapAsync(riskExclusionsListBuiltinExclusions(
       this,
       request,
@@ -77,10 +98,10 @@ export class Exclusions extends ClientSDK {
    * List risk exclusions for the current project. Optionally filter to a single policy.
    */
   async list(
-    request?: operations.ListRiskExclusionsRequest | undefined,
-    security?: operations.ListRiskExclusionsSecurity | undefined,
+    request?: ListRiskExclusionsRequest | undefined,
+    security?: ListRiskExclusionsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListRiskExclusionsResult> {
+  ): Promise<ListRiskExclusionsResult> {
     return unwrapAsync(riskExclusionsList(
       this,
       request,
@@ -96,10 +117,10 @@ export class Exclusions extends ClientSDK {
    * Update a risk exclusion.
    */
   async update(
-    request: operations.UpdateRiskExclusionRequest,
-    security?: operations.UpdateRiskExclusionSecurity | undefined,
+    request: UpdateRiskExclusionRequest,
+    security?: UpdateRiskExclusionSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskExclusion> {
+  ): Promise<RiskExclusion> {
     return unwrapAsync(riskExclusionsUpdate(
       this,
       request,

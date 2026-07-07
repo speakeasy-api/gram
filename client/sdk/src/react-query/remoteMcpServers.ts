@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListRemoteMcpServersRequest,
+  ListRemoteMcpServersSecurity,
+} from "../models/operations/listremotemcpservers.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RemoteMcpServersQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RemoteMcpServersQueryError =
  * List all remote MCP servers for a project
  */
 export function useRemoteMcpServers(
-  request?: operations.ListRemoteMcpServersRequest | undefined,
-  security?: operations.ListRemoteMcpServersSecurity | undefined,
+  request?: ListRemoteMcpServersRequest | undefined,
+  security?: ListRemoteMcpServersSecurity | undefined,
   options?: QueryHookOptions<
     RemoteMcpServersQueryData,
     RemoteMcpServersQueryError
@@ -85,8 +88,8 @@ export function useRemoteMcpServers(
  * List all remote MCP servers for a project
  */
 export function useRemoteMcpServersSuspense(
-  request?: operations.ListRemoteMcpServersRequest | undefined,
-  security?: operations.ListRemoteMcpServersSecurity | undefined,
+  request?: ListRemoteMcpServersRequest | undefined,
+  security?: ListRemoteMcpServersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RemoteMcpServersQueryData,
     RemoteMcpServersQueryError

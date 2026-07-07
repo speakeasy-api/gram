@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { organizationsGet } from "../funcs/organizationsGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { Organization } from "../models/components/organization.js";
+import {
+  GetOrganizationRequest,
+  GetOrganizationSecurity,
+} from "../models/operations/getorganization.js";
 import { unwrapAsync } from "../types/fp.js";
-export type OrganizationQueryData = components.Organization;
+export type OrganizationQueryData = Organization;
 
 export function prefetchOrganization(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetOrganizationRequest | undefined,
-  security?: operations.GetOrganizationSecurity | undefined,
+  request?: GetOrganizationRequest | undefined,
+  security?: GetOrganizationSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchOrganization(
 
 export function buildOrganizationQuery(
   client$: GramCore,
-  request?: operations.GetOrganizationRequest | undefined,
-  security?: operations.GetOrganizationSecurity | undefined,
+  request?: GetOrganizationRequest | undefined,
+  security?: GetOrganizationSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

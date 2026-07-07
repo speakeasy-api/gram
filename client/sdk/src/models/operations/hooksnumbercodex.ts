@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CodexHookPayload,
+  CodexHookPayload$Outbound,
+  CodexHookPayload$outboundSchema,
+} from "../components/codexhookpayload.js";
 
 export type HooksNumberCodexSecurity = {
   apikeyHeaderGramKey?: string | undefined;
@@ -28,7 +32,7 @@ export type HooksNumberCodexRequest = {
    * Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
    */
   idempotencyKey?: string | undefined;
-  codexHookPayload: components.CodexHookPayload;
+  codexHookPayload: CodexHookPayload;
 };
 
 /** @internal */
@@ -68,7 +72,7 @@ export type HooksNumberCodexRequest$Outbound = {
   "Gram-Project"?: string | undefined;
   "X-Gram-Hook-Hostname"?: string | undefined;
   "Idempotency-Key"?: string | undefined;
-  CodexHookPayload: components.CodexHookPayload$Outbound;
+  CodexHookPayload: CodexHookPayload$Outbound;
 };
 
 /** @internal */
@@ -81,7 +85,7 @@ export const HooksNumberCodexRequest$outboundSchema: z.ZodMiniType<
     gramProject: z.optional(z.string()),
     xGramHookHostname: z.optional(z.string()),
     idempotencyKey: z.optional(z.string()),
-    codexHookPayload: components.CodexHookPayload$outboundSchema,
+    codexHookPayload: CodexHookPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

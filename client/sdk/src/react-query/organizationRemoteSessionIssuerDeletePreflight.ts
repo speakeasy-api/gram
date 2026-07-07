@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
+  GetOrganizationRemoteSessionIssuerDeletePreflightSecurity,
+} from "../models/operations/getorganizationremotesessionissuerdeletepreflight.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type OrganizationRemoteSessionIssuerDeletePreflightQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,9 +62,9 @@ export type OrganizationRemoteSessionIssuerDeletePreflightQueryError =
  * Authoritative impact summary for deleting a remote_session_issuer: associated client count and affected MCP server names. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuerDeletePreflight(
-  request: operations.GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
+  request: GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
   security?:
-    | operations.GetOrganizationRemoteSessionIssuerDeletePreflightSecurity
+    | GetOrganizationRemoteSessionIssuerDeletePreflightSecurity
     | undefined,
   options?: QueryHookOptions<
     OrganizationRemoteSessionIssuerDeletePreflightQueryData,
@@ -90,9 +93,9 @@ export function useOrganizationRemoteSessionIssuerDeletePreflight(
  * Authoritative impact summary for deleting a remote_session_issuer: associated client count and affected MCP server names. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuerDeletePreflightSuspense(
-  request: operations.GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
+  request: GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
   security?:
-    | operations.GetOrganizationRemoteSessionIssuerDeletePreflightSecurity
+    | GetOrganizationRemoteSessionIssuerDeletePreflightSecurity
     | undefined,
   options?: SuspenseQueryHookOptions<
     OrganizationRemoteSessionIssuerDeletePreflightQueryData,

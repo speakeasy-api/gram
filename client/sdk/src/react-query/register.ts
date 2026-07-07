@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  RegisterRequest,
+  RegisterSecurity,
+} from "../models/operations/register.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RegisterMutationVariables = {
-  request: operations.RegisterRequest;
-  security?: operations.RegisterSecurity | undefined;
+  request: RegisterRequest;
+  security?: RegisterSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type RegisterMutationData = void;
 
 export type RegisterMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

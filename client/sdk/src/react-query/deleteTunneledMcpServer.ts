@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DeleteTunneledMcpServerRequest,
+  DeleteTunneledMcpServerSecurity,
+} from "../models/operations/deletetunneledmcpserver.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type DeleteTunneledMcpServerMutationVariables = {
-  request: operations.DeleteTunneledMcpServerRequest;
-  security?: operations.DeleteTunneledMcpServerSecurity | undefined;
+  request: DeleteTunneledMcpServerRequest;
+  security?: DeleteTunneledMcpServerSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type DeleteTunneledMcpServerMutationData = void;
 
 export type DeleteTunneledMcpServerMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

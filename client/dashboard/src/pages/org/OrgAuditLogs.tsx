@@ -15,14 +15,12 @@ import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { subjectHref } from "@/components/auditlogs/subject-href";
-import type { AuditLog } from "@gram/client/models/components";
+import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
-import {
-  useAuditLogsInfinite,
-  useAuditLogFacets,
-  useGramContext,
-  useListToolsets,
-} from "@gram/client/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useAuditLogFacets } from "@gram/client/react-query/auditLogFacets.js";
+import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { Icon, Input } from "@speakeasy-api/moonshine";
 import React, {
   useCallback,

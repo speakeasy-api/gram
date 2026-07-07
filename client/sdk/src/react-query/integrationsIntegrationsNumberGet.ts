@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  IntegrationsNumberGetRequest,
+  IntegrationsNumberGetSecurity,
+} from "../models/operations/integrationsnumberget.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type IntegrationsIntegrationsNumberGetQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type IntegrationsIntegrationsNumberGetQueryError =
  * Get a third-party integration by ID or name.
  */
 export function useIntegrationsIntegrationsNumberGet(
-  request?: operations.IntegrationsNumberGetRequest | undefined,
-  security?: operations.IntegrationsNumberGetSecurity | undefined,
+  request?: IntegrationsNumberGetRequest | undefined,
+  security?: IntegrationsNumberGetSecurity | undefined,
   options?: QueryHookOptions<
     IntegrationsIntegrationsNumberGetQueryData,
     IntegrationsIntegrationsNumberGetQueryError
@@ -88,8 +91,8 @@ export function useIntegrationsIntegrationsNumberGet(
  * Get a third-party integration by ID or name.
  */
 export function useIntegrationsIntegrationsNumberGetSuspense(
-  request?: operations.IntegrationsNumberGetRequest | undefined,
-  security?: operations.IntegrationsNumberGetSecurity | undefined,
+  request?: IntegrationsNumberGetRequest | undefined,
+  security?: IntegrationsNumberGetSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     IntegrationsIntegrationsNumberGetQueryData,
     IntegrationsIntegrationsNumberGetQueryError

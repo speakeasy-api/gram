@@ -24,20 +24,16 @@ import {
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
-import type {
-  McpServer,
-  RemoteSessionClient,
-  RemoteSessionIssuer,
-  UserSessionIssuer,
-} from "@gram/client/models/components";
-import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
-import {
-  invalidateAllGetMcpServer,
-  invalidateAllMcpServers,
-  invalidateAllRemoteSessionClients,
-  invalidateAllRemoteSessionIssuers,
-  invalidateAllUserSessionIssuers,
-} from "@gram/client/react-query/index.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";

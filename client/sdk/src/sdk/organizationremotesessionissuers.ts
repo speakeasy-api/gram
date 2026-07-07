@@ -23,8 +23,96 @@ import { organizationRemoteSessionIssuersRevokeSession } from "../funcs/organiza
 import { organizationRemoteSessionIssuersUpdateClient } from "../funcs/organizationRemoteSessionIssuersUpdateClient.js";
 import { organizationRemoteSessionIssuersUpdateIssuer } from "../funcs/organizationRemoteSessionIssuersUpdateIssuer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListOrganizationMcpServersResult } from "../models/components/listorganizationmcpserversresult.js";
+import { OrganizationClientDeletePreflight } from "../models/components/organizationclientdeletepreflight.js";
+import { OrganizationIssuerDeletePreflight } from "../models/components/organizationissuerdeletepreflight.js";
+import { RemoteSession } from "../models/components/remotesession.js";
+import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
+import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
+import { RevokeAllRemoteSessionsResult } from "../models/components/revokeallremotesessionsresult.js";
+import {
+  CreateCimdOrganizationRemoteSessionClientRequest,
+  CreateCimdOrganizationRemoteSessionClientSecurity,
+} from "../models/operations/createcimdorganizationremotesessionclient.js";
+import {
+  CreateOrganizationRemoteSessionClientRequest,
+  CreateOrganizationRemoteSessionClientSecurity,
+} from "../models/operations/createorganizationremotesessionclient.js";
+import {
+  CreateOrganizationRemoteSessionIssuerRequest,
+  CreateOrganizationRemoteSessionIssuerSecurity,
+} from "../models/operations/createorganizationremotesessionissuer.js";
+import {
+  DeleteOrganizationRemoteSessionClientRequest,
+  DeleteOrganizationRemoteSessionClientSecurity,
+} from "../models/operations/deleteorganizationremotesessionclient.js";
+import {
+  DeleteOrganizationRemoteSessionIssuerRequest,
+  DeleteOrganizationRemoteSessionIssuerSecurity,
+} from "../models/operations/deleteorganizationremotesessionissuer.js";
+import {
+  GetOrganizationRemoteSessionClientRequest,
+  GetOrganizationRemoteSessionClientSecurity,
+} from "../models/operations/getorganizationremotesessionclient.js";
+import {
+  GetOrganizationRemoteSessionClientDeletePreflightRequest,
+  GetOrganizationRemoteSessionClientDeletePreflightSecurity,
+} from "../models/operations/getorganizationremotesessionclientdeletepreflight.js";
+import {
+  GetOrganizationRemoteSessionIssuerRequest,
+  GetOrganizationRemoteSessionIssuerSecurity,
+} from "../models/operations/getorganizationremotesessionissuer.js";
+import {
+  GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
+  GetOrganizationRemoteSessionIssuerDeletePreflightSecurity,
+} from "../models/operations/getorganizationremotesessionissuerdeletepreflight.js";
+import {
+  ListOrganizationRemoteSessionClientMcpServersRequest,
+  ListOrganizationRemoteSessionClientMcpServersSecurity,
+} from "../models/operations/listorganizationremotesessionclientmcpservers.js";
+import {
+  ListOrganizationRemoteSessionClientsRequest,
+  ListOrganizationRemoteSessionClientsResponse,
+  ListOrganizationRemoteSessionClientsSecurity,
+} from "../models/operations/listorganizationremotesessionclients.js";
+import {
+  ListOrganizationRemoteSessionClientSessionsRequest,
+  ListOrganizationRemoteSessionClientSessionsResponse,
+  ListOrganizationRemoteSessionClientSessionsSecurity,
+} from "../models/operations/listorganizationremotesessionclientsessions.js";
+import {
+  ListOrganizationRemoteSessionIssuersRequest,
+  ListOrganizationRemoteSessionIssuersResponse,
+  ListOrganizationRemoteSessionIssuersSecurity,
+} from "../models/operations/listorganizationremotesessionissuers.js";
+import {
+  MoveOrganizationRemoteSessionIssuerRequest,
+  MoveOrganizationRemoteSessionIssuerSecurity,
+} from "../models/operations/moveorganizationremotesessionissuer.js";
+import {
+  RefreshOrganizationRemoteSessionRequest,
+  RefreshOrganizationRemoteSessionSecurity,
+} from "../models/operations/refreshorganizationremotesession.js";
+import {
+  RemoveOrganizationRemoteSessionClientFromMcpServerRequest,
+  RemoveOrganizationRemoteSessionClientFromMcpServerSecurity,
+} from "../models/operations/removeorganizationremotesessionclientfrommcpserver.js";
+import {
+  RevokeAllOrganizationRemoteSessionClientSessionsRequest,
+  RevokeAllOrganizationRemoteSessionClientSessionsSecurity,
+} from "../models/operations/revokeallorganizationremotesessionclientsessions.js";
+import {
+  RevokeOrganizationRemoteSessionRequest,
+  RevokeOrganizationRemoteSessionSecurity,
+} from "../models/operations/revokeorganizationremotesession.js";
+import {
+  UpdateOrganizationRemoteSessionClientRequest,
+  UpdateOrganizationRemoteSessionClientSecurity,
+} from "../models/operations/updateorganizationremotesessionclient.js";
+import {
+  UpdateOrganizationRemoteSessionIssuerRequest,
+  UpdateOrganizationRemoteSessionIssuerSecurity,
+} from "../models/operations/updateorganizationremotesessionissuer.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -36,12 +124,10 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.
    */
   async createCimdClient(
-    request: operations.CreateCimdOrganizationRemoteSessionClientRequest,
-    security?:
-      | operations.CreateCimdOrganizationRemoteSessionClientSecurity
-      | undefined,
+    request: CreateCimdOrganizationRemoteSessionClientRequest,
+    security?: CreateCimdOrganizationRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionClient> {
+  ): Promise<RemoteSessionClient> {
     return unwrapAsync(organizationRemoteSessionIssuersCreateCimdClient(
       this,
       request,
@@ -57,12 +143,10 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Register a standalone remote_session_client under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.
    */
   async createClient(
-    request: operations.CreateOrganizationRemoteSessionClientRequest,
-    security?:
-      | operations.CreateOrganizationRemoteSessionClientSecurity
-      | undefined,
+    request: CreateOrganizationRemoteSessionClientRequest,
+    security?: CreateOrganizationRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionClient> {
+  ): Promise<RemoteSessionClient> {
     return unwrapAsync(organizationRemoteSessionIssuersCreateClient(
       this,
       request,
@@ -78,12 +162,10 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Create a remote_session_issuer in the caller's organization. With no project_id the issuer is organization-level (project_id NULL, inherited by every project); with a project_id (which must belong to the organization) it is project-specific. Requires org:admin.
    */
   async createIssuer(
-    request: operations.CreateOrganizationRemoteSessionIssuerRequest,
-    security?:
-      | operations.CreateOrganizationRemoteSessionIssuerSecurity
-      | undefined,
+    request: CreateOrganizationRemoteSessionIssuerRequest,
+    security?: CreateOrganizationRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionIssuer> {
+  ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(organizationRemoteSessionIssuersCreateIssuer(
       this,
       request,
@@ -99,10 +181,8 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Soft-delete a remote_session_client in the caller's organization. Cascades to the remote_sessions minted against it. Requires org:admin.
    */
   async deleteClient(
-    request: operations.DeleteOrganizationRemoteSessionClientRequest,
-    security?:
-      | operations.DeleteOrganizationRemoteSessionClientSecurity
-      | undefined,
+    request: DeleteOrganizationRemoteSessionClientRequest,
+    security?: DeleteOrganizationRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationRemoteSessionIssuersDeleteClient(
@@ -120,10 +200,8 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Soft-delete any remote_session_issuer (organizational or project-specific) in the caller's organization. Blocked when any remote_session_clients still reference it. Requires org:admin.
    */
   async deleteIssuer(
-    request: operations.DeleteOrganizationRemoteSessionIssuerRequest,
-    security?:
-      | operations.DeleteOrganizationRemoteSessionIssuerSecurity
-      | undefined,
+    request: DeleteOrganizationRemoteSessionIssuerRequest,
+    security?: DeleteOrganizationRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationRemoteSessionIssuersDeleteIssuer(
@@ -141,12 +219,10 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Get a remote_session_client in the caller's organization by id. Requires org:read.
    */
   async getClient(
-    request: operations.GetOrganizationRemoteSessionClientRequest,
-    security?:
-      | operations.GetOrganizationRemoteSessionClientSecurity
-      | undefined,
+    request: GetOrganizationRemoteSessionClientRequest,
+    security?: GetOrganizationRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionClient> {
+  ): Promise<RemoteSessionClient> {
     return unwrapAsync(organizationRemoteSessionIssuersGetClient(
       this,
       request,
@@ -162,13 +238,12 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Authoritative impact summary for deleting a remote_session_client: associated session count and affected MCP server names. Requires org:read.
    */
   async getClientDeletePreflight(
-    request:
-      operations.GetOrganizationRemoteSessionClientDeletePreflightRequest,
+    request: GetOrganizationRemoteSessionClientDeletePreflightRequest,
     security?:
-      | operations.GetOrganizationRemoteSessionClientDeletePreflightSecurity
+      | GetOrganizationRemoteSessionClientDeletePreflightSecurity
       | undefined,
     options?: RequestOptions,
-  ): Promise<components.OrganizationClientDeletePreflight> {
+  ): Promise<OrganizationClientDeletePreflight> {
     return unwrapAsync(organizationRemoteSessionIssuersGetClientDeletePreflight(
       this,
       request,
@@ -184,12 +259,10 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Get any remote_session_issuer (organizational or project-specific) in the caller's organization by id. Requires org:read.
    */
   async getIssuer(
-    request: operations.GetOrganizationRemoteSessionIssuerRequest,
-    security?:
-      | operations.GetOrganizationRemoteSessionIssuerSecurity
-      | undefined,
+    request: GetOrganizationRemoteSessionIssuerRequest,
+    security?: GetOrganizationRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionIssuer> {
+  ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(organizationRemoteSessionIssuersGetIssuer(
       this,
       request,
@@ -205,13 +278,12 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Authoritative impact summary for deleting a remote_session_issuer: associated client count and affected MCP server names. Requires org:read.
    */
   async getIssuerDeletePreflight(
-    request:
-      operations.GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
+    request: GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
     security?:
-      | operations.GetOrganizationRemoteSessionIssuerDeletePreflightSecurity
+      | GetOrganizationRemoteSessionIssuerDeletePreflightSecurity
       | undefined,
     options?: RequestOptions,
-  ): Promise<components.OrganizationIssuerDeletePreflight> {
+  ): Promise<OrganizationIssuerDeletePreflight> {
     return unwrapAsync(organizationRemoteSessionIssuersGetIssuerDeletePreflight(
       this,
       request,
@@ -227,12 +299,12 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * List the MCP servers a remote_session_client is attached to (resolved through user_session_issuers) in the caller's organization. Requires org:read.
    */
   async listClientMcpServers(
-    request: operations.ListOrganizationRemoteSessionClientMcpServersRequest,
+    request: ListOrganizationRemoteSessionClientMcpServersRequest,
     security?:
-      | operations.ListOrganizationRemoteSessionClientMcpServersSecurity
+      | ListOrganizationRemoteSessionClientMcpServersSecurity
       | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListOrganizationMcpServersResult> {
+  ): Promise<ListOrganizationMcpServersResult> {
     return unwrapAsync(organizationRemoteSessionIssuersListClientMcpServers(
       this,
       request,
@@ -248,14 +320,12 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * List the remote_sessions minted against a remote_session_client in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned. Requires org:read.
    */
   async listClientSessions(
-    request: operations.ListOrganizationRemoteSessionClientSessionsRequest,
-    security?:
-      | operations.ListOrganizationRemoteSessionClientSessionsSecurity
-      | undefined,
+    request: ListOrganizationRemoteSessionClientSessionsRequest,
+    security?: ListOrganizationRemoteSessionClientSessionsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<
     PageIterator<
-      operations.ListOrganizationRemoteSessionClientSessionsResponse,
+      ListOrganizationRemoteSessionClientSessionsResponse,
       { cursor: string }
     >
   > {
@@ -276,14 +346,12 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * List the remote_session_clients registered with a given issuer in the caller's organization, each with its MCP server attachment count. Requires org:read.
    */
   async listClients(
-    request: operations.ListOrganizationRemoteSessionClientsRequest,
-    security?:
-      | operations.ListOrganizationRemoteSessionClientsSecurity
-      | undefined,
+    request: ListOrganizationRemoteSessionClientsRequest,
+    security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<
     PageIterator<
-      operations.ListOrganizationRemoteSessionClientsResponse,
+      ListOrganizationRemoteSessionClientsResponse,
       { cursor: string }
     >
   > {
@@ -302,16 +370,12 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
    */
   async listIssuers(
-    request?:
-      | operations.ListOrganizationRemoteSessionIssuersRequest
-      | undefined,
-    security?:
-      | operations.ListOrganizationRemoteSessionIssuersSecurity
-      | undefined,
+    request?: ListOrganizationRemoteSessionIssuersRequest | undefined,
+    security?: ListOrganizationRemoteSessionIssuersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<
     PageIterator<
-      operations.ListOrganizationRemoteSessionIssuersResponse,
+      ListOrganizationRemoteSessionIssuersResponse,
       { cursor: string }
     >
   > {
@@ -330,12 +394,10 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Re-scope a remote_session_issuer in the caller's organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.
    */
   async moveIssuer(
-    request: operations.MoveOrganizationRemoteSessionIssuerRequest,
-    security?:
-      | operations.MoveOrganizationRemoteSessionIssuerSecurity
-      | undefined,
+    request: MoveOrganizationRemoteSessionIssuerRequest,
+    security?: MoveOrganizationRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionIssuer> {
+  ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(organizationRemoteSessionIssuersMoveIssuer(
       this,
       request,
@@ -351,10 +413,10 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Force an upstream token refresh on a single remote_session in the caller's organization, regardless of current access-token expiry. Returns the updated remote_session so callers can reflect the new expiry without a refetch. Fails with a bad-request error when the session holds no refresh token. Requires org:admin.
    */
   async refreshSession(
-    request: operations.RefreshOrganizationRemoteSessionRequest,
-    security?: operations.RefreshOrganizationRemoteSessionSecurity | undefined,
+    request: RefreshOrganizationRemoteSessionRequest,
+    security?: RefreshOrganizationRemoteSessionSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSession> {
+  ): Promise<RemoteSession> {
     return unwrapAsync(organizationRemoteSessionIssuersRefreshSession(
       this,
       request,
@@ -370,10 +432,9 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Detach a remote_session_client from an MCP server (clears the MCP server's user_session_issuer link) in the caller's organization. Requires org:admin.
    */
   async removeClientFromMcpServer(
-    request:
-      operations.RemoveOrganizationRemoteSessionClientFromMcpServerRequest,
+    request: RemoveOrganizationRemoteSessionClientFromMcpServerRequest,
     security?:
-      | operations.RemoveOrganizationRemoteSessionClientFromMcpServerSecurity
+      | RemoveOrganizationRemoteSessionClientFromMcpServerSecurity
       | undefined,
     options?: RequestOptions,
   ): Promise<void> {
@@ -394,12 +455,12 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Revoke (soft-delete) all remote_sessions minted against a remote_session_client in the caller's organization. Requires org:admin.
    */
   async revokeAllClientSessions(
-    request: operations.RevokeAllOrganizationRemoteSessionClientSessionsRequest,
+    request: RevokeAllOrganizationRemoteSessionClientSessionsRequest,
     security?:
-      | operations.RevokeAllOrganizationRemoteSessionClientSessionsSecurity
+      | RevokeAllOrganizationRemoteSessionClientSessionsSecurity
       | undefined,
     options?: RequestOptions,
-  ): Promise<components.RevokeAllRemoteSessionsResult> {
+  ): Promise<RevokeAllRemoteSessionsResult> {
     return unwrapAsync(organizationRemoteSessionIssuersRevokeAllClientSessions(
       this,
       request,
@@ -415,8 +476,8 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Revoke (soft-delete) a single remote_session in the caller's organization. Requires org:admin.
    */
   async revokeSession(
-    request: operations.RevokeOrganizationRemoteSessionRequest,
-    security?: operations.RevokeOrganizationRemoteSessionSecurity | undefined,
+    request: RevokeOrganizationRemoteSessionRequest,
+    security?: RevokeOrganizationRemoteSessionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationRemoteSessionIssuersRevokeSession(
@@ -434,12 +495,10 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Update a remote_session_client's non-secret fields in the caller's organization. Requires org:admin.
    */
   async updateClient(
-    request: operations.UpdateOrganizationRemoteSessionClientRequest,
-    security?:
-      | operations.UpdateOrganizationRemoteSessionClientSecurity
-      | undefined,
+    request: UpdateOrganizationRemoteSessionClientRequest,
+    security?: UpdateOrganizationRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionClient> {
+  ): Promise<RemoteSessionClient> {
     return unwrapAsync(organizationRemoteSessionIssuersUpdateClient(
       this,
       request,
@@ -455,12 +514,10 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.
    */
   async updateIssuer(
-    request: operations.UpdateOrganizationRemoteSessionIssuerRequest,
-    security?:
-      | operations.UpdateOrganizationRemoteSessionIssuerSecurity
-      | undefined,
+    request: UpdateOrganizationRemoteSessionIssuerRequest,
+    security?: UpdateOrganizationRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionIssuer> {
+  ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(organizationRemoteSessionIssuersUpdateIssuer(
       this,
       request,

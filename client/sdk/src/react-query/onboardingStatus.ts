@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetOnboardingStatusRequest,
+  GetOnboardingStatusSecurity,
+} from "../models/operations/getonboardingstatus.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type OnboardingStatusQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type OnboardingStatusQueryError =
  * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
  */
 export function useOnboardingStatus(
-  request?: operations.GetOnboardingStatusRequest | undefined,
-  security?: operations.GetOnboardingStatusSecurity | undefined,
+  request?: GetOnboardingStatusRequest | undefined,
+  security?: GetOnboardingStatusSecurity | undefined,
   options?: QueryHookOptions<
     OnboardingStatusQueryData,
     OnboardingStatusQueryError
@@ -85,8 +88,8 @@ export function useOnboardingStatus(
  * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
  */
 export function useOnboardingStatusSuspense(
-  request?: operations.GetOnboardingStatusRequest | undefined,
-  security?: operations.GetOnboardingStatusSecurity | undefined,
+  request?: GetOnboardingStatusRequest | undefined,
+  security?: GetOnboardingStatusSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     OnboardingStatusQueryData,
     OnboardingStatusQueryError

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetHooksSummaryRequest,
+  GetHooksSummarySecurity,
+} from "../models/operations/gethookssummary.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetHooksSummaryQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetHooksSummaryQueryError =
  * Get aggregated hooks metrics grouped by server
  */
 export function useGetHooksSummary(
-  request: operations.GetHooksSummaryRequest,
-  security?: operations.GetHooksSummarySecurity | undefined,
+  request: GetHooksSummaryRequest,
+  security?: GetHooksSummarySecurity | undefined,
   options?: QueryHookOptions<
     GetHooksSummaryQueryData,
     GetHooksSummaryQueryError
@@ -85,8 +88,8 @@ export function useGetHooksSummary(
  * Get aggregated hooks metrics grouped by server
  */
 export function useGetHooksSummarySuspense(
-  request: operations.GetHooksSummaryRequest,
-  security?: operations.GetHooksSummarySecurity | undefined,
+  request: GetHooksSummaryRequest,
+  security?: GetHooksSummarySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetHooksSummaryQueryData,
     GetHooksSummaryQueryError

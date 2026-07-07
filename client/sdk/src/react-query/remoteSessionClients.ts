@@ -24,10 +24,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListRemoteSessionClientsRequest,
+  ListRemoteSessionClientsSecurity,
+} from "../models/operations/listremotesessionclients.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -60,7 +63,7 @@ export {
 };
 
 export type RemoteSessionClientsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -77,8 +80,8 @@ export type RemoteSessionClientsQueryError =
  * List remote_session_clients in the caller's project.
  */
 export function useRemoteSessionClients(
-  request?: operations.ListRemoteSessionClientsRequest | undefined,
-  security?: operations.ListRemoteSessionClientsSecurity | undefined,
+  request?: ListRemoteSessionClientsRequest | undefined,
+  security?: ListRemoteSessionClientsSecurity | undefined,
   options?: QueryHookOptions<
     RemoteSessionClientsQueryData,
     RemoteSessionClientsQueryError
@@ -106,8 +109,8 @@ export function useRemoteSessionClients(
  * List remote_session_clients in the caller's project.
  */
 export function useRemoteSessionClientsSuspense(
-  request?: operations.ListRemoteSessionClientsRequest | undefined,
-  security?: operations.ListRemoteSessionClientsSecurity | undefined,
+  request?: ListRemoteSessionClientsRequest | undefined,
+  security?: ListRemoteSessionClientsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RemoteSessionClientsQueryData,
     RemoteSessionClientsQueryError
@@ -135,8 +138,8 @@ export function useRemoteSessionClientsSuspense(
  * List remote_session_clients in the caller's project.
  */
 export function useRemoteSessionClientsInfinite(
-  request?: operations.ListRemoteSessionClientsRequest | undefined,
-  security?: operations.ListRemoteSessionClientsSecurity | undefined,
+  request?: ListRemoteSessionClientsRequest | undefined,
+  security?: ListRemoteSessionClientsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     RemoteSessionClientsInfiniteQueryData,
     RemoteSessionClientsQueryError
@@ -178,8 +181,8 @@ export function useRemoteSessionClientsInfinite(
  * List remote_session_clients in the caller's project.
  */
 export function useRemoteSessionClientsInfiniteSuspense(
-  request?: operations.ListRemoteSessionClientsRequest | undefined,
-  security?: operations.ListRemoteSessionClientsSecurity | undefined,
+  request?: ListRemoteSessionClientsRequest | undefined,
+  security?: ListRemoteSessionClientsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     RemoteSessionClientsInfiniteQueryData,
     RemoteSessionClientsQueryError

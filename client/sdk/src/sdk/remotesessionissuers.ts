@@ -9,8 +9,33 @@ import { remoteSessionIssuersGet } from "../funcs/remoteSessionIssuersGet.js";
 import { remoteSessionIssuersList } from "../funcs/remoteSessionIssuersList.js";
 import { remoteSessionIssuersUpdate } from "../funcs/remoteSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
+import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissuerdraft.js";
+import {
+  CreateRemoteSessionIssuerRequest,
+  CreateRemoteSessionIssuerSecurity,
+} from "../models/operations/createremotesessionissuer.js";
+import {
+  DeleteRemoteSessionIssuerRequest,
+  DeleteRemoteSessionIssuerSecurity,
+} from "../models/operations/deleteremotesessionissuer.js";
+import {
+  DiscoverRemoteSessionIssuerRequest,
+  DiscoverRemoteSessionIssuerSecurity,
+} from "../models/operations/discoverremotesessionissuer.js";
+import {
+  GetRemoteSessionIssuerRequest,
+  GetRemoteSessionIssuerSecurity,
+} from "../models/operations/getremotesessionissuer.js";
+import {
+  ListRemoteSessionIssuersRequest,
+  ListRemoteSessionIssuersResponse,
+  ListRemoteSessionIssuersSecurity,
+} from "../models/operations/listremotesessionissuers.js";
+import {
+  UpdateRemoteSessionIssuerRequest,
+  UpdateRemoteSessionIssuerSecurity,
+} from "../models/operations/updateremotesessionissuer.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -22,10 +47,10 @@ export class RemoteSessionIssuers extends ClientSDK {
    * Create a new remote_session_issuer.
    */
   async create(
-    request: operations.CreateRemoteSessionIssuerRequest,
-    security?: operations.CreateRemoteSessionIssuerSecurity | undefined,
+    request: CreateRemoteSessionIssuerRequest,
+    security?: CreateRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionIssuer> {
+  ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(remoteSessionIssuersCreate(
       this,
       request,
@@ -41,8 +66,8 @@ export class RemoteSessionIssuers extends ClientSDK {
    * Soft-delete a remote_session_issuer. Blocked if any remote_session_clients still reference it.
    */
   async delete(
-    request: operations.DeleteRemoteSessionIssuerRequest,
-    security?: operations.DeleteRemoteSessionIssuerSecurity | undefined,
+    request: DeleteRemoteSessionIssuerRequest,
+    security?: DeleteRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(remoteSessionIssuersDelete(
@@ -60,10 +85,10 @@ export class RemoteSessionIssuers extends ClientSDK {
    * Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.
    */
   async discover(
-    request: operations.DiscoverRemoteSessionIssuerRequest,
-    security?: operations.DiscoverRemoteSessionIssuerSecurity | undefined,
+    request: DiscoverRemoteSessionIssuerRequest,
+    security?: DiscoverRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionIssuerDraft> {
+  ): Promise<RemoteSessionIssuerDraft> {
     return unwrapAsync(remoteSessionIssuersDiscover(
       this,
       request,
@@ -79,10 +104,10 @@ export class RemoteSessionIssuers extends ClientSDK {
    * Get a remote_session_issuer by id or by slug. Provide exactly one.
    */
   async get(
-    request?: operations.GetRemoteSessionIssuerRequest | undefined,
-    security?: operations.GetRemoteSessionIssuerSecurity | undefined,
+    request?: GetRemoteSessionIssuerRequest | undefined,
+    security?: GetRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionIssuer> {
+  ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(remoteSessionIssuersGet(
       this,
       request,
@@ -98,14 +123,11 @@ export class RemoteSessionIssuers extends ClientSDK {
    * List remote_session_issuers in the caller's project.
    */
   async list(
-    request?: operations.ListRemoteSessionIssuersRequest | undefined,
-    security?: operations.ListRemoteSessionIssuersSecurity | undefined,
+    request?: ListRemoteSessionIssuersRequest | undefined,
+    security?: ListRemoteSessionIssuersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<
-    PageIterator<
-      operations.ListRemoteSessionIssuersResponse,
-      { cursor: string }
-    >
+    PageIterator<ListRemoteSessionIssuersResponse, { cursor: string }>
   > {
     return unwrapResultIterator(remoteSessionIssuersList(
       this,
@@ -122,10 +144,10 @@ export class RemoteSessionIssuers extends ClientSDK {
    * Update fields on an existing remote_session_issuer.
    */
   async update(
-    request: operations.UpdateRemoteSessionIssuerRequest,
-    security?: operations.UpdateRemoteSessionIssuerSecurity | undefined,
+    request: UpdateRemoteSessionIssuerRequest,
+    security?: UpdateRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionIssuer> {
+  ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(remoteSessionIssuersUpdate(
       this,
       request,

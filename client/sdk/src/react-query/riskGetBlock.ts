@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetRiskBlockRequest,
+  GetRiskBlockSecurity,
+} from "../models/operations/getriskblock.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskGetBlockQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskGetBlockQueryError =
  * Get a tool call block by its risk result ID for the durable block page.
  */
 export function useRiskGetBlock(
-  request: operations.GetRiskBlockRequest,
-  security?: operations.GetRiskBlockSecurity | undefined,
+  request: GetRiskBlockRequest,
+  security?: GetRiskBlockSecurity | undefined,
   options?: QueryHookOptions<RiskGetBlockQueryData, RiskGetBlockQueryError>,
 ): UseQueryResult<RiskGetBlockQueryData, RiskGetBlockQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useRiskGetBlock(
  * Get a tool call block by its risk result ID for the durable block page.
  */
 export function useRiskGetBlockSuspense(
-  request: operations.GetRiskBlockRequest,
-  security?: operations.GetRiskBlockSecurity | undefined,
+  request: GetRiskBlockRequest,
+  security?: GetRiskBlockSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskGetBlockQueryData,
     RiskGetBlockQueryError

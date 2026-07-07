@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { mcpEndpointsCreate } from "../funcs/mcpEndpointsCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { McpEndpoint } from "../models/components/mcpendpoint.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CreateMcpEndpointRequest,
+  CreateMcpEndpointSecurity,
+} from "../models/operations/createmcpendpoint.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateMcpEndpointMutationVariables = {
-  request: operations.CreateMcpEndpointRequest;
-  security?: operations.CreateMcpEndpointSecurity | undefined;
+  request: CreateMcpEndpointRequest;
+  security?: CreateMcpEndpointSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type CreateMcpEndpointMutationData = components.McpEndpoint;
+export type CreateMcpEndpointMutationData = McpEndpoint;
 
 export type CreateMcpEndpointMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

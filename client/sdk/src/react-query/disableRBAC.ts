@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DisableRBACRequest,
+  DisableRBACSecurity,
+} from "../models/operations/disablerbac.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type DisableRBACMutationVariables = {
-  request?: operations.DisableRBACRequest | undefined;
-  security?: operations.DisableRBACSecurity | undefined;
+  request?: DisableRBACRequest | undefined;
+  security?: DisableRBACSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type DisableRBACMutationData = void;
 
 export type DisableRBACMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

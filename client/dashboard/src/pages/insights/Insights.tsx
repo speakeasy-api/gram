@@ -8,7 +8,7 @@ import { InsightsToolsContent } from "@/components/observe/InsightsTools";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ObserveTabNav } from "@/components/observe/ObserveTabNav";
-import { useMembers } from "@gram/client/react-query";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { slugify } from "@/lib/constants";
 
 export function InsightsRoot(): JSX.Element {

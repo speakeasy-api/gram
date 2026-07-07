@@ -9,19 +9,15 @@ import {
   tunneledMcpRouteParam,
 } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import type {
-  McpEndpoint,
-  McpServer,
-  RemoteMcpServer,
-  TunneledMcpServer,
-  ToolsetEntry,
-} from "@gram/client/models/components";
-import {
-  useGetRemoteMcpServer,
-  useGetTunneledMcpServer,
-  useListToolsets,
-  useRemoteSessionClients,
-} from "@gram/client/react-query/index.js";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
+import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
+import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
+import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { useRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { ArrowUpRight, Copy, ExternalLink } from "lucide-react";
 import { type ReactNode } from "react";

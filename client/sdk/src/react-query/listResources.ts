@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListResourcesRequest,
+  ListResourcesSecurity,
+} from "../models/operations/listresources.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListResourcesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListResourcesQueryError =
  * List all resources for a project
  */
 export function useListResources(
-  request?: operations.ListResourcesRequest | undefined,
-  security?: operations.ListResourcesSecurity | undefined,
+  request?: ListResourcesRequest | undefined,
+  security?: ListResourcesSecurity | undefined,
   options?: QueryHookOptions<ListResourcesQueryData, ListResourcesQueryError>,
 ): UseQueryResult<ListResourcesQueryData, ListResourcesQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useListResources(
  * List all resources for a project
  */
 export function useListResourcesSuspense(
-  request?: operations.ListResourcesRequest | undefined,
-  security?: operations.ListResourcesSecurity | undefined,
+  request?: ListResourcesRequest | undefined,
+  security?: ListResourcesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListResourcesQueryData,
     ListResourcesQueryError

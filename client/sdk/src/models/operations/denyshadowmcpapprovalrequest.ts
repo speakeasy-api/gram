@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  DenyShadowMCPApprovalRequestForm,
+  DenyShadowMCPApprovalRequestForm$Outbound,
+  DenyShadowMCPApprovalRequestForm$outboundSchema,
+} from "../components/denyshadowmcpapprovalrequestform.js";
 
 export type DenyShadowMCPApprovalRequestSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,7 +19,7 @@ export type DenyShadowMCPApprovalRequestRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  denyShadowMCPApprovalRequestForm: components.DenyShadowMCPApprovalRequestForm;
+  denyShadowMCPApprovalRequestForm: DenyShadowMCPApprovalRequestForm;
 };
 
 /** @internal */
@@ -51,8 +55,7 @@ export function denyShadowMCPApprovalRequestSecurityToJSON(
 /** @internal */
 export type DenyShadowMCPApprovalRequestRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  DenyShadowMCPApprovalRequestForm:
-    components.DenyShadowMCPApprovalRequestForm$Outbound;
+  DenyShadowMCPApprovalRequestForm: DenyShadowMCPApprovalRequestForm$Outbound;
 };
 
 /** @internal */
@@ -63,7 +66,7 @@ export const DenyShadowMCPApprovalRequestRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     denyShadowMCPApprovalRequestForm:
-      components.DenyShadowMCPApprovalRequestForm$outboundSchema,
+      DenyShadowMCPApprovalRequestForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

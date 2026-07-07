@@ -58,14 +58,14 @@ import {
 } from "react";
 import { useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
 import {
   invalidateAllRiskListPolicies,
-  useMembers,
-  useRiskCreatePolicyMutation,
   useRiskListPolicies,
-  useRiskPoliciesDeleteMutation,
-  useRoles,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/riskListPolicies.js";
+import { useRiskPoliciesDeleteMutation } from "@gram/client/react-query/riskPoliciesDelete.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import {
   useRiskPoliciesStatus,
   invalidateAllRiskPoliciesStatus,

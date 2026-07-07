@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { userSessionIssuersGet } from "../funcs/userSessionIssuersGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { UserSessionIssuer } from "../models/components/usersessionissuer.js";
+import {
+  GetUserSessionIssuerRequest,
+  GetUserSessionIssuerSecurity,
+} from "../models/operations/getusersessionissuer.js";
 import { unwrapAsync } from "../types/fp.js";
-export type UserSessionIssuerQueryData = components.UserSessionIssuer;
+export type UserSessionIssuerQueryData = UserSessionIssuer;
 
 export function prefetchUserSessionIssuer(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetUserSessionIssuerRequest | undefined,
-  security?: operations.GetUserSessionIssuerSecurity | undefined,
+  request?: GetUserSessionIssuerRequest | undefined,
+  security?: GetUserSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchUserSessionIssuer(
 
 export function buildUserSessionIssuerQuery(
   client$: GramCore,
-  request?: operations.GetUserSessionIssuerRequest | undefined,
-  security?: operations.GetUserSessionIssuerSecurity | undefined,
+  request?: GetUserSessionIssuerRequest | undefined,
+  security?: GetUserSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

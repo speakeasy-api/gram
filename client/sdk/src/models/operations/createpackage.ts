@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreatePackageForm,
+  CreatePackageForm$Outbound,
+  CreatePackageForm$outboundSchema,
+} from "../components/createpackageform.js";
 
 export type CreatePackageSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type CreatePackageRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  createPackageForm: components.CreatePackageForm;
+  createPackageForm: CreatePackageForm;
 };
 
 /** @internal */
@@ -143,7 +147,7 @@ export type CreatePackageRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  CreatePackageForm: components.CreatePackageForm$Outbound;
+  CreatePackageForm: CreatePackageForm$Outbound;
 };
 
 /** @internal */
@@ -155,7 +159,7 @@ export const CreatePackageRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    createPackageForm: components.CreatePackageForm$outboundSchema,
+    createPackageForm: CreatePackageForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

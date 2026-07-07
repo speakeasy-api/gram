@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { organizationsListUsers } from "../funcs/organizationsListUsers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListUsersResult } from "../models/components/listusersresult.js";
+import {
+  ListOrganizationUsersRequest,
+  ListOrganizationUsersSecurity,
+} from "../models/operations/listorganizationusers.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListOrganizationUsersQueryData = components.ListUsersResult;
+export type ListOrganizationUsersQueryData = ListUsersResult;
 
 export function prefetchListOrganizationUsers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListOrganizationUsersRequest | undefined,
-  security?: operations.ListOrganizationUsersSecurity | undefined,
+  request?: ListOrganizationUsersRequest | undefined,
+  security?: ListOrganizationUsersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListOrganizationUsers(
 
 export function buildListOrganizationUsersQuery(
   client$: GramCore,
-  request?: operations.ListOrganizationUsersRequest | undefined,
-  security?: operations.ListOrganizationUsersSecurity | undefined,
+  request?: ListOrganizationUsersRequest | undefined,
+  security?: ListOrganizationUsersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

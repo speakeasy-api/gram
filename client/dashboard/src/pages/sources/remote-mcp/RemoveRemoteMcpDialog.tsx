@@ -1,5 +1,5 @@
 import { RemoveMcpSourceDialogContent } from "@/components/sources/RemoveMcpSourceDialogContent";
-import type { McpServer } from "@gram/client/models/components";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useDeleteRemoteMcpSource } from "./hooks";
 
 interface RemoveRemoteMcpDialogContentProps {

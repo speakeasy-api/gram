@@ -11,16 +11,21 @@ import { GramCore } from "../core.js";
 import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPackage.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  DownloadPluginPackageRequest,
+  DownloadPluginPackageResponse,
+  DownloadPluginPackageSecurity,
+  QueryParamPlatform,
+} from "../models/operations/downloadpluginpackage.js";
 import { unwrapAsync } from "../types/fp.js";
 export type PluginsDownloadPluginPackageQueryData =
-  operations.DownloadPluginPackageResponse;
+  DownloadPluginPackageResponse;
 
 export function prefetchPluginsDownloadPluginPackage(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.DownloadPluginPackageRequest,
-  security?: operations.DownloadPluginPackageSecurity | undefined,
+  request: DownloadPluginPackageRequest,
+  security?: DownloadPluginPackageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +40,8 @@ export function prefetchPluginsDownloadPluginPackage(
 
 export function buildPluginsDownloadPluginPackageQuery(
   client$: GramCore,
-  request: operations.DownloadPluginPackageRequest,
-  security?: operations.DownloadPluginPackageSecurity | undefined,
+  request: DownloadPluginPackageRequest,
+  security?: DownloadPluginPackageSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -78,7 +83,7 @@ export function buildPluginsDownloadPluginPackageQuery(
 export function queryKeyPluginsDownloadPluginPackage(
   parameters: {
     pluginId: string;
-    platform: operations.QueryParamPlatform;
+    platform: QueryParamPlatform;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

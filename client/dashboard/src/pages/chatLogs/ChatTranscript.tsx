@@ -33,10 +33,8 @@ import {
   Icon,
 } from "@speakeasy-api/moonshine";
 import { MessageContent, type SectionMatch, ToolUI } from "@gram-ai/elements";
-import type {
-  ClaudeToolUsage,
-  RiskResult,
-} from "@gram/client/models/components";
+import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   Popover,
   PopoverContent,

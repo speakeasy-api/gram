@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetRiskPolicyRequest,
+  GetRiskPolicySecurity,
+} from "../models/operations/getriskpolicy.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskPoliciesGetQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskPoliciesGetQueryError =
  * Get a risk analysis policy by ID.
  */
 export function useRiskPoliciesGet(
-  request: operations.GetRiskPolicyRequest,
-  security?: operations.GetRiskPolicySecurity | undefined,
+  request: GetRiskPolicyRequest,
+  security?: GetRiskPolicySecurity | undefined,
   options?: QueryHookOptions<
     RiskPoliciesGetQueryData,
     RiskPoliciesGetQueryError
@@ -85,8 +88,8 @@ export function useRiskPoliciesGet(
  * Get a risk analysis policy by ID.
  */
 export function useRiskPoliciesGetSuspense(
-  request: operations.GetRiskPolicyRequest,
-  security?: operations.GetRiskPolicySecurity | undefined,
+  request: GetRiskPolicyRequest,
+  security?: GetRiskPolicySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskPoliciesGetQueryData,
     RiskPoliciesGetQueryError

@@ -24,10 +24,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListOrganizationRemoteSessionClientsRequest,
+  ListOrganizationRemoteSessionClientsSecurity,
+} from "../models/operations/listorganizationremotesessionclients.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -60,7 +63,7 @@ export {
 };
 
 export type OrganizationRemoteSessionClientsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -77,10 +80,8 @@ export type OrganizationRemoteSessionClientsQueryError =
  * List the remote_session_clients registered with a given issuer in the caller's organization, each with its MCP server attachment count. Requires org:read.
  */
 export function useOrganizationRemoteSessionClients(
-  request: operations.ListOrganizationRemoteSessionClientsRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientsSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientsRequest,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: QueryHookOptions<
     OrganizationRemoteSessionClientsQueryData,
     OrganizationRemoteSessionClientsQueryError
@@ -108,10 +109,8 @@ export function useOrganizationRemoteSessionClients(
  * List the remote_session_clients registered with a given issuer in the caller's organization, each with its MCP server attachment count. Requires org:read.
  */
 export function useOrganizationRemoteSessionClientsSuspense(
-  request: operations.ListOrganizationRemoteSessionClientsRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientsSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientsRequest,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     OrganizationRemoteSessionClientsQueryData,
     OrganizationRemoteSessionClientsQueryError
@@ -139,10 +138,8 @@ export function useOrganizationRemoteSessionClientsSuspense(
  * List the remote_session_clients registered with a given issuer in the caller's organization, each with its MCP server attachment count. Requires org:read.
  */
 export function useOrganizationRemoteSessionClientsInfinite(
-  request: operations.ListOrganizationRemoteSessionClientsRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientsSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientsRequest,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     OrganizationRemoteSessionClientsInfiniteQueryData,
     OrganizationRemoteSessionClientsQueryError
@@ -184,10 +181,8 @@ export function useOrganizationRemoteSessionClientsInfinite(
  * List the remote_session_clients registered with a given issuer in the caller's organization, each with its MCP server attachment count. Requires org:read.
  */
 export function useOrganizationRemoteSessionClientsInfiniteSuspense(
-  request: operations.ListOrganizationRemoteSessionClientsRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientsSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientsRequest,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     OrganizationRemoteSessionClientsInfiniteQueryData,
     OrganizationRemoteSessionClientsQueryError

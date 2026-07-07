@@ -18,10 +18,14 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListToolsRequest,
+  ListToolsSecurity,
+  ToolTypes,
+} from "../models/operations/listtools.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +46,7 @@ export {
 };
 
 export type ListToolsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +63,8 @@ export type ListToolsQueryError =
  * List all tools for a project
  */
 export function useListTools(
-  request?: operations.ListToolsRequest | undefined,
-  security?: operations.ListToolsSecurity | undefined,
+  request?: ListToolsRequest | undefined,
+  security?: ListToolsSecurity | undefined,
   options?: QueryHookOptions<ListToolsQueryData, ListToolsQueryError>,
 ): UseQueryResult<ListToolsQueryData, ListToolsQueryError> {
   const client = useGramContext();
@@ -82,8 +86,8 @@ export function useListTools(
  * List all tools for a project
  */
 export function useListToolsSuspense(
-  request?: operations.ListToolsRequest | undefined,
-  security?: operations.ListToolsSecurity | undefined,
+  request?: ListToolsRequest | undefined,
+  security?: ListToolsSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListToolsQueryData, ListToolsQueryError>,
 ): UseSuspenseQueryResult<ListToolsQueryData, ListToolsQueryError> {
   const client = useGramContext();
@@ -106,7 +110,7 @@ export function setListToolsData(
       limit?: number | undefined;
       deploymentId?: string | undefined;
       urnPrefix?: string | undefined;
-      toolTypes?: Array<operations.ToolTypes> | undefined;
+      toolTypes?: Array<ToolTypes> | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -126,7 +130,7 @@ export function invalidateListTools(
       limit?: number | undefined;
       deploymentId?: string | undefined;
       urnPrefix?: string | undefined;
-      toolTypes?: Array<operations.ToolTypes> | undefined;
+      toolTypes?: Array<ToolTypes> | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]

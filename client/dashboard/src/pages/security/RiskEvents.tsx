@@ -9,11 +9,9 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { getPresetRange } from "@gram-ai/elements";
-import type { RiskResult } from "@gram/client/models/components";
-import {
-  useRiskListPolicies,
-  useRiskOverview,
-} from "@gram/client/react-query/index.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";

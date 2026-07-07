@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { deploymentsLatest } from "../funcs/deploymentsLatest.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetLatestDeploymentResult } from "../models/components/getlatestdeploymentresult.js";
+import {
+  GetLatestDeploymentRequest,
+  GetLatestDeploymentSecurity,
+} from "../models/operations/getlatestdeployment.js";
 import { unwrapAsync } from "../types/fp.js";
-export type LatestDeploymentQueryData = components.GetLatestDeploymentResult;
+export type LatestDeploymentQueryData = GetLatestDeploymentResult;
 
 export function prefetchLatestDeployment(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetLatestDeploymentRequest | undefined,
-  security?: operations.GetLatestDeploymentSecurity | undefined,
+  request?: GetLatestDeploymentRequest | undefined,
+  security?: GetLatestDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchLatestDeployment(
 
 export function buildLatestDeploymentQuery(
   client$: GramCore,
-  request?: operations.GetLatestDeploymentRequest | undefined,
-  security?: operations.GetLatestDeploymentSecurity | undefined,
+  request?: GetLatestDeploymentRequest | undefined,
+  security?: GetLatestDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

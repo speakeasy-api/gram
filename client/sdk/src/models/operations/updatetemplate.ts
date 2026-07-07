@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpdatePromptTemplateForm,
+  UpdatePromptTemplateForm$Outbound,
+  UpdatePromptTemplateForm$outboundSchema,
+} from "../components/updateprompttemplateform.js";
 
 export type UpdateTemplateSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type UpdateTemplateRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  updatePromptTemplateForm: components.UpdatePromptTemplateForm;
+  updatePromptTemplateForm: UpdatePromptTemplateForm;
 };
 
 /** @internal */
@@ -143,7 +147,7 @@ export type UpdateTemplateRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  UpdatePromptTemplateForm: components.UpdatePromptTemplateForm$Outbound;
+  UpdatePromptTemplateForm: UpdatePromptTemplateForm$Outbound;
 };
 
 /** @internal */
@@ -155,8 +159,7 @@ export const UpdateTemplateRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    updatePromptTemplateForm:
-      components.UpdatePromptTemplateForm$outboundSchema,
+    updatePromptTemplateForm: UpdatePromptTemplateForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

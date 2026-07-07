@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  EvaluatePromptGuardrailRequestBody,
+  EvaluatePromptGuardrailRequestBody$Outbound,
+  EvaluatePromptGuardrailRequestBody$outboundSchema,
+} from "../components/evaluatepromptguardrailrequestbody.js";
 
 export type EvaluatePromptGuardrailSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,8 +38,7 @@ export type EvaluatePromptGuardrailRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  evaluatePromptGuardrailRequestBody:
-    components.EvaluatePromptGuardrailRequestBody;
+  evaluatePromptGuardrailRequestBody: EvaluatePromptGuardrailRequestBody;
 };
 
 /** @internal */
@@ -151,7 +154,7 @@ export type EvaluatePromptGuardrailRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   EvaluatePromptGuardrailRequestBody:
-    components.EvaluatePromptGuardrailRequestBody$Outbound;
+    EvaluatePromptGuardrailRequestBody$Outbound;
 };
 
 /** @internal */
@@ -164,7 +167,7 @@ export const EvaluatePromptGuardrailRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     evaluatePromptGuardrailRequestBody:
-      components.EvaluatePromptGuardrailRequestBody$outboundSchema,
+      EvaluatePromptGuardrailRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

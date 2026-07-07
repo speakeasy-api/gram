@@ -11,9 +11,9 @@ import { GramCore } from "../core.js";
 import { usageGetUsageTiers } from "../funcs/usageGetUsageTiers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { UsageTiers } from "../models/components/usagetiers.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetUsageTiersQueryData = components.UsageTiers;
+export type GetUsageTiersQueryData = UsageTiers;
 
 export function prefetchGetUsageTiers(
   queryClient: QueryClient,

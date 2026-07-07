@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  AttachServerRequestBody,
+  AttachServerRequestBody$Outbound,
+  AttachServerRequestBody$outboundSchema,
+} from "../components/attachserverrequestbody.js";
 
 export type DetachServerFromCollectionSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -20,7 +24,7 @@ export type DetachServerFromCollectionRequest = {
    * API Key header
    */
   gramKey?: string | undefined;
-  attachServerRequestBody: components.AttachServerRequestBody;
+  attachServerRequestBody: AttachServerRequestBody;
 };
 
 /** @internal */
@@ -60,7 +64,7 @@ export function detachServerFromCollectionSecurityToJSON(
 export type DetachServerFromCollectionRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
-  AttachServerRequestBody: components.AttachServerRequestBody$Outbound;
+  AttachServerRequestBody: AttachServerRequestBody$Outbound;
 };
 
 /** @internal */
@@ -71,7 +75,7 @@ export const DetachServerFromCollectionRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
-    attachServerRequestBody: components.AttachServerRequestBody$outboundSchema,
+    attachServerRequestBody: AttachServerRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

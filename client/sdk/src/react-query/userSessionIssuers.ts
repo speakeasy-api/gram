@@ -24,10 +24,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListUserSessionIssuersRequest,
+  ListUserSessionIssuersSecurity,
+} from "../models/operations/listusersessionissuers.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -60,7 +63,7 @@ export {
 };
 
 export type UserSessionIssuersQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -77,8 +80,8 @@ export type UserSessionIssuersQueryError =
  * List user_session_issuers in the caller's project.
  */
 export function useUserSessionIssuers(
-  request?: operations.ListUserSessionIssuersRequest | undefined,
-  security?: operations.ListUserSessionIssuersSecurity | undefined,
+  request?: ListUserSessionIssuersRequest | undefined,
+  security?: ListUserSessionIssuersSecurity | undefined,
   options?: QueryHookOptions<
     UserSessionIssuersQueryData,
     UserSessionIssuersQueryError
@@ -103,8 +106,8 @@ export function useUserSessionIssuers(
  * List user_session_issuers in the caller's project.
  */
 export function useUserSessionIssuersSuspense(
-  request?: operations.ListUserSessionIssuersRequest | undefined,
-  security?: operations.ListUserSessionIssuersSecurity | undefined,
+  request?: ListUserSessionIssuersRequest | undefined,
+  security?: ListUserSessionIssuersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     UserSessionIssuersQueryData,
     UserSessionIssuersQueryError
@@ -132,8 +135,8 @@ export function useUserSessionIssuersSuspense(
  * List user_session_issuers in the caller's project.
  */
 export function useUserSessionIssuersInfinite(
-  request?: operations.ListUserSessionIssuersRequest | undefined,
-  security?: operations.ListUserSessionIssuersSecurity | undefined,
+  request?: ListUserSessionIssuersRequest | undefined,
+  security?: ListUserSessionIssuersSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     UserSessionIssuersInfiniteQueryData,
     UserSessionIssuersQueryError
@@ -175,8 +178,8 @@ export function useUserSessionIssuersInfinite(
  * List user_session_issuers in the caller's project.
  */
 export function useUserSessionIssuersInfiniteSuspense(
-  request?: operations.ListUserSessionIssuersRequest | undefined,
-  security?: operations.ListUserSessionIssuersSecurity | undefined,
+  request?: ListUserSessionIssuersRequest | undefined,
+  security?: ListUserSessionIssuersSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     UserSessionIssuersInfiniteQueryData,
     UserSessionIssuersQueryError

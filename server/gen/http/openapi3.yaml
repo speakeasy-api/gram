@@ -4037,7 +4037,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/DeleteAIIntegrationConfigRequest'
+                            $ref: '#/components/schemas/DeleteConfigRequestBody'
                 required: true
             responses:
                 "204":
@@ -4225,7 +4225,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UpsertAIIntegrationConfigRequest'
+                            $ref: '#/components/schemas/UpsertConfigRequestBody'
                 required: true
             responses:
                 "200":
@@ -19681,7 +19681,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UpsertConfigRequestBody'
+                            $ref: '#/components/schemas/UpsertConfigRequestBody2'
                 required: true
             responses:
                 "200":
@@ -42043,7 +42043,7 @@ components:
                 - project_name
                 - project_slug
                 - mcp_server_id
-        DeleteAIIntegrationConfigRequest:
+        DeleteConfigRequestBody:
             type: object
             properties:
                 provider:
@@ -54734,28 +54734,6 @@ components:
                     $ref: '#/components/schemas/Asset'
             required:
                 - asset
-        UpsertAIIntegrationConfigRequest:
-            type: object
-            properties:
-                api_key:
-                    type: string
-                    description: Provider API key. Stored encrypted at rest; never returned on reads.
-                billing_mode:
-                    type: string
-                    description: 'How the provider org is billed: ''metered'', ''flat_rate'', or ''unknown''. Free-form; omit to leave the existing value unchanged.'
-                enabled:
-                    type: boolean
-                    description: Whether the integration should be active.
-                external_organization_id:
-                    type: string
-                    description: Provider organization identifier. Required for anthropic_compliance.
-                provider:
-                    type: string
-                    description: AI provider identifier. Supported values include cursor and anthropic_compliance.
-            required:
-                - provider
-                - api_key
-                - enabled
         UpsertAllowedOriginForm:
             type: object
             properties:
@@ -54781,6 +54759,28 @@ components:
             required:
                 - allowed_origin
         UpsertConfigRequestBody:
+            type: object
+            properties:
+                api_key:
+                    type: string
+                    description: Provider API key. Stored encrypted at rest; never returned on reads.
+                billing_mode:
+                    type: string
+                    description: 'How the provider org is billed: ''metered'', ''flat_rate'', or ''unknown''. Free-form; omit to leave the existing value unchanged.'
+                enabled:
+                    type: boolean
+                    description: Whether the integration should be active.
+                external_organization_id:
+                    type: string
+                    description: Provider organization identifier. Required for anthropic_compliance.
+                provider:
+                    type: string
+                    description: AI provider identifier. Supported values include cursor and anthropic_compliance.
+            required:
+                - provider
+                - api_key
+                - enabled
+        UpsertConfigRequestBody2:
             type: object
             properties:
                 enabled:

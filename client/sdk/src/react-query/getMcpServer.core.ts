@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { mcpServersGet } from "../funcs/mcpServersGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { McpServer } from "../models/components/mcpserver.js";
+import {
+  GetMcpServerRequest,
+  GetMcpServerSecurity,
+} from "../models/operations/getmcpserver.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetMcpServerQueryData = components.McpServer;
+export type GetMcpServerQueryData = McpServer;
 
 export function prefetchGetMcpServer(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetMcpServerRequest | undefined,
-  security?: operations.GetMcpServerSecurity | undefined,
+  request?: GetMcpServerRequest | undefined,
+  security?: GetMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGetMcpServer(
 
 export function buildGetMcpServerQuery(
   client$: GramCore,
-  request?: operations.GetMcpServerRequest | undefined,
-  security?: operations.GetMcpServerSecurity | undefined,
+  request?: GetMcpServerRequest | undefined,
+  security?: GetMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

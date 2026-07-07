@@ -125,7 +125,7 @@ export function useAIIntegrationConfigForm(
   const save = () => {
     upsert({
       request: {
-        upsertAIIntegrationConfigRequest: {
+        upsertConfigRequestBody: {
           provider: provider.provider,
           apiKey: apiKey.trim(),
           enabled,
@@ -142,7 +142,7 @@ export function useAIIntegrationConfigForm(
     if (!isConfigured) return;
     deleteConfig({
       request: {
-        deleteAIIntegrationConfigRequest: {
+        deleteConfigRequestBody: {
           provider: provider.provider,
         },
       },

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  GetEmployeeDataFlowGraphPayload,
+  GetEmployeeDataFlowGraphPayload$Outbound,
+  GetEmployeeDataFlowGraphPayload$outboundSchema,
+} from "../components/getemployeedataflowgraphpayload.js";
 
 export type GetEmployeeDataFlowGraphSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type GetEmployeeDataFlowGraphRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  getEmployeeDataFlowGraphPayload: components.GetEmployeeDataFlowGraphPayload;
+  getEmployeeDataFlowGraphPayload: GetEmployeeDataFlowGraphPayload;
 };
 
 /** @internal */
@@ -149,8 +153,7 @@ export type GetEmployeeDataFlowGraphRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  GetEmployeeDataFlowGraphPayload:
-    components.GetEmployeeDataFlowGraphPayload$Outbound;
+  GetEmployeeDataFlowGraphPayload: GetEmployeeDataFlowGraphPayload$Outbound;
 };
 
 /** @internal */
@@ -163,7 +166,7 @@ export const GetEmployeeDataFlowGraphRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     getEmployeeDataFlowGraphPayload:
-      components.GetEmployeeDataFlowGraphPayload$outboundSchema,
+      GetEmployeeDataFlowGraphPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

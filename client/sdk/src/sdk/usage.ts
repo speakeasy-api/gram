@@ -10,8 +10,33 @@ import { usageGetTokensUnderManagement } from "../funcs/usageGetTokensUnderManag
 import { usageGetUsageTiers } from "../funcs/usageGetUsageTiers.js";
 import { usageSetBillingMetadata } from "../funcs/usageSetBillingMetadata.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { PeriodUsage } from "../models/components/periodusage.js";
+import { TokensUnderManagement } from "../models/components/tokensundermanagement.js";
+import { UsageTiers } from "../models/components/usagetiers.js";
+import {
+  CreateCheckoutRequest,
+  CreateCheckoutSecurity,
+} from "../models/operations/createcheckout.js";
+import {
+  CreateCustomerSessionRequest,
+  CreateCustomerSessionSecurity,
+} from "../models/operations/createcustomersession.js";
+import {
+  CreateTopUpCheckoutRequest,
+  CreateTopUpCheckoutSecurity,
+} from "../models/operations/createtopupcheckout.js";
+import {
+  GetPeriodUsageRequest,
+  GetPeriodUsageSecurity,
+} from "../models/operations/getperiodusage.js";
+import {
+  GetTokensUnderManagementRequest,
+  GetTokensUnderManagementSecurity,
+} from "../models/operations/gettokensundermanagement.js";
+import {
+  SetBillingMetadataRequest,
+  SetBillingMetadataSecurity,
+} from "../models/operations/setbillingmetadata.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Usage extends ClientSDK {
@@ -22,8 +47,8 @@ export class Usage extends ClientSDK {
    * Create a checkout link for upgrading to the business plan
    */
   async createCheckout(
-    request?: operations.CreateCheckoutRequest | undefined,
-    security?: operations.CreateCheckoutSecurity | undefined,
+    request?: CreateCheckoutRequest | undefined,
+    security?: CreateCheckoutSecurity | undefined,
     options?: RequestOptions,
   ): Promise<string> {
     return unwrapAsync(usageCreateCheckout(
@@ -41,8 +66,8 @@ export class Usage extends ClientSDK {
    * Create a customer session for the user
    */
   async createCustomerSession(
-    request?: operations.CreateCustomerSessionRequest | undefined,
-    security?: operations.CreateCustomerSessionSecurity | undefined,
+    request?: CreateCustomerSessionRequest | undefined,
+    security?: CreateCustomerSessionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<string> {
     return unwrapAsync(usageCreateCustomerSession(
@@ -60,8 +85,8 @@ export class Usage extends ClientSDK {
    * Create a checkout link for a one-time credit top-up purchase
    */
   async createTopUpCheckout(
-    request?: operations.CreateTopUpCheckoutRequest | undefined,
-    security?: operations.CreateTopUpCheckoutSecurity | undefined,
+    request?: CreateTopUpCheckoutRequest | undefined,
+    security?: CreateTopUpCheckoutSecurity | undefined,
     options?: RequestOptions,
   ): Promise<string> {
     return unwrapAsync(usageCreateTopUpCheckout(
@@ -79,10 +104,10 @@ export class Usage extends ClientSDK {
    * Get the usage for an organization for a given period
    */
   async getPeriodUsage(
-    request?: operations.GetPeriodUsageRequest | undefined,
-    security?: operations.GetPeriodUsageSecurity | undefined,
+    request?: GetPeriodUsageRequest | undefined,
+    security?: GetPeriodUsageSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.PeriodUsage> {
+  ): Promise<PeriodUsage> {
     return unwrapAsync(usageGetPeriodUsage(
       this,
       request,
@@ -98,10 +123,10 @@ export class Usage extends ClientSDK {
    * Get tokens under management for the active billing cycle alongside the contracted terms
    */
   async getTokensUnderManagement(
-    request?: operations.GetTokensUnderManagementRequest | undefined,
-    security?: operations.GetTokensUnderManagementSecurity | undefined,
+    request?: GetTokensUnderManagementRequest | undefined,
+    security?: GetTokensUnderManagementSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.TokensUnderManagement> {
+  ): Promise<TokensUnderManagement> {
     return unwrapAsync(usageGetTokensUnderManagement(
       this,
       request,
@@ -118,7 +143,7 @@ export class Usage extends ClientSDK {
    */
   async getUsageTiers(
     options?: RequestOptions,
-  ): Promise<components.UsageTiers> {
+  ): Promise<UsageTiers> {
     return unwrapAsync(usageGetUsageTiers(
       this,
       options,
@@ -132,10 +157,10 @@ export class Usage extends ClientSDK {
    * Set an organization's billing contract terms. Restricted to platform admins.
    */
   async setBillingMetadata(
-    request: operations.SetBillingMetadataRequest,
-    security?: operations.SetBillingMetadataSecurity | undefined,
+    request: SetBillingMetadataRequest,
+    security?: SetBillingMetadataSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.TokensUnderManagement> {
+  ): Promise<TokensUnderManagement> {
     return unwrapAsync(usageSetBillingMetadata(
       this,
       request,

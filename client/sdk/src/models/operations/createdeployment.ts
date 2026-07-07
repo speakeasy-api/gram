@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateDeploymentRequestBody,
+  CreateDeploymentRequestBody$Outbound,
+  CreateDeploymentRequestBody$outboundSchema,
+} from "../components/createdeploymentrequestbody.js";
 
 export type CreateDeploymentSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -38,7 +42,7 @@ export type CreateDeploymentRequest = {
    * A unique identifier that will mitigate against duplicate deployments.
    */
   idempotencyKey: string;
-  createDeploymentRequestBody: components.CreateDeploymentRequestBody;
+  createDeploymentRequestBody: CreateDeploymentRequestBody;
 };
 
 /** @internal */
@@ -148,7 +152,7 @@ export type CreateDeploymentRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Idempotency-Key": string;
-  CreateDeploymentRequestBody: components.CreateDeploymentRequestBody$Outbound;
+  CreateDeploymentRequestBody: CreateDeploymentRequestBody$Outbound;
 };
 
 /** @internal */
@@ -161,8 +165,7 @@ export const CreateDeploymentRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     idempotencyKey: z.string(),
-    createDeploymentRequestBody:
-      components.CreateDeploymentRequestBody$outboundSchema,
+    createDeploymentRequestBody: CreateDeploymentRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

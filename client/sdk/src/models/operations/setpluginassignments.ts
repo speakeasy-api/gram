@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SetPluginAssignmentsForm,
+  SetPluginAssignmentsForm$Outbound,
+  SetPluginAssignmentsForm$outboundSchema,
+} from "../components/setpluginassignmentsform.js";
 
 export type SetPluginAssignmentsSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -20,7 +24,7 @@ export type SetPluginAssignmentsRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  setPluginAssignmentsForm: components.SetPluginAssignmentsForm;
+  setPluginAssignmentsForm: SetPluginAssignmentsForm;
 };
 
 /** @internal */
@@ -60,7 +64,7 @@ export function setPluginAssignmentsSecurityToJSON(
 export type SetPluginAssignmentsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  SetPluginAssignmentsForm: components.SetPluginAssignmentsForm$Outbound;
+  SetPluginAssignmentsForm: SetPluginAssignmentsForm$Outbound;
 };
 
 /** @internal */
@@ -71,8 +75,7 @@ export const SetPluginAssignmentsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    setPluginAssignmentsForm:
-      components.SetPluginAssignmentsForm$outboundSchema,
+    setPluginAssignmentsForm: SetPluginAssignmentsForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

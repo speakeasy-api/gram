@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { deploymentsActive } from "../funcs/deploymentsActive.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetActiveDeploymentResult } from "../models/components/getactivedeploymentresult.js";
+import {
+  GetActiveDeploymentRequest,
+  GetActiveDeploymentSecurity,
+} from "../models/operations/getactivedeployment.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ActiveDeploymentQueryData = components.GetActiveDeploymentResult;
+export type ActiveDeploymentQueryData = GetActiveDeploymentResult;
 
 export function prefetchActiveDeployment(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetActiveDeploymentRequest | undefined,
-  security?: operations.GetActiveDeploymentSecurity | undefined,
+  request?: GetActiveDeploymentRequest | undefined,
+  security?: GetActiveDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchActiveDeployment(
 
 export function buildActiveDeploymentQuery(
   client$: GramCore,
-  request?: operations.GetActiveDeploymentRequest | undefined,
-  security?: operations.GetActiveDeploymentSecurity | undefined,
+  request?: GetActiveDeploymentRequest | undefined,
+  security?: GetActiveDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

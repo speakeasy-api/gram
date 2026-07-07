@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DeleteToolsetRequest,
+  DeleteToolsetSecurity,
+} from "../models/operations/deletetoolset.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type DeleteToolsetMutationVariables = {
-  request: operations.DeleteToolsetRequest;
-  security?: operations.DeleteToolsetSecurity | undefined;
+  request: DeleteToolsetRequest;
+  security?: DeleteToolsetSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type DeleteToolsetMutationData = void;
 
 export type DeleteToolsetMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

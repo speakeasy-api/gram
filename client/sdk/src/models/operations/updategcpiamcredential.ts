@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpdateGcpIamCredentialRequestBody,
+  UpdateGcpIamCredentialRequestBody$Outbound,
+  UpdateGcpIamCredentialRequestBody$outboundSchema,
+} from "../components/updategcpiamcredentialrequestbody.js";
 
 export type UpdateGcpIamCredentialSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,8 +19,7 @@ export type UpdateGcpIamCredentialRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  updateGcpIamCredentialRequestBody:
-    components.UpdateGcpIamCredentialRequestBody;
+  updateGcpIamCredentialRequestBody: UpdateGcpIamCredentialRequestBody;
 };
 
 /** @internal */
@@ -52,8 +55,7 @@ export function updateGcpIamCredentialSecurityToJSON(
 /** @internal */
 export type UpdateGcpIamCredentialRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  UpdateGcpIamCredentialRequestBody:
-    components.UpdateGcpIamCredentialRequestBody$Outbound;
+  UpdateGcpIamCredentialRequestBody: UpdateGcpIamCredentialRequestBody$Outbound;
 };
 
 /** @internal */
@@ -64,7 +66,7 @@ export const UpdateGcpIamCredentialRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     updateGcpIamCredentialRequestBody:
-      components.UpdateGcpIamCredentialRequestBody$outboundSchema,
+      UpdateGcpIamCredentialRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

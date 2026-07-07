@@ -21,7 +21,10 @@ import {
 } from "../models/errors/httpclienterrors.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ReceiveWorkOSWebhookRequest,
+  ReceiveWorkOSWebhookRequest$outboundSchema,
+} from "../models/operations/receiveworkoswebhook.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -33,7 +36,7 @@ import { Result } from "../types/fp.js";
  */
 export function externalReceiveWorkOSWebhook(
   client: GramCore,
-  request?: operations.ReceiveWorkOSWebhookRequest | undefined,
+  request?: ReceiveWorkOSWebhookRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -57,7 +60,7 @@ export function externalReceiveWorkOSWebhook(
 
 async function $do(
   client: GramCore,
-  request?: operations.ReceiveWorkOSWebhookRequest | undefined,
+  request?: ReceiveWorkOSWebhookRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -78,10 +81,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        z.optional(operations.ReceiveWorkOSWebhookRequest$outboundSchema),
-        value,
-      ),
+      z.parse(z.optional(ReceiveWorkOSWebhookRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {

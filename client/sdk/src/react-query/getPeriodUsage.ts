@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetPeriodUsageRequest,
+  GetPeriodUsageSecurity,
+} from "../models/operations/getperiodusage.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetPeriodUsageQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetPeriodUsageQueryError =
  * Get the usage for an organization for a given period
  */
 export function useGetPeriodUsage(
-  request?: operations.GetPeriodUsageRequest | undefined,
-  security?: operations.GetPeriodUsageSecurity | undefined,
+  request?: GetPeriodUsageRequest | undefined,
+  security?: GetPeriodUsageSecurity | undefined,
   options?: QueryHookOptions<GetPeriodUsageQueryData, GetPeriodUsageQueryError>,
 ): UseQueryResult<GetPeriodUsageQueryData, GetPeriodUsageQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useGetPeriodUsage(
  * Get the usage for an organization for a given period
  */
 export function useGetPeriodUsageSuspense(
-  request?: operations.GetPeriodUsageRequest | undefined,
-  security?: operations.GetPeriodUsageSecurity | undefined,
+  request?: GetPeriodUsageRequest | undefined,
+  security?: GetPeriodUsageSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetPeriodUsageQueryData,
     GetPeriodUsageQueryError

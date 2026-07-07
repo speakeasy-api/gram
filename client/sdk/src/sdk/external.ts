@@ -4,7 +4,7 @@
 
 import { externalReceiveWorkOSWebhook } from "../funcs/externalReceiveWorkOSWebhook.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import { ReceiveWorkOSWebhookRequest } from "../models/operations/receiveworkoswebhook.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class External extends ClientSDK {
@@ -15,7 +15,7 @@ export class External extends ClientSDK {
    * Receive and enqueue a WorkOS webhook event.
    */
   async receiveWorkOSWebhook(
-    request?: operations.ReceiveWorkOSWebhookRequest | undefined,
+    request?: ReceiveWorkOSWebhookRequest | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(externalReceiveWorkOSWebhook(

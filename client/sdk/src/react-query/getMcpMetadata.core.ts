@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { mcpMetadataGet } from "../funcs/mcpMetadataGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetMcpMetadataResponseBody } from "../models/components/getmcpmetadataresponsebody.js";
+import {
+  GetMcpMetadataRequest,
+  GetMcpMetadataSecurity,
+} from "../models/operations/getmcpmetadata.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetMcpMetadataQueryData = components.GetMcpMetadataResponseBody;
+export type GetMcpMetadataQueryData = GetMcpMetadataResponseBody;
 
 export function prefetchGetMcpMetadata(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetMcpMetadataRequest | undefined,
-  security?: operations.GetMcpMetadataSecurity | undefined,
+  request?: GetMcpMetadataRequest | undefined,
+  security?: GetMcpMetadataSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGetMcpMetadata(
 
 export function buildGetMcpMetadataQuery(
   client$: GramCore,
-  request?: operations.GetMcpMetadataRequest | undefined,
-  security?: operations.GetMcpMetadataSecurity | undefined,
+  request?: GetMcpMetadataRequest | undefined,
+  security?: GetMcpMetadataSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

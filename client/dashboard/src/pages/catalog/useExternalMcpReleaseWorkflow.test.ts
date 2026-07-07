@@ -48,12 +48,10 @@ vi.mock("@gram/client/react-query", () => ({
   useListToolsets: vi.fn(() => ({ data: undefined })),
 }));
 
-import {
-  useDeployment,
-  useDeploymentLogs,
-  useLatestDeployment,
-  useListToolsets,
-} from "@gram/client/react-query";
+import { useDeployment } from "@gram/client/react-query/deployment.js";
+import { useDeploymentLogs } from "@gram/client/react-query/deploymentLogs.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import {
   generateSlug,

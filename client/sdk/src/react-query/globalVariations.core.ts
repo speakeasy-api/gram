@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { variationsListGlobal } from "../funcs/variationsListGlobal.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListVariationsResult } from "../models/components/listvariationsresult.js";
+import {
+  ListGlobalVariationsRequest,
+  ListGlobalVariationsSecurity,
+} from "../models/operations/listglobalvariations.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GlobalVariationsQueryData = components.ListVariationsResult;
+export type GlobalVariationsQueryData = ListVariationsResult;
 
 export function prefetchGlobalVariations(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListGlobalVariationsRequest | undefined,
-  security?: operations.ListGlobalVariationsSecurity | undefined,
+  request?: ListGlobalVariationsRequest | undefined,
+  security?: ListGlobalVariationsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGlobalVariations(
 
 export function buildGlobalVariationsQuery(
   client$: GramCore,
-  request?: operations.ListGlobalVariationsRequest | undefined,
-  security?: operations.ListGlobalVariationsSecurity | undefined,
+  request?: ListGlobalVariationsRequest | undefined,
+  security?: ListGlobalVariationsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

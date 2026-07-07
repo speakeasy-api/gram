@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { projectsListAllowedOrigins } from "../funcs/projectsListAllowedOrigins.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListAllowedOriginsResult } from "../models/components/listallowedoriginsresult.js";
+import {
+  ListAllowedOriginsRequest,
+  ListAllowedOriginsSecurity,
+} from "../models/operations/listallowedorigins.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListAllowedOriginsQueryData = components.ListAllowedOriginsResult;
+export type ListAllowedOriginsQueryData = ListAllowedOriginsResult;
 
 export function prefetchListAllowedOrigins(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListAllowedOriginsRequest | undefined,
-  security?: operations.ListAllowedOriginsSecurity | undefined,
+  request?: ListAllowedOriginsRequest | undefined,
+  security?: ListAllowedOriginsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListAllowedOrigins(
 
 export function buildListAllowedOriginsQuery(
   client$: GramCore,
-  request?: operations.ListAllowedOriginsRequest | undefined,
-  security?: operations.ListAllowedOriginsSecurity | undefined,
+  request?: ListAllowedOriginsRequest | undefined,
+  security?: ListAllowedOriginsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

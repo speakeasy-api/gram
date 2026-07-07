@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListHooksTracesRequest,
+  ListHooksTracesSecurity,
+} from "../models/operations/listhookstraces.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListHooksTracesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListHooksTracesQueryError =
  * List hook traces aggregated by trace_id with user information
  */
 export function useListHooksTraces(
-  request: operations.ListHooksTracesRequest,
-  security?: operations.ListHooksTracesSecurity | undefined,
+  request: ListHooksTracesRequest,
+  security?: ListHooksTracesSecurity | undefined,
   options?: QueryHookOptions<
     ListHooksTracesQueryData,
     ListHooksTracesQueryError
@@ -85,8 +88,8 @@ export function useListHooksTraces(
  * List hook traces aggregated by trace_id with user information
  */
 export function useListHooksTracesSuspense(
-  request: operations.ListHooksTracesRequest,
-  security?: operations.ListHooksTracesSecurity | undefined,
+  request: ListHooksTracesRequest,
+  security?: ListHooksTracesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListHooksTracesQueryData,
     ListHooksTracesQueryError

@@ -26,21 +26,19 @@ import {
 } from "@/lib/sources";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
-import type {
-  McpServer,
-  TunneledMcpConnection,
-  TunneledMcpServer,
-  TunneledMcpServerConnections,
-} from "@gram/client/models/components";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { TunneledMcpConnection } from "@gram/client/models/components/tunneledmcpconnection.js";
+import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
+import type { TunneledMcpServerConnections } from "@gram/client/models/components/tunneledmcpserverconnections.js";
 import {
   invalidateAllGetTunneledMcpServer,
-  invalidateAllTunneledMcpServers,
   useGetTunneledMcpServer,
-  useListTunneledMcpServerConnections,
-  useMcpEndpoints,
-  useMcpServers,
-  useUpdateTunneledMcpServerMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/getTunneledMcpServer.js";
+import { useListTunneledMcpServerConnections } from "@gram/client/react-query/listTunneledMcpServerConnections.js";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
+import { useUpdateTunneledMcpServerMutation } from "@gram/client/react-query/updateTunneledMcpServer.js";
 import { Alert, Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";

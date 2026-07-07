@@ -1,13 +1,11 @@
 import { ReactElement } from "react";
 import { cn } from "@/lib/utils";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
-import type {
-  TelemetryLogRecord,
-  ToolUsageTraceLogGroup,
-} from "@gram/client/models/components";
+import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
+import type { ToolUsageTraceLogGroup } from "@gram/client/models/components/toolusagetraceloggroup.js";
 import { Operator as Op } from "@gram/client/models/components/logfilter";
 import type { SearchLogsPayload } from "@gram/client/models/components/searchlogspayload";
-import { useGramContext } from "@gram/client/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";

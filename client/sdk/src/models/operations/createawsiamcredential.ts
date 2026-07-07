@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateAwsIamCredentialForm,
+  CreateAwsIamCredentialForm$Outbound,
+  CreateAwsIamCredentialForm$outboundSchema,
+} from "../components/createawsiamcredentialform.js";
 
 export type CreateAwsIamCredentialSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,7 +19,7 @@ export type CreateAwsIamCredentialRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  createAwsIamCredentialForm: components.CreateAwsIamCredentialForm;
+  createAwsIamCredentialForm: CreateAwsIamCredentialForm;
 };
 
 /** @internal */
@@ -51,7 +55,7 @@ export function createAwsIamCredentialSecurityToJSON(
 /** @internal */
 export type CreateAwsIamCredentialRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  CreateAwsIamCredentialForm: components.CreateAwsIamCredentialForm$Outbound;
+  CreateAwsIamCredentialForm: CreateAwsIamCredentialForm$Outbound;
 };
 
 /** @internal */
@@ -61,8 +65,7 @@ export const CreateAwsIamCredentialRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    createAwsIamCredentialForm:
-      components.CreateAwsIamCredentialForm$outboundSchema,
+    createAwsIamCredentialForm: CreateAwsIamCredentialForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

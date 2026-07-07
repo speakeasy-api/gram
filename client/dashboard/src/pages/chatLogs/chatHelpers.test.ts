@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RiskResult } from "@gram/client/models/components";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { getMatchStrings, matchShownInDescription } from "./chatHelpers";
 
 // Minimal RiskResult factory — only the fields the match-display helpers read

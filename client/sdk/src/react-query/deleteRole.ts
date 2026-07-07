@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DeleteRoleRequest,
+  DeleteRoleSecurity,
+} from "../models/operations/deleterole.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type DeleteRoleMutationVariables = {
-  request: operations.DeleteRoleRequest;
-  security?: operations.DeleteRoleSecurity | undefined;
+  request: DeleteRoleRequest;
+  security?: DeleteRoleSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type DeleteRoleMutationData = void;
 
 export type DeleteRoleMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

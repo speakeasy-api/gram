@@ -5,8 +5,16 @@
 import { auditlogsList } from "../funcs/auditlogsList.js";
 import { auditlogsListFacets } from "../funcs/auditlogsListFacets.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListAuditLogFacetsResult } from "../models/components/listauditlogfacetsresult.js";
+import {
+  ListAuditLogFacetsRequest,
+  ListAuditLogFacetsSecurity,
+} from "../models/operations/listauditlogfacets.js";
+import {
+  ListAuditLogsRequest,
+  ListAuditLogsResponse,
+  ListAuditLogsSecurity,
+} from "../models/operations/listauditlogs.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -18,12 +26,10 @@ export class Auditlogs extends ClientSDK {
    * List audit logs across organization and projects.
    */
   async list(
-    request?: operations.ListAuditLogsRequest | undefined,
-    security?: operations.ListAuditLogsSecurity | undefined,
+    request?: ListAuditLogsRequest | undefined,
+    security?: ListAuditLogsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<
-    PageIterator<operations.ListAuditLogsResponse, { cursor: string }>
-  > {
+  ): Promise<PageIterator<ListAuditLogsResponse, { cursor: string }>> {
     return unwrapResultIterator(auditlogsList(
       this,
       request,
@@ -39,10 +45,10 @@ export class Auditlogs extends ClientSDK {
    * List available audit log facet values across organization and projects.
    */
   async listFacets(
-    request?: operations.ListAuditLogFacetsRequest | undefined,
-    security?: operations.ListAuditLogFacetsSecurity | undefined,
+    request?: ListAuditLogFacetsRequest | undefined,
+    security?: ListAuditLogFacetsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListAuditLogFacetsResult> {
+  ): Promise<ListAuditLogFacetsResult> {
     return unwrapAsync(auditlogsListFacets(
       this,
       request,

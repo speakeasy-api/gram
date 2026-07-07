@@ -9,17 +9,13 @@ import {
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
-import type {
-  RemoteSessionClient,
-  RemoteSessionIssuer,
-  UserSessionIssuer,
-} from "@gram/client/models/components";
-import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
-import {
-  invalidateAllRemoteSessionClients,
-  invalidateAllRemoteSessionIssuers,
-  useMcpServers,
-} from "@gram/client/react-query/index.js";
+import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";

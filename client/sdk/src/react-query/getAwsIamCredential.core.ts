@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { externalCredentialsGetAwsIam } from "../funcs/externalCredentialsGetAwsIam.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { AwsIamCredential } from "../models/components/awsiamcredential.js";
+import {
+  GetAwsIamCredentialRequest,
+  GetAwsIamCredentialSecurity,
+} from "../models/operations/getawsiamcredential.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetAwsIamCredentialQueryData = components.AwsIamCredential;
+export type GetAwsIamCredentialQueryData = AwsIamCredential;
 
 export function prefetchGetAwsIamCredential(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetAwsIamCredentialRequest,
-  security?: operations.GetAwsIamCredentialSecurity | undefined,
+  request: GetAwsIamCredentialRequest,
+  security?: GetAwsIamCredentialSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGetAwsIamCredential(
 
 export function buildGetAwsIamCredentialQuery(
   client$: GramCore,
-  request: operations.GetAwsIamCredentialRequest,
-  security?: operations.GetAwsIamCredentialSecurity | undefined,
+  request: GetAwsIamCredentialRequest,
+  security?: GetAwsIamCredentialSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

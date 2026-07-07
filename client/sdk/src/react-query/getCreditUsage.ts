@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CreditUsageRequest,
+  CreditUsageSecurity,
+} from "../models/operations/creditusage.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetCreditUsageQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetCreditUsageQueryError =
  * Get the total number of chat credits and usage for the current billing period
  */
 export function useGetCreditUsage(
-  request?: operations.CreditUsageRequest | undefined,
-  security?: operations.CreditUsageSecurity | undefined,
+  request?: CreditUsageRequest | undefined,
+  security?: CreditUsageSecurity | undefined,
   options?: QueryHookOptions<GetCreditUsageQueryData, GetCreditUsageQueryError>,
 ): UseQueryResult<GetCreditUsageQueryData, GetCreditUsageQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useGetCreditUsage(
  * Get the total number of chat credits and usage for the current billing period
  */
 export function useGetCreditUsageSuspense(
-  request?: operations.CreditUsageRequest | undefined,
-  security?: operations.CreditUsageSecurity | undefined,
+  request?: CreditUsageRequest | undefined,
+  security?: CreditUsageSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetCreditUsageQueryData,
     GetCreditUsageQueryError

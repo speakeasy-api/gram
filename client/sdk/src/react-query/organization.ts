@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetOrganizationRequest,
+  GetOrganizationSecurity,
+} from "../models/operations/getorganization.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type OrganizationQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type OrganizationQueryError =
  * Get the active organization from the session.
  */
 export function useOrganization(
-  request?: operations.GetOrganizationRequest | undefined,
-  security?: operations.GetOrganizationSecurity | undefined,
+  request?: GetOrganizationRequest | undefined,
+  security?: GetOrganizationSecurity | undefined,
   options?: QueryHookOptions<OrganizationQueryData, OrganizationQueryError>,
 ): UseQueryResult<OrganizationQueryData, OrganizationQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useOrganization(
  * Get the active organization from the session.
  */
 export function useOrganizationSuspense(
-  request?: operations.GetOrganizationRequest | undefined,
-  security?: operations.GetOrganizationSecurity | undefined,
+  request?: GetOrganizationRequest | undefined,
+  security?: GetOrganizationSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     OrganizationQueryData,
     OrganizationQueryError

@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DeleteRemoteSessionClientRequest,
+  DeleteRemoteSessionClientSecurity,
+} from "../models/operations/deleteremotesessionclient.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type DeleteRemoteSessionClientMutationVariables = {
-  request: operations.DeleteRemoteSessionClientRequest;
-  security?: operations.DeleteRemoteSessionClientSecurity | undefined;
+  request: DeleteRemoteSessionClientRequest;
+  security?: DeleteRemoteSessionClientSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type DeleteRemoteSessionClientMutationData = void;
 
 export type DeleteRemoteSessionClientMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

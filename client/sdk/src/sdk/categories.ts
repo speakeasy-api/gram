@@ -4,8 +4,11 @@
 
 import { riskCategoriesList } from "../funcs/riskCategoriesList.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RiskCategoriesResult } from "../models/components/riskcategoriesresult.js";
+import {
+  ListRiskCategoriesRequest,
+  ListRiskCategoriesSecurity,
+} from "../models/operations/listriskcategories.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Categories extends ClientSDK {
@@ -16,10 +19,10 @@ export class Categories extends ClientSDK {
    * Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.
    */
   async list(
-    request?: operations.ListRiskCategoriesRequest | undefined,
-    security?: operations.ListRiskCategoriesSecurity | undefined,
+    request?: ListRiskCategoriesRequest | undefined,
+    security?: ListRiskCategoriesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskCategoriesResult> {
+  ): Promise<RiskCategoriesResult> {
     return unwrapAsync(riskCategoriesList(
       this,
       request,

@@ -1,6 +1,6 @@
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
-import { useListChats } from "@gram/client/react-query";
+import { useListChats } from "@gram/client/react-query/listChats.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
 import { cn, isMacPlatform } from "@/lib/utils";

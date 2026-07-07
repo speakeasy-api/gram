@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListTriggerDefinitionsRequest,
+  ListTriggerDefinitionsSecurity,
+} from "../models/operations/listtriggerdefinitions.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type TriggerDefinitionsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type TriggerDefinitionsQueryError =
  * List static trigger definitions available to a project.
  */
 export function useTriggerDefinitions(
-  request?: operations.ListTriggerDefinitionsRequest | undefined,
-  security?: operations.ListTriggerDefinitionsSecurity | undefined,
+  request?: ListTriggerDefinitionsRequest | undefined,
+  security?: ListTriggerDefinitionsSecurity | undefined,
   options?: QueryHookOptions<
     TriggerDefinitionsQueryData,
     TriggerDefinitionsQueryError
@@ -85,8 +88,8 @@ export function useTriggerDefinitions(
  * List static trigger definitions available to a project.
  */
 export function useTriggerDefinitionsSuspense(
-  request?: operations.ListTriggerDefinitionsRequest | undefined,
-  security?: operations.ListTriggerDefinitionsSecurity | undefined,
+  request?: ListTriggerDefinitionsRequest | undefined,
+  security?: ListTriggerDefinitionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     TriggerDefinitionsQueryData,
     TriggerDefinitionsQueryError

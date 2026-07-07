@@ -27,20 +27,18 @@ import {
 } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
-import type {
-  GetObservabilityOverviewResult,
-  McpServer,
-  RemoteMcpServer,
-} from "@gram/client/models/components";
+import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import { useGramContext } from "@gram/client/react-query/_context";
 import {
   invalidateAllGetRemoteMcpServer,
-  invalidateAllRemoteMcpServers,
   useGetRemoteMcpServer,
-  useMcpEndpoints,
-  useMcpServers,
-  useUpdateRemoteMcpServerMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/getRemoteMcpServer.js";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
+import { useUpdateRemoteMcpServerMutation } from "@gram/client/react-query/updateRemoteMcpServer.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Alert, Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { useQuery, useQueryClient } from "@tanstack/react-query";

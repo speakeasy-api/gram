@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DownloadCodexInstallScriptRequest,
+  DownloadCodexInstallScriptSecurity,
+} from "../models/operations/downloadcodexinstallscript.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type PluginsDownloadCodexInstallScriptQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type PluginsDownloadCodexInstallScriptQueryError =
  * Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.
  */
 export function usePluginsDownloadCodexInstallScript(
-  request?: operations.DownloadCodexInstallScriptRequest | undefined,
-  security?: operations.DownloadCodexInstallScriptSecurity | undefined,
+  request?: DownloadCodexInstallScriptRequest | undefined,
+  security?: DownloadCodexInstallScriptSecurity | undefined,
   options?: QueryHookOptions<
     PluginsDownloadCodexInstallScriptQueryData,
     PluginsDownloadCodexInstallScriptQueryError
@@ -88,8 +91,8 @@ export function usePluginsDownloadCodexInstallScript(
  * Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.
  */
 export function usePluginsDownloadCodexInstallScriptSuspense(
-  request?: operations.DownloadCodexInstallScriptRequest | undefined,
-  security?: operations.DownloadCodexInstallScriptSecurity | undefined,
+  request?: DownloadCodexInstallScriptRequest | undefined,
+  security?: DownloadCodexInstallScriptSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     PluginsDownloadCodexInstallScriptQueryData,
     PluginsDownloadCodexInstallScriptQueryError

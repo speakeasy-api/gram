@@ -7,7 +7,7 @@ import { Type } from "@/components/ui/type";
 import { InstallInstructionsButton } from "./InstallInstructionsDialog";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useRoutes } from "@/routes";
-import { Plugin } from "@gram/client/models/components";
+import { Plugin } from "@gram/client/models/components/plugin.js";
 import { useCreatePluginMutation } from "@gram/client/react-query/createPlugin";
 import {
   invalidateAllPlugins,

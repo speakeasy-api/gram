@@ -32,15 +32,13 @@ import { telemetryGetEmployeeDataFlowGraph } from "@gram/client/funcs/telemetryG
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetUserMetricsSummary } from "@gram/client/funcs/telemetryGetUserMetricsSummary";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
-import type {
-  EmployeeDataFlowNode,
-  GetEmployeeDataFlowGraphResult,
-  GetObservabilityOverviewResult,
-  ProjectSummary,
-  TimeSeriesBucket,
-  UserAccount,
-  UserSummary,
-} from "@gram/client/models/components";
+import type { EmployeeDataFlowNode } from "@gram/client/models/components/employeedataflownode.js";
+import type { GetEmployeeDataFlowGraphResult } from "@gram/client/models/components/getemployeedataflowgraphresult.js";
+import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
+import type { ProjectSummary } from "@gram/client/models/components/projectsummary.js";
+import type { TimeSeriesBucket } from "@gram/client/models/components/timeseriesbucket.js";
+import type { UserAccount } from "@gram/client/models/components/useraccount.js";
+import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { AccountRow } from "@/components/observe/account-display";
 import { providerLabel } from "@/components/observe/account-display-utils";
 import {
@@ -50,13 +48,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  useGramContext,
-  useListChats,
-  useMembers,
-  useUserSessions,
-} from "@gram/client/react-query";
-import { useRiskOverview } from "@gram/client/react-query/index.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useListChats } from "@gram/client/react-query/listChats.js";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useUserSessions } from "@gram/client/react-query/userSessions.js";
+import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import {
   TimeRangePicker,

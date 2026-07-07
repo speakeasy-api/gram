@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { externalCredentialsUpdateAwsIam } from "../funcs/externalCredentialsUpdateAwsIam.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { AwsIamCredential } from "../models/components/awsiamcredential.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  UpdateAwsIamCredentialRequest,
+  UpdateAwsIamCredentialSecurity,
+} from "../models/operations/updateawsiamcredential.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UpdateAwsIamCredentialMutationVariables = {
-  request: operations.UpdateAwsIamCredentialRequest;
-  security?: operations.UpdateAwsIamCredentialSecurity | undefined;
+  request: UpdateAwsIamCredentialRequest;
+  security?: UpdateAwsIamCredentialSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpdateAwsIamCredentialMutationData = components.AwsIamCredential;
+export type UpdateAwsIamCredentialMutationData = AwsIamCredential;
 
 export type UpdateAwsIamCredentialMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
