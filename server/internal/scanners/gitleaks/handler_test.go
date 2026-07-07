@@ -8,7 +8,7 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -45,8 +45,7 @@ func TestHandle_PublishesGitleaksFinding(t *testing.T) {
 	t.Parallel()
 
 	pub, published := capturingPub(t)
-	h, err := gitleaks.NewHandler(testenv.NewLogger(t), pub)
-	require.NoError(t, err)
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub)
 
 	content := `Here is my AWS key: AKIAIOSFODNN7REALKEY and secret: wJalrXUtnFEMI/K7MDENG/bPxRfiCYREALKEYXX`
 	require.NoError(t, h.Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
@@ -80,8 +79,7 @@ func TestHandle_CleanContentPublishesNothing(t *testing.T) {
 	t.Parallel()
 
 	pub, published := capturingPub(t)
-	h, err := gitleaks.NewHandler(testenv.NewLogger(t), pub)
-	require.NoError(t, err)
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub)
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("hello world, this is a normal message"), gcp.MessageMetadata{}))
 	require.Empty(t, *published)

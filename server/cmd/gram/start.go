@@ -29,6 +29,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/external"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
@@ -441,7 +443,7 @@ func newStartCommand() *cli.Command {
 			slog.SetDefault(logger)
 
 			if serviceEnv == "local" {
-				risk_analysis.EnableRuleIDFormatEnforcement()
+				scanners.EnableRuleIDFormatEnforcement()
 			}
 
 			ctx, cancel := context.WithCancel(c.Context)
@@ -985,7 +987,11 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("load built-in exclusion library: %w", err)
 			}
-			riskScanner, err := risk.NewScanner(logger, tracerProvider, meterProvider, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, celEngine)
+			customRulesScanner, err := customruleanalyzer.NewScanner(db)
+			if err != nil {
+				return fmt.Errorf("create custom rules scanner: %w", err)
+			}
+			riskScanner, err := risk.NewScanner(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, celEngine)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -1220,8 +1226,9 @@ func newStartCommand() *cli.Command {
 						TemporalEnv:                    temporalEnv,
 						PIIScanner:                     piiScanner,
 						PIScanner:                      piScanner,
-						ShadowMCPClient:                shadowMCPClient,
+						CustomRuleScanner:              customRulesScanner,
 						BuiltinPresets:                 builtinPresets,
+						ShadowMCPClient:                shadowMCPClient,
 						AuditLogger:                    auditLogger,
 						WorkOSClient:                   backgroundWorkOSClient,
 						SvixClient:                     svixClient,

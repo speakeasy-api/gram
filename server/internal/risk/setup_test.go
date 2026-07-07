@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -46,6 +47,14 @@ func testPresetLibrary(t *testing.T) *presetlib.Library {
 	lib, err := presetlib.New()
 	require.NoError(t, err)
 	return lib
+}
+
+func newTestCustomRuleAnalyzer(t *testing.T, conn riskrepo.DBTX) *customruleanalyzer.Scanner {
+	t.Helper()
+	scanner, err := customruleanalyzer.NewScanner(conn)
+	require.NoError(t, err)
+
+	return scanner
 }
 
 var infra *testenv.Environment

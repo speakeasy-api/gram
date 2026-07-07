@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -69,6 +70,13 @@ func mustCELEngine(t *testing.T) *celenv.Engine {
 	return eng
 }
 
+func mustCustomRuleScanner(t *testing.T, db riskrepo.DBTX) *customruleanalyzer.Scanner {
+	t.Helper()
+	s, err := customruleanalyzer.NewScanner(db)
+	require.NoError(t, err)
+	return s
+}
+
 func newGitleaksPub() *gcp.MockPublisher[*riskv1.GitleaksAnalysis] {
 	pub := gcp.NewMockPublisher[*riskv1.GitleaksAnalysis]()
 	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
@@ -83,7 +91,7 @@ func newCustomRulesPub() *gcp.MockPublisher[*riskv1.CustomRulesAnalysis] {
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newCustomRulesPub(), mustCELEngine(t), nil)
+	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newCustomRulesPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil)
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -140,6 +148,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		newPresidioPub(),
 		newGitleaksPub(),
 		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 	)
@@ -233,6 +242,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		newPresidioPub(),
 		newGitleaksPub(),
 		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 	)
@@ -338,6 +348,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		newPresidioPub(),
 		newGitleaksPub(),
 		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 	)
@@ -423,6 +434,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		newPresidioPub(),
 		newGitleaksPub(),
 		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 	)
@@ -931,6 +943,7 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		newPresidioPub(),
 		newGitleaksPub(),
 		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 	)

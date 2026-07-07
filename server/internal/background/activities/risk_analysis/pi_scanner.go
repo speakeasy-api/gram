@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // SourcePromptInjection is the policy source value that enables prompt
@@ -54,7 +55,7 @@ type PromptInjectionEngine func(ctx context.Context, req PromptInjectionRequest)
 // prompt-injection finding. The same rule id is emitted regardless of whether
 // the match came from the L1 engine or an L0 heuristic.
 func DescribePromptInjection() (string, string) {
-	return guard(RulePromptInjection), "Detected a prompt injection attempt."
+	return scanners.GuardRuleID(RulePromptInjection), "Detected a prompt injection attempt."
 }
 
 // PromptInjectionScanner combines two detection layers that emit the same
@@ -94,7 +95,7 @@ func (s *PromptInjectionScanner) l1Active(l1Enabled bool) bool {
 // tool attribution, body kind) the L1 engine reasons over. orgID/projectID
 // identify the caller for per-org billing and rate limiting. Used by the
 // realtime risk scanner on the hook path.
-func (s *PromptInjectionScanner) Scan(ctx context.Context, text, orgID, projectID string, msg JudgeMessage, l1Enabled bool) ([]Finding, error) {
+func (s *PromptInjectionScanner) Scan(ctx context.Context, text, orgID, projectID string, msg JudgeMessage, l1Enabled bool) ([]scanners.Finding, error) {
 	if text == "" && !msg.HasContent() {
 		return nil, nil
 	}
@@ -127,8 +128,8 @@ func (s *PromptInjectionScanner) Scan(ctx context.Context, text, orgID, projectI
 // text; when l1Enabled and an engine is wired, a single batched Classify call
 // over the structured messages is folded in on top. texts and msgs are aligned
 // by index (texts[i] is the flattened body of msgs[i]).
-func (s *PromptInjectionScanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, msgs []JudgeMessage, l1Enabled bool) ([][]Finding, error) {
-	out := make([][]Finding, len(texts))
+func (s *PromptInjectionScanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, msgs []JudgeMessage, l1Enabled bool) ([][]scanners.Finding, error) {
+	out := make([][]scanners.Finding, len(texts))
 	for i, t := range texts {
 		if t == "" {
 			continue
@@ -166,7 +167,7 @@ func (s *PromptInjectionScanner) ScanBatch(ctx context.Context, texts []string, 
 	return out, nil
 }
 
-func (s *PromptInjectionScanner) findingFromResult(text string, r PromptInjectionResult) *Finding {
+func (s *PromptInjectionScanner) findingFromResult(text string, r PromptInjectionResult) *scanners.Finding {
 	if r.Label != LabelInjection {
 		return nil
 	}
@@ -176,7 +177,7 @@ func (s *PromptInjectionScanner) findingFromResult(text string, r PromptInjectio
 	if r.Rationale != "" {
 		description = r.Rationale
 	}
-	return &Finding{
+	return &scanners.Finding{
 		RuleID:              ruleID,
 		Description:         description,
 		Match:               text,
@@ -186,16 +187,16 @@ func (s *PromptInjectionScanner) findingFromResult(text string, r PromptInjectio
 		Source:              SourcePromptInjection,
 		Confidence:          r.Score,
 		DeadLetterReason:    "",
-		mcpLookupToolCallID: "",
-		spanGroupKey:        "",
-		field:               "",
-		path:                "",
+		McpLookupToolCallID: "",
+		SpanGroupKey:        "",
+		Field:               "",
+		Path:                "",
 	}
 }
 
 // DetectPromptInjection runs the L0 heuristic rules only. Kept for tests and for
 // code paths that don't have a scanner instance.
-func DetectPromptInjection(_ context.Context, text string) ([]Finding, error) {
+func DetectPromptInjection(_ context.Context, text string) ([]scanners.Finding, error) {
 	if text == "" {
 		return nil, nil
 	}

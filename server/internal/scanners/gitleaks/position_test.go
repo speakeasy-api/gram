@@ -38,31 +38,36 @@ func TestLineColToBytePos(t *testing.T) {
 			want:    11,
 		},
 		{
+			// gitleaks reports the first byte after a newline as column 2
+			// (the newline holds column 1), so 'w' at byte 6 is column 2.
 			name:    "second line start",
 			content: "hello\nworld",
 			line:    1,
-			col:     1,
+			col:     2,
 			want:    6,
 		},
 		{
+			// 'r' at byte 8: (8 - newlineIndex 5) + 1 = column 4.
 			name:    "second line middle",
 			content: "hello\nworld",
 			line:    1,
-			col:     3,
+			col:     4,
 			want:    8,
 		},
 		{
+			// 'l' at byte 24: (24 - preceding newlineIndex 17) + 1 = column 8.
 			name:    "multi-line with various lengths",
 			content: "first line\nsecond\nthird line here",
 			line:    2,
-			col:     7,
+			col:     8,
 			want:    24,
 		},
 		{
+			// 'f' at byte 8: (8 - preceding newlineIndex 7) + 1 = column 2.
 			name:    "empty lines",
 			content: "first\n\n\nfourth",
 			line:    3,
-			col:     1,
+			col:     2,
 			want:    8,
 		},
 		{
@@ -126,9 +131,9 @@ func TestLineColToBytePosWithActualSecrets(t *testing.T) {
 }`,
 			matchString: "sk-proj-1234567890abcdef",
 			startLine:   1,
-			startCol:    15,
+			startCol:    16,
 			endLine:     1,
-			endCol:      39,
+			endCol:      40,
 		},
 		{
 			name: "Database URL spanning line",
@@ -136,9 +141,9 @@ func TestLineColToBytePosWithActualSecrets(t *testing.T) {
   "postgresql://user:password123@localhost/db";`,
 			matchString: "password123",
 			startLine:   1,
-			startCol:    22,
+			startCol:    23,
 			endLine:     1,
-			endCol:      33,
+			endCol:      34,
 		},
 		{
 			name: "GitHub token in config",
@@ -147,9 +152,9 @@ github_token: ghp_1234567890abcdefghijklmnopqrstuvwxyz
 environment: production`,
 			matchString: "ghp_1234567890abcdefghijklmnopqrstuvwxyz",
 			startLine:   1,
-			startCol:    15,
+			startCol:    16,
 			endLine:     1,
-			endCol:      55,
+			endCol:      56,
 		},
 	}
 
@@ -237,7 +242,7 @@ func TestLineColToBytePos_MultiByte(t *testing.T) {
 			name:    "emoji on second line before secret",
 			content: "line1\n🔑 token=abc123",
 			line:    1,
-			col:     10, // byte offset from line start: 🔑(4) + " "(1) + "token"(5) = 10, col 10
+			col:     11, // 'n' at byte 15: (15 - newlineIndex 5) + 1 = 11 (first byte after '\n' is col 2)
 			want:    15, // 6 (line1\n) + 4 (🔑) + 1 ( ) + 5 (token) - 1 = 15
 		},
 	}

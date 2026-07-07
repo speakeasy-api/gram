@@ -2,6 +2,7 @@ package risk_analysis
 
 import (
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // dropBuiltinFalsePositives removes findings that the built-in preset library
@@ -9,11 +10,11 @@ import (
 // and matched value. A finding is dropped when lib.Reason returns a non-empty
 // catalog reason; an empty reason means it is a real finding and is retained. A
 // nil library (feature not wired) drops nothing.
-func dropBuiltinFalsePositives(lib *presetlib.Library, findings []Finding) []Finding {
+func dropBuiltinFalsePositives(lib *presetlib.Library, findings []scanners.Finding) []scanners.Finding {
 	if lib == nil || len(findings) == 0 {
 		return findings
 	}
-	out := make([]Finding, 0)
+	out := make([]scanners.Finding, 0, len(findings))
 	for _, f := range findings {
 		m := presetlib.Match{Source: f.Source, RuleID: f.RuleID, Value: f.Match}
 		if lib.Reason(m) != "" {

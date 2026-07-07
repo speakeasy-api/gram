@@ -35,9 +35,9 @@ flowchart LR
   p1 --> t_gram_risk_v1_custom_rules_analysis
   p2[/"📤<br/>pystreams/src/pystreams/risk/handler.py"/]:::python
   p2 --> t_gram_risk_v1_finding
-  p3[/"📤<br/>server/internal/customruleanalyzer/handler.go"/]:::go
+  p3[/"📤<br/>server/internal/scanners/customruleanalyzer/handler.go"/]:::go
   p3 --> t_gram_risk_v1_finding
-  p4[/"📤<br/>server/internal/gitleaks/handler.go"/]:::go
+  p4[/"📤<br/>server/internal/scanners/gitleaks/handler.go"/]:::go
   p4 --> t_gram_risk_v1_finding
   p5[/"📤<br/>server/internal/background/activities/risk_analysis/scan_gitleaks.go"/]:::go
   p5 --> t_gram_risk_v1_gitleaks_analysis
@@ -73,7 +73,7 @@ flowchart LR
 | [`gram-ping-v2-processor-dlq`](../infra/proto/gram/ping/v2/processor.proto) | DLQ | — | — |
 | [`gram-ping-v2-py-processor-dlq`](../infra/proto/gram/ping/v2/processor.proto) | DLQ | — | — |
 | [`gram-risk-v1-custom-rules-analysis`](../infra/proto/gram/risk/v1/custom_rules_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_custom_rules.go`](../server/internal/background/activities/risk_analysis/scan_custom_rules.go) |
-| [`gram-risk-v1-finding`](../infra/proto/gram/risk/v1/finding.proto) | topic | 7d | [`pystreams/src/pystreams/risk/handler.py`](../pystreams/src/pystreams/risk/handler.py)<br/>[`server/internal/customruleanalyzer/handler.go`](../server/internal/customruleanalyzer/handler.go)<br/>[`server/internal/gitleaks/handler.go`](../server/internal/gitleaks/handler.go) |
+| [`gram-risk-v1-finding`](../infra/proto/gram/risk/v1/finding.proto) | topic | 7d | [`pystreams/src/pystreams/risk/handler.py`](../pystreams/src/pystreams/risk/handler.py)<br/>[`server/internal/scanners/customruleanalyzer/handler.go`](../server/internal/scanners/customruleanalyzer/handler.go)<br/>[`server/internal/scanners/gitleaks/handler.go`](../server/internal/scanners/gitleaks/handler.go) |
 | [`gram-risk-v1-gitleaks-analysis`](../infra/proto/gram/risk/v1/gitleaks_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_gitleaks.go`](../server/internal/background/activities/risk_analysis/scan_gitleaks.go) |
 | [`gram-risk-v1-presidio-analysis`](../infra/proto/gram/risk/v1/presidio_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_presidio.go`](../server/internal/background/activities/risk_analysis/scan_presidio.go) |
 

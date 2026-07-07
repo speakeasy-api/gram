@@ -51,6 +51,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -102,14 +104,13 @@ type Service struct {
 	// so the dashboard sees the exact same matcher output the worker
 	// produces during chat-message analysis. Optional: when nil the
 	// playground returns an "unsupported" response for that scanner family.
-	piiScanner ra.PIIScanner
-	piScanner  *ra.PromptInjectionScanner
-	// builtinPresets is the parsed built-in exclusion library, injected at
-	// construction. Used by ListBuiltinExclusions to describe the catalog.
-	builtinPresets *presetlib.Library
+	piiScanner      ra.PIIScanner
+	piScanner       *ra.PromptInjectionScanner
+	gitleaksScanner *gitleaks.Scanner
 	// celEng is the shared CEL env, injected at construction; used to compile
 	// and validate scope/detection expressions. nil in the lightweight observer.
-	celEng *celenv.Engine
+	celEng         *celenv.Engine
+	builtinPresets *presetlib.Library
 	// promptJudge replays an inline guardrail against a chat session for the
 	// policy-eval workbench (EvaluatePromptGuardrail). It is the same LLM judge
 	// the realtime scanner uses. Optional: when nil the eval endpoint returns
@@ -132,12 +133,9 @@ func NewObserver(
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
 
-		logger: logger.With(attr.SlogComponent("risk")),
-		db:     db,
-		repo:   repo.New(db),
-		// The observer path does not serve ListBuiltinExclusions, so it carries no
-		// preset library.
-		builtinPresets:   nil,
+		logger:           logger.With(attr.SlogComponent("risk")),
+		db:               db,
+		repo:             repo.New(db),
 		auth:             nil,
 		authz:            nil,
 		signaler:         signaler,
@@ -150,8 +148,10 @@ func NewObserver(
 		jwtSecret:        "",
 		piiScanner:       nil,
 		piScanner:        nil,
+		gitleaksScanner:  nil,
 		flags:            nil,
 		celEng:           nil,
+		builtinPresets:   nil,
 		promptJudge:      nil,
 	}
 }
@@ -196,6 +196,7 @@ func NewService(
 		jwtSecret:        jwtSecret,
 		piiScanner:       piiScanner,
 		piScanner:        piScanner,
+		gitleaksScanner:  gitleaks.NewScanner(),
 		flags:            flags,
 		celEng:           celEng,
 		builtinPresets:   builtinPresets,
@@ -2737,7 +2738,7 @@ func evalReviewToType(row repo.RiskPolicyEvalReview) *types.RiskPolicyEvalReview
 }
 
 func (s *Service) testGitleaksRule(ctx context.Context, ruleID, text string) (*gen.TestDetectionRuleResult, error) {
-	findings, err := ra.ScanWithGitleaks(text)
+	findings, err := s.gitleaksScanner.Scan(ctx, text)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run gitleaks").LogError(ctx, s.logger)
 	}
@@ -2857,7 +2858,7 @@ func (s *Service) testCustomRule(ruleID, detectionExpr, text string) (*gen.TestD
 	}, nil
 }
 
-func findingToMatch(f ra.Finding) *gen.TestDetectionRuleMatch {
+func findingToMatch(f scanners.Finding) *gen.TestDetectionRuleMatch {
 	return &gen.TestDetectionRuleMatch{
 		RuleID:      f.RuleID,
 		Description: new(f.Description),

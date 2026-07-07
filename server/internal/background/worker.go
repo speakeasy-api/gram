@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -83,8 +84,9 @@ type WorkerOptions struct {
 	TemporalEnv                    *tenv.Environment
 	PIIScanner                     risk_analysis.PIIScanner
 	PIScanner                      *risk_analysis.PromptInjectionScanner
-	ShadowMCPClient                *shadowmcp.Client
+	CustomRuleScanner              *customruleanalyzer.Scanner
 	BuiltinPresets                 *presetlib.Library
+	ShadowMCPClient                *shadowmcp.Client
 	AuditLogger                    *audit.Logger
 	WorkOSClient                   activities.WorkOSClient
 	SvixClient                     *svix.Svix
@@ -133,8 +135,9 @@ func ForDeploymentProcessing(
 		TemporalEnv:                    nil,
 		PIIScanner:                     nil,
 		PIScanner:                      nil,
-		ShadowMCPClient:                nil,
+		CustomRuleScanner:              nil,
 		BuiltinPresets:                 nil,
+		ShadowMCPClient:                nil,
 		WorkOSClient:                   workos.NewStubClient(),
 		SvixClient:                     nil,
 		ProductFeatures:                nil,
@@ -184,8 +187,9 @@ func NewTemporalWorker(
 		TemporalEnv:                    env,
 		PIIScanner:                     nil,
 		PIScanner:                      nil,
-		ShadowMCPClient:                nil,
+		CustomRuleScanner:              nil,
 		BuiltinPresets:                 nil,
+		ShadowMCPClient:                nil,
 		AuditLogger:                    nil,
 		WorkOSClient:                   workos.NewStubClient(),
 		SvixClient:                     nil,
@@ -225,8 +229,9 @@ func NewTemporalWorker(
 			TemporalEnv:                    conv.Default(o.TemporalEnv, opts.TemporalEnv),
 			PIIScanner:                     conv.Default(o.PIIScanner, opts.PIIScanner),
 			PIScanner:                      conv.Default(o.PIScanner, opts.PIScanner),
-			ShadowMCPClient:                conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
+			CustomRuleScanner:              conv.Default(o.CustomRuleScanner, opts.CustomRuleScanner),
 			BuiltinPresets:                 conv.Default(o.BuiltinPresets, opts.BuiltinPresets),
+			ShadowMCPClient:                conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
 			AuditLogger:                    conv.Default(o.AuditLogger, opts.AuditLogger),
 			WorkOSClient:                   conv.Default(o.WorkOSClient, opts.WorkOSClient),
 			SvixClient:                     conv.Default(o.SvixClient, opts.SvixClient),
@@ -299,6 +304,7 @@ func NewTemporalWorker(
 		opts.AssistantsCore,
 		opts.PIIScanner,
 		opts.PIScanner,
+		opts.CustomRuleScanner,
 		opts.ShadowMCPClient,
 		opts.AuditLogger,
 		opts.WorkOSClient,

@@ -1,32 +1,120 @@
-package risk_analysis
+// Package clidestructive is the single home for the destructive-CLI-command
+// scanner. It scans recorded tool-call arguments for a curated set of
+// destructive command patterns (rm -rf, git push --force, DROP TABLE, ...)
+// and converts matches into the shared scanners.Finding domain type.
+//
+// The scanner is content-driven and tool-name-agnostic: patterns run against
+// every string value reachable from a call's parsed arguments, so a
+// destructive shell snippet trips whether it rides in a Bash tool's "command"
+// field or an MCP query tool's "query"/"args" field. It applies to native
+// tools (Bash, run_terminal_cmd) as well as MCP-routed calls whose arguments
+// happen to carry a destructive payload.
+//
+// The curated pattern set is kept in-code rather than per-policy because the
+// trade-off is "first-line guardrail, not full sandbox": adding a new pattern
+// is a code change so reviewers see every addition.
+package clidestructive
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
-// DescribeCLIDestructive returns the canonical (rule_id, description) for
-// a cli_destructive pattern match. The pattern's FullName() is the
-// canonical rule id directly.
-func DescribeCLIDestructive(pattern cliDestructivePattern, toolName string) (string, string) {
+// Source labels findings produced by this scanner. Mirrors
+// shadowmcp.SourceDestructiveTool but is content-driven instead of
+// annotation-driven.
+const Source = "cli_destructive"
+
+// ToolCall is one recorded tool invocation to scan. Arguments is the raw JSON
+// arguments string exactly as recorded on the tool call.
+type ToolCall struct {
+	Name      string
+	Arguments string
+}
+
+// Scanner scans recorded tool calls for destructive CLI command content. It is
+// stateless — the curated pattern set is compiled once at package init — and
+// safe for concurrent use.
+type Scanner struct{}
+
+// NewScanner returns a ready-to-use Scanner.
+func NewScanner() *Scanner { return &Scanner{} }
+
+// Scan returns one Finding per tool call whose arguments contain a destructive
+// command pattern. Calls with no name are skipped. Only the first matching
+// pattern per call is reported, keeping the hot path predictable.
+func (s *Scanner) Scan(calls []ToolCall) []scanners.Finding {
+	var findings []scanners.Finding
+	for _, call := range calls {
+		if call.Name == "" {
+			continue
+		}
+
+		matched, ok := scanForCLIDestructive(parseToolInput(call.Arguments))
+		if !ok {
+			continue
+		}
+
+		ruleID, description := describe(matched, call.Name)
+		findings = append(findings, scanners.Finding{
+			Source:      Source,
+			RuleID:      ruleID,
+			Description: description,
+			Match:       call.Name,
+			StartPos:    0,
+			EndPos:      0,
+			Tags:        []string{},
+			Confidence:  1.0,
+
+			DeadLetterReason:    "",
+			McpLookupToolCallID: "",
+			SpanGroupKey:        "",
+			Field:               "",
+			Path:                "",
+		})
+	}
+	return findings
+}
+
+// parseToolInput parses a recorded tool call's raw arguments string into a
+// value the pattern walker can traverse. Empty input yields nil; malformed
+// JSON falls back to scanning the raw string itself so a destructive payload
+// in an unparseable arguments blob is still caught.
+func parseToolInput(raw string) any {
+	if raw == "" {
+		return nil
+	}
+	var toolInput any
+	if err := json.Unmarshal([]byte(raw), &toolInput); err != nil {
+		return raw
+	}
+	return toolInput
+}
+
+// describe returns the canonical (rule_id, description) for a cli_destructive
+// pattern match. The pattern's FullName() is the canonical rule id directly.
+func describe(pattern cliDestructivePattern, toolName string) (string, string) {
 	ruleID := pattern.FullName()
 	cmd := cliCommandHumanForm[ruleID]
 	if cmd == "" {
 		if toolName == "" {
-			return guard(ruleID), "Detected a destructive command pattern in tool arguments."
+			return scanners.GuardRuleID(ruleID), "Detected a destructive command pattern in tool arguments."
 		}
-		return guard(ruleID), fmt.Sprintf("Detected a destructive command pattern in the arguments of tool %q.", toolName)
+		return scanners.GuardRuleID(ruleID), fmt.Sprintf("Detected a destructive command pattern in the arguments of tool %q.", toolName)
 	}
 	if toolName == "" {
-		return guard(ruleID), fmt.Sprintf("Detected a %q invocation in tool arguments.", cmd)
+		return scanners.GuardRuleID(ruleID), fmt.Sprintf("Detected a %q invocation in tool arguments.", cmd)
 	}
-	return guard(ruleID), fmt.Sprintf("Detected a %q invocation in the arguments of tool %q.", cmd, toolName)
+	return scanners.GuardRuleID(ruleID), fmt.Sprintf("Detected a %q invocation in the arguments of tool %q.", cmd, toolName)
 }
 
-// cliCommandHumanForm maps a cli_destructive canonical rule id to the
-// human form of the matched command, embedded in the description sentence.
+// cliCommandHumanForm maps a cli_destructive canonical rule id to the human
+// form of the matched command, embedded in the description sentence.
 var cliCommandHumanForm = map[string]string{
 	"destructive.shell.rm_rf":                    "rm -rf",
 	"destructive.shell.dd":                       "dd",
@@ -50,25 +138,17 @@ var cliCommandHumanForm = map[string]string{
 	"destructive.cloud.kubectl_delete_workload":  "kubectl delete workload",
 }
 
-// SourceCLIDestructive is the policy source value that flags tool calls whose
-// arguments contain a curated destructive CLI command pattern (rm -rf, git
-// push --force, DROP TABLE, ...). Mirrors SourceDestructiveTool but is
-// content-driven instead of annotation-driven and applies to native tools
-// (Bash, run_terminal_cmd) as well as MCP-routed calls whose arguments
-// happen to carry a destructive payload.
-const SourceCLIDestructive = "cli_destructive"
-
 // cliDestructivePattern is one curated rule for matching destructive command
 // content inside a recorded tool call's arguments JSON. Patterns are
-// tool-name-agnostic — they run against every string value reachable from
-// the parsed arguments so a destructive shell snippet trips regardless of
-// whether it lives in a Bash tool's "command" field or an MCP query tool's
-// "query" / "args" field.
+// tool-name-agnostic — they run against every string value reachable from the
+// parsed arguments so a destructive shell snippet trips regardless of whether
+// it lives in a Bash tool's "command" field or an MCP query tool's "query" /
+// "args" field.
 //
-// Guard, when non-nil, is an "innocence" regex: a candidate string only
-// counts as destructive when Regex matches AND Guard does NOT. Used to
-// express rules like "DELETE FROM is destructive only if there's no WHERE
-// clause" without negative lookahead (which Go's RE2 doesn't support).
+// Guard, when non-nil, is an "innocence" regex: a candidate string only counts
+// as destructive when Regex matches AND Guard does NOT. Used to express rules
+// like "DELETE FROM is destructive only if there's no WHERE clause" without
+// negative lookahead (which Go's RE2 doesn't support).
 type cliDestructivePattern struct {
 	Category string
 	Name     string
@@ -77,9 +157,9 @@ type cliDestructivePattern struct {
 }
 
 // FullName returns the canonical rule id for this pattern, in
-// `destructive.<category>.<name>` form (e.g. `destructive.shell.rm_rf`).
-// The pattern is a peer of `destructive.tool` under the `destructive.`
-// category, with shell/git/database/cloud as a second-layer grouping.
+// `destructive.<category>.<name>` form (e.g. `destructive.shell.rm_rf`). The
+// pattern is a peer of `destructive.tool` under the `destructive.` category,
+// with shell/git/database/cloud as a second-layer grouping.
 func (p cliDestructivePattern) FullName() string {
 	if p.Category == "" && p.Name == "" {
 		return ""
@@ -100,16 +180,13 @@ type cliDestructiveSpec struct {
 }
 
 // cliDestructivePatterns is the curated v1 set covering shell, git, database,
-// and cloud CLI commands. Kept in-code rather than per-policy because the
-// trade-off here is "first-line guardrail, not full sandbox" — see PR
-// description for the rationale. Adding a new pattern is a code change so
-// reviewers see every addition.
+// and cloud CLI commands.
 //
 // Order matters: matchCLIDestructiveString returns the first match, so
 // **specific** patterns must come before broader catch-alls in the same
 // category. Within "shell", e.g., chmod_recursive precedes the bare-`sudo`
-// catch-all so `sudo chmod -R 777 /` reports as shell/chmod_recursive
-// rather than shell/sudo.
+// catch-all so `sudo chmod -R 777 /` reports as shell/chmod_recursive rather
+// than shell/sudo.
 var cliDestructivePatterns = compileCLIDestructivePatterns([]cliDestructiveSpec{
 	// Shell.
 	{Category: "shell", Name: "rm_rf", Pattern: `(?i)\brm\s+(?:-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r|--recursive\s+--force|--force\s+--recursive)\b`, Guard: ""},
@@ -169,13 +246,13 @@ func compileCLIDestructivePatterns(specs []cliDestructiveSpec) []cliDestructiveP
 
 // flattenCLIStrings walks a parsed-JSON value and returns every string value
 // reachable via map values or slice elements. Map keys are not included — the
-// threat model is the values (a key like "DROP TABLE" would be strange but
-// not actually destructive). Numbers, bools, and nil are ignored.
+// threat model is the values (a key like "DROP TABLE" would be strange but not
+// actually destructive). Numbers, bools, and nil are ignored.
 //
 // Map iteration is keyed-sorted so the first-match-wins ordering downstream
 // produces the same rule_id every run. Otherwise an input like
-// {"shell": "rm -rf *", "query": "DROP TABLE"} would flap between
-// shell/rm_rf and database/drop on alert dashboards.
+// {"shell": "rm -rf *", "query": "DROP TABLE"} would flap between shell/rm_rf
+// and database/drop on alert dashboards.
 func flattenCLIStrings(input any) []string {
 	if input == nil {
 		return nil

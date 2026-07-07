@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 func newTestLibrary(t *testing.T) *presetlib.Library {
@@ -19,7 +20,7 @@ func TestDropBuiltinFalsePositives_DropsCatalogCreditCard(t *testing.T) {
 	t.Parallel()
 	lib := newTestLibrary(t)
 
-	findings := []Finding{
+	findings := []scanners.Finding{
 		{RuleID: "pii.credit_card", Source: "presidio", Match: "4242 4242 4242 4242"},
 	}
 
@@ -32,7 +33,7 @@ func TestDropBuiltinFalsePositives_DropsStripeTestKey(t *testing.T) {
 	t.Parallel()
 	lib := newTestLibrary(t)
 
-	findings := []Finding{
+	findings := []scanners.Finding{
 		{RuleID: "secret.stripe_secret_key", Source: "gitleaks", Match: "sk_test_4eC39HqLyjWDarjtT1zdp7dc"},
 	}
 
@@ -45,8 +46,8 @@ func TestDropBuiltinFalsePositives_RetainsRealFinding(t *testing.T) {
 	t.Parallel()
 	lib := newTestLibrary(t)
 
-	realFinding := Finding{RuleID: "secret.stripe_secret_key", Source: "gitleaks", Match: "sk_live_4eC39HqLyjWDarjtT1zdp7dc"}
-	findings := []Finding{realFinding}
+	realFinding := scanners.Finding{RuleID: "secret.stripe_secret_key", Source: "gitleaks", Match: "sk_live_4eC39HqLyjWDarjtT1zdp7dc"}
+	findings := []scanners.Finding{realFinding}
 
 	got := dropBuiltinFalsePositives(lib, findings)
 
@@ -58,8 +59,8 @@ func TestDropBuiltinFalsePositives_MixedBatch(t *testing.T) {
 	t.Parallel()
 	lib := newTestLibrary(t)
 
-	realFinding := Finding{RuleID: "secret.stripe_secret_key", Source: "gitleaks", Match: "sk_live_realsecretvalue"}
-	findings := []Finding{
+	realFinding := scanners.Finding{RuleID: "secret.stripe_secret_key", Source: "gitleaks", Match: "sk_live_realsecretvalue"}
+	findings := []scanners.Finding{
 		{RuleID: "pii.credit_card", Source: "presidio", Match: "4242424242424242"},
 		realFinding,
 		{RuleID: "secret.stripe_secret_key", Source: "gitleaks", Match: "sk_test_4eC39HqLyjWDarjtT1zdp7dc"},
