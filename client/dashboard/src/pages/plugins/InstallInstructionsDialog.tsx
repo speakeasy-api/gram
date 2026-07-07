@@ -1,7 +1,13 @@
 import { CodeBlock } from "@/components/code";
 import { InstallSteps } from "@/components/install-steps";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Tooltip,
   TooltipContent,
@@ -731,12 +737,20 @@ export function InstallInstructionsDialog({
         side="right"
         className="flex w-full flex-col overflow-hidden sm:max-w-[662px]"
       >
+        <SheetHeader className="sr-only">
+          <SheetTitle>Install instructions</SheetTitle>
+          <SheetDescription>
+            Steps to install this plugin in your AI coding assistant.
+          </SheetDescription>
+        </SheetHeader>
         <div className="flex items-center gap-1.5 px-6 pt-6 pr-14">
           {Array.from({ length: totalSteps }, (_, idx) => (
             <button
               key={idx}
               type="button"
               onClick={() => goToStep(idx)}
+              aria-label={`Step ${idx + 1} of ${totalSteps}`}
+              aria-current={idx === stepIndex ? "step" : undefined}
               className={cn(
                 "h-1 rounded-full transition-all",
                 idx === stepIndex
@@ -917,7 +931,7 @@ export function InstallInstructionsDialog({
               <MoonshineButton
                 variant="primary"
                 size="sm"
-                onClick={() => onOpenChange(false)}
+                onClick={() => handleOpenChange(false)}
               >
                 <MoonshineButton.Text>Done</MoonshineButton.Text>
               </MoonshineButton>

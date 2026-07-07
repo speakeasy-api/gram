@@ -164,7 +164,14 @@ export default function MCPServerDetails(): JSX.Element {
           substitutions={{
             [idOrSlug]: mcpServer?.name || "MCP Server",
           }}
-          skipSegments={["x", ...MCP_X_TAB_URLS]}
+          skipSegments={[
+            "x",
+            // skipSegments matches by literal value, not position — if the
+            // server's own slug happens to collide with a tab name (e.g. a
+            // server slugged "settings"), guard against also skipping the
+            // server's own breadcrumb crumb.
+            ...MCP_X_TAB_URLS.filter((tab) => tab !== idOrSlug),
+          ]}
         />
       </Page.Header>
 
@@ -190,7 +197,7 @@ const VISIBILITY_OPTIONS: {
   {
     value: "disabled",
     label: "Disabled",
-    description: "This server is not offline. No users can connect to it",
+    description: "This server is offline. No users can connect to it",
     dotClass: "bg-amber-400",
     hoverDotClass: "group-hover:bg-amber-400",
   },

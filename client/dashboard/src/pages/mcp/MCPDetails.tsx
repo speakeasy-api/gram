@@ -453,7 +453,7 @@ const STATUS_OPTIONS: {
   {
     value: "disabled",
     label: "Disabled",
-    description: "This server is not offline. No users can connect to it",
+    description: "This server is offline. No users can connect to it",
     dotClass: "bg-amber-400",
     hoverDotClass: "group-hover:bg-amber-400",
   },
@@ -1142,10 +1142,15 @@ function MCPResourcesTab({ toolset }: { toolset: Toolset }) {
   if (!fullToolset) return null;
 
   return (
-    <ResourcesTabContent
-      toolset={fullToolset}
-      updateToolsetMutation={updateToolsetMutation}
-    />
+    <Page.Section>
+      <Page.Section.Title>Resources</Page.Section.Title>
+      <Page.Section.Body>
+        <ResourcesTabContent
+          toolset={fullToolset}
+          updateToolsetMutation={updateToolsetMutation}
+        />
+      </Page.Section.Body>
+    </Page.Section>
   );
 }
 
@@ -1167,10 +1172,15 @@ function MCPPromptsTab({ toolset }: { toolset: Toolset }) {
   if (!fullToolset) return null;
 
   return (
-    <PromptsTabContent
-      toolset={fullToolset}
-      updateToolsetMutation={updateToolsetMutation}
-    />
+    <Page.Section>
+      <Page.Section.Title>Prompts</Page.Section.Title>
+      <Page.Section.Body>
+        <PromptsTabContent
+          toolset={fullToolset}
+          updateToolsetMutation={updateToolsetMutation}
+        />
+      </Page.Section.Body>
+    </Page.Section>
   );
 }
 

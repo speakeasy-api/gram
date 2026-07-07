@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -277,4 +278,18 @@ func withauthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, gran
 	require.NoError(t, err)
 
 	return authz.GrantsToContext(ctx, loadedGrants)
+}
+
+// beginTx starts a transaction that's rolled back on test cleanup, so tests
+// that need a real pgx.Tx (e.g. for savepoint-using functions) don't leak
+// open transactions. Callers that need a write visible to a later call in
+// the same test (simulating separate requests) must Commit explicitly.
+func beginTx(t *testing.T, ctx context.Context, conn *pgxpool.Pool) pgx.Tx {
+	t.Helper()
+
+	tx, err := conn.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(ctx) })
+
+	return tx
 }

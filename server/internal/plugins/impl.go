@@ -278,7 +278,7 @@ func (s *Service) ensureDefaultPlugin(ctx context.Context, ac *contextvalues.Aut
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	ensured, err := EnsureDefaultPlugin(ctx, repo.New(tx), ac.ActiveOrganizationID, *ac.ProjectID)
+	ensured, err := EnsureDefaultPlugin(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "ensure default plugin").LogError(ctx, s.logger)
 	}
