@@ -609,6 +609,29 @@ func TestRedactCommandMasksSeparatedHeaderValue(t *testing.T) {
 	require.NotContains(t, got, "abc123")
 	require.Contains(t, got, "retry=3", "cookie continuation is scoped to cookie headers")
 	require.Contains(t, got, "tail6")
+
+	got = redactCommand("GITHUB_PAT=github_pat_11ABCDEF npx -y srv")
+	require.NotContains(t, got, "github_pat_11ABCDEF", "a benign-named env assignment can still carry a recognizable credential")
+	require.Contains(t, got, "GITHUB_PAT=***")
+
+	got = redactCommand("PROXY_URL=https://user:hunter7@proxy.internal npx -y srv")
+	require.NotContains(t, got, "hunter7")
+}
+
+// TestUnparseable2xxBlocksGatingEvent: a 2xx the SDK cannot parse (wrong
+// content type — e.g. an intercepting proxy) carries no verdict and must not
+// read as an implicit allow on a blocking hook.
+func TestUnparseable2xxBlocksGatingEvent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<html>intercepted</html>"))
+	}))
+	t.Cleanup(srv.Close)
+	cfg := authedConfig(t, srv.URL)
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+	require.Contains(t, string(res.Stdout), "verdict")
 }
 
 // TestRejectedCachedKeyNudgesPromptReconnect covers the stale-cache recovery

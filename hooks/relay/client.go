@@ -146,6 +146,18 @@ func interpretError(err error) ingestResult {
 	}
 	var apiErr *apierrors.APIError
 	if errors.As(err, &apiErr) && apiErr.StatusCode > 0 {
+		if apiErr.StatusCode >= 200 && apiErr.StatusCode < 300 {
+			// A 2xx the SDK could not parse (wrong content type, unexpected
+			// status) carries no verdict; passing the status through would
+			// read as an implicit allow in evaluate. Report a failed exchange
+			// instead — statusCode 0 also lets send replay it, and a duplicate
+			// delivery is safe under the reused Idempotency-Key.
+			return ingestResult{
+				statusCode:   0,
+				decision:     decision{Decision: "", Reason: "", Message: "Speakeasy hooks could not read the server's verdict."},
+				authRejected: false,
+			}
+		}
 		return ingestResult{
 			statusCode:   apiErr.StatusCode,
 			decision:     decision{Decision: "", Reason: "", Message: ""},

@@ -44,6 +44,7 @@ var (
 	secretAssignRE    = regexp.MustCompile(`(?i)^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*=`)
 	secretFlagRE      = regexp.MustCompile(`(?i)^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$`)
 	secretHeaderRE    = regexp.MustCompile(`(?i)^(--?[^=]*=)?(authorization|proxy-authorization|cookie|x-api-key) *:`)
+	envAssignRE       = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
 	// authSchemeRE matches auth scheme words that precede the credential in a
 	// header value ("Authorization: Token abc"); the scheme is not the secret.
 	authSchemeRE  = regexp.MustCompile(`(?i)^(bearer|basic|token|digest|negotiate|ntlm|dpop|oauth|hawk|apikey)$`)
@@ -139,6 +140,12 @@ func redactCommand(raw string) string {
 		case strings.EqualFold(f, "bearer"):
 			out = append(out, f)
 			maskNext = true
+		case envAssignRE.MatchString(f) && tokenPrefixRE.MatchString(f[strings.IndexByte(f, '=')+1:]):
+			// An env assignment whose name has no secret keyword can still
+			// carry a recognizable credential ("GITHUB_PAT=github_pat_...",
+			// a userinfo URL); the value's shape gives it away.
+			i := strings.IndexByte(f, '=')
+			out = append(out, f[:i+1]+"***")
 		case strings.Contains(f, "://"):
 			// A server URL passed as an argument (npx mcp-remote <url>) can
 			// carry credentials in userinfo or its query string; structured
