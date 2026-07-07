@@ -44,17 +44,17 @@ func overlapsAny(kept []Finding, candidate Finding) bool {
 	return false
 }
 
-func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, batchFindings [][]Finding) ([]repo.InsertRiskResultsParams, int) {
+func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, messageIDs []uuid.UUID, batchFindings [][]Finding) ([]repo.InsertRiskResultsParams, int) {
 	var rows []repo.InsertRiskResultsParams
 	findingsCount := 0
 
-	for i, msg := range messages {
+	for i, msgID := range messageIDs {
 		findings := batchFindings[i]
 		realFindings := findings[:0:0]
 		for _, f := range findings {
 			if f.DeadLetterReason != "" {
 				resultID, _ := uuid.NewV7()
-				rows = append(rows, deadLetterRow(resultID, args, msg.ID, f))
+				rows = append(rows, deadLetterRow(resultID, args, msgID, f))
 				continue
 			}
 			realFindings = append(realFindings, f)
@@ -62,7 +62,7 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 
 		if len(realFindings) == 0 {
 			resultID, _ := uuid.NewV7()
-			rows = append(rows, emptyResultRow(resultID, args, msg.ID))
+			rows = append(rows, emptyResultRow(resultID, args, msgID))
 			continue
 		}
 
@@ -81,7 +81,7 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 				OrganizationID:    args.OrganizationID,
 				RiskPolicyID:      args.RiskPolicyID,
 				RiskPolicyVersion: args.PolicyVersion,
-				ChatMessageID:     msg.ID,
+				ChatMessageID:     msgID,
 				Source:            f.Source,
 				Found:             true,
 				RuleID:            pgtype.Text{String: f.RuleID, Valid: true},

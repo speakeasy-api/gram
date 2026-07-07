@@ -96,7 +96,33 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	scopes := map[string]struct{}{}
+	for _, rawscope := range payload.Scopes {
+		scope, ok := auth.APIKeyScopes[rawscope]
+		if !ok || scope == auth.APIKeyScopeInvalid {
+			return nil, oops.E(oops.CodeBadRequest, nil, "invalid api key scope: %s", scope).LogError(ctx, s.logger)
+		}
+
+		scopes[scope.String()] = struct{}{}
+	}
+
+	if len(scopes) == 0 {
+		scopes = map[string]struct{}{
+			auth.APIKeyScopeConsumer.String(): {},
+		}
+	}
+
+	finalScopes := slices.Sorted(maps.Keys(scopes))
+
+	// A hooks key only attributes a developer's own coding-agent telemetry and
+	// carries no write powers, so any org member can mint one as part of the
+	// self-serve browser sign-in the hook plugins run. Every other scope (and
+	// any mix) stays admin-only.
+	requiredScope := authz.ScopeOrgAdmin
+	if slices.Equal(finalScopes, []string{auth.APIKeyScopeHooks.String()}) {
+		requiredScope = authz.ScopeOrgRead
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: requiredScope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -118,24 +144,6 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	} else {
 		projectID = uuid.NullUUID{UUID: uuid.UUID{}, Valid: false}
 	}
-
-	scopes := map[string]struct{}{}
-	for _, rawscope := range payload.Scopes {
-		scope, ok := auth.APIKeyScopes[rawscope]
-		if !ok || scope == auth.APIKeyScopeInvalid {
-			return nil, oops.E(oops.CodeBadRequest, nil, "invalid api key scope: %s", scope).LogError(ctx, s.logger)
-		}
-
-		scopes[scope.String()] = struct{}{}
-	}
-
-	if len(scopes) == 0 {
-		scopes = map[string]struct{}{
-			auth.APIKeyScopeConsumer.String(): {},
-		}
-	}
-
-	finalScopes := slices.Sorted(maps.Keys(scopes))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {

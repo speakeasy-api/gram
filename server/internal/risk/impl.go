@@ -355,6 +355,16 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
 	}
+	if len(payload.ApprovedEmailDomains) > 0 {
+		domains, err := validateApprovedEmailDomains(payload.ApprovedEmailDomains)
+		if err != nil {
+			return nil, err
+		}
+		analyzerConfig, err = ra.WithApprovedEmailDomains(analyzerConfig, domains)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
+		}
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -528,6 +538,18 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	analyzerConfig := current.AnalyzerConfig
 	if payload.PresidioScoreThreshold != nil {
 		updated, err := ra.WithPresidioScoreThreshold(current.AnalyzerConfig, payload.PresidioScoreThreshold)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
+		}
+		analyzerConfig = updated
+	}
+	// Omit to preserve; send (possibly empty, to clear) to replace.
+	if payload.ApprovedEmailDomains != nil {
+		domains, err := validateApprovedEmailDomains(payload.ApprovedEmailDomains)
+		if err != nil {
+			return nil, err
+		}
+		updated, err := ra.WithApprovedEmailDomains(analyzerConfig, domains)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
 		}
@@ -936,7 +958,8 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 
 // redactResultMatchInPlace clears a result's raw match/spans and populates
 // match_redacted in their place, reusing the same fingerprint format (and
-// shadow_mcp passthrough carve-out) as redactMatch/redactRiskResult below.
+// shadow_mcp/account_identity passthrough carve-out) as
+// redactMatch/redactRiskResult below.
 // Spans aren't given a redacted counterpart here because nothing on this
 // (non-agent) redacted path renders them.
 func redactResultMatchInPlace(r *types.RiskResult, orgID string) {
@@ -1168,10 +1191,12 @@ func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedact
 	}
 }
 
-// redactMatch encodes a match value as `<redacted len=N sha=XXXXXXXX>` for
-// non-shadow_mcp sources, or passes it through verbatim for shadow_mcp.
-// A nil/empty match collapses to `<redacted len=0>` without a sha component
-// so the absence of a finding payload is distinguishable from a real hash.
+// redactMatch encodes a match value as `<redacted len=N sha=XXXXXXXX>`,
+// except for shadow_mcp and account_identity findings whose match passes
+// through verbatim: an MCP server URL or an account email IS the report, not
+// a secret. A nil/empty match collapses to `<redacted len=0>` without a sha
+// component so the absence of a finding payload is distinguishable from a
+// real hash.
 //
 // The hash is salted by orgID with a NUL separator so two different orgs
 // holding the same secret produce different fingerprints — defense in depth
@@ -1181,7 +1206,7 @@ func redactMatch(source string, match *string, orgID string) string {
 	if match == nil || *match == "" {
 		return "<redacted len=0>"
 	}
-	if source == shadowmcp.SourceShadowMCP {
+	if source == shadowmcp.SourceShadowMCP || source == ra.SourceAccountIdentity {
 		return *match
 	}
 	var buf []byte
@@ -2477,6 +2502,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		Sources:                row.Sources,
 		PresidioEntities:       row.PresidioEntities,
 		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
+		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
 		PromptInjectionRules:   row.PromptInjectionRules,
 		DisabledRules:          row.DisabledRules,
 		CustomRuleIds:          row.CustomRuleIds,
@@ -2511,6 +2537,7 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		Sources:                row.Sources,
 		PresidioEntities:       row.PresidioEntities,
 		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
+		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
 		PromptInjectionRules:   row.PromptInjectionRules,
 		DisabledRules:          row.DisabledRules,
 		CustomRuleIds:          row.CustomRuleIds,
@@ -2667,6 +2694,8 @@ func sourcesToCategoryLabels(sources []string) []string {
 			out = append(out, "Destructive CLI Command")
 		case ra.SourcePromptInjection:
 			out = append(out, "Prompt Injection")
+		case ra.SourceAccountIdentity:
+			out = append(out, "Non-Corporate Account")
 		}
 	}
 	return out
@@ -2770,7 +2799,7 @@ func validateAction(action string) error {
 func validateSources(sources []string) error {
 	for _, src := range sources {
 		switch src {
-		case ra.SourceGitleaks, ra.SourcePresidio, shadowmcp.SourceShadowMCP, shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourcePromptInjection:
+		case ra.SourceGitleaks, ra.SourcePresidio, shadowmcp.SourceShadowMCP, shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourcePromptInjection, ra.SourceAccountIdentity:
 		default:
 			return oops.E(oops.CodeInvalid, nil, "source %q is not a recognized policy source", src)
 		}
@@ -2782,12 +2811,39 @@ func validateSourceAction(sources []string, action string) error {
 	if action != "block" {
 		return nil
 	}
-	for _, src := range []string{shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive} {
+	for _, src := range []string{shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourceAccountIdentity} {
 		if slices.Contains(sources, src) {
 			return oops.E(oops.CodeInvalid, nil, "source %q supports flagging only", src)
 		}
 	}
 	return nil
+}
+
+// approvedDomainFormat matches a plausible DNS domain: LDH (letters, digits,
+// hyphen) labels joined by dots, at least two labels.
+var approvedDomainFormat = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`)
+
+// validateApprovedEmailDomains normalizes the account_identity domain
+// allowlist (lowercase, trimmed, optional leading "@" stripped, deduped) and
+// rejects entries that are not plausible domains.
+func validateApprovedEmailDomains(domains []string) ([]string, error) {
+	out := make([]string, 0, len(domains))
+	seen := make(map[string]struct{}, len(domains))
+	for _, raw := range domains {
+		domain := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(raw)), "@")
+		if domain == "" {
+			continue
+		}
+		if !approvedDomainFormat.MatchString(domain) {
+			return nil, oops.E(oops.CodeInvalid, nil, "approved email domain %q is not a valid domain", raw)
+		}
+		if _, ok := seen[domain]; ok {
+			continue
+		}
+		seen[domain] = struct{}{}
+		out = append(out, domain)
+	}
+	return out, nil
 }
 
 func validatePolicyName(name string) error {
@@ -2815,7 +2871,8 @@ func payloadHasPromptPolicyDetectionConfig(payload *gen.UpdateRiskPolicyPayload)
 		len(payload.PresidioEntities) > 0 ||
 		len(payload.PromptInjectionRules) > 0 ||
 		len(payload.DisabledRules) > 0 ||
-		len(payload.CustomRuleIds) > 0
+		len(payload.CustomRuleIds) > 0 ||
+		len(payload.ApprovedEmailDomains) > 0
 }
 
 func payloadHasCreatePromptPolicyDetectionConfig(payload *gen.CreateRiskPolicyPayload) bool {
@@ -2823,7 +2880,8 @@ func payloadHasCreatePromptPolicyDetectionConfig(payload *gen.CreateRiskPolicyPa
 		len(payload.PresidioEntities) > 0 ||
 		len(payload.PromptInjectionRules) > 0 ||
 		len(payload.DisabledRules) > 0 ||
-		len(payload.CustomRuleIds) > 0
+		len(payload.CustomRuleIds) > 0 ||
+		len(payload.ApprovedEmailDomains) > 0
 }
 
 func createPolicyDetectionField(policyType string, values []string) []string {

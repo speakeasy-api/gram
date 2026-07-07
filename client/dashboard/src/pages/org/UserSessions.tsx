@@ -139,6 +139,7 @@ function UserSessionsInner(): JSX.Element {
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
+    isFetching,
     refetch,
   } = useUserSessionsInfinite({
     gramProject: projectSlug,
@@ -306,6 +307,10 @@ function UserSessionsInner(): JSX.Element {
               {filteredSessions.length} session
               {filteredSessions.length === 1 ? "" : "s"}
             </Page.Toolbar.Count>
+            <Page.Toolbar.Refresh
+              onRefresh={() => void refetch()}
+              isRefreshing={isFetching}
+            />
           </Page.Toolbar>
 
           {selectionEnabled && selectedIds.length > 0 && (

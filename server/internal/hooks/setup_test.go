@@ -96,6 +96,8 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
+	serverURL, err := url.Parse("https://localhost:8080")
+	require.NoError(t, err)
 	svc := NewService(
 		logger,
 		conn,
@@ -113,6 +115,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		policyBypass,
 		shadowMCPClient,
 		chatWriter,
+		serverURL,
 		siteURL,
 		"test-jwt-secret",
 	)

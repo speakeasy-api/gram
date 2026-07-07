@@ -125,6 +125,7 @@ const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   "shadow_mcp",
   "destructive_tool",
   "cli_destructive",
+  "account_identity",
   "prompt_injection",
   "custom",
 ]);
@@ -136,6 +137,7 @@ const ALL_CATEGORIES: RuleCategory[] = [
   "shadow_mcp",
   "destructive_tool",
   "cli_destructive",
+  "account_identity",
   "prompt_injection",
   "off_policy",
 ];
@@ -146,6 +148,7 @@ const ALL_CATEGORIES: RuleCategory[] = [
 const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
   "destructive_tool",
   "cli_destructive",
+  "account_identity",
 ]);
 
 /** Steps in the guided standard-policy creation/edit flow. Mirrors the
@@ -349,6 +352,8 @@ function CustomizeRulesSheet({
   setSelectedCategories,
   disabledRules,
   setDisabledRules,
+  approvedDomains,
+  setApprovedDomains,
   onClose,
 }: {
   category: RuleCategory;
@@ -356,6 +361,8 @@ function CustomizeRulesSheet({
   setSelectedCategories: (v: Set<RuleCategory>) => void;
   disabledRules: Set<string>;
   setDisabledRules: (v: Set<string>) => void;
+  approvedDomains: string;
+  setApprovedDomains: (v: string) => void;
   onClose: () => void;
 }) {
   const meta = RULE_CATEGORY_META[category];
@@ -444,6 +451,14 @@ function CustomizeRulesSheet({
             Pick which rules in this category are active. All are on by default.
           </SheetDescription>
         </SheetHeader>
+        {category === "account_identity" && (
+          <div className="border-border mx-6 mt-3 border-b pb-4">
+            <ApprovedDomainsConfig
+              value={approvedDomains}
+              onChange={setApprovedDomains}
+            />
+          </div>
+        )}
         <div className="px-6 pt-3">
           <Input
             value={search}
@@ -552,9 +567,20 @@ function RuleToggleRow({
   onToggle: (on: boolean) => void;
 }) {
   return (
-    <div className="hover:bg-muted flex items-center justify-between gap-3 rounded-md px-2 py-2 text-sm">
-      <span className="min-w-0 truncate">{rule.title}</span>
-      <Switch checked={checked} onCheckedChange={onToggle} />
+    <div className="hover:bg-muted flex items-start justify-between gap-3 rounded-md px-2 py-2 text-sm">
+      <div className="min-w-0 flex-1">
+        <span className="block truncate">{rule.title}</span>
+        {rule.description && (
+          <p className="text-muted-foreground mt-0.5 text-xs">
+            {rule.description}
+          </p>
+        )}
+      </div>
+      <Switch
+        className="mt-0.5 shrink-0"
+        checked={checked}
+        onCheckedChange={onToggle}
+      />
     </div>
   );
 }
@@ -590,6 +616,7 @@ function policyToCategories(
   if (sources.includes("shadow_mcp")) cats.add("shadow_mcp");
   if (sources.includes("destructive_tool")) cats.add("destructive_tool");
   if (sources.includes("cli_destructive")) cats.add("cli_destructive");
+  if (sources.includes("account_identity")) cats.add("account_identity");
   if (sources.includes("prompt_injection")) cats.add("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
     const wireEntities = DETECTION_RULES[cat].map((r) =>
@@ -630,6 +657,7 @@ function categoriesToPayload(
   if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
   if (cats.has("destructive_tool")) sources.push("destructive_tool");
   if (cats.has("cli_destructive")) sources.push("cli_destructive");
+  if (cats.has("account_identity")) sources.push("account_identity");
   if (cats.has("prompt_injection")) sources.push("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
@@ -867,6 +895,16 @@ function firstStepId(kind: PolicyKind): string {
   return steps[0]!.id;
 }
 
+/** Parse the comma-separated approved-domains input into the array the API
+ *  expects. Splits on commas and whitespace; the server normalizes each entry
+ *  (lowercase, strips a leading '@') and rejects implausible domains. */
+function parseApprovedEmailDomains(raw: string): string[] {
+  return raw
+    .split(/[,\s]+/)
+    .map((domain) => domain.trim())
+    .filter((domain) => domain.length > 0);
+}
+
 function promptPolicyName(prompt: string): string {
   return prompt.trim().replace(/\s+/g, " ").slice(0, 60) || "Prompt Policy";
 }
@@ -971,6 +1009,9 @@ function PolicyCenterContent() {
   const [formPresidioThreshold, setFormPresidioThreshold] = useState<number>(
     DEFAULT_PRESIDIO_THRESHOLD,
   );
+  // Approved email domains for the Non-Corporate Accounts category, held as
+  // the raw comma-separated input. Only sent when the category is selected.
+  const [formApprovedDomains, setFormApprovedDomains] = useState("");
   // Fail-open (true) is the server default: allow the message when the judge errors.
   const [formFailOpen, setFormFailOpen] = useState(true);
   const [formAudienceType, setFormAudienceType] =
@@ -1075,6 +1116,7 @@ function PolicyCenterContent() {
     setFormModel("");
     setFormTemperature(DEFAULT_JUDGE_TEMPERATURE);
     setFormPresidioThreshold(DEFAULT_PRESIDIO_THRESHOLD);
+    setFormApprovedDomains("");
     setFormFailOpen(true);
     setFormAudienceType("everyone");
     setSelectedAudiencePrincipalUrns(new Set<string>());
@@ -1158,6 +1200,7 @@ function PolicyCenterContent() {
       setFormPresidioThreshold(
         policy.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
       );
+      setFormApprovedDomains((policy.approvedEmailDomains ?? []).join(", "));
       setDisabledRules(new Set(policy.disabledRules ?? []));
       setSelectedCustomRuleIds(new Set<string>(customRuleIds));
       setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
@@ -1305,10 +1348,14 @@ function PolicyCenterContent() {
         editingPolicy ? editingPolicy.presidioEntities : undefined,
       ),
     );
+    // Flag-only sources (destructive_tool, cli_destructive, account_identity)
+    // are rejected by the server with action=block, so force flag as a safety
+    // net in case the form state drifted.
+    const flagOnlyActive = sources.some((s) =>
+      FLAG_ONLY_CATEGORIES.has(s as RuleCategory),
+    );
     const action =
-      sources.includes("destructive_tool") && formAction === "block"
-        ? "flag"
-        : formAction;
+      flagOnlyActive && formAction === "block" ? "flag" : formAction;
     const audiencePrincipalUrns =
       formAudienceType === "targeted" ? [...selectedAudiencePrincipalUrns] : [];
     // Only persist the Presidio threshold when a Presidio category is active, so
@@ -1316,6 +1363,11 @@ function PolicyCenterContent() {
     const presidioActive = PRESIDIO_CATEGORIES.some((c) =>
       selectedCategories.has(c),
     );
+    // Only send approved domains while the Non-Corporate Accounts category is
+    // selected (an empty array clears them); omit otherwise so the server
+    // preserves whatever is stored.
+    const identityActive = selectedCategories.has("account_identity");
+    const approvedEmailDomains = parseApprovedEmailDomains(formApprovedDomains);
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
@@ -1338,6 +1390,7 @@ function PolicyCenterContent() {
             ...(presidioActive
               ? { presidioScoreThreshold: formPresidioThreshold }
               : {}),
+            ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
       });
@@ -1362,6 +1415,7 @@ function PolicyCenterContent() {
             ...(presidioActive
               ? { presidioScoreThreshold: formPresidioThreshold }
               : {}),
+            ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
       });
@@ -1885,6 +1939,8 @@ function PolicyCenterContent() {
                       setSelectedCategories={setSelectedCategories}
                       formPresidioThreshold={formPresidioThreshold}
                       setFormPresidioThreshold={setFormPresidioThreshold}
+                      formApprovedDomains={formApprovedDomains}
+                      setFormApprovedDomains={setFormApprovedDomains}
                       disabledRules={disabledRules}
                       setDisabledRules={setDisabledRules}
                       customRules={customRules}
@@ -2681,6 +2737,8 @@ function PolicySheetBody({
   setSelectedCategories,
   formPresidioThreshold,
   setFormPresidioThreshold,
+  formApprovedDomains,
+  setFormApprovedDomains,
   disabledRules,
   setDisabledRules,
   customRules,
@@ -2715,6 +2773,8 @@ function PolicySheetBody({
   setSelectedCategories: (v: Set<RuleCategory>) => void;
   formPresidioThreshold: number;
   setFormPresidioThreshold: (v: number) => void;
+  formApprovedDomains: string;
+  setFormApprovedDomains: (v: string) => void;
   disabledRules: Set<string>;
   setDisabledRules: (v: Set<string>) => void;
   customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
@@ -3145,10 +3205,41 @@ function PolicySheetBody({
           setSelectedCategories={setSelectedCategories}
           disabledRules={disabledRules}
           setDisabledRules={setDisabledRules}
+          approvedDomains={formApprovedDomains}
+          setApprovedDomains={setFormApprovedDomains}
           onClose={() => setCustomizeCategory(null)}
         />
       )}
     </>
+  );
+}
+
+/** Per-policy config for the Non-Corporate Accounts category: the list of
+ *  email domains treated as corporate. Rendered inside the category's
+ *  Customize sheet; the parsed list rides on the create/update payload as
+ *  approved_email_domains while the category is selected. */
+function ApprovedDomainsConfig({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium">Approved email domains</Label>
+      <p className="text-muted-foreground text-xs">
+        Sessions from AI accounts whose email domain is not in this list are
+        flagged by the unapproved-domain rule. Matching is exact per domain, so
+        list subdomains explicitly; a leading '@' is allowed. Until at least one
+        domain is configured, only the personal-account rule fires.
+      </p>
+      <Input
+        value={value}
+        onChange={onChange}
+        placeholder="e.g. acme.com, corp.acme.com"
+      />
+    </div>
   );
 }
 
@@ -3819,8 +3910,8 @@ function ActionPicker({
               </div>
               {disabled && (
                 <div className="text-destructive mt-1 text-xs font-medium">
-                  Destructive Tools and Destructive CLI Commands support
-                  flagging only.
+                  Destructive Tools, Destructive CLI Commands, and Non-Corporate
+                  Accounts support flagging only.
                 </div>
               )}
             </div>
