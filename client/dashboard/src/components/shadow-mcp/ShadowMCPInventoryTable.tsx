@@ -6,7 +6,6 @@ import {
   useShadowMCPInventory,
 } from "@gram/client/react-query/shadowMCPInventory.js";
 import { useAllowShadowMCPInventoryServerMutation } from "@gram/client/react-query/allowShadowMCPInventoryServer.js";
-import { useBlockShadowMCPInventoryServerMutation } from "@gram/client/react-query/blockShadowMCPInventoryServer.js";
 import { useClearShadowMCPInventoryServerAccessMutation } from "@gram/client/react-query/clearShadowMCPInventoryServerAccess.js";
 import {
   Badge,
@@ -22,30 +21,16 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { cn } from "@/lib/utils";
+import {
+  shadowMCPInventoryActionLabel,
+  shadowMCPInventoryStatus,
+  shadowMCPInventoryStatusBadgeVariant,
+  shadowMCPInventoryStatusDescription,
+  shadowMCPInventoryStatusLabel,
+  type ShadowMCPPolicyState,
+} from "./shadowMCPInventoryStatus";
 
 const INVENTORY_PAGE_LIMIT = 50;
-
-function accessLabel(access: ShadowMCPInventoryServer["access"]) {
-  switch (access) {
-    case "allowed":
-      return "Allowed";
-    case "denied":
-      return "Blocked";
-    case "none":
-      return "No rule";
-  }
-}
-
-function accessBadgeVariant(access: ShadowMCPInventoryServer["access"]) {
-  switch (access) {
-    case "allowed":
-      return "success" as const;
-    case "denied":
-      return "destructive" as const;
-    case "none":
-      return "neutral" as const;
-  }
-}
 
 function usageCountLabel(count: number) {
   return `${count} ${count === 1 ? "call" : "calls"}`;
@@ -68,15 +53,24 @@ function InventoryServerCell({ server }: { server: ShadowMCPInventoryServer }) {
   );
 }
 
-function AccessStateBadge({
-  access,
+function InventoryStatusCell({
+  policyState,
+  server,
 }: {
-  access: ShadowMCPInventoryServer["access"];
+  policyState: ShadowMCPPolicyState;
+  server: ShadowMCPInventoryServer;
 }) {
+  const status = shadowMCPInventoryStatus(server, policyState);
+
   return (
-    <Badge variant={accessBadgeVariant(access)}>
-      <Badge.Text>{accessLabel(access)}</Badge.Text>
-    </Badge>
+    <div className="space-y-1">
+      <Badge variant={shadowMCPInventoryStatusBadgeVariant(status)}>
+        <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
+      </Badge>
+      <Type variant="small" className="text-muted-foreground text-xs">
+        {shadowMCPInventoryStatusDescription(server, policyState)}
+      </Type>
+    </div>
   );
 }
 
@@ -100,10 +94,12 @@ function InventoryEmptyState() {
 export function ShadowMCPInventoryTable({
   className,
   enabled = true,
+  policyState,
   projectID,
 }: {
   className?: string;
   enabled?: boolean;
+  policyState: ShadowMCPPolicyState;
   projectID: string;
 }): JSX.Element {
   const queryClient = useQueryClient();
@@ -113,14 +109,12 @@ export function ShadowMCPInventoryTable({
     { enabled: enabled && projectID.length > 0 },
   );
   const allowServer = useAllowShadowMCPInventoryServerMutation();
-  const blockServer = useBlockShadowMCPInventoryServerMutation();
   const clearServer = useClearShadowMCPInventoryServerAccessMutation();
   const [sort, setSort] = useState<SortDescriptor | null>({
     id: "lastSeen",
     direction: "desc",
   });
-  const isMutating =
-    allowServer.isPending || blockServer.isPending || clearServer.isPending;
+  const isMutating = allowServer.isPending || clearServer.isPending;
 
   const refreshInventory = async () => {
     await invalidateAllShadowMCPInventory(queryClient);
@@ -141,24 +135,6 @@ export function ShadowMCPInventoryTable({
       toast.success("Server allowed");
     } catch {
       toast.error("Server allow failed");
-    }
-  };
-
-  const blockInventoryServer = async (server: ShadowMCPInventoryServer) => {
-    try {
-      await blockServer.mutateAsync({
-        request: {
-          shadowMCPInventoryServerAccessForm: {
-            projectId: projectID,
-            serverName: server.serverName,
-            serverUrl: server.canonicalServerUrl,
-          },
-        },
-      });
-      await refreshInventory();
-      toast.success("Server blocked");
-    } catch {
-      toast.error("Server block failed");
     }
   };
 
@@ -192,12 +168,17 @@ export function ShadowMCPInventoryTable({
       render: (server) => <InventoryServerCell server={server} />,
     },
     {
-      key: "access",
-      header: "Access",
+      key: "status",
+      header: "Status",
       sortable: true,
-      sortValue: (server) => accessLabel(server.access),
-      width: "0.7fr",
-      render: (server) => <AccessStateBadge access={server.access} />,
+      sortValue: (server) =>
+        shadowMCPInventoryStatusLabel(
+          shadowMCPInventoryStatus(server, policyState),
+        ),
+      width: "0.8fr",
+      render: (server) => (
+        <InventoryStatusCell policyState={policyState} server={server} />
+      ),
     },
     {
       key: "lastCalled",
@@ -242,31 +223,7 @@ export function ShadowMCPInventoryTable({
       width: "1fr",
       render: (server) => (
         <div className="flex justify-end gap-2">
-          {server.access !== "allowed" && (
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={isMutating}
-              onClick={() => {
-                void allowInventoryServer(server);
-              }}
-            >
-              <Button.Text>Allow</Button.Text>
-            </Button>
-          )}
-          {server.access !== "denied" && (
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={isMutating}
-              onClick={() => {
-                void blockInventoryServer(server);
-              }}
-            >
-              <Button.Text>Block</Button.Text>
-            </Button>
-          )}
-          {server.access !== "none" && (
+          {server.access === "allowed" ? (
             <Button
               size="sm"
               variant="secondary"
@@ -275,7 +232,18 @@ export function ShadowMCPInventoryTable({
                 void clearInventoryServer(server);
               }}
             >
-              <Button.Text>Clear</Button.Text>
+              <Button.Text>{shadowMCPInventoryActionLabel(server)}</Button.Text>
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={isMutating}
+              onClick={() => {
+                void allowInventoryServer(server);
+              }}
+            >
+              <Button.Text>{shadowMCPInventoryActionLabel(server)}</Button.Text>
             </Button>
           )}
         </div>

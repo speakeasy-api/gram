@@ -5,17 +5,10 @@ import {
   shadowMCPPolicyBadgeVariant,
   shadowMCPPolicyLabel,
   shadowMCPPolicyState,
-  type ShadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { useProject } from "@/contexts/Auth";
 import { useRiskListPolicies } from "@gram/client/react-query/index.js";
 import { Badge } from "@speakeasy-api/moonshine";
-
-const ShadowMCPInventoryTableWithPolicy =
-  ShadowMCPInventoryTable as unknown as (props: {
-    projectID: string;
-    policyState: ShadowMCPPolicyState;
-  }) => JSX.Element;
 
 export default function ShadowMCP(): JSX.Element {
   const project = useProject();
@@ -43,7 +36,7 @@ export default function ShadowMCP(): JSX.Element {
               </Badge>
             </Page.Section.CTA>
             <Page.Section.Body>
-              <ShadowMCPInventoryTableWithPolicy
+              <ShadowMCPInventoryTable
                 policyState={policyState}
                 projectID={project.id}
               />

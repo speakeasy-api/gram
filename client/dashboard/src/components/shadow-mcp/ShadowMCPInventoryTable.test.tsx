@@ -16,7 +16,6 @@ const mocks = vi.hoisted(() => ({
   useShadowMCPInventory: vi.fn(),
   invalidateShadowMCPInventory: vi.fn(),
   allowInventoryServerMutation: vi.fn(),
-  blockInventoryServerMutation: vi.fn(),
   clearInventoryServerMutation: vi.fn(),
 }));
 
@@ -27,10 +26,6 @@ vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
 
 vi.mock("@gram/client/react-query/allowShadowMCPInventoryServer.js", () => ({
   useAllowShadowMCPInventoryServerMutation: mocks.allowInventoryServerMutation,
-}));
-
-vi.mock("@gram/client/react-query/blockShadowMCPInventoryServer.js", () => ({
-  useBlockShadowMCPInventoryServerMutation: mocks.blockInventoryServerMutation,
 }));
 
 vi.mock(
@@ -187,12 +182,18 @@ function inventoryServer(
   };
 }
 
-function renderInventoryTable(projectID = "project-id-1") {
+function renderInventoryTable(
+  projectID = "project-id-1",
+  policyState: "blocking" | "flagging" | "none" | "unavailable" = "blocking",
+) {
   const queryClient = new QueryClient();
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <ShadowMCPInventoryTable projectID={projectID} />
+      <ShadowMCPInventoryTable
+        policyState={policyState}
+        projectID={projectID}
+      />
     </QueryClientProvider>,
   );
 }
@@ -223,10 +224,6 @@ describe("ShadowMCPInventoryTable", () => {
 
     mockShadowMCPInventory();
     mocks.allowInventoryServerMutation.mockReturnValue({
-      isPending: false,
-      mutateAsync: vi.fn(),
-    });
-    mocks.blockInventoryServerMutation.mockReturnValue({
       isPending: false,
       mutateAsync: vi.fn(),
     });
@@ -266,6 +263,9 @@ describe("ShadowMCPInventoryTable", () => {
     });
     expect(screen.getByText("https://github.example.com/mcp")).toBeTruthy();
     expect(screen.getByText("Allowed")).toBeTruthy();
+    expect(screen.getByText("Allowed by URL rule")).toBeTruthy();
+    expect(screen.getByText("Blocked")).toBeTruthy();
+    expect(screen.getByText("Blocked by policy")).toBeTruthy();
     expect(screen.getByText("42 calls")).toBeTruthy();
     expect(screen.getByText("3 users")).toBeTruthy();
     expect(screen.getByText("Never")).toBeTruthy();
@@ -308,7 +308,7 @@ describe("ShadowMCPInventoryTable", () => {
 
     for (const header of [
       "Server",
-      "Access",
+      "Status",
       "Last called",
       "Last seen",
       "Usage",
@@ -331,9 +331,8 @@ describe("ShadowMCPInventoryTable", () => {
     expect(within(rows[1]!).getByText("1 user")).toBeTruthy();
   });
 
-  it("allows, blocks, and clears Shadow MCP inventory URL access", async () => {
+  it("adds and removes Shadow MCP inventory URL allow rules", async () => {
     const allowServer = vi.fn().mockResolvedValue({});
-    const blockServer = vi.fn().mockResolvedValue({});
     const clearServer = vi.fn().mockResolvedValue({});
     mockShadowMCPInventory({
       servers: [
@@ -347,20 +346,11 @@ describe("ShadowMCPInventoryTable", () => {
           canonicalServerUrl: "https://allowed.example.com/mcp",
           serverName: "Allowed MCP",
         }),
-        inventoryServer({
-          access: "denied",
-          canonicalServerUrl: "https://blocked.example.com/mcp",
-          serverName: "Blocked MCP",
-        }),
       ],
     });
     mocks.allowInventoryServerMutation.mockReturnValue({
       isPending: false,
       mutateAsync: allowServer,
-    });
-    mocks.blockInventoryServerMutation.mockReturnValue({
-      isPending: false,
-      mutateAsync: blockServer,
     });
     mocks.clearInventoryServerMutation.mockReturnValue({
       isPending: false,
@@ -375,14 +365,16 @@ describe("ShadowMCPInventoryTable", () => {
 
     const pendingRow = screen.getByText("Pending MCP").closest("tr");
     const allowedRow = screen.getByText("Allowed MCP").closest("tr");
-    const blockedRow = screen.getByText("Blocked MCP").closest("tr");
-    if (!pendingRow || !allowedRow || !blockedRow) {
+    if (!pendingRow || !allowedRow) {
       throw new Error("Inventory rows not found");
     }
 
-    fireEvent.click(within(pendingRow).getByRole("button", { name: "Allow" }));
-    fireEvent.click(within(allowedRow).getByRole("button", { name: "Block" }));
-    fireEvent.click(within(blockedRow).getByRole("button", { name: "Clear" }));
+    fireEvent.click(
+      within(pendingRow).getByRole("button", { name: "Add Allow Rule" }),
+    );
+    fireEvent.click(
+      within(allowedRow).getByRole("button", { name: "Remove Allow Rule" }),
+    );
 
     await waitFor(() => {
       expect(allowServer).toHaveBeenCalledWith({
@@ -394,24 +386,35 @@ describe("ShadowMCPInventoryTable", () => {
           },
         },
       });
-      expect(blockServer).toHaveBeenCalledWith({
-        request: {
-          shadowMCPInventoryServerAccessForm: {
-            projectId: "project-id-1",
-            serverName: "Allowed MCP",
-            serverUrl: "https://allowed.example.com/mcp",
-          },
-        },
-      });
       expect(clearServer).toHaveBeenCalledWith({
         request: {
           clearShadowMCPInventoryServerAccessRequestBody: {
             projectId: "project-id-1",
-            serverUrl: "https://blocked.example.com/mcp",
+            serverUrl: "https://allowed.example.com/mcp",
           },
         },
       });
     });
     expect(mocks.invalidateShadowMCPInventory).toHaveBeenCalled();
+  });
+
+  it("renders observed status when blocking is inactive", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "none",
+          canonicalServerUrl: "https://observed.example.com/mcp",
+          serverName: "Observed MCP",
+        }),
+      ],
+    });
+
+    renderInventoryTable("project-id-1", "flagging");
+
+    await waitFor(() => {
+      expect(screen.getByText("Observed MCP")).toBeTruthy();
+    });
+    expect(screen.getByText("Observed")).toBeTruthy();
+    expect(screen.getByText("Not blocking")).toBeTruthy();
   });
 });
