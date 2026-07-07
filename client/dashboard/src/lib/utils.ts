@@ -14,13 +14,13 @@ export function getServerURL(): string {
   return __GRAM_SERVER_URL__ ?? window.location.origin;
 }
 
-// tunnel.getgram.ai in prod, tunnel-pr-N.<env> in previews (single label
+// tunnel.speakeasy.com in prod, tunnel-pr-N.<env> in previews (single label
 // keeps the wildcard cert valid), tunnel.<host> otherwise.
 export function tunnelGatewayURL(): string {
   const server = new URL(getServerURL());
   const host =
     server.host === "app.getgram.ai"
-      ? "tunnel.getgram.ai"
+      ? "tunnel.speakeasy.com"
       : /^pr-\d+\./.test(server.host)
         ? `tunnel-${server.host}`
         : `tunnel.${server.host}`;
