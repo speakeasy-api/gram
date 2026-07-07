@@ -32,6 +32,7 @@ import (
 	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
 	externalc "github.com/speakeasy-api/gram/server/gen/http/external/client"
+	externalcredentialsc "github.com/speakeasy-api/gram/server/gen/http/external_credentials/client"
 	featuresc "github.com/speakeasy-api/gram/server/gen/http/features/client"
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
@@ -93,6 +94,7 @@ func UsageCommands() []string {
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|update-domain|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
+		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|delete-aws-iam-credential|delete-gcp-iam-credential)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details)",
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
@@ -745,6 +747,50 @@ func ParseEndpoint(
 		environmentsGetToolsetEnvironmentToolsetIDFlag        = environmentsGetToolsetEnvironmentFlags.String("toolset-id", "REQUIRED", "")
 		environmentsGetToolsetEnvironmentSessionTokenFlag     = environmentsGetToolsetEnvironmentFlags.String("session-token", "", "")
 		environmentsGetToolsetEnvironmentProjectSlugInputFlag = environmentsGetToolsetEnvironmentFlags.String("project-slug-input", "", "")
+
+		externalCredentialsFlags = flag.NewFlagSet("external-credentials", flag.ContinueOnError)
+
+		externalCredentialsCreateAwsIamCredentialFlags            = flag.NewFlagSet("create-aws-iam-credential", flag.ExitOnError)
+		externalCredentialsCreateAwsIamCredentialBodyFlag         = externalCredentialsCreateAwsIamCredentialFlags.String("body", "REQUIRED", "")
+		externalCredentialsCreateAwsIamCredentialSessionTokenFlag = externalCredentialsCreateAwsIamCredentialFlags.String("session-token", "", "")
+
+		externalCredentialsUpdateAwsIamCredentialFlags            = flag.NewFlagSet("update-aws-iam-credential", flag.ExitOnError)
+		externalCredentialsUpdateAwsIamCredentialBodyFlag         = externalCredentialsUpdateAwsIamCredentialFlags.String("body", "REQUIRED", "")
+		externalCredentialsUpdateAwsIamCredentialSessionTokenFlag = externalCredentialsUpdateAwsIamCredentialFlags.String("session-token", "", "")
+
+		externalCredentialsCreateGcpIamCredentialFlags            = flag.NewFlagSet("create-gcp-iam-credential", flag.ExitOnError)
+		externalCredentialsCreateGcpIamCredentialBodyFlag         = externalCredentialsCreateGcpIamCredentialFlags.String("body", "REQUIRED", "")
+		externalCredentialsCreateGcpIamCredentialSessionTokenFlag = externalCredentialsCreateGcpIamCredentialFlags.String("session-token", "", "")
+
+		externalCredentialsUpdateGcpIamCredentialFlags            = flag.NewFlagSet("update-gcp-iam-credential", flag.ExitOnError)
+		externalCredentialsUpdateGcpIamCredentialBodyFlag         = externalCredentialsUpdateGcpIamCredentialFlags.String("body", "REQUIRED", "")
+		externalCredentialsUpdateGcpIamCredentialSessionTokenFlag = externalCredentialsUpdateGcpIamCredentialFlags.String("session-token", "", "")
+
+		externalCredentialsListExternalCredentialsFlags            = flag.NewFlagSet("list-external-credentials", flag.ExitOnError)
+		externalCredentialsListExternalCredentialsProviderFlag     = externalCredentialsListExternalCredentialsFlags.String("provider", "", "")
+		externalCredentialsListExternalCredentialsSessionTokenFlag = externalCredentialsListExternalCredentialsFlags.String("session-token", "", "")
+
+		externalCredentialsListAwsIamCredentialsFlags            = flag.NewFlagSet("list-aws-iam-credentials", flag.ExitOnError)
+		externalCredentialsListAwsIamCredentialsSessionTokenFlag = externalCredentialsListAwsIamCredentialsFlags.String("session-token", "", "")
+
+		externalCredentialsListGcpIamCredentialsFlags            = flag.NewFlagSet("list-gcp-iam-credentials", flag.ExitOnError)
+		externalCredentialsListGcpIamCredentialsSessionTokenFlag = externalCredentialsListGcpIamCredentialsFlags.String("session-token", "", "")
+
+		externalCredentialsGetAwsIamCredentialFlags            = flag.NewFlagSet("get-aws-iam-credential", flag.ExitOnError)
+		externalCredentialsGetAwsIamCredentialIDFlag           = externalCredentialsGetAwsIamCredentialFlags.String("id", "REQUIRED", "")
+		externalCredentialsGetAwsIamCredentialSessionTokenFlag = externalCredentialsGetAwsIamCredentialFlags.String("session-token", "", "")
+
+		externalCredentialsGetGcpIamCredentialFlags            = flag.NewFlagSet("get-gcp-iam-credential", flag.ExitOnError)
+		externalCredentialsGetGcpIamCredentialIDFlag           = externalCredentialsGetGcpIamCredentialFlags.String("id", "REQUIRED", "")
+		externalCredentialsGetGcpIamCredentialSessionTokenFlag = externalCredentialsGetGcpIamCredentialFlags.String("session-token", "", "")
+
+		externalCredentialsDeleteAwsIamCredentialFlags            = flag.NewFlagSet("delete-aws-iam-credential", flag.ExitOnError)
+		externalCredentialsDeleteAwsIamCredentialIDFlag           = externalCredentialsDeleteAwsIamCredentialFlags.String("id", "REQUIRED", "")
+		externalCredentialsDeleteAwsIamCredentialSessionTokenFlag = externalCredentialsDeleteAwsIamCredentialFlags.String("session-token", "", "")
+
+		externalCredentialsDeleteGcpIamCredentialFlags            = flag.NewFlagSet("delete-gcp-iam-credential", flag.ExitOnError)
+		externalCredentialsDeleteGcpIamCredentialIDFlag           = externalCredentialsDeleteGcpIamCredentialFlags.String("id", "REQUIRED", "")
+		externalCredentialsDeleteGcpIamCredentialSessionTokenFlag = externalCredentialsDeleteGcpIamCredentialFlags.String("session-token", "", "")
 
 		mcpRegistriesFlags = flag.NewFlagSet("mcp-registries", flag.ContinueOnError)
 
@@ -2466,6 +2512,19 @@ func ParseEndpoint(
 	environmentsDeleteToolsetEnvironmentLinkFlags.Usage = environmentsDeleteToolsetEnvironmentLinkUsage
 	environmentsGetToolsetEnvironmentFlags.Usage = environmentsGetToolsetEnvironmentUsage
 
+	externalCredentialsFlags.Usage = externalCredentialsUsage
+	externalCredentialsCreateAwsIamCredentialFlags.Usage = externalCredentialsCreateAwsIamCredentialUsage
+	externalCredentialsUpdateAwsIamCredentialFlags.Usage = externalCredentialsUpdateAwsIamCredentialUsage
+	externalCredentialsCreateGcpIamCredentialFlags.Usage = externalCredentialsCreateGcpIamCredentialUsage
+	externalCredentialsUpdateGcpIamCredentialFlags.Usage = externalCredentialsUpdateGcpIamCredentialUsage
+	externalCredentialsListExternalCredentialsFlags.Usage = externalCredentialsListExternalCredentialsUsage
+	externalCredentialsListAwsIamCredentialsFlags.Usage = externalCredentialsListAwsIamCredentialsUsage
+	externalCredentialsListGcpIamCredentialsFlags.Usage = externalCredentialsListGcpIamCredentialsUsage
+	externalCredentialsGetAwsIamCredentialFlags.Usage = externalCredentialsGetAwsIamCredentialUsage
+	externalCredentialsGetGcpIamCredentialFlags.Usage = externalCredentialsGetGcpIamCredentialUsage
+	externalCredentialsDeleteAwsIamCredentialFlags.Usage = externalCredentialsDeleteAwsIamCredentialUsage
+	externalCredentialsDeleteGcpIamCredentialFlags.Usage = externalCredentialsDeleteGcpIamCredentialUsage
+
 	mcpRegistriesFlags.Usage = mcpRegistriesUsage
 	mcpRegistriesClearCacheFlags.Usage = mcpRegistriesClearCacheUsage
 	mcpRegistriesListRegistriesFlags.Usage = mcpRegistriesListRegistriesUsage
@@ -2858,6 +2917,8 @@ func ParseEndpoint(
 			svcf = domainsFlags
 		case "environments":
 			svcf = environmentsFlags
+		case "external-credentials":
+			svcf = externalCredentialsFlags
 		case "mcp-registries":
 			svcf = mcpRegistriesFlags
 		case "collections":
@@ -3327,6 +3388,43 @@ func ParseEndpoint(
 
 			case "get-toolset-environment":
 				epf = environmentsGetToolsetEnvironmentFlags
+
+			}
+
+		case "external-credentials":
+			switch epn {
+			case "create-aws-iam-credential":
+				epf = externalCredentialsCreateAwsIamCredentialFlags
+
+			case "update-aws-iam-credential":
+				epf = externalCredentialsUpdateAwsIamCredentialFlags
+
+			case "create-gcp-iam-credential":
+				epf = externalCredentialsCreateGcpIamCredentialFlags
+
+			case "update-gcp-iam-credential":
+				epf = externalCredentialsUpdateGcpIamCredentialFlags
+
+			case "list-external-credentials":
+				epf = externalCredentialsListExternalCredentialsFlags
+
+			case "list-aws-iam-credentials":
+				epf = externalCredentialsListAwsIamCredentialsFlags
+
+			case "list-gcp-iam-credentials":
+				epf = externalCredentialsListGcpIamCredentialsFlags
+
+			case "get-aws-iam-credential":
+				epf = externalCredentialsGetAwsIamCredentialFlags
+
+			case "get-gcp-iam-credential":
+				epf = externalCredentialsGetGcpIamCredentialFlags
+
+			case "delete-aws-iam-credential":
+				epf = externalCredentialsDeleteAwsIamCredentialFlags
+
+			case "delete-gcp-iam-credential":
+				epf = externalCredentialsDeleteGcpIamCredentialFlags
 
 			}
 
@@ -4701,6 +4799,43 @@ func ParseEndpoint(
 			case "get-toolset-environment":
 				endpoint = c.GetToolsetEnvironment()
 				data, err = environmentsc.BuildGetToolsetEnvironmentPayload(*environmentsGetToolsetEnvironmentToolsetIDFlag, *environmentsGetToolsetEnvironmentSessionTokenFlag, *environmentsGetToolsetEnvironmentProjectSlugInputFlag)
+			}
+		case "external-credentials":
+			c := externalcredentialsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-aws-iam-credential":
+				endpoint = c.CreateAwsIamCredential()
+				data, err = externalcredentialsc.BuildCreateAwsIamCredentialPayload(*externalCredentialsCreateAwsIamCredentialBodyFlag, *externalCredentialsCreateAwsIamCredentialSessionTokenFlag)
+			case "update-aws-iam-credential":
+				endpoint = c.UpdateAwsIamCredential()
+				data, err = externalcredentialsc.BuildUpdateAwsIamCredentialPayload(*externalCredentialsUpdateAwsIamCredentialBodyFlag, *externalCredentialsUpdateAwsIamCredentialSessionTokenFlag)
+			case "create-gcp-iam-credential":
+				endpoint = c.CreateGcpIamCredential()
+				data, err = externalcredentialsc.BuildCreateGcpIamCredentialPayload(*externalCredentialsCreateGcpIamCredentialBodyFlag, *externalCredentialsCreateGcpIamCredentialSessionTokenFlag)
+			case "update-gcp-iam-credential":
+				endpoint = c.UpdateGcpIamCredential()
+				data, err = externalcredentialsc.BuildUpdateGcpIamCredentialPayload(*externalCredentialsUpdateGcpIamCredentialBodyFlag, *externalCredentialsUpdateGcpIamCredentialSessionTokenFlag)
+			case "list-external-credentials":
+				endpoint = c.ListExternalCredentials()
+				data, err = externalcredentialsc.BuildListExternalCredentialsPayload(*externalCredentialsListExternalCredentialsProviderFlag, *externalCredentialsListExternalCredentialsSessionTokenFlag)
+			case "list-aws-iam-credentials":
+				endpoint = c.ListAwsIamCredentials()
+				data, err = externalcredentialsc.BuildListAwsIamCredentialsPayload(*externalCredentialsListAwsIamCredentialsSessionTokenFlag)
+			case "list-gcp-iam-credentials":
+				endpoint = c.ListGcpIamCredentials()
+				data, err = externalcredentialsc.BuildListGcpIamCredentialsPayload(*externalCredentialsListGcpIamCredentialsSessionTokenFlag)
+			case "get-aws-iam-credential":
+				endpoint = c.GetAwsIamCredential()
+				data, err = externalcredentialsc.BuildGetAwsIamCredentialPayload(*externalCredentialsGetAwsIamCredentialIDFlag, *externalCredentialsGetAwsIamCredentialSessionTokenFlag)
+			case "get-gcp-iam-credential":
+				endpoint = c.GetGcpIamCredential()
+				data, err = externalcredentialsc.BuildGetGcpIamCredentialPayload(*externalCredentialsGetGcpIamCredentialIDFlag, *externalCredentialsGetGcpIamCredentialSessionTokenFlag)
+			case "delete-aws-iam-credential":
+				endpoint = c.DeleteAwsIamCredential()
+				data, err = externalcredentialsc.BuildDeleteAwsIamCredentialPayload(*externalCredentialsDeleteAwsIamCredentialIDFlag, *externalCredentialsDeleteAwsIamCredentialSessionTokenFlag)
+			case "delete-gcp-iam-credential":
+				endpoint = c.DeleteGcpIamCredential()
+				data, err = externalcredentialsc.BuildDeleteGcpIamCredentialPayload(*externalCredentialsDeleteGcpIamCredentialIDFlag, *externalCredentialsDeleteGcpIamCredentialSessionTokenFlag)
 			}
 		case "mcp-registries":
 			c := mcpregistriesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -8306,6 +8441,243 @@ func environmentsGetToolsetEnvironmentUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "environments get-toolset-environment --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// externalCredentialsUsage displays the usage of the external-credentials
+// command and its subcommands.
+func externalCredentialsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] external-credentials COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-aws-iam-credential: Create an AWS IAM external credential. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    update-aws-iam-credential: Replace an AWS IAM external credential's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    create-gcp-iam-credential: Create a GCP IAM external credential. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    update-gcp-iam-credential: Replace a GCP IAM external credential's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    list-external-credentials: List the organization's external credentials (provider-independent summary). Optionally filter by provider. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    list-aws-iam-credentials: List the organization's AWS IAM external credentials. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    list-gcp-iam-credentials: List the organization's GCP IAM external credentials. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-aws-iam-credential: Get an AWS IAM external credential by ID. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-gcp-iam-credential: Get a GCP IAM external credential by ID. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    delete-aws-iam-credential: Soft-delete an AWS IAM external credential by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    delete-gcp-iam-credential: Soft-delete a GCP IAM external credential by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s external-credentials COMMAND --help\n", os.Args[0])
+}
+func externalCredentialsCreateAwsIamCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-credentials create-aws-iam-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create an AWS IAM external credential. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-credentials create-aws-iam-credential --body '{\n      \"assume_role_arn\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc_audience\": \"abc123\",\n      \"oidc_subject\": \"abc123\",\n      \"sts_region\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalCredentialsUpdateAwsIamCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-credentials update-aws-iam-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace an AWS IAM external credential's configuration. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-credentials update-aws-iam-credential --body '{\n      \"assume_role_arn\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc_audience\": \"abc123\",\n      \"oidc_subject\": \"abc123\",\n      \"sts_region\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalCredentialsCreateGcpIamCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-credentials create-gcp-iam-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a GCP IAM external credential. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-credentials create-gcp-iam-credential --body '{\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\",\n      \"wif_pool_id\": \"abc123\",\n      \"wif_project_number\": \"abc123\",\n      \"wif_provider_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalCredentialsUpdateGcpIamCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-credentials update-gcp-iam-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace a GCP IAM external credential's configuration. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-credentials update-gcp-iam-credential --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\",\n      \"wif_pool_id\": \"abc123\",\n      \"wif_project_number\": \"abc123\",\n      \"wif_provider_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalCredentialsListExternalCredentialsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-credentials list-external-credentials", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's external credentials (provider-independent summary). Optionally filter by provider. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-credentials list-external-credentials --provider \"gcp_iam\" --session-token \"abc123\"")
+}
+
+func externalCredentialsListAwsIamCredentialsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-credentials list-aws-iam-credentials", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's AWS IAM external credentials. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-credentials list-aws-iam-credentials --session-token \"abc123\"")
+}
+
+func externalCredentialsListGcpIamCredentialsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-credentials list-gcp-iam-credentials", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's GCP IAM external credentials. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-credentials list-gcp-iam-credentials --session-token \"abc123\"")
+}
+
+func externalCredentialsGetAwsIamCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-credentials get-aws-iam-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an AWS IAM external credential by ID. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-credentials get-aws-iam-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func externalCredentialsGetGcpIamCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-credentials get-gcp-iam-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a GCP IAM external credential by ID. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-credentials get-gcp-iam-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func externalCredentialsDeleteAwsIamCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-credentials delete-aws-iam-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete an AWS IAM external credential by ID. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-credentials delete-aws-iam-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func externalCredentialsDeleteGcpIamCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-credentials delete-gcp-iam-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a GCP IAM external credential by ID. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-credentials delete-gcp-iam-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 // mcpRegistriesUsage displays the usage of the mcp-registries command and its

@@ -20,6 +20,7 @@ import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
 import { External } from "./external.js";
+import { ExternalCredentials } from "./externalcredentials.js";
 import { Features } from "./features.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
@@ -141,6 +142,13 @@ export class Gram extends ClientSDK {
   private _external?: External;
   get external(): External {
     return (this._external ??= new External(this._options));
+  }
+
+  private _externalCredentials?: ExternalCredentials;
+  get externalCredentials(): ExternalCredentials {
+    return (this._externalCredentials ??= new ExternalCredentials(
+      this._options,
+    ));
   }
 
   private _hooks?: Hooks;

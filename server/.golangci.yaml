@@ -94,6 +94,11 @@ linters:
         linters:
           - gosec
         text: G101
+      # False positives that audit subject/action constants containing "credential" are somehow hardcoded credentials.
+      - path: internal/audit/(events|awsiamcredentials|gcpiamcredentials)\.go
+        linters:
+          - gosec
+        text: G101
       # The guardian package is the only package that is allowed to access
       # http.Client directly since it constructs the safe HTTP clients
       # that are used throughout the codebase. This is tracked by GG002.
