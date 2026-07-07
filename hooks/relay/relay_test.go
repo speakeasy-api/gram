@@ -610,12 +610,33 @@ func TestRedactCommandMasksSeparatedHeaderValue(t *testing.T) {
 	require.Contains(t, got, "retry=3", "cookie continuation is scoped to cookie headers")
 	require.Contains(t, got, "tail6")
 
+	got = redactCommand(`curl -H'X-API-Key: abc124' tail7`)
+	require.NotContains(t, got, "abc124", "curl's attached short-option header form is still a secret header")
+	require.Contains(t, got, "tail7")
+
+	got = redactCommand(`curl -H'Authorization:Bearer tok-88' https://ok.example.com/v2`)
+	require.NotContains(t, got, "tok-88")
+	require.Contains(t, got, "ok.example.com")
+
 	got = redactCommand("GITHUB_PAT=github_pat_11ABCDEF npx -y srv")
 	require.NotContains(t, got, "github_pat_11ABCDEF", "a benign-named env assignment can still carry a recognizable credential")
 	require.Contains(t, got, "GITHUB_PAT=***")
 
 	got = redactCommand("PROXY_URL=https://user:hunter7@proxy.internal npx -y srv")
 	require.NotContains(t, got, "hunter7")
+}
+
+// TestMissingVerdictBlocksGatingEvent: a JSON 2xx whose body carries no
+// explicit decision must not read as an allow on a blocking hook.
+func TestMissingVerdictBlocksGatingEvent(t *testing.T) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusOK, decision{Decision: "", Reason: "", Message: ""}
+	})
+	cfg := authedConfig(t, fs.URL)
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+	require.Contains(t, string(res.Stdout), "verdict")
 }
 
 // TestUnparseable2xxBlocksGatingEvent: a 2xx the SDK cannot parse (wrong

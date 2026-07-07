@@ -43,8 +43,10 @@ var (
 	secretEnvAssignRE = regexp.MustCompile(`(?i)^[A-Za-z_][A-Za-z0-9_]*(key|token|secret|password|passwd|credential|auth)[A-Za-z0-9_]*=`)
 	secretAssignRE    = regexp.MustCompile(`(?i)^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*=`)
 	secretFlagRE      = regexp.MustCompile(`(?i)^--?[^=]*(key|token|secret|password|passwd|credential|bearer|auth)[^=]*$`)
-	secretHeaderRE    = regexp.MustCompile(`(?i)^(--?[^=]*=)?(authorization|proxy-authorization|cookie|x-api-key) *:`)
-	envAssignRE       = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
+	// The optional prefix covers --header=NAME:..., and curl's attached
+	// short-option form (-HNAME:... after quote stripping).
+	secretHeaderRE = regexp.MustCompile(`(?i)^(--?[^=]*=|-[a-z])?(authorization|proxy-authorization|cookie|x-api-key) *:`)
+	envAssignRE    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
 	// authSchemeRE matches auth scheme words that precede the credential in a
 	// header value ("Authorization: Token abc"); the scheme is not the secret.
 	authSchemeRE  = regexp.MustCompile(`(?i)^(bearer|basic|token|digest|negotiate|ntlm|dpop|oauth|hawk|apikey)$`)

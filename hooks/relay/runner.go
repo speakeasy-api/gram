@@ -213,10 +213,22 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 	}
 
 	if res.statusCode >= 200 && res.statusCode < 300 {
-		if res.decision.denied() && !r.cfg.Nonblocking {
+		switch {
+		case strings.EqualFold(res.decision.Decision, "allow"):
+			return verdict{block: false, message: "", nudge: false}
+		case r.cfg.Nonblocking:
+			return verdict{block: false, message: "", nudge: false}
+		case res.decision.denied():
 			return verdict{block: true, message: res.decision.Message, nudge: false}
+		default:
+			// A 2xx whose body carries no explicit verdict (an intermediary's
+			// JSON, a skewed server) is not an allow.
+			msg := strings.TrimSpace(res.decision.Message)
+			if msg == "" {
+				msg = "Speakeasy hooks could not read the server's verdict."
+			}
+			return verdict{block: true, message: msg, nudge: false}
 		}
-		return verdict{block: false, message: "", nudge: false}
 	}
 	// Non-2xx or unreachable: the server could not confirm the action is
 	// allowed, so block unless observability mode says otherwise.
