@@ -739,9 +739,21 @@ export function InsightsProvider({
   // chat API, not `access.listMembers`).
   const { data: membersData } = useMembers();
   const resolveCreator = useCallback(
-    ({ userId }: { userId?: string; externalUserId?: string }) => {
-      if (!userId) return undefined;
-      const member = membersData?.members.find((m) => m.id === userId);
+    ({
+      userId,
+      externalUserId,
+    }: {
+      userId?: string;
+      externalUserId?: string;
+    }) => {
+      if (!userId && !externalUserId) return undefined;
+      // Chats started from the dashboard itself have no `userId` at capture
+      // time and stash the caller's email in `externalUserId` instead — fall
+      // back to an email match so those still resolve to a member.
+      const member = membersData?.members.find(
+        (m) =>
+          m.id === userId || (!!externalUserId && m.email === externalUserId),
+      );
       return (
         member && {
           name: member.name,

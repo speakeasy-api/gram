@@ -625,17 +625,26 @@ function initialsOf(identifier: string): string {
       words[0]!.charAt(0) + words[words.length - 1]!.charAt(0)
     ).toUpperCase();
   }
-  return handle.slice(0, 2).toUpperCase();
+  return handle.trim().slice(0, 2).toUpperCase();
 }
 
 // Row icon: the chat creator's avatar when it resolves against the org
 // member list, otherwise the default message icon (e.g. chats with no
-// internal user attached, or before members have loaded).
-function RecentRowIcon({ userId }: { userId?: string }): ReactElement {
+// internal user attached, or before members have loaded). Chats started from
+// the dashboard itself have no `userId` at capture time and stash the
+// caller's email in `externalUserId` instead — fall back to an email match so
+// those still resolve.
+function RecentRowIcon({
+  userId,
+  externalUserId,
+}: {
+  userId?: string;
+  externalUserId?: string;
+}): ReactElement {
   const { data: membersData } = useMembers();
-  const member = userId
-    ? membersData?.members.find((m) => m.id === userId)
-    : undefined;
+  const member = membersData?.members.find(
+    (m) => m.id === userId || (!!externalUserId && m.email === externalUserId),
+  );
 
   if (member) {
     const display = member.name || member.email;
@@ -675,7 +684,10 @@ function RecentRow({
         to={routes.chat.conversation.href(chat.id)}
         className="flex min-w-0 flex-1 items-center gap-3"
       >
-        <RecentRowIcon userId={chat.userId} />
+        <RecentRowIcon
+          userId={chat.userId}
+          externalUserId={chat.externalUserId}
+        />
         <span className="text-foreground min-w-0 flex-1 truncate text-sm">
           {chat.title || "New chat"}
         </span>

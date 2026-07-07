@@ -25,7 +25,7 @@ export function initialsOf(identifier: string): string {
       words[0]!.charAt(0) + words[words.length - 1]!.charAt(0)
     ).toUpperCase();
   }
-  return handle.slice(0, 2).toUpperCase();
+  return handle.trim().slice(0, 2).toUpperCase();
 }
 
 export function assert(condition: unknown, message: string): asserts condition {
