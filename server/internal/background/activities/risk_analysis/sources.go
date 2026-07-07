@@ -1,6 +1,7 @@
 package risk_analysis
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/scanners/accountidentity"
 	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 )
@@ -15,6 +16,11 @@ const (
 	// run_terminal_cmd) as well as MCP-routed calls whose arguments happen to
 	// carry a destructive payload.
 	SourceCLIDestructive = clidestructive.Source
+	// SourceAccountIdentity is the policy source value flagging sessions
+	// authenticated with a non-corporate AI account. Unlike the content
+	// scanners it inspects the chat's account attribution (personal-account
+	// tracking data on user_accounts), not the message text.
+	SourceAccountIdentity = accountidentity.Source
 	// SourceNone marks the sentinel row for an analyzed message with no findings.
 	SourceNone = "none"
 
