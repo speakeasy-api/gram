@@ -302,13 +302,14 @@ function SessionSummary({
           <div className="mb-1 text-sm font-semibold">Session details</div>
           <div className="divide-border divide-y">
             <MetaRow label="User">{chat.externalUserId || "anonymous"}</MetaRow>
-            {chat.accountEmail && (
+            {personalAccountEmail(chat) && (
               <MetaRow label="Account">
                 <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
-                  {chat.accountEmail}
+                  {personalAccountEmail(chat)}
                   <AccountTypeBadge accountType={chat.accountType} noTooltip />
                 </span>
               </MetaRow>
+            )}
             )}
             {chat.source && (
               <MetaRow label="Source">
