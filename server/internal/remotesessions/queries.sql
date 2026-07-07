@@ -241,11 +241,12 @@ WHERE remote_session_client_id = @remote_session_client_id
   AND user_session_issuer_id = @user_session_issuer_id;
 
 -- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
-DELETE FROM remote_session_client_user_session_issuers AS link
-USING remote_session_clients AS c
-WHERE link.remote_session_client_id = c.id
-  AND c.id = @remote_session_client_id
-  AND c.project_id = @project_id;
+-- Keyed on client id alone: the sole caller (DeleteRemoteSessionClient) has
+-- already established ownership via the client soft-delete's scoping, and a
+-- deleted client's attachments are dead org-wide — including bindings to
+-- other projects' issuers when the client is organization-level.
+DELETE FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = @remote_session_client_id;
 
 -- name: GetRemoteSessionClientForClientMetadataDocument :one
 -- Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the
@@ -371,9 +372,15 @@ VALUES (
 RETURNING *;
 
 -- name: DeleteRemoteSessionClient :one
+-- Scoped like GetRemoteSessionClientByID / ListRemoteSessionClientsByProjectID:
+-- the project's own client, or an organization-level client (project_id NULL)
+-- in the caller's org. Without the org-level arm, deleting an org-level client
+-- through a project-scoped call silently no-ops.
 UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+WHERE id = @id
+  AND (project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id))
+  AND deleted IS FALSE
 RETURNING *;
 
 -- name: SoftDeleteRemoteSessionsByClientID :execrows

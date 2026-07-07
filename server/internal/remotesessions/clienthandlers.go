@@ -1006,8 +1006,9 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	txRepo := repo.New(dbtx)
 
 	deleted, err := txRepo.DeleteRemoteSessionClient(ctx, repo.DeleteRemoteSessionClientParams{
-		ID:        clientID,
-		ProjectID: conv.ToNullUUID(*authCtx.ProjectID),
+		ID:             clientID,
+		ProjectID:      conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1016,13 +1017,7 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeUnexpected, err, "delete remote session client").LogError(ctx, logger)
 	}
 
-	if err := txRepo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(
-		ctx,
-		repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{
-			RemoteSessionClientID: deleted.ID,
-			ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
-		},
-	); err != nil {
+	if err := txRepo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, deleted.ID); err != nil {
 		return oops.E(
 			oops.CodeUnexpected,
 			err,

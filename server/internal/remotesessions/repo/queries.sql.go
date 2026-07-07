@@ -537,17 +537,24 @@ func (q *Queries) DeleteOrganizationRemoteSessionIssuer(ctx context.Context, arg
 const deleteRemoteSessionClient = `-- name: DeleteRemoteSessionClient :one
 UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
-WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+WHERE id = $1
+  AND (project_id = $2 OR (project_id IS NULL AND organization_id = $3))
+  AND deleted IS FALSE
 RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteRemoteSessionClientParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.NullUUID
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
 }
 
+// Scoped like GetRemoteSessionClientByID / ListRemoteSessionClientsByProjectID:
+// the project's own client, or an organization-level client (project_id NULL)
+// in the caller's org. Without the org-level arm, deleting an org-level client
+// through a project-scoped call silently no-ops.
 func (q *Queries) DeleteRemoteSessionClient(ctx context.Context, arg DeleteRemoteSessionClientParams) (RemoteSessionClient, error) {
-	row := q.db.QueryRow(ctx, deleteRemoteSessionClient, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, deleteRemoteSessionClient, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i RemoteSessionClient
 	err := row.Scan(
 		&i.ID,
@@ -618,20 +625,16 @@ func (q *Queries) DeleteRemoteSessionIssuer(ctx context.Context, arg DeleteRemot
 }
 
 const deleteUserSessionIssuerAttachmentsForRemoteSessionClient = `-- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
-DELETE FROM remote_session_client_user_session_issuers AS link
-USING remote_session_clients AS c
-WHERE link.remote_session_client_id = c.id
-  AND c.id = $1
-  AND c.project_id = $2
+DELETE FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = $1
 `
 
-type DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams struct {
-	RemoteSessionClientID uuid.UUID
-	ProjectID             uuid.NullUUID
-}
-
-func (q *Queries) DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx context.Context, arg DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams) error {
-	_, err := q.db.Exec(ctx, deleteUserSessionIssuerAttachmentsForRemoteSessionClient, arg.RemoteSessionClientID, arg.ProjectID)
+// Keyed on client id alone: the sole caller (DeleteRemoteSessionClient) has
+// already established ownership via the client soft-delete's scoping, and a
+// deleted client's attachments are dead org-wide — including bindings to
+// other projects' issuers when the client is organization-level.
+func (q *Queries) DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx context.Context, remoteSessionClientID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserSessionIssuerAttachmentsForRemoteSessionClient, remoteSessionClientID)
 	return err
 }
 

@@ -851,6 +851,87 @@ func TestDeleteRemoteSessionClient(t *testing.T) {
 	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerUUID))
 }
 
+func TestDeleteRemoteSessionClient_OrgLevel(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-org-delete", "")
+	issuerUUID, err := uuid.Parse(issuerID)
+	require.NoError(t, err)
+	userIssuerUUID := createUserSessionIssuer(t, ctx, ti.conn, "usi-org-delete")
+
+	// Organization-level client: project_id NULL, owned by the caller's org
+	// (the shape the org external-credentials API writes). The project-scoped
+	// delete handler must still reach it.
+	q := repo.New(ti.conn)
+	created, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:          pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true},
+		RemoteSessionIssuerID:   issuerUUID,
+		ClientID:                "org-level-delete-client",
+		ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
+		ClientIDIssuedAt:        pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		TokenEndpointAuthMethod: pgtype.Text{String: "none", Valid: true},
+		Scope:                   nil,
+		Audience:                pgtype.Text{String: "", Valid: false},
+		LegacyCallbackUrl:       false,
+	})
+	require.NoError(t, err)
+	require.False(t, created.ProjectID.Valid, "fixture must be organization-level")
+
+	err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: created.ID,
+		UserSessionIssuerID:   userIssuerUUID,
+	})
+	require.NoError(t, err)
+
+	_, err = q.InsertRemoteSession(ctx, repo.InsertRemoteSessionParams{
+		SubjectUrn:            urn.NewUserSubject("org-level-principal"),
+		UserSessionIssuerID:   userIssuerUUID,
+		RemoteSessionClientID: created.ID,
+		AccessTokenEncrypted:  "ciphertext",
+		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+
+	err = ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{
+		ID:               created.ID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	// Row is gone from the project-scoped read surface and the cascades ran.
+	_, err = ti.service.GetRemoteSessionClient(ctx, &clientsgen.GetRemoteSessionClientPayload{
+		ID:               created.ID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	activeSessions, err := q.CountActiveRemoteSessionsByClientID(ctx, created.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), activeSessions)
+	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, created.ID, userIssuerUUID))
+
+	// Idempotence: deleting an already-deleted client stays a silent success.
+	err = ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{
+		ID:               created.ID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+}
+
 func TestCloneClientFromOAuthProxyProvider_HappyPath(t *testing.T) {
 	t.Parallel()
 
