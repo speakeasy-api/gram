@@ -193,7 +193,8 @@ export default function PluginDetail(): JSX.Element | null {
   const deleteMutation = useDeletePluginMutation({
     onSuccess: async () => {
       setIsDeleteOpen(false);
-      await invalidateAllPlugins(queryClient);
+      await invalidateAll();
+      offerPublish("Plugin deleted");
       void navigate(routes.plugins.href());
     },
   });

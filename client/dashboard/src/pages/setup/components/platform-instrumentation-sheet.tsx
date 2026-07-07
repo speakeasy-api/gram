@@ -9,6 +9,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
+import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { useSlugs } from "@/contexts/Sdk";
 import { toast } from "sonner";
@@ -133,17 +134,18 @@ export function PlatformInstrumentationSheet({
   >({});
 
   const { data: publishStatus } = usePublishStatus();
+  const { data: marketplaceSettings } = useMarketplaceSettings();
   const { orgSlug = "" } = useSlugs();
   const repoOwner = publishStatus?.repoOwner ?? "";
   const repoName = publishStatus?.repoName ?? "";
   const marketplaceUrl = publishStatus?.marketplaceUrl ?? "";
   const repoUrl = publishStatus?.repoUrl ?? "";
-  // Marketplace + plugin slug formulas mirror server/internal/plugins/naming/naming.go.
-  // Both sides derive from the org slug — NOT the GitHub repo name, which can
-  // be anything (e.g. "speakeasy-default-plugins"). The marketplace.json "name"
-  // field is what `enabledPlugins`/`plugins.required` reference as the
-  // `<plugin>@<marketplace>` suffix, and it's always `<orgSlug>-gram`.
-  const marketplaceName = orgSlug ? `${orgSlug}-gram` : "";
+  // The marketplace.json "name" field — what `enabledPlugins`/`plugins.required`
+  // reference as the `<plugin>@<marketplace>` suffix. Sourced from the server
+  // (naming.MarketplaceName is org-slug-normalized AND project-scoped) rather
+  // than re-derived here, which previously hardcoded the wrong "-gram" suffix
+  // instead of "-speakeasy" and ignored non-default-project scoping entirely.
+  const marketplaceName = marketplaceSettings?.effectiveName ?? "";
   const claudePluginName = orgSlug ? `${orgSlug}-observability` : "";
   const codexPluginName = orgSlug ? `${orgSlug}-observability-codex` : "";
   const cursorPluginName = orgSlug ? `${orgSlug}-observability-cursor` : "";
@@ -182,15 +184,17 @@ export function PlatformInstrumentationSheet({
       // non-deleted rows, and key tokens are only returned on creation (never
       // re-readable via listKeys). Both constraints mean we can't "fetch the
       // existing key" — we have to mint a fresh one with a unique name on each
-      // run. The timestamp suffix guarantees uniqueness and tells admins which
-      // run produced each entry in the API Keys list.
+      // run. The timestamp suffix tells admins which run produced each entry
+      // in the API Keys list; a random suffix guarantees uniqueness even when
+      // two tabs/remounts mint a key in the same second.
       const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
+      const uniqueSuffix = Math.random().toString(36).slice(2, 6);
       createKeyMutation.mutate(
         {
           security: { sessionHeaderGramSession: "" },
           request: {
             createKeyForm: {
-              name: `${platform.name} hooks (setup ${timestamp})`,
+              name: `${platform.name} hooks (setup ${timestamp} ${uniqueSuffix})`,
               scopes: ["hooks"],
             },
           },

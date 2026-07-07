@@ -262,16 +262,6 @@ export default function Plugins(): JSX.Element {
           </Page.Section.Description>
           <Page.Section.CTA>
             <Stack direction="horizontal" gap={2} align="center">
-              <Button
-                variant="tertiary"
-                onClick={handleOpenMarketplaceSettings}
-                aria-label="Marketplace settings"
-                title="Marketplace settings"
-              >
-                <Button.LeftIcon>
-                  <Icon name="settings" className="h-4 w-4" />
-                </Button.LeftIcon>
-              </Button>
               {/* Once connected, publishing moves to the plugin detail page
                   and the marketplace card below — this CTA is only the
                   first-time "connect GitHub" entrypoint. */}
@@ -302,6 +292,7 @@ export default function Plugins(): JSX.Element {
                     onManageCollaborators={() =>
                       setIsManageCollaboratorsOpen(true)
                     }
+                    onRename={handleOpenMarketplaceSettings}
                   />
                   <div className="border-border border-t" />
                 </>
@@ -621,13 +612,15 @@ function PluginGrid({
         {searchQuery ? (
           <Type muted>No plugins matching &ldquo;{searchQuery}&rdquo;</Type>
         ) : null}
-        <div className="grid grid-cols-2 gap-6">{createCard}</div>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          {createCard}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       {plugins.map((plugin) => (
         <PluginCard
           key={plugin.id}
