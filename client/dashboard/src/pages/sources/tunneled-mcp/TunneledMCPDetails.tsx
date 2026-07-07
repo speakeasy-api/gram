@@ -25,7 +25,7 @@ import {
   getTunneledMcpServerArgs,
 } from "@/lib/sources";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
-import { getServerURL } from "@/lib/utils";
+import { tunnelGatewayURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpConnection } from "@gram/client/models/components/tunneledmcpconnection.js";
@@ -956,10 +956,7 @@ export function TunneledMcpSetupTabs({
   const upstream = "http://localhost:3000/mcp";
   const clusterUpstream = "http://127.0.0.1:3000/mcp";
   const dockerUpstream = `http://hello-world-mcp-${slug}:3000/mcp`;
-  // The tunnel gateway listens on /connect under the same hostnames as the
-  // Gram server (see gram-infra ingress), so derive it from the environment's
-  // server URL instead of hardcoding the prod hostname.
-  const gateway = `${getServerURL().replace(/^http/, "ws")}/connect`;
+  const gateway = tunnelGatewayURL();
   const helloWorldPython = `from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP(
