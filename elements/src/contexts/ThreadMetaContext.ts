@@ -15,6 +15,16 @@ import { createContext, useContext } from "react";
 export interface ThreadMeta {
   /** ISO timestamp of when the chat was created. */
   createdAt?: string;
+  /**
+   * The chat creator's displayable identity, as resolved by the consumer's
+   * `history.resolveCreator` callback. Undefined when that callback is
+   * unset, or returns nothing for this chat.
+   */
+  owner?: {
+    name?: string;
+    email: string;
+    photoUrl?: string;
+  };
 }
 
 export const ThreadMetaContext = createContext<Record<string, ThreadMeta>>({});
