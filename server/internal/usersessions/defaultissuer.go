@@ -60,7 +60,6 @@ func GetDefaultIssuer(ctx context.Context, db repo.DBTX, projectID uuid.UUID) (r
 // first requests arrive concurrently.
 func GetOrCreateDefaultIssuer(ctx context.Context, db repo.DBTX, projectID uuid.UUID) (repo.UserSessionIssuer, error) {
 	var zero repo.UserSessionIssuer
-	q := repo.New(db)
 
 	row, found, err := GetDefaultIssuer(ctx, db, projectID)
 	if err != nil {
@@ -70,7 +69,7 @@ func GetOrCreateDefaultIssuer(ctx context.Context, db repo.DBTX, projectID uuid.
 		return row, nil
 	}
 
-	row, err = q.CreateDefaultUserSessionIssuer(ctx, repo.CreateDefaultUserSessionIssuerParams{
+	row, err = repo.New(db).CreateDefaultUserSessionIssuer(ctx, repo.CreateDefaultUserSessionIssuerParams{
 		ProjectID:          projectID,
 		Slug:               DefaultIssuerSlug,
 		AuthnChallengeMode: "interactive",
@@ -90,12 +89,12 @@ func GetOrCreateDefaultIssuer(ctx context.Context, db repo.DBTX, projectID uuid.
 
 	// Lost the create race: a concurrent request inserted the row between
 	// our read and write. Re-read it.
-	row, err = q.GetUserSessionIssuerBySlug(ctx, repo.GetUserSessionIssuerBySlugParams{
-		Slug:      DefaultIssuerSlug,
-		ProjectID: projectID,
-	})
+	row, found, err = GetDefaultIssuer(ctx, db, projectID)
 	if err != nil {
-		return zero, fmt.Errorf("re-read default user session issuer after create race: %w", err)
+		return zero, err
+	}
+	if !found {
+		return zero, fmt.Errorf("default user session issuer missing after create race")
 	}
 	return row, nil
 }
