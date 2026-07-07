@@ -133,7 +133,10 @@ CREATE TABLE IF NOT EXISTS billing_cycle_usage (
 
   CONSTRAINT billing_cycle_usage_pkey PRIMARY KEY (id),
   CONSTRAINT billing_cycle_usage_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT billing_cycle_usage_cycle_bounds_check CHECK (cycle_end > cycle_start)
+  CONSTRAINT billing_cycle_usage_cycle_bounds_check CHECK (cycle_end > cycle_start),
+  -- Token counts originate from client-supplied OTEL attributes; a negative
+  -- sum must never become part of the permanent billing record.
+  CONSTRAINT billing_cycle_usage_tum_tokens_check CHECK (tum_tokens >= 0)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS billing_cycle_usage_organization_id_cycle_start_key
