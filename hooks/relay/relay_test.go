@@ -626,6 +626,38 @@ func TestRedactCommandMasksSeparatedHeaderValue(t *testing.T) {
 	require.NotContains(t, got, "hunter7")
 }
 
+// TestCodexToolCompletionReplaysRequestID: codex PostToolUse omits both
+// tool_use_id and tool_input, so its synthesized id diverges from the
+// request's; the queued request id must be replayed on the completion or
+// tool.completed never attaches to the tool_calls row.
+func TestCodexToolCompletionReplaysRequestID(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("TMPDIR", t.TempDir())
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+
+	pre := []byte(`{"hook_event_name":"PreToolUse","session_id":"sess-cx1","turn_id":"turn-9","tool_name":"shell","tool_input":{"command":"ls -la"},"cwd":"/work"}`)
+	post := []byte(`{"hook_event_name":"PostToolUse","session_id":"sess-cx1","turn_id":"turn-9","tool_name":"shell","tool_output":"file listing","cwd":"/work"}`)
+	agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCodex, pre, "--variant=cli")
+	agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCodex, post, "--variant=cli")
+
+	var reqTool, doneTool *components.HookToolCallData
+	for _, b := range fs.requests {
+		switch b.Event.Type {
+		case components.TypeToolRequested:
+			reqTool = b.Data.ToolCall
+		case components.TypeToolCompleted:
+			doneTool = b.Data.ToolCall
+		}
+	}
+	require.NotNil(t, reqTool)
+	require.NotNil(t, doneTool)
+	require.NotNil(t, reqTool.ID)
+	require.NotNil(t, doneTool.ID)
+	require.NotEmpty(t, *reqTool.ID)
+	require.Equal(t, *reqTool.ID, *doneTool.ID, "the completion must replay the request's id")
+}
+
 // TestMissingVerdictBlocksGatingEvent: a JSON 2xx whose body carries no
 // explicit decision must not read as an allow on a blocking hook.
 func TestMissingVerdictBlocksGatingEvent(t *testing.T) {

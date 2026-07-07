@@ -158,6 +158,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	}
 
 	payload := buildEnvelope(typed, hostname())
+	r.correlateCodexToolID(typed, &payload)
 	res := r.client.send(ctx, c, payload)
 	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
 	if res.authRejected && c.Source == credEnv {
