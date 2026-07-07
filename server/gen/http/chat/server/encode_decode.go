@@ -2060,6 +2060,7 @@ func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *Ch
 		LastMessageTimestamp: v.LastMessageTimestamp,
 		RiskFindingsCount:    v.RiskFindingsCount,
 		AccountType:          v.AccountType,
+		AccountEmail:         v.AccountEmail,
 	}
 
 	return res
