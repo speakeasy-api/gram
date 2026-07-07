@@ -25,9 +25,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
-	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 )
 
 // RiskScanner checks text against blocking risk policies.
@@ -115,48 +117,61 @@ var _ RiskScanner = (*Scanner)(nil)
 // It pre-creates a gitleaks detector at construction time to avoid the
 // per-scan mutex+init overhead on the hot path.
 type Scanner struct {
-	logger     *slog.Logger
-	tracer     trace.Tracer
-	db         *pgxpool.Pool
-	repo       *repo.Queries
-	gitleaks   *ra.GitleaksScanner        // pre-created, reused & serialized across scans
-	piiScanner ra.PIIScanner              // nil if Presidio is unavailable
-	piScanner  *ra.PromptInjectionScanner // never nil; stub-classifier when L1 disabled
-	judge      ra.PromptJudge             // nil-safe; guarded at the call site
-	flags      feature.Provider           // nil disables prompt_based enforcement
-	metrics    *scannerMetrics
-	celEng     *celenv.Engine
+	logger            *slog.Logger
+	tracer            trace.Tracer
+	db                *pgxpool.Pool
+	repo              *repo.Queries
+	gitleaks          *gitleaks.Scanner           // warm at startup, reused across scans
+	customRuleScanner *customruleanalyzer.Scanner // required; evaluates custom CEL detection rules
+	piiScanner        ra.PIIScanner               // nil if Presidio is unavailable
+	piScanner         *ra.PromptInjectionScanner  // never nil; stub-classifier when L1 disabled
+	judge             ra.PromptJudge              // nil-safe; guarded at the call site
+	flags             feature.Provider            // nil disables prompt_based enforcement
+	metrics           *scannerMetrics
+	celEng            *celenv.Engine
 }
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio
 // is not available in the server process. piScanner must be non-nil; pass a
 // scanner built with a nil engine to run L0 heuristics only.
-// Pre-creates a gitleaks detector to avoid per-scan rule compilation on the
+// Primes the gitleaks detector to avoid per-scan rule compilation on the
 // real-time hook path; returns an error if the detector cannot be built
 // (init relies on viper global state and should never realistically fail,
 // but propagating the error keeps startup honest).
-func NewScanner(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner ra.PIIScanner, piScanner *ra.PromptInjectionScanner, judge ra.PromptJudge, flags feature.Provider, celEng *celenv.Engine) (*Scanner, error) {
-	gitleaksScanner, err := ra.NewGitleaksScanner()
-	if err != nil {
-		return nil, fmt.Errorf("create gitleaks scanner: %w", err)
-	}
-
+func NewScanner(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
+	db *pgxpool.Pool,
+	customRuleScanner *customruleanalyzer.Scanner,
+	piiScanner ra.PIIScanner,
+	piScanner *ra.PromptInjectionScanner,
+	judge ra.PromptJudge,
+	flags feature.Provider,
+	celEng *celenv.Engine,
+) (*Scanner, error) {
 	if piScanner == nil {
 		piScanner = ra.NewPromptInjectionScanner(logger, nil)
 	}
 
+	gitleaksScanner := gitleaks.NewScanner()
+	if err := gitleaksScanner.Prime(); err != nil {
+		return nil, fmt.Errorf("prime gitleaks scanner: %w", err)
+	}
+
 	return &Scanner{
-		logger:     logger.With(attr.SlogComponent("risk-scanner")),
-		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
-		db:         db,
-		repo:       repo.New(db),
-		gitleaks:   gitleaksScanner,
-		piiScanner: piiScanner,
-		piScanner:  piScanner,
-		judge:      judge,
-		flags:      flags,
-		metrics:    newScannerMetrics(meterProvider, logger),
-		celEng:     celEng,
+		logger:            logger.With(attr.SlogComponent("risk-scanner")),
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		db:                db,
+		repo:              repo.New(db),
+		customRuleScanner: customRuleScanner,
+		gitleaks:          gitleaksScanner,
+		piiScanner:        piiScanner,
+		piScanner:         piScanner,
+		judge:             judge,
+		flags:             flags,
+		metrics:           newScannerMetrics(meterProvider, logger),
+		celEng:            celEng,
 	}, nil
 }
 
@@ -426,14 +441,14 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 		return nil, fmt.Errorf("list exclusions: %w", err)
 	}
 	exclusions := ra.NewExclusionSet(exclusionRows)
-	filter := func(findings []ra.Finding) []ra.Finding {
+	filter := func(findings []scanners.Finding) []scanners.Finding {
 		return exclusions.FilterFindings(disabled.FilterFindings(findings))
 	}
 
 	// Evaluate custom detection rules up front; their findings are held for the
 	// block check after the built-in sources. Message exemptions were already
 	// applied above via the policy's scope_exempt.
-	var customFindings []ra.Finding
+	var customFindings []scanners.Finding
 	if len(policy.CustomRuleIds) > 0 {
 		customFindings, err = s.scanCustomRules(ctx, policy, view)
 		if err != nil {
@@ -447,7 +462,11 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 	for _, source := range policy.Sources {
 		switch source {
 		case ra.SourceGitleaks:
-			findings := filter(s.scanGitleaks(text))
+			gitleaksFindings, err := s.scanGitleaks(ctx, text)
+			if err != nil {
+				return nil, fmt.Errorf("gitleaks scan: %w", err)
+			}
+			findings := filter(gitleaksFindings)
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:      policy.Action,
@@ -586,29 +605,34 @@ func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.T
 	}
 }
 
-func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) ([]ra.Finding, error) {
+func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) ([]scanners.Finding, error) {
 	if len(policy.CustomRuleIds) == 0 {
-		return []ra.Finding{}, nil
+		return []scanners.Finding{}, nil
 	}
 
-	rules, err := customrules.LoadSelected(ctx, s.repo, policy.ProjectID, policy.CustomRuleIds)
-	if err != nil {
-		return nil, fmt.Errorf("load custom detection rules: %w", err)
+	toolCalls := make([]customruleanalyzer.ScanToolCall, 0, len(view.Tools))
+	for _, t := range view.Tools {
+		toolCalls = append(toolCalls, customruleanalyzer.ScanToolCall{Name: t.Name, Arguments: t.Arguments})
 	}
-	compiled, err := ra.CompileCELRules(s.celEng, rules)
-	if err != nil {
-		return nil, fmt.Errorf("compile custom detection rules: %w", err)
-	}
-	findings, err := ra.ScanCELRules(s.celEng, view, compiled)
+
+	findings, err := s.customRuleScanner.Scan(ctx, customruleanalyzer.ScanRequest{
+		ProjectID:     policy.ProjectID,
+		CustomRuleIDs: policy.CustomRuleIds,
+		Content:       view.Content,
+		Kind:          view.Type,
+		ToolCalls:     toolCalls,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("scan custom detection rules: %w", err)
 	}
 	return findings, nil
 }
 
-// scanGitleaks scans text on the pre-created, reused gitleaks scanner. The
-// scanner reuses one detector (avoiding per-scan rule compilation) and
-// serializes the underlying DetectString call, which mutates detector state.
-func (s *Scanner) scanGitleaks(text string) []ra.Finding {
-	return s.gitleaks.Scan(text)
+// scanGitleaks scans text on the warm, reused gitleaks scanner.
+func (s *Scanner) scanGitleaks(ctx context.Context, text string) ([]scanners.Finding, error) {
+	findings, err := s.gitleaks.Scan(ctx, text)
+	if err != nil {
+		return nil, fmt.Errorf("gitleaks scan: %w", err)
+	}
+	return findings, nil
 }

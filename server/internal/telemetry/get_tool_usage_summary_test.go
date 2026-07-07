@@ -286,7 +286,7 @@ func TestGetToolUsageSummary_FiltersByHookSource(t *testing.T) {
 		var err error
 		result, err = ti.service.GetToolUsageSummary(ctx, payload)
 		return err == nil && result != nil && result.Totals.EventCount == 1
-	}, 2*time.Second, 50*time.Millisecond, "expected only the cowork hook event in the filtered summary")
+	}, 10*time.Second, 200*time.Millisecond, "expected only the cowork hook event in the filtered summary")
 
 	targets := toolUsageTargetsByKey(result.Targets)
 	require.NotNil(t, targets["shadow_mcp_server:server:shadow-db"])

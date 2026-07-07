@@ -3,6 +3,8 @@ package risk_analysis
 import (
 	"regexp"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // heuristicRule is one named L0 detector. Each rule contributes findings
@@ -159,12 +161,12 @@ func asciiToLower(s string) string {
 // the full input but rely on Go RE2 with bounded `.{0,N}` quantifiers, which
 // are linear-time; capping them would just trade defense-in-depth coverage
 // (delimiters near the end of long messages) for no measurable CPU win.
-func runHeuristics(text string) []Finding {
+func runHeuristics(text string) []scanners.Finding {
 	if text == "" {
 		return nil
 	}
 
-	var findings []Finding
+	var findings []scanners.Finding
 	findings = append(findings, detectInstructionOverrides(text)...)
 	findings = append(findings, runFamily(text, familyRoleHijack)...)
 	findings = append(findings, runFamily(text, familySystemPromptLeak)...)
@@ -174,8 +176,8 @@ func runHeuristics(text string) []Finding {
 }
 
 // runFamily applies all heuristicRules in a family to text.
-func runFamily(text string, fam ruleFamily) []Finding {
-	var out []Finding
+func runFamily(text string, fam ruleFamily) []scanners.Finding {
+	var out []scanners.Finding
 	for _, rule := range heuristicRules {
 		if rule.family != fam {
 			continue
@@ -185,7 +187,7 @@ func runFamily(text string, fam ruleFamily) []Finding {
 			continue
 		}
 		ruleID, description := DescribePromptInjection()
-		out = append(out, Finding{
+		out = append(out, scanners.Finding{
 			RuleID:              ruleID,
 			Description:         description,
 			Match:               text[loc[0]:loc[1]],
@@ -195,10 +197,10 @@ func runFamily(text string, fam ruleFamily) []Finding {
 			Confidence:          rule.confidence,
 			Tags:                []string{},
 			DeadLetterReason:    "",
-			mcpLookupToolCallID: "",
-			spanGroupKey:        "",
-			field:               "",
-			path:                "",
+			McpLookupToolCallID: "",
+			SpanGroupKey:        "",
+			Field:               "",
+			Path:                "",
 		})
 	}
 	return out
@@ -211,21 +213,21 @@ func runFamily(text string, fam ruleFamily) []Finding {
 // Unicode runes expand under Unicode-aware lowercasing (e.g. U+023A → U+2C65,
 // 2 bytes → 3 bytes), which would let an attacker craft input that panics on
 // the substring slice.
-func detectInstructionOverrides(text string) []Finding {
+func detectInstructionOverrides(text string) []scanners.Finding {
 	scan := text
 	if len(scan) > fuzzyMatchInputCap {
 		scan = scan[:fuzzyMatchInputCap]
 	}
 	lower := asciiToLower(scan)
 
-	var out []Finding
+	var out []scanners.Finding
 	for _, kw := range overrideKeywords {
 		idx := strings.Index(lower, kw)
 		if idx < 0 {
 			continue
 		}
 		ruleID, description := DescribePromptInjection()
-		out = append(out, Finding{
+		out = append(out, scanners.Finding{
 			RuleID:              ruleID,
 			Description:         description,
 			Match:               scan[idx : idx+len(kw)],
@@ -235,10 +237,10 @@ func detectInstructionOverrides(text string) []Finding {
 			Confidence:          0.9,
 			Tags:                []string{},
 			DeadLetterReason:    "",
-			mcpLookupToolCallID: "",
-			spanGroupKey:        "",
-			field:               "",
-			path:                "",
+			McpLookupToolCallID: "",
+			SpanGroupKey:        "",
+			Field:               "",
+			Path:                "",
 		})
 		// One finding is enough for this family; multiple keywords would
 		// just produce overlapping findings the dedup pass would drop.
@@ -248,13 +250,13 @@ func detectInstructionOverrides(text string) []Finding {
 }
 
 // detectDelimiterInjection looks for forged role/instruction delimiters.
-func detectDelimiterInjection(text string) []Finding {
+func detectDelimiterInjection(text string) []scanners.Finding {
 	loc := delimiterPatterns.FindStringIndex(text)
 	if loc == nil {
 		return nil
 	}
 	ruleID, description := DescribePromptInjection()
-	return []Finding{{
+	return []scanners.Finding{{
 		RuleID:              ruleID,
 		Description:         description,
 		Match:               text[loc[0]:loc[1]],
@@ -264,9 +266,9 @@ func detectDelimiterInjection(text string) []Finding {
 		Confidence:          0.8,
 		Tags:                []string{},
 		DeadLetterReason:    "",
-		mcpLookupToolCallID: "",
-		spanGroupKey:        "",
-		field:               "",
-		path:                "",
+		McpLookupToolCallID: "",
+		SpanGroupKey:        "",
+		Field:               "",
+		Path:                "",
 	}}
 }

@@ -3042,6 +3042,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_slug_null_custom_domain_id_key
 ON mcp_endpoints (slug)
 WHERE custom_domain_id IS NULL AND deleted IS FALSE;
 
+-- MCP servers attached directly to an assistant. The legacy toolset
+-- attachment path lives in assistant_toolsets; this table covers
+-- mcp_servers-modelled backends (remote, tunnelled) that have no toolsets
+-- row and so cannot be attached there. resolveAssistantMCPServers merges
+-- both into the runtime MCP set. Replace-on-write like assistant_toolsets,
+-- so no soft-delete column.
+CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  assistant_id uuid NOT NULL,
+  mcp_server_id uuid NOT NULL,
+  environment_id uuid,
+  project_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT assistant_mcp_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_mcp_servers_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE CASCADE,
+  -- RESTRICT mirrors plugin_servers: mcp_servers soft-delete, so RESTRICT only
+  -- blocks manual hard deletes; SET NULL is not viable for a required backend.
+  CONSTRAINT assistant_mcp_servers_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE RESTRICT,
+  CONSTRAINT assistant_mcp_servers_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_mcp_servers_assistant_id_mcp_server_id_key UNIQUE (assistant_id, mcp_server_id)
+);
+
+CREATE INDEX IF NOT EXISTS assistant_mcp_servers_mcp_server_id_idx ON assistant_mcp_servers (mcp_server_id);
+CREATE INDEX IF NOT EXISTS assistant_mcp_servers_project_id_idx ON assistant_mcp_servers (project_id);
+
 -- Plugin definitions: project-scoped distributable bundles of MCP servers.
 -- Admins create plugins and assign them to roles for distribution.
 CREATE TABLE IF NOT EXISTS plugins (

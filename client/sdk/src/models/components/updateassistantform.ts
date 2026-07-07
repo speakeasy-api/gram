@@ -6,6 +6,11 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 import {
+  AssistantMCPServerRef,
+  AssistantMCPServerRef$Outbound,
+  AssistantMCPServerRef$outboundSchema,
+} from "./assistantmcpserverref.js";
+import {
   AssistantToolsetRef,
   AssistantToolsetRef$Outbound,
   AssistantToolsetRef$outboundSchema,
@@ -39,6 +44,10 @@ export type UpdateAssistantForm = {
    */
   maxConcurrency?: number | undefined;
   /**
+   * MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+   */
+  mcpServers?: Array<AssistantMCPServerRef> | undefined;
+  /**
    * The model identifier used by the assistant.
    */
   model?: string | undefined;
@@ -70,6 +79,7 @@ export type UpdateAssistantForm$Outbound = {
   id: string;
   instructions?: string | undefined;
   max_concurrency?: number | undefined;
+  mcp_servers?: Array<AssistantMCPServerRef$Outbound> | undefined;
   model?: string | undefined;
   name?: string | undefined;
   status?: string | undefined;
@@ -86,6 +96,7 @@ export const UpdateAssistantForm$outboundSchema: z.ZodMiniType<
     id: z.string(),
     instructions: z.optional(z.string()),
     maxConcurrency: z.optional(z.int()),
+    mcpServers: z.optional(z.array(AssistantMCPServerRef$outboundSchema)),
     model: z.optional(z.string()),
     name: z.optional(z.string()),
     status: z.optional(UpdateAssistantFormStatus$outboundSchema),
@@ -95,6 +106,7 @@ export const UpdateAssistantForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       maxConcurrency: "max_concurrency",
+      mcpServers: "mcp_servers",
       warmTtlSeconds: "warm_ttl_seconds",
     });
   }),

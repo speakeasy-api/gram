@@ -1,5 +1,30 @@
 # dashboard
 
+## 0.83.0
+
+### Minor Changes
+
+- e9ff915: Add the Non-Corporate Accounts risk-policy category (detection source `account_identity`). Policies can now flag sessions authenticated with a personal AI account (`identity.personal_account`) or with an AI-account email domain outside a configurable approved list (`identity.unapproved_domain`), reusing the account attribution captured by session ingest. The create/update policy endpoints accept `approved_email_domains`, findings are emitted once per session, and the Policy Center exposes the approved-domains input in the category's Customize sheet (flag-only, like other agent-integrity detectors).
+- ad4e76d: Adds a policy evaluation workbench for prompt guardrails with real chat replay, saved review verdicts, and transcript-level judge results.
+- 747b1ba: Add a manual refresh button to the shared list-page toolbar (`Page.Toolbar.Refresh`) and wire it into every page using it: Catalog, MCP, Agent Sessions, Employee Insights, User Sessions, Risk Events, and the Observe Tools/Agents log pages. Restores the refresh control that Tool Logs previously had before it was merged into the unified logs page.
+
+### Patch Changes
+
+- 548e704: Assistants can now attach MCP servers directly, including remote (external‑SaaS) and tunnelled servers that aren't backed by a Gram toolset. The assistant setup chat can list the project's MCP servers and attach one by name, and the assistant's runtime connects to it alongside its toolsets.
+- 548e704: Fixed chat MCP tool connections failing with an "Illegal invocation" fetch error, which left chats without their configured MCP tools (including the assistant setup chat, which could no longer call the assistant's own tools). Also fixed opening a chat via a shared `?threadId=` URL sometimes silently landing on a new empty thread instead of restoring the linked conversation.
+- 4ab62e6: feat: show most recently used account as a dropdown on the employees Last Activity column
+- 34b8a1b: Editing an environment now requires `environment:write` instead of `project:write`. Creating, updating, and deleting environments previously gated on `project:write`, so principals holding only `environment:write` were rejected. The dashboard gates for these actions were realigned to match.
+- 2034568: Hide the chat composer for project assistant threads the signed-in caller didn't create. Elements gains an opt-in `history.isOwnChat` callback (mirrors `resolveCreator`) that reports whether the caller owns a thread-list chat; the dashboard wires it up so admins who open another member's chat via their `chat:read` grant see a read-only transcript instead of a "chat not found" error on send — the backend has always rejected replies into a chat you don't own, this just stops the UI offering an action that was never going to succeed.
+- 8104660: chore: use icons to delineate team vs personal accounts
+- f16bde1: Re-introduce the unified `/rpc/hooks.ingest` endpoint with working self-serve authentication for hook plugins. On session start the plugin opens the Gram dashboard in a browser, receives a hooks-scoped API key on a localhost callback, and caches it per device — no python or manual key setup required. Machines that have never authenticated are not blocked: sessions proceed with a warning, Claude is prompted to offer connecting via the bundled login helper, and enforcement only becomes strict after the first successful sign-in.
+- 5828815: Preserve assistant setup chat history: list prior onboarding threads and make them URL-addressable (scoped by source_kind).
+- 155ec48: Attribute project assistant chats to the user who created them. Elements gains an opt-in `history.resolveCreator` callback that resolves a chat's `userId`/`externalUserId` to a displayable name/avatar, shown on thread-list rows and above each user turn in the transcript. The dashboard wires this up for the Project Assistant using its existing org member list — no new network requests, and no identity data is fetched from inside Elements itself (avoids leaking org member data into customer-facing embeds, which don't opt in). Also adds the same avatar to the "Recent Chats" list on the assistant home page, and gives user message bubbles an iMessage-style blue treatment.
+- Updated dependencies [548e704]
+- Updated dependencies [2034568]
+- Updated dependencies [155ec48]
+- Updated dependencies [730353d]
+  - @gram-ai/elements@1.41.0
+
 ## 0.82.0
 
 ### Minor Changes

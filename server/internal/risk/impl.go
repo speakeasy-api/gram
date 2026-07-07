@@ -50,6 +50,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -101,8 +103,9 @@ type Service struct {
 	// so the dashboard sees the exact same matcher output the worker
 	// produces during chat-message analysis. Optional: when nil the
 	// playground returns an "unsupported" response for that scanner family.
-	piiScanner ra.PIIScanner
-	piScanner  *ra.PromptInjectionScanner
+	piiScanner      ra.PIIScanner
+	piScanner       *ra.PromptInjectionScanner
+	gitleaksScanner *gitleaks.Scanner
 	// celEng is the shared CEL env, injected at construction; used to compile
 	// and validate scope/detection expressions. nil in the lightweight observer.
 	celEng *celenv.Engine
@@ -143,6 +146,7 @@ func NewObserver(
 		jwtSecret:        "",
 		piiScanner:       nil,
 		piScanner:        nil,
+		gitleaksScanner:  nil,
 		flags:            nil,
 		celEng:           nil,
 		promptJudge:      nil,
@@ -188,6 +192,7 @@ func NewService(
 		jwtSecret:        jwtSecret,
 		piiScanner:       piiScanner,
 		piScanner:        piScanner,
+		gitleaksScanner:  gitleaks.NewScanner(),
 		flags:            flags,
 		celEng:           celEng,
 		promptJudge:      promptJudge,
@@ -2688,7 +2693,7 @@ func evalReviewToType(row repo.RiskPolicyEvalReview) *types.RiskPolicyEvalReview
 }
 
 func (s *Service) testGitleaksRule(ctx context.Context, ruleID, text string) (*gen.TestDetectionRuleResult, error) {
-	findings, err := ra.ScanWithGitleaks(text)
+	findings, err := s.gitleaksScanner.Scan(ctx, text)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run gitleaks").LogError(ctx, s.logger)
 	}
@@ -2808,7 +2813,7 @@ func (s *Service) testCustomRule(ruleID, detectionExpr, text string) (*gen.TestD
 	}, nil
 }
 
-func findingToMatch(f ra.Finding) *gen.TestDetectionRuleMatch {
+func findingToMatch(f scanners.Finding) *gen.TestDetectionRuleMatch {
 	return &gen.TestDetectionRuleMatch{
 		RuleID:      f.RuleID,
 		Description: new(f.Description),

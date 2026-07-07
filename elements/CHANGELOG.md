@@ -1,5 +1,17 @@
 # @gram-ai/elements
 
+## 1.41.0
+
+### Minor Changes
+
+- 2034568: Hide the chat composer for project assistant threads the signed-in caller didn't create. Elements gains an opt-in `history.isOwnChat` callback (mirrors `resolveCreator`) that reports whether the caller owns a thread-list chat; the dashboard wires it up so admins who open another member's chat via their `chat:read` grant see a read-only transcript instead of a "chat not found" error on send — the backend has always rejected replies into a chat you don't own, this just stops the UI offering an action that was never going to succeed.
+- 155ec48: Attribute project assistant chats to the user who created them. Elements gains an opt-in `history.resolveCreator` callback that resolves a chat's `userId`/`externalUserId` to a displayable name/avatar, shown on thread-list rows and above each user turn in the transcript. The dashboard wires this up for the Project Assistant using its existing org member list — no new network requests, and no identity data is fetched from inside Elements itself (avoids leaking org member data into customer-facing embeds, which don't opt in). Also adds the same avatar to the "Recent Chats" list on the assistant home page, and gives user message bubbles an iMessage-style blue treatment.
+
+### Patch Changes
+
+- 548e704: Fixed chat MCP tool connections failing with an "Illegal invocation" fetch error, which left chats without their configured MCP tools (including the assistant setup chat, which could no longer call the assistant's own tools). Also fixed opening a chat via a shared `?threadId=` URL sometimes silently landing on a new empty thread instead of restoring the linked conversation.
+- 730353d: TimeRangePicker: clicking outside while the input is in edit mode now exits editing and closes the dropdown in a single click (previously the first click only blurred the input, and typed-but-uncommitted text made the dropdown undismissable by clicking). Uncommitted input text is discarded on outside click.
+
 ## 1.40.1
 
 ### Patch Changes
