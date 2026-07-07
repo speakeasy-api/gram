@@ -3,6 +3,7 @@ package relay
 import (
 	"bufio"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -214,14 +215,18 @@ func insecureServerURL(serverURL string) bool {
 	if strings.HasPrefix(serverURL, "https://") {
 		return false
 	}
-	rest, ok := strings.CutPrefix(serverURL, "http://")
-	if !ok {
+	if !strings.HasPrefix(serverURL, "http://") {
 		return true
 	}
-	for _, host := range []string{"127.0.0.1", "localhost", "[::1]"} {
-		if rest == host || strings.HasPrefix(rest, host+":") || strings.HasPrefix(rest, host+"/") {
-			return false
-		}
+	// The parsed host decides — a prefix check reads the userinfo trick
+	// http://localhost:pw@evil.example as loopback.
+	u, err := url.Parse(serverURL)
+	if err != nil {
+		return true
+	}
+	switch u.Hostname() {
+	case "127.0.0.1", "localhost", "::1":
+		return false
 	}
 	return true
 }

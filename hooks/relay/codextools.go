@@ -111,31 +111,31 @@ func readCodexToolQueue(path string) []string {
 	return strings.Split(trimmed, "\n")
 }
 
-// correlateCodexToolID queues the id a codex tool request reports and replays
-// it onto the matching completion so both sides carry the same identity. Only
-// ToolPreEvent enqueues: PermissionRequest also normalizes to tool.requested
-// but has no matching completion, so queueing it would leave a stale id for
-// the next completion to pop.
-func (r *Relay) correlateCodexToolID(typed any, payload *components.IngestRequestBody) {
-	base := agenthooks.EventOf(typed)
-	if base == nil || base.Provider != agenthooks.ProviderCodex {
+// queueCodexToolID remembers the id an allowed codex tool request reported so
+// the matching completion can replay it. Callers gate on the verdict: a
+// denied request never executes, so its completion never drains the queue and
+// a stale entry would attach the next same-tool result to the wrong call.
+// PermissionRequest must not enqueue either — it also normalizes to
+// tool.requested but has no matching completion.
+func (r *Relay) queueCodexToolID(e *agenthooks.ToolPreEvent) {
+	if e.Provider != agenthooks.ProviderCodex || !e.Tool.Synthesized {
 		return
 	}
-	switch e := typed.(type) {
-	case *agenthooks.ToolPreEvent:
-		if e.Tool.Synthesized {
-			pushCodexToolID(codexToolStatePath(r.cfg, base.Session, e.Tool.Name), e.Tool.ID)
-		}
-	case *agenthooks.ToolPostEvent:
-		if !e.Tool.Synthesized {
-			return
-		}
-		id := popCodexToolID(codexToolStatePath(r.cfg, base.Session, e.Tool.Name))
-		if id == "" {
-			return
-		}
-		if payload.Data != nil && payload.Data.ToolCall != nil {
-			payload.Data.ToolCall.ID = &id
-		}
+	pushCodexToolID(codexToolStatePath(r.cfg, e.Session, e.Tool.Name), e.Tool.ID)
+}
+
+// correlateCodexToolID replays a remembered request id onto a codex tool
+// completion so both sides carry the same identity.
+func (r *Relay) correlateCodexToolID(typed any, payload *components.IngestRequestBody) {
+	e, ok := typed.(*agenthooks.ToolPostEvent)
+	if !ok || e.Provider != agenthooks.ProviderCodex || !e.Tool.Synthesized {
+		return
+	}
+	id := popCodexToolID(codexToolStatePath(r.cfg, e.Session, e.Tool.Name))
+	if id == "" {
+		return
+	}
+	if payload.Data != nil && payload.Data.ToolCall != nil {
+		payload.Data.ToolCall.ID = &id
 	}
 }

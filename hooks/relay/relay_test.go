@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -676,6 +677,49 @@ func TestCodexToolCompletionReplaysRequestID(t *testing.T) {
 	require.Equal(t, *reqTool.ID, *doneTool.ID, "the completion must replay the request's id")
 }
 
+// TestCodexDeniedRequestDoesNotQueueID: a denied codex request never executes,
+// so no completion drains its queue entry; queueing it would attach the next
+// same-tool result to the wrong call.
+func TestCodexDeniedRequestDoesNotQueueID(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("TMPDIR", t.TempDir())
+	fs := newFakeServer(t, func(b components.IngestRequestBody) (int, decision) {
+		if b.Event.Type == components.TypeToolRequested {
+			in, _ := json.Marshal(b.Data.ToolCall.Input)
+			if strings.Contains(string(in), "blocked-cmd") {
+				return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: "blocked"}
+			}
+		}
+		return http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
+	})
+	cfg := authedConfig(t, fs.URL)
+
+	denied := []byte(`{"hook_event_name":"PreToolUse","session_id":"sess-cx2","turn_id":"turn-2","tool_name":"shell","tool_input":{"command":"blocked-cmd"},"cwd":"/work"}`)
+	allowed := []byte(`{"hook_event_name":"PreToolUse","session_id":"sess-cx2","turn_id":"turn-2","tool_name":"shell","tool_input":{"command":"ls"},"cwd":"/work"}`)
+	post := []byte(`{"hook_event_name":"PostToolUse","session_id":"sess-cx2","turn_id":"turn-2","tool_name":"shell","tool_output":"ok","cwd":"/work"}`)
+	agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCodex, denied, "--variant=cli")
+	agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCodex, allowed, "--variant=cli")
+	agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCodex, post, "--variant=cli")
+
+	var allowedID, doneID string
+	for _, b := range fs.requests {
+		if b.Data == nil || b.Data.ToolCall == nil || b.Data.ToolCall.ID == nil {
+			continue
+		}
+		switch b.Event.Type {
+		case components.TypeToolRequested:
+			in, _ := json.Marshal(b.Data.ToolCall.Input)
+			if !strings.Contains(string(in), "blocked-cmd") {
+				allowedID = *b.Data.ToolCall.ID
+			}
+		case components.TypeToolCompleted:
+			doneID = *b.Data.ToolCall.ID
+		}
+	}
+	require.NotEmpty(t, allowedID)
+	require.Equal(t, allowedID, doneID, "the completion must correlate to the allowed request, not the denied one")
+}
+
 // TestCodexToolQueueConcurrentPushPop: concurrent hook processes share the
 // queue (the async completion sender overlaps the next request's hook); every
 // pushed id must survive and pop exactly once.
@@ -838,6 +882,8 @@ func TestInsecureServerURL(t *testing.T) {
 	require.True(t, insecureServerURL("http://gram.example.com"))
 	require.True(t, insecureServerURL("http://127.0.0.2"), "only the exact loopback address is exempt")
 	require.True(t, insecureServerURL("http://localhost.evil.example"), "loopback names must match as whole hosts")
+	require.True(t, insecureServerURL("http://localhost:pw@evil.example"), "userinfo must not spoof a loopback host")
+	require.False(t, insecureServerURL("http://user@localhost:8080/x"), "userinfo on a real loopback host stays exempt")
 	require.True(t, insecureServerURL("ftp://gram.example.com"))
 }
 

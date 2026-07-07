@@ -284,6 +284,7 @@ func (r *Relay) onToolPre(ctx context.Context, e *agenthooks.ToolPreEvent) (agen
 		// the model.
 		return agenthooks.Deny(v.message).WithSystemMessage(v.message), nil
 	}
+	r.queueCodexToolID(e)
 	return agenthooks.NoDecision(), nil
 }
 
