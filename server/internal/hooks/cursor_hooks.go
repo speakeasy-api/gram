@@ -125,11 +125,11 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		// beforeMCPExecution fires for MCP-routed (non-local) tool calls. Run
 		// the risk scanner first (block-only today), then fall through to the
 		// shadow-MCP guard so unapproved toolsets are still blocked.
-		if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
-			if scanResult.Action == "warn" && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName) {
-				result.Permission = new("allow")
-				break
-			}
+		// Acknowledged warn is excluded from the enforcement block so it falls
+		// through to the shadow-MCP guard below: an ack clears the risk
+		// challenge but must never bypass unapproved-toolset validation.
+		if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil && !(scanResult.Action == "warn" &&
+			s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
 			if scanResult.Action == "warn" {
 				if warnReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 					blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
@@ -261,7 +261,11 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			result.Permission = new("allow")
 		}
 	case *hookevents.UserPromptSubmit:
-		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+		// A warn (challenge) is never hard-denied at prompt submit: there is no
+		// confirmation primitive here, and denying would diverge from the
+		// Claude/Codex prompt paths. Let it through — the follow-on tool call
+		// carrying the match is where a warn is challenged.
+		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason

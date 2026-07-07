@@ -91,7 +91,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
 			Prompt: canonicalPromptText(payload),
 		})
-		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+		// A warn (challenge) is never blocked here: the canonical ingest
+		// transport has no native confirmation primitive, and hard-denying
+		// would clobber the ask a dedicated ask-capable hook (Claude
+		// PreToolUse) surfaces for the same event. Defer to that transport.
+		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
 		}
@@ -104,7 +108,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				ToolInput:      toolInput,
 				PermissionType: permissionType,
 			})
-			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil {
+			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
 				auditReason := fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, payload, auditReason, toolName, scanResult.PolicyID, userReason)
@@ -115,7 +119,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				ToolName:  toolName,
 				ToolInput: toolInput,
 			})
-			if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
+			if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
 				auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, payload, auditReason, toolName, scanResult.PolicyID, userReason)
@@ -126,7 +130,8 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			ToolName:  toolName,
 			ToolInput: toolInput,
 		})
-		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+		// warn defers to the ask-capable transport (see prompt.submitted note).
+		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, payload, auditReason, toolName, scanResult.PolicyID, userReason)

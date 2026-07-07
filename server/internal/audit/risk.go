@@ -291,3 +291,42 @@ func (l *Logger) logRiskPolicyBypassRequest(ctx context.Context, dbtx repo.DBTX,
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RiskPolicyV1})
 }
+
+type LogRiskPolicyChallengeAcknowledgeEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyName string
+}
+
+// LogRiskPolicyChallengeAcknowledge records a self-service acknowledgement of a
+// warn (challenge) policy. Log-safe fields only — never the matched value.
+func (l *Logger) LogRiskPolicyChallengeAcknowledge(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyChallengeAcknowledgeEvent) error {
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionRiskPolicyChallengeAcknowledge),
+
+		SubjectID:          event.RiskPolicyID.String(),
+		SubjectType:        string(subjectTypeRiskPolicy),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.RiskPolicyName),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RiskPolicyV1})
+}

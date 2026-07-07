@@ -80,6 +80,15 @@ type ShadowMCPPolicy struct {
 // ephemeral, user-facing warning ("... %{match} identified as %{entity} ...").
 // MatchedValue is empty for judge-based matches (prompt-based policies) that
 // have no literal substring.
+//
+// CAVEAT: via %{match} the value does reach the agent's permission prompt
+// (Claude permissionDecisionReason/SystemMessage; Cursor/Codex UserMessage/
+// AgentMessage) and therefore the local agent transcript. That is by design —
+// the human needs to see what tripped the challenge — but it means the
+// "never leaves the server" invariant is scoped to Gram's own persistence, not
+// the agent host. Any Gram-side ingestion that captures permission-prompt or
+// transcript content (e.g. a future session-replay path) MUST scrub %{match}
+// before persisting, or the invariant breaks silently.
 type ScanResult struct {
 	Action      string // "flag" | "block" | "warn"
 	PolicyID    string
@@ -326,7 +335,9 @@ func (s *Scanner) ScanForEnforcement(
 		return hit, nil
 	}
 	if hit := warnWinner.Load(); hit != nil {
-		s.recordScan(ctx, projectID.String(), "blocked", time.Since(start))
+		// Distinct outcome from "blocked" so challenge hits are tracked
+		// separately in dashboards/metrics and don't inflate the block count.
+		s.recordScan(ctx, projectID.String(), "warned", time.Since(start))
 		return hit, nil
 	}
 

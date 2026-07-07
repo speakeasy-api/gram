@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // defaultAckGrace is the minimum window an acknowledgement keeps re-challenge
@@ -163,6 +164,20 @@ func (s *Service) AcknowledgeRiskPolicyChallenge(ctx context.Context, payload *g
 		return nil, oops.E(oops.CodeUnexpected, err, "acknowledge risk policy challenge").LogError(ctx, s.logger)
 	}
 
+	// Audit within the same transaction as the mark, so the acknowledgement and
+	// its audit record commit atomically. Log-safe fields only.
+	if err := s.audit.LogRiskPolicyChallengeAcknowledge(ctx, dbtx, audit.LogRiskPolicyChallengeAcknowledgeEvent{
+		OrganizationID:   record.OrganizationID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		RiskPolicyID:     policyID,
+		RiskPolicyName:   row.PolicyName.String,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy challenge acknowledge").LogError(ctx, s.logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy challenge ack").LogError(ctx, s.logger)
 	}
@@ -170,14 +185,10 @@ func (s *Service) AcknowledgeRiskPolicyChallenge(ctx context.Context, payload *g
 	// One-shot: drop the cache token so the link can't be replayed (TTL also bounds it).
 	invalidatePolicyAckToken(ctx, s.cache, payload.AckToken)
 
-	// TODO(epic-g audit): add a first-class audit event
-	// (audit.ActionRiskPolicyChallengeAcknowledge) mirroring the bypass-request
-	// audit machinery. Interim: structured log carrying only log-safe fields.
 	s.logger.InfoContext(ctx, "risk policy challenge acknowledged",
 		attr.SlogRiskPolicyID(policyID.String()),
 		attr.SlogUserID(authCtx.UserID),
 	)
-	_ = audit.ActionRiskPolicyChallengeAcknowledge
 
 	name := row.PolicyName.String
 	exp := expiresAt.UTC().Format(time.RFC3339)

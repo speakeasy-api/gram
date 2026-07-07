@@ -832,6 +832,11 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	if s.riskScanner != nil && ev.ConversationID != "" {
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
 			if scanResult.Action == "warn" {
+				// Known tradeoff: the native "ask" keeps the y/n inside Claude
+				// Code and its answer is never reported back, so a Claude-transport
+				// challenge row stays `challenged` — acknowledgement analytics
+				// undercount here by design. We record the challenge (a challenge
+				// WAS surfaced) but cannot mark it acknowledged from the server.
 				s.recordWarnChallenge(ctx, ev.Event, scanResult, ev.ToolName)
 				return constructAskResponse(payload.HookEventName, emphasizeWarn(renderWarnBody(scanResult))), nil
 			}
