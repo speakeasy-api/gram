@@ -15,7 +15,15 @@ type BadgeVariant =
 
 export function sessionStatus(session: UserSession): SessionStatus {
   if (session.revokedAt) return "revoked";
-  if (new Date(session.expiresAt).getTime() <= Date.now()) return "expired";
+  // Active/expired is keyed off refreshExpiresAt (the session/refresh
+  // lifetime), NOT expiresAt (the ~1h access-token lifetime), matching the
+  // backend's ListUserSessionsByProjectID status filter. An active MCP
+  // connection only refreshes its access token on demand, so a live session
+  // routinely has a past expiresAt while its refresh token is still valid;
+  // keying "active" off expiresAt makes those connections wrongly read as
+  // expired until the client next refreshes.
+  if (new Date(session.refreshExpiresAt).getTime() <= Date.now())
+    return "expired";
   return "active";
 }
 
@@ -47,7 +55,7 @@ export function sessionTimeLabel(session: UserSession): string {
   if (status === "revoked" && session.revokedAt) {
     return `revoked ${format(new Date(session.revokedAt), "PP")}`;
   }
-  const relative = formatDistanceToNow(new Date(session.expiresAt), {
+  const relative = formatDistanceToNow(new Date(session.refreshExpiresAt), {
     addSuffix: true,
   });
   return status === "expired" ? `expired ${relative}` : `expires ${relative}`;
