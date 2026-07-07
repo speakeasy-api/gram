@@ -7,9 +7,8 @@ import { InsightsAgentsPage } from "../insights/Insights";
 import { CostsExplorer } from "./CostsExplorer";
 import { displayName, parseDrillPath } from "./taxonomy";
 
-// New cost-taxonomy dashboard. Part of the Observe surface, gated on
-// telemetry:read OR org:admin. Basic members hold neither; org admins pass via
-// org:admin even before telemetry:read is backfilled onto existing admin roles.
+// New cost-taxonomy dashboard. Part of the Observe surface, gated on org:admin
+// so basic members (synced via directory/SCIM) don't see it by default.
 function NewCostsPage(): JSX.Element {
   const location = useLocation();
 
@@ -37,7 +36,7 @@ function NewCostsPage(): JSX.Element {
         <Page.Header.Breadcrumbs substitutions={breadcrumbSubstitutions} />
       </Page.Header>
       <Page.Body noPadding fullWidth>
-        <RequireScope scope={["telemetry:read", "org:admin"]} level="page">
+        <RequireScope scope="org:admin" level="page">
           <CostsExplorer />
         </RequireScope>
       </Page.Body>

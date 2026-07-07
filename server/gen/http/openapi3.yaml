@@ -43662,7 +43662,6 @@ components:
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
-                        - telemetry:read
                 selectors:
                     type: array
                     items:
@@ -43694,7 +43693,6 @@ components:
                             - risk_policy:evaluate
                             - risk_policy:bypass
                             - chat:read
-                            - telemetry:read
                     description: The inherited scopes the primary scope grants.
             required:
                 - scope
@@ -48195,7 +48193,6 @@ components:
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
-                        - telemetry:read
                 selectors:
                     type: array
                     items:
@@ -48303,7 +48300,6 @@ components:
                         - environment
                         - risk_policy
                         - chat
-                        - telemetry
                 slug:
                     type: string
                     description: Unique scope identifier.
@@ -48329,7 +48325,6 @@ components:
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
-                        - telemetry:read
                 visibility:
                     type: string
                     description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -48765,7 +48760,6 @@ components:
                         - environment
                         - risk_policy
                         - chat
-                        - telemetry
                         - '*'
                 server_url:
                     type: string

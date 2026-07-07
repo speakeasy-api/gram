@@ -198,9 +198,9 @@ export function AppSidebar({
                 <div className="border-border border-t" />
               </li>
 
-              {/* Observe group — always shown (like Secure). Members without
-                  telemetry:read still see the nav; opening a page renders the
-                  page-level "Access restricted" notice via RequireScope. */}
+              {/* Observe group — always shown (like Secure). Non-admins still
+                  see the nav; opening a page renders the page-level "Access
+                  restricted" notice via RequireScope (org:admin). */}
               <CollapsibleNavGroup
                 label="Observe"
                 Icon={(p) => <Icon {...p} name="eye" />}

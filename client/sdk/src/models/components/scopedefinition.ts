@@ -39,7 +39,6 @@ export const ResourceType = {
   Environment: "environment",
   RiskPolicy: "risk_policy",
   Chat: "chat",
-  Telemetry: "telemetry",
 } as const;
 /**
  * The type of resource this scope applies to.
@@ -71,7 +70,6 @@ export const Slug = {
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   ChatRead: "chat:read",
-  TelemetryRead: "telemetry:read",
 } as const;
 /**
  * Unique scope identifier.

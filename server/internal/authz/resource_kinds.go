@@ -8,5 +8,4 @@ const (
 	ResourceKindEnvironment = "environment"
 	ResourceKindRiskPolicy  = "risk_policy"
 	ResourceKindChat        = "chat"
-	ResourceKindTelemetry   = "telemetry"
 )

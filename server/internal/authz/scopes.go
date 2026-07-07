@@ -37,7 +37,6 @@ const (
 	ScopeRiskPolicyEvaluate      Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass        Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 	ScopeChatRead                Scope = "chat:read"
-	ScopeTelemetryRead           Scope = "telemetry:read"
 )
 
 type scopeVisibility int
@@ -62,7 +61,6 @@ var adminScopes = []Scope{
 	ScopeMCPConnect,
 	ScopeEnvironmentRead,
 	ScopeEnvironmentWrite,
-	ScopeTelemetryRead,
 	// chat:read is intentionally NOT a default for any system role: reading
 	// other members' session transcripts is sensitive, so it must be granted
 	// explicitly (via a custom role grant). Everyone reads their own sessions
@@ -95,7 +93,6 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
 	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
 	ScopeChatRead:                scopeVisibilityUserVisible,
-	ScopeTelemetryRead:           scopeVisibilityUserVisible,
 }
 
 var memberScopes = []Scope{
@@ -107,9 +104,9 @@ var memberScopes = []Scope{
 	// values include secrets, so viewing them must be granted explicitly via a
 	// custom role. Admins retain environment:read/write via adminScopes.
 	//
-	// telemetry:read (the Observe/observability dashboard surface) is likewise not
-	// a member default; it is a dedicated scope gated separately from
-	// environment:read so the two can be granted independently.
+	// The Observe/observability dashboard surface is separately gated on org:admin
+	// at the page level, so basic members (e.g. synced via directory/SCIM) don't
+	// see telemetry by default.
 }
 
 func (s Scope) Parts() ScopeParts {
@@ -176,7 +173,6 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeRiskPolicyEvaluate:      nil,
 	ScopeRiskPolicyBypass:        nil,
 	ScopeChatRead:                nil,
-	ScopeTelemetryRead:           nil,
 }
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
@@ -205,7 +201,6 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
 	ScopeRiskPolicyBypass:        "",
 	ScopeChatRead:                "",
-	ScopeTelemetryRead:           "",
 }
 
 // ExclusionScopeFor returns the scope that stores exception grants for the

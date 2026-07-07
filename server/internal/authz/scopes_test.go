@@ -128,11 +128,10 @@ func TestSystemRoleAdminExcludesChatRead(t *testing.T) {
 	}
 }
 
-// environment:read and telemetry:read are not member defaults. environment values
-// include secrets, and the Observe dashboard surface is gated by its own
-// telemetry:read scope; both must be granted explicitly via a custom role. Admins
-// retain both via adminScopes.
-func TestSystemRoleMemberExcludesEnvironmentAndTelemetryRead(t *testing.T) {
+// environment:read is not a member default: environment values include secrets,
+// so viewing them must be granted explicitly via a custom role. Admins retain
+// environment:read/write via adminScopes.
+func TestSystemRoleMemberExcludesEnvironmentRead(t *testing.T) {
 	t.Parallel()
 
 	memberScopes := make([]string, 0, len(SystemRoleGrants[SystemRoleMember]))
@@ -141,14 +140,12 @@ func TestSystemRoleMemberExcludesEnvironmentAndTelemetryRead(t *testing.T) {
 	}
 	require.NotContains(t, memberScopes, string(ScopeEnvironmentRead))
 	require.NotContains(t, memberScopes, string(ScopeEnvironmentWrite))
-	require.NotContains(t, memberScopes, string(ScopeTelemetryRead))
 
 	adminScopes := make([]string, 0, len(SystemRoleGrants[SystemRoleAdmin]))
 	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
 		adminScopes = append(adminScopes, grant.Scope)
 	}
 	require.Contains(t, adminScopes, string(ScopeEnvironmentRead))
-	require.Contains(t, adminScopes, string(ScopeTelemetryRead))
 }
 
 func TestCheckExpand_orgRead(t *testing.T) {

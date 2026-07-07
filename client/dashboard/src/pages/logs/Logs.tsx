@@ -11,7 +11,7 @@ export function LogsRoot(): JSX.Element {
           <Page.Header.Breadcrumbs fullWidth />
         </Page.Header>
         <Page.Body fullWidth fullHeight overflowHidden noPadding>
-          <RequireScope scope={["telemetry:read", "org:admin"]} level="page">
+          <RequireScope scope="org:admin" level="page">
             <LogsTools />
           </RequireScope>
         </Page.Body>
