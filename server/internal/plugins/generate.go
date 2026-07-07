@@ -84,6 +84,13 @@ type GenerateConfig struct {
 	// path for POC rollouts in orgs that cannot tolerate hook errors or brief
 	// server unavailability disrupting the user.
 	ObservabilityMode bool
+	// SkillSync emits the Claude Code skill-sync client (hooks/skill_sync.sh)
+	// and wires it onto SessionStart/SessionEnd. Off by default so the sync
+	// client is dormant until the org's skills-distribution feature and the
+	// server-side sync endpoint (/rpc/skills.sync) are both live; the script
+	// itself fails safe (keeps the last-synced set) when the endpoint is
+	// absent, so enabling it early can never block or disrupt a session.
+	SkillSync bool
 }
 
 // DefaultMarketplaceName returns the marketplace identifier used when no
@@ -122,7 +129,7 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 // for generator changes that alter behaviour in ways the placeholder
 // fingerprint pass can't observe. The Plugin Generate Check CI workflow
 // requires this to change whenever generate.go does.
-const pluginGeneratorVersion = "9"
+const pluginGeneratorVersion = "10"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -696,6 +703,23 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 			preflightTimeout := 300
 			hooks = append([]claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/auth_preflight.sh"`, Async: &f, Timeout: &preflightTimeout}}, hooks...)
 		}
+		// The skill-sync client runs after the auth preflight has (re)established
+		// credentials. SessionStart is authoritative and synchronous so a
+		// net-new skill is materialized and announced before the turn begins,
+		// bounded by a short timeout; SessionEnd is a best-effort async refresh.
+		// The script always exits 0 (fail-open to the last-synced set), so
+		// neither hook can ever block or delay a session on a sync failure.
+		if cfg.SkillSync {
+			switch event {
+			case "SessionStart":
+				f := false
+				syncTimeout := 15
+				hooks = append(hooks, claudeHookCommand{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/skill_sync.sh"`, Async: &f, Timeout: &syncTimeout})
+			case "SessionEnd":
+				t := true
+				hooks = append(hooks, claudeHookCommand{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/skill_sync.sh"`, Async: &t, Timeout: nil})
+			}
+		}
 		hookEvents[event] = []claudeHookMatcher{
 			{Matcher: "", Hooks: hooks},
 		}
@@ -712,6 +736,9 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	files[path.Join(subdir, "hooks/login.sh")] = renderLoginScript(cfg)
 	files[path.Join(subdir, "hooks/auth_preflight.sh")] = renderAuthPreflightScript(cfg)
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "claude")
+	if cfg.SkillSync {
+		files[path.Join(subdir, "hooks/skill_sync.sh")] = renderSkillSyncScript(cfg)
+	}
 
 	return nil
 }
@@ -1922,6 +1949,356 @@ gram_http_post() {
 }
 `)
 }
+
+// renderSkillSyncScript emits hooks/skill_sync.sh: the Claude Code skill-sync
+// client that materializes org-distributed skills into the user's personal
+// skills directory at SessionStart (authoritative, synchronous) and refreshes
+// them best-effort at SessionEnd.
+//
+// Design invariants (DNO-430 / the "Skills — Distribution via Plugins" RFC):
+//   - Never blocks a session: the script always exits 0, even on auth,
+//     network, or filesystem failure — it fails open to the last-synced set
+//     (the INC-398 lesson). Only SessionStart writes additionalContext.
+//   - Owns only what it tracks: a local manifest records the skills it created
+//     (name -> applied content hash). It creates/updates/deletes only those; a
+//     skill directory of the same name it does not own is left untouched and
+//     reported as a conflict (shadowed).
+//   - CLAUDE_CONFIG_DIR-aware: the skills root resolves from CLAUDE_CONFIG_DIR
+//     (falling back to ~/.claude), never hardcoded.
+//   - 401/403 removes all managed skills — distribution is authenticated, not
+//     fail-open telemetry — while any other non-2xx keeps the stale set.
+//   - Degraded mode: when the skills root is not writable, the skill index and
+//     bounded bodies are inlined via additionalContext and reported fs_readonly.
+//
+// Wire contract with the sync endpoint (POST {server_url}/rpc/skills.sync,
+// authenticated with the shared hooks key via auth.sh — see DNO-429). All
+// non-scalar payloads are base64 so the exchange parses in pure POSIX shell
+// without assuming jq is installed:
+//
+//	request:  {"hostname":"…","manifest_b64":"<base64 TSV: name<TAB>hash per line>"}
+//	response: {"plan_b64":"<base64 TSV plan>","bundle_b64":"<base64 tar.gz;
+//	           top-level entries are <skill-name>/…>"}
+//	  plan TSV rows (tab-separated), one op per line:
+//	    UPDATE<TAB>name<TAB>hash<TAB>relpath<TAB>description_b64
+//	    REMOVE<TAB>name
+//	  relpath is relative to the skills root (e.g. research/SKILL.md) and also
+//	  names the bundle entry to read.
+//	receipt:  {"hostname":"…","receipts_b64":"<base64 TSV: name<TAB>status<TAB>hash>"}
+//	  posted best-effort after applying; status in live|shadowed|removed|fs_readonly|error.
+func renderSkillSyncScript(cfg GenerateConfig) []byte {
+	header := fmt.Sprintf(`#!/usr/bin/env bash
+# Generated by Speakeasy. Do not edit — overwritten on every publish.
+#
+# Claude Code skill-sync client. Runs at SessionStart (authoritative,
+# synchronous) and SessionEnd (best-effort refresh). Materializes skills your
+# organization distributes into the personal skills directory and announces
+# net-new skills to the session. Always exits 0 so a sync failure can never
+# block or delay a session.
+
+set -u
+
+server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
+project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
+gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-%s}"
+`, cfg.ServerURL, cfg.ProjectSlug, cfg.OrgID)
+
+	return append([]byte(header), skillSyncScriptBody...)
+}
+
+// skillSyncScriptBody is the CLAUDE_CONFIG_DIR-aware body of skill_sync.sh,
+// held as a raw literal (no Go format verbs) so the many shell/awk % and $
+// tokens pass through verbatim. The config header is prepended by
+// renderSkillSyncScript.
+var skillSyncScriptBody = []byte(`
+provider_payload="$(cat 2>/dev/null || true)"
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+. "$script_dir/http.sh" 2>/dev/null || exit 0
+# shellcheck source=/dev/null
+. "$script_dir/auth.sh" 2>/dev/null || exit 0
+
+# A sync hook must never open the interactive browser login and never block.
+export GRAM_HOOKS_INTERACTIVE=0
+
+# Skills root is resolved CLAUDE_CONFIG_DIR-aware, never hardcoded to ~/.claude.
+skills_root="${GRAM_SKILLS_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills}"
+state_dir="${GRAM_HOOKS_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/gram}"
+# The manifest lives outside skills_root so it is never itself discovered as a skill.
+manifest_file="$state_dir/skill-sync-manifest.tsv"
+
+# Bounds for degraded-mode inlining so additionalContext stays small.
+GRAM_SKILL_INLINE_PER=4000
+GRAM_SKILL_INLINE_TOTAL=16000
+
+TAB="$(printf '\t')"
+
+# Pick the local base64 decode flag once (GNU uses -d, BSD accepts --decode).
+_gram_b64_flag=""
+if printf '' | base64 --decode >/dev/null 2>&1; then
+  _gram_b64_flag="--decode"
+elif printf '' | base64 -d >/dev/null 2>&1; then
+  _gram_b64_flag="-d"
+fi
+gram_skill_b64_decode() {
+  [ -n "$_gram_b64_flag" ] || return 1
+  base64 "$_gram_b64_flag" 2>/dev/null
+}
+gram_skill_b64_encode() {
+  base64 2>/dev/null | tr -d '\n'
+}
+
+# JSON string escaper (matches the hook sender's, so behavior is identical).
+gram_skill_json_escape() {
+  awk 'BEGIN { first = 1; ORS = "" }
+       {
+         gsub(/\\/, "\\\\")
+         gsub(/"/, "\\\"")
+         gsub(/\b/, "\\b")
+         gsub(/\f/, "\\f")
+         gsub(/\r/, "\\r")
+         gsub(/\t/, "\\t")
+         if (!first) printf "\\n"
+         printf "%s", $0
+         first = 0
+       }'
+}
+
+gram_skill_event_name() {
+  printf '%s' "$1" | tr '\n' ' ' | sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sed -n '1p'
+}
+
+# Base64 wire fields use only [A-Za-z0-9+/=], so a scalar sed extract is safe
+# (no embedded quotes or newlines to worry about).
+gram_skill_b64_field() {
+  printf '%s' "$1" | tr -d '\n' | sed -n 's/.*"'"$2"'"[[:space:]]*:[[:space:]]*"\([A-Za-z0-9+/=]*\)".*/\1/p' | sed -n '1p'
+}
+
+gram_skill_emit_context() {
+  local text="$1" escaped
+  [ -n "$text" ] || return 0
+  escaped="$(printf '%s' "$text" | gram_skill_json_escape)"
+  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$escaped"
+}
+
+# Ownership is defined solely by the manifest: a skill dir we did not record is
+# a user's own skill and must never be modified or deleted.
+gram_skill_manifest_owned() {
+  [ -r "$manifest_file" ] || return 1
+  awk -F "$TAB" -v n="$1" '$1==n{found=1} END{exit found?0:1}' "$manifest_file"
+}
+
+gram_skill_remove_all() {
+  [ -r "$manifest_file" ] || return 0
+  local name _rest
+  while IFS="$TAB" read -r name _rest; do
+    [ -n "$name" ] || continue
+    rm -rf "$skills_root/$name" 2>/dev/null || true
+  done < "$manifest_file"
+  rm -f "$manifest_file" 2>/dev/null || true
+}
+
+event="$(gram_skill_event_name "$provider_payload")"
+is_session_start=0
+[ "$event" = "SessionStart" ] && is_session_start=1
+
+mkdir -p "$state_dir" 2>/dev/null || true
+
+# Request manifest (name<TAB>hash) is the local applied state; hash comparison
+# keeps steady-state responses tiny.
+manifest_payload=""
+if [ -r "$manifest_file" ]; then
+  manifest_payload="$(cat "$manifest_file" 2>/dev/null || true)"
+fi
+manifest_b64="$(printf '%s' "$manifest_payload" | gram_skill_b64_encode)"
+hostname_esc="$(hostname 2>/dev/null | gram_skill_json_escape || true)"
+request="$(printf '{"hostname":"%s","manifest_b64":"%s"}' "$hostname_esc" "$manifest_b64")"
+
+# prepare_auth returns non-zero (or exits 0) when this machine is not connected;
+# either way we keep the stale set and never block.
+gram_hooks_prepare_auth "$server_url" "$project_slug" 0 || exit 0
+
+gram_http_post "${server_url}/rpc/skills.sync" "$request" 10 ${auth_config_arg[@]+"${auth_config_arg[@]}"} || true
+code="$GRAM_HTTP_CODE"
+body="$GRAM_HTTP_BODY"
+
+case "$code" in
+  401 | 403)
+    # Authenticated distribution: a rejected identity removes managed skills.
+    gram_skill_remove_all
+    exit 0
+    ;;
+  2[0-9][0-9]) ;;
+  *)
+    # Unreachable server, 404 (endpoint not deployed yet), or 5xx: keep stale.
+    exit 0
+    ;;
+esac
+
+plan_b64="$(gram_skill_b64_field "$body" "plan_b64")"
+bundle_b64="$(gram_skill_b64_field "$body" "bundle_b64")"
+
+# Steady state: no plan means nothing changed.
+[ -n "$plan_b64" ] || exit 0
+
+plan_file="$(mktemp "${TMPDIR:-/tmp}/gram-skill-plan.XXXXXX" 2>/dev/null)" || exit 0
+new_manifest="$(mktemp "${TMPDIR:-/tmp}/gram-skill-mf.XXXXXX" 2>/dev/null)" || { rm -f "$plan_file"; exit 0; }
+extract_dir=""
+
+gram_skill_cleanup() {
+  rm -f "$plan_file" "$new_manifest" 2>/dev/null || true
+  [ -n "$extract_dir" ] && rm -rf "$extract_dir" 2>/dev/null || true
+}
+
+printf '%s' "$plan_b64" | gram_skill_b64_decode > "$plan_file" 2>/dev/null || true
+if [ -r "$manifest_file" ]; then
+  cat "$manifest_file" > "$new_manifest" 2>/dev/null || true
+fi
+
+# Determine whether the skills root is writable; if not, fall back to inlining.
+degraded=0
+if mkdir -p "$skills_root" 2>/dev/null && [ -w "$skills_root" ]; then
+  degraded=0
+else
+  degraded=1
+fi
+
+# Bundle is decoded to a temp dir (always writable) so degraded mode can still
+# read bodies for inlining.
+if [ -n "$bundle_b64" ]; then
+  extract_dir="$(mktemp -d "${TMPDIR:-/tmp}/gram-skill-bundle.XXXXXX" 2>/dev/null)" || extract_dir=""
+  if [ -n "$extract_dir" ]; then
+    printf '%s' "$bundle_b64" | gram_skill_b64_decode | tar -xzf - -C "$extract_dir" 2>/dev/null || true
+  fi
+fi
+
+manifest_set() {
+  local name="$1" hash="$2" tmp
+  tmp="$(mktemp "${TMPDIR:-/tmp}/gram-skill-mfset.XXXXXX" 2>/dev/null)" || return 1
+  awk -F "$TAB" -v n="$name" '$1!=n' "$new_manifest" > "$tmp" 2>/dev/null || true
+  printf '%s\t%s\n' "$name" "$hash" >> "$tmp"
+  mv "$tmp" "$new_manifest"
+}
+manifest_del() {
+  local name="$1" tmp
+  tmp="$(mktemp "${TMPDIR:-/tmp}/gram-skill-mfdel.XXXXXX" 2>/dev/null)" || return 1
+  awk -F "$TAB" -v n="$name" '$1!=n' "$new_manifest" > "$tmp" 2>/dev/null || true
+  mv "$tmp" "$new_manifest"
+}
+
+receipts=""
+announce=""
+inline=""
+inline_total=0
+
+# The trailing "|| [ -n "$op" ]" processes a final plan row even when the
+# server omits the trailing newline.
+while IFS="$TAB" read -r op f2 f3 f4 f5 || [ -n "$op" ]; do
+  [ -n "$op" ] || continue
+  case "$op" in
+    UPDATE)
+      name="$f2"; hash="$f3"; relpath="$f4"; desc_b64="$f5"
+      [ -n "$name" ] || continue
+      desc=""
+      if [ -n "$desc_b64" ]; then
+        desc="$(printf '%s' "$desc_b64" | gram_skill_b64_decode 2>/dev/null || true)"
+      fi
+      was_owned=0
+      gram_skill_manifest_owned "$name" && was_owned=1
+
+      if [ "$degraded" -eq 1 ]; then
+        body_text=""
+        if [ -n "$extract_dir" ] && [ -n "$relpath" ] && [ -r "$extract_dir/$relpath" ]; then
+          body_text="$(head -c "$GRAM_SKILL_INLINE_PER" "$extract_dir/$relpath" 2>/dev/null || true)"
+        fi
+        if [ "$inline_total" -lt "$GRAM_SKILL_INLINE_TOTAL" ]; then
+          inline="${inline}
+## ${name}
+${desc}
+
+${body_text}
+"
+          inline_total=$((inline_total + ${#body_text} + ${#desc}))
+        fi
+        receipts="${receipts}${name}${TAB}fs_readonly${TAB}${hash}
+"
+        continue
+      fi
+
+      target="$skills_root/$name"
+      if [ -e "$target" ] && [ "$was_owned" -eq 0 ]; then
+        # A personal skill of the same name is present and unowned — never clobber it.
+        receipts="${receipts}${name}${TAB}shadowed${TAB}${hash}
+"
+        continue
+      fi
+      if [ -z "$extract_dir" ] || [ ! -d "$extract_dir/$name" ]; then
+        receipts="${receipts}${name}${TAB}error${TAB}${hash}
+"
+        continue
+      fi
+      rm -rf "$target" 2>/dev/null || true
+      mkdir -p "$(dirname "$target")" 2>/dev/null || true
+      if cp -R "$extract_dir/$name" "$target" 2>/dev/null; then
+        manifest_set "$name" "$hash"
+        receipts="${receipts}${name}${TAB}live${TAB}${hash}
+"
+        if [ "$was_owned" -eq 0 ]; then
+          announce="${announce}- ${name}: ${desc} (read before use: ${skills_root}/${relpath})
+"
+        fi
+      else
+        receipts="${receipts}${name}${TAB}error${TAB}${hash}
+"
+      fi
+      ;;
+    REMOVE)
+      name="$f2"
+      [ -n "$name" ] || continue
+      # A read-only skills root cannot be mutated; leave the stale set in place.
+      [ "$degraded" -eq 0 ] || continue
+      if gram_skill_manifest_owned "$name"; then
+        rm -rf "$skills_root/$name" 2>/dev/null || true
+        manifest_del "$name"
+        receipts="${receipts}${name}${TAB}removed${TAB}
+"
+      fi
+      ;;
+  esac
+done < "$plan_file"
+
+# Persist the manifest only when the skills root was actually mutated.
+if [ "$degraded" -eq 0 ]; then
+  mkdir -p "$state_dir" 2>/dev/null || true
+  cp "$new_manifest" "$manifest_file" 2>/dev/null || true
+fi
+
+# additionalContext is only meaningful at SessionStart (SessionEnd stdout is
+# not read back into the model).
+if [ "$is_session_start" -eq 1 ]; then
+  ctx=""
+  if [ "$degraded" -eq 1 ] && [ -n "$inline" ]; then
+    ctx="Your skills directory (${skills_root}) is not writable, so these skills distributed by your organization could not be installed. Their contents are inlined below — read the relevant one before use.
+${inline}"
+  elif [ -n "$announce" ]; then
+    ctx="Your organization has distributed the following skills to you and they are now installed for this session. Read a skill's SKILL.md before using it.
+${announce}"
+  fi
+  [ -n "$ctx" ] && gram_skill_emit_context "$ctx"
+fi
+
+# Report the applied set back best-effort. Reset the idempotency token so the
+# receipt is not de-duplicated against the sync request in this same shell.
+if [ -n "$receipts" ]; then
+  GRAM_IDEMPOTENCY_TOKEN=""
+  receipts_b64="$(printf '%s' "$receipts" | gram_skill_b64_encode)"
+  receipt_req="$(printf '{"hostname":"%s","receipts_b64":"%s"}' "$hostname_esc" "$receipts_b64")"
+  gram_http_post "${server_url}/rpc/skills.sync" "$receipt_req" 10 ${auth_config_arg[@]+"${auth_config_arg[@]}"} >/dev/null 2>&1 || true
+fi
+
+gram_skill_cleanup
+exit 0
+`)
 
 // renderHookScript produces the bash wrapper that forwards hook event JSON
 // from stdin to the unified Gram endpoint. The shared auth helper supplies

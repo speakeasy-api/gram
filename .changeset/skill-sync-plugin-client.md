@@ -1,0 +1,5 @@
+---
+"server": minor
+---
+
+Add the Claude Code skill-sync client to the generated observability plugin (`hooks/skill_sync.sh`), wired onto SessionStart (synchronous, authoritative) and SessionEnd (best-effort). It materializes org-distributed skills into the personal skills directory (resolved `CLAUDE_CONFIG_DIR`-aware), tracks a local manifest of the files it owns, and creates/updates/deletes only those — an unowned personal skill of the same name is left untouched and reported as a conflict. Net-new skills are announced to the session via SessionStart `additionalContext`; when the skills directory is read-only it falls back to inlining bounded skill bodies. A rejected identity (401/403) removes managed skills, while any other failure (unreachable server, 404, 5xx) keeps the last-synced set — the script always exits 0 so a sync failure can never block or delay a session. Emission is gated behind a new opt-in generator flag (off by default), so the client stays dormant until the server-side sync endpoint (`/rpc/skills.sync`) and the skills-distribution feature are live.
