@@ -4022,3 +4022,92 @@ CREATE TABLE IF NOT EXISTS skill_versions (
   CONSTRAINT skill_versions_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
   CONSTRAINT skill_versions_skill_id_canonical_sha256_key UNIQUE (skill_id, canonical_sha256)
 );
+
+-- A skill_distributions row makes a skill available through a delivery channel
+-- to some audience within a project. It is the source of truth for what the
+-- sync endpoint hands out.
+CREATE TABLE IF NOT EXISTS skill_distributions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+
+  -- Pins the distribution to a specific version. NULL tracks the skill's latest
+  -- version. Cleared (SET NULL) if that version is later deleted, so the
+  -- distribution falls back to tracking latest rather than dangling.
+  pinned_version_id uuid,
+
+  -- WorkOS directory group ids this distribution targets. NULL means
+  -- project-wide (everyone); a non-null array scopes it to those groups.
+  audience TEXT[],
+
+  -- Delivery channel. App-side consts are canonical (no DB enum): 'plugin'
+  -- today; 'assistant' reserved.
+  channel TEXT NOT NULL DEFAULT 'plugin',
+
+  -- WorkOS user id of the actor who created the distribution.
+  created_by TEXT,
+
+  -- Set when the distribution is revoked (soft delete); NULL while active.
+  revoked_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_distributions_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_distributions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_distributions_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
+  CONSTRAINT skill_distributions_pinned_version_id_fkey FOREIGN KEY (pinned_version_id) REFERENCES skill_versions (id) ON DELETE SET NULL
+);
+
+-- Backs the skills cascade delete and per-skill distribution listings.
+CREATE INDEX IF NOT EXISTS skill_distributions_skill_id_idx ON skill_distributions (skill_id);
+
+-- Backs the projects cascade delete and project-scoped distribution listings.
+CREATE INDEX IF NOT EXISTS skill_distributions_project_id_idx ON skill_distributions (project_id);
+
+-- Backs the pinned_version_id SET NULL when a skill_versions row is deleted.
+CREATE INDEX IF NOT EXISTS skill_distributions_pinned_version_id_idx ON skill_distributions (pinned_version_id);
+
+-- A skill_sync_receipt records the outcome of syncing a distributed skill to
+-- one user's machine. Written from the sync reports the plugin sends, it powers
+-- the "live on N machines", drift, and shadowing views. High-churn: kept lean
+-- and upserted per (user, hostname, skill) rather than append-only.
+CREATE TABLE IF NOT EXISTS skill_sync_receipts (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+
+  -- The version present on the machine after the sync. Cleared (SET NULL) if
+  -- that version is later deleted. Compared against the skill's latest to
+  -- surface drift and shadowing.
+  skill_version_id uuid,
+
+  -- WorkOS user id and machine hostname the skill synced to. Part of the upsert
+  -- key, so both are required.
+  user_id TEXT NOT NULL,
+  hostname TEXT NOT NULL,
+
+  -- Outcome of the sync. App-side consts are canonical (no DB enum): 'applied',
+  -- 'conflict_skipped', 'fs_readonly'.
+  status TEXT NOT NULL,
+
+  synced_at timestamptz NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_sync_receipts_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_sync_receipts_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_sync_receipts_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
+  CONSTRAINT skill_sync_receipts_skill_version_id_fkey FOREIGN KEY (skill_version_id) REFERENCES skill_versions (id) ON DELETE SET NULL
+);
+
+-- One receipt per (user, hostname, skill) within a project: sync reports upsert
+-- onto this key instead of appending. Its (project_id, skill_id) prefix also
+-- serves per-skill receipt rollups and backs the skills cascade delete.
+CREATE UNIQUE INDEX IF NOT EXISTS skill_sync_receipts_project_id_skill_id_user_id_hostname_key
+ON skill_sync_receipts (project_id, skill_id, user_id, hostname);
+
+-- Backs (project, skill_version) lookups for drift and shadowing views.
+CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_skill_version_id_idx
+ON skill_sync_receipts (project_id, skill_version_id);

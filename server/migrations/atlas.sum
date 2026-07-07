@@ -1,4 +1,4 @@
-h1:eSl12DjLPSWBiLgipY911sP/Ez/jQAGmqn1yBkLT0Uk=
+h1:kYvGmjTELGesIfZX0Te9JGR3sZ0nzlNnv0HfUGUCdcg=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -248,3 +248,4 @@ h1:eSl12DjLPSWBiLgipY911sP/Ez/jQAGmqn1yBkLT0Uk=
 20260707070702_risk-policy-eval-reviews.sql h1:RjhJvs0KrFmEk9tuNDI9slvcm1uGbnyEf44mDlZ8/MI=
 20260707120239_assistant-mcp-servers.sql h1:bDNWbd/16MXwFmJBGKVMmnLcxgdiDCCpizKI/ftevrY=
 20260707213957_skills-skill-versions.sql h1:SDb8rZuQl8x59yxSikJhWtFHXFk7abWI1ypN1Wzv0io=
+20260707221134_skill-distributions-sync-receipts.sql h1:N/hZD63GzUQl9Sk95Py4FJBDXXM/2Fm3MW4pVM8Zp+Q=
