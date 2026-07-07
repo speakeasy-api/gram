@@ -269,12 +269,12 @@ export type EntityProfileProps = {
   axisValue: string;
   axisOptions: { value: string; label: string }[];
   // The Claude attribution cuts (MCP Server/Tool, Skill, Subagent) — surfaced in
-  // a separate "MCP breakdown" dropdown next to the time range rather than mixed
+  // a separate "Agent activity" dropdown next to the time range rather than mixed
   // into the main "Breakdown by" control. Shares axisValue/onAxisChange with it;
   // empty when the org has no attribution data (dropdown hidden).
-  mcpAxisOptions: { value: string; label: string }[];
+  activityAxisOptions: { value: string; label: string }[];
   // Optional caveat for the current breakdown axis, shown as an info tooltip
-  // beside the MCP breakdown select (e.g. the root Skill cut excludes
+  // beside the Agent activity select (e.g. the root Skill cut excludes
   // subagent-run skills).
   axisHint?: string;
   onAxisChange: (value: string) => void;
@@ -322,7 +322,7 @@ export function EntityProfile({
   canDrill,
   axisValue,
   axisOptions,
-  mcpAxisOptions,
+  activityAxisOptions,
   axisHint,
   onAxisChange,
   rows,
@@ -440,18 +440,18 @@ export function EntityProfile({
             </button>
           </div>
           {/* Top-right header controls, in line with the back controls on the
-              left: the MCP breakdown dropdown (Claude attribution cuts, split out
+              left: the Agent activity dropdown (Claude attribution cuts, split out
               of the main "Breakdown by" control) and the date-range picker that
               scopes every number below. */}
           <div className="absolute top-5 right-8 z-10 flex items-center gap-2">
-            {mcpAxisOptions.length > 0 && (
+            {activityAxisOptions.length > 0 && (
               <div className="flex items-center gap-1.5">
                 <Select value={axisValue} onValueChange={onAxisChange}>
                   <SelectTrigger className="border-border hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto cursor-pointer gap-1.5 rounded-md border bg-background py-1.5 pr-2.5 pl-3 text-sm font-medium shadow-none transition-colors focus-visible:ring-0">
-                    <SelectValue placeholder="MCP breakdown" />
+                    <SelectValue placeholder="Agent activity" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mcpAxisOptions.map((o) => (
+                    {activityAxisOptions.map((o) => (
                       <SelectItem key={o.value} value={o.value}>
                         {o.label}
                       </SelectItem>
@@ -534,8 +534,8 @@ export function EntityProfile({
               Breakdown by
               <Select value={axisValue} onValueChange={onAxisChange}>
                 <SelectTrigger className="border-border hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto -my-1 cursor-pointer gap-1.5 rounded-md border bg-transparent py-1.5 pr-2.5 pl-3 text-sm font-semibold shadow-none transition-colors focus-visible:ring-0">
-                  {/* Placeholder shows when the active axis lives in the MCP
-                      breakdown dropdown instead (no matching item here). */}
+                  {/* Placeholder shows when the active axis lives in the Agent
+                      activity dropdown instead (no matching item here). */}
                   <SelectValue placeholder="Select…" />
                 </SelectTrigger>
                 <SelectContent>

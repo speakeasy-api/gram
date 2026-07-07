@@ -757,7 +757,7 @@ export function CostsExplorer(): JSX.Element {
   // The breakdown axes split across two controls. The organizational pivots (plus
   // the always-available sessions sentinel) stay in the main "Breakdown by"
   // dropdown; the Claude attribution cuts (MCP Server/Tool, Skill, Subagent) move
-  // to a dedicated "MCP breakdown" dropdown next to the time range. Attribution
+  // to a dedicated "Agent activity" dropdown next to the time range. Attribution
   // cuts group a different dataset (api_request attribution rows) and don't roll
   // up to the same total as the org breakdowns, so mixing them into one control
   // read as a broken breakdown — hence the separation (DNO-392). Both dropdowns
@@ -775,7 +775,7 @@ export function CostsExplorer(): JSX.Element {
     ...dimensionAxisOptions,
     { value: SESSIONS_AXIS, label: LABELS[SESSIONS_AXIS]! },
   ];
-  const mcpAxisOptions: { value: string; label: string }[] = atSessionLeaf
+  const activityAxisOptions: { value: string; label: string }[] = atSessionLeaf
     ? []
     : pivotOptions
         .filter((p) => isAttributionDim(p.dim))
@@ -954,7 +954,7 @@ export function CostsExplorer(): JSX.Element {
         canDrill={canDrill}
         axisValue={axisValue}
         axisOptions={axisOptions}
-        mcpAxisOptions={mcpAxisOptions}
+        activityAxisOptions={activityAxisOptions}
         axisHint={axisHint}
         onAxisChange={(value) => changeGroupBy(value as Axis)}
         rows={visibleRows}
