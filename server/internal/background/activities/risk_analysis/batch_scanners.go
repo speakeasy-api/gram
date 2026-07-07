@@ -111,6 +111,10 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		activity.RecordHeartbeat(ctx, SourceCLIDestructive)
 	}
 
+	// Note: SourceAccountIdentity is deliberately absent here — it is
+	// session-scoped and evaluated in Do over the batch's full message-id set,
+	// bypassing the message-type filter and CEL scope that shape `messages`.
+
 	return mergeFindings(mergeFindingsInput{
 		outOfPolicyScope:        outOfPolicyScope,
 		exclusions:              exclusions,

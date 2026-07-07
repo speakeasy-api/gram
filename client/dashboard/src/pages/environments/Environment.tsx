@@ -173,7 +173,9 @@ function EnvironmentPageInner() {
   const navigate = useNavigate();
   const telemetry = useTelemetry();
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("project:write");
+  const canWrite = hasScope("environment:write");
+  // "Fill for MCP Server" links an environment to a toolset, which remains project:write.
+  const canLinkToolset = hasScope("project:write");
 
   const [toolsetDialogOpen, setToolsetDialogOpen] = useState(false);
   const [selectedToolsetSlug, setSelectedToolsetSlug] = useState<string>("");
@@ -470,7 +472,7 @@ function EnvironmentPageInner() {
         <Page.Section>
           <Page.Section.Title>{environment.name}</Page.Section.Title>
           <Page.Section.CTA>
-            <RequireScope scope="project:write" level="component">
+            <RequireScope scope="environment:write" level="component">
               <Button
                 onClick={handleAddNewEntry}
                 disabled={isSaving || isAddingNew}
@@ -485,7 +487,7 @@ function EnvironmentPageInner() {
                 label: "Fill for MCP Server",
                 onClick: () => setToolsetDialogOpen(true),
                 icon: "copy-plus",
-                disabled: !canWrite,
+                disabled: !canLinkToolset,
               },
               {
                 label: "Delete Environment",

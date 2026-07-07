@@ -662,6 +662,54 @@ func TestAnalyzeBatch_CustomDetectionRuleFinding(t *testing.T) {
 	assert.Equal(t, "ACME-ABC12345", rows[0].Match.String)
 }
 
+// A configured exclusion must suppress a message-level content finding through
+// the full Do() path. TestAnalyzeBatch_CustomDetectionRuleFinding is the control
+// (identical setup, no exclusion -> 1 finding). The ExclusionSet predicate is
+// unit-tested in isolation; the wiring the session-level work reshaped —
+// policyExclusionSet's DB fetch and threading into scanStandardPolicy — is only
+// exercised end-to-end here.
+func TestAnalyzeBatch_ExclusionSuppressesMessageFinding(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `content.matchRegex("ACME-[A-Z0-9]{8}")`)
+
+	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "deploy with ACME-ABC12345 today",
+	})
+	require.NoError(t, err)
+
+	_, err = riskrepo.New(conn).CreateRiskExclusion(t.Context(), riskrepo.CreateRiskExclusionParams{
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		RiskPolicyID:   uuid.NullUUID{UUID: td.policyID, Valid: true},
+		MatchType:      "exact",
+		MatchValue:     "ACME-ABC12345",
+		Enabled:        true,
+	})
+	require.NoError(t, err)
+
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil)
+	require.Equal(t, 1, result.Processed)
+	require.Equal(t, 0, result.Findings, "excluded content finding must be suppressed end-to-end through Do()")
+
+	// No active finding remains. The scanned message still records the empty
+	// sentinel row buildRows writes, but that row is found=false, which this
+	// active-findings query filters out — so the list is empty, as in
+	// TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex.
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows, "no active finding should survive the exclusion")
+}
+
 func TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)

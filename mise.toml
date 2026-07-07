@@ -233,10 +233,6 @@ GRAM_ASSISTANT_RUNTIME_PROVIDER = "flyio"
 ##################
 ## MCP Registry ##
 ##################
-## Options below configure where your optional local registry container will be
-## discoverable by the Gram application.
-LOCAL_MCP_REGISTRY_PORT = "9847"
-LOCAL_MCP_REGISTRY_URL = "http://localhost:{{env.LOCAL_MCP_REGISTRY_PORT}}"
 PULSE_REGISTRY_TENANT = "unset"
 PULSE_REGISTRY_KEY = "unset"
 

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Scope } from "@/hooks/useRBAC";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { AppRoute, useRoutes } from "@/routes";
 
 /** A project nav page plus the scopes that grant access to it. */

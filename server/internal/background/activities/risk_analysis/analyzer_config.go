@@ -9,8 +9,9 @@ import (
 // risk_policies.analyzer_config (JSONB), namespaced by analyzer. New per-scanner
 // options live here rather than as a dedicated column each.
 type AnalyzerConfig struct {
-	Presidio       *PresidioConfig       `json:"presidio,omitempty"`
-	BuiltinPresets *BuiltinPresetsConfig `json:"builtin_presets,omitempty"`
+	Presidio        *PresidioConfig        `json:"presidio,omitempty"`
+	BuiltinPresets  *BuiltinPresetsConfig  `json:"builtin_presets,omitempty"`
+	AccountIdentity *AccountIdentityConfig `json:"account_identity,omitempty"`
 }
 
 // PresidioConfig holds presidio-scanner options.
@@ -26,6 +27,15 @@ type BuiltinPresetsConfig struct {
 	// Enabled toggles scan-time suppression of catalog false positives. Absent
 	// means "unset" — callers default to ON (see BuiltinPresetsEnabledFromConfig).
 	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// AccountIdentityConfig holds account_identity-scanner options.
+type AccountIdentityConfig struct {
+	// ApprovedEmailDomains is the corporate email domain allowlist. When
+	// non-empty, sessions whose AI-account email domain is not in the list
+	// produce an identity.unapproved_domain finding. Empty means the domain
+	// rule is inert.
+	ApprovedEmailDomains []string `json:"approved_email_domains,omitempty"`
 }
 
 // ParseAnalyzerConfig decodes the JSONB blob, returning a zero config for
@@ -69,6 +79,37 @@ func PresidioScoreThresholdPtr(b []byte) *float64 {
 		return c.Presidio.ScoreThreshold
 	}
 	return nil
+}
+
+// ApprovedEmailDomainsFromConfig returns the configured corporate email
+// domain allowlist, or nil when unset.
+func ApprovedEmailDomainsFromConfig(b []byte) []string {
+	c := ParseAnalyzerConfig(b)
+	if c.AccountIdentity != nil {
+		return c.AccountIdentity.ApprovedEmailDomains
+	}
+	return nil
+}
+
+// WithApprovedEmailDomains returns analyzer_config JSON with
+// account_identity.approved_email_domains set to v, or cleared when v is
+// empty. Only fields known to AnalyzerConfig are round-tripped; any
+// unrecognized keys in base are dropped.
+func WithApprovedEmailDomains(base []byte, v []string) ([]byte, error) {
+	c := ParseAnalyzerConfig(base)
+	switch {
+	case len(v) > 0:
+		c.AccountIdentity = &AccountIdentityConfig{ApprovedEmailDomains: v}
+	case c.AccountIdentity != nil:
+		// ApprovedEmailDomains is account_identity's only field today; clearing
+		// it leaves the section empty, so drop it entirely.
+		c.AccountIdentity = nil
+	}
+	out, err := json.Marshal(c)
+	if err != nil {
+		return nil, fmt.Errorf("marshal analyzer config: %w", err)
+	}
+	return out, nil
 }
 
 // WithPresidioScoreThreshold returns analyzer_config JSON with

@@ -31,6 +31,10 @@ type CreateRiskPolicyRequestBody struct {
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
+	// For the account_identity source: corporate email domains considered
+	// approved. Sessions whose AI-account email domain is not listed are flagged.
+	// Empty/omitted leaves the domain rule inert.
+	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
@@ -84,6 +88,9 @@ type UpdateRiskPolicyRequestBody struct {
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
+	// For the account_identity source: corporate email domains considered
+	// approved. Omit to preserve the current list; send an empty array to clear it.
+	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
@@ -308,6 +315,10 @@ type CreateRiskPolicyResponseBody struct {
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline. When empty, only heuristics run.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
+	// For the account_identity source: corporate email domains considered
+	// approved. Sessions whose AI-account email domain is not listed are flagged.
+	// Empty means the domain rule is inert.
+	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
@@ -398,6 +409,10 @@ type GetRiskPolicyResponseBody struct {
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline. When empty, only heuristics run.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
+	// For the account_identity source: corporate email domains considered
+	// approved. Sessions whose AI-account email domain is not listed are flagged.
+	// Empty means the domain rule is inert.
+	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
@@ -472,6 +487,10 @@ type UpdateRiskPolicyResponseBody struct {
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline. When empty, only heuristics run.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
+	// For the account_identity source: corporate email domains considered
+	// approved. Sessions whose AI-account email domain is not listed are flagged.
+	// Empty means the domain rule is inert.
+	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
@@ -7585,6 +7604,10 @@ type RiskPolicyResponseBody struct {
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline. When empty, only heuristics run.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
+	// For the account_identity source: corporate email domains considered
+	// approved. Sessions whose AI-account email domain is not listed are flagged.
+	// Empty means the domain rule is inert.
+	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
@@ -8017,6 +8040,12 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 			body.PromptInjectionRules[i] = val
 		}
 	}
+	if p.ApprovedEmailDomains != nil {
+		body.ApprovedEmailDomains = make([]string, len(p.ApprovedEmailDomains))
+		for i, val := range p.ApprovedEmailDomains {
+			body.ApprovedEmailDomains[i] = val
+		}
+	}
 	if p.DisabledRules != nil {
 		body.DisabledRules = make([]string, len(p.DisabledRules))
 		for i, val := range p.DisabledRules {
@@ -8091,6 +8120,12 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		body.PromptInjectionRules = make([]string, len(p.PromptInjectionRules))
 		for i, val := range p.PromptInjectionRules {
 			body.PromptInjectionRules[i] = val
+		}
+	}
+	if p.ApprovedEmailDomains != nil {
+		body.ApprovedEmailDomains = make([]string, len(p.ApprovedEmailDomains))
+		for i, val := range p.ApprovedEmailDomains {
+			body.ApprovedEmailDomains[i] = val
 		}
 	}
 	if p.DisabledRules != nil {
@@ -8373,6 +8408,12 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		v.PromptInjectionRules = make([]string, len(body.PromptInjectionRules))
 		for i, val := range body.PromptInjectionRules {
 			v.PromptInjectionRules[i] = val
+		}
+	}
+	if body.ApprovedEmailDomains != nil {
+		v.ApprovedEmailDomains = make([]string, len(body.ApprovedEmailDomains))
+		for i, val := range body.ApprovedEmailDomains {
+			v.ApprovedEmailDomains[i] = val
 		}
 	}
 	if body.DisabledRules != nil {
@@ -8927,6 +8968,12 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 			v.PromptInjectionRules[i] = val
 		}
 	}
+	if body.ApprovedEmailDomains != nil {
+		v.ApprovedEmailDomains = make([]string, len(body.ApprovedEmailDomains))
+		for i, val := range body.ApprovedEmailDomains {
+			v.ApprovedEmailDomains[i] = val
+		}
+	}
 	if body.DisabledRules != nil {
 		v.DisabledRules = make([]string, len(body.DisabledRules))
 		for i, val := range body.DisabledRules {
@@ -9143,6 +9190,12 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		v.PromptInjectionRules = make([]string, len(body.PromptInjectionRules))
 		for i, val := range body.PromptInjectionRules {
 			v.PromptInjectionRules[i] = val
+		}
+	}
+	if body.ApprovedEmailDomains != nil {
+		v.ApprovedEmailDomains = make([]string, len(body.ApprovedEmailDomains))
+		for i, val := range body.ApprovedEmailDomains {
+			v.ApprovedEmailDomains[i] = val
 		}
 	}
 	if body.DisabledRules != nil {

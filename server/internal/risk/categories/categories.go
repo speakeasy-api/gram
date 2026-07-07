@@ -35,6 +35,7 @@ const (
 	CategoryShadowMCP       Category = "shadow_mcp"
 	CategoryDestructiveTool Category = "destructive_tool"
 	CategoryCLIDestructive  Category = "cli_destructive"
+	CategoryAccountIdentity Category = "account_identity"
 	CategoryCustom          Category = "custom"
 )
 
@@ -91,6 +92,13 @@ var Definitions = []Definition{
 		Description: "Tool calls whose arguments match a curated set of destructive shell, git, database, or cloud CLI patterns (rm -rf, git push --force, DROP TABLE, kubectl delete ns, ...). Applies to native Bash / run_terminal_cmd as well as MCP-routed tools whose arguments carry destructive content.",
 		Icon:        "terminal",
 		Source:      "cli_destructive",
+	},
+	{
+		Category:    CategoryAccountIdentity,
+		Label:       "Non-Corporate Accounts",
+		Description: "Sessions authenticated with a personal AI account or an account whose email domain is not on the organization's approved list. Uses the account attribution captured by session ingest.",
+		Icon:        "user-x",
+		Source:      "account_identity",
 	},
 	{
 		Category:    CategoryPromptPolicy,

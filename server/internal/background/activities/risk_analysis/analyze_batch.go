@@ -110,6 +110,10 @@ type AnalyzeBatchArgs struct {
 	// false positives. Do derives it from the refetched policy's analyzer_config
 	// (defaulting ON), so it is not a caller input.
 	BuiltinPresetsEnabled bool
+	// ApprovedEmailDomains is the account_identity corporate domain allowlist.
+	// Like PresidioScoreThreshold, Do derives it from the refetched policy's
+	// analyzer_config, so it is not a caller input.
+	ApprovedEmailDomains []string
 }
 
 type AnalyzeBatchResult struct {
@@ -159,10 +163,11 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
 
-	// Single source of truth: derive the presidio threshold from the policy we
-	// just refetched, rather than trusting a (possibly omitted) caller value.
+	// Single source of truth: derive analyzer options from the policy we just
+	// refetched, rather than trusting (possibly omitted) caller values.
 	args.PresidioScoreThreshold = PresidioScoreThresholdFromConfig(policy.AnalyzerConfig)
 	args.BuiltinPresetsEnabled = BuiltinPresetsEnabledFromConfig(policy.AnalyzerConfig)
+	args.ApprovedEmailDomains = ApprovedEmailDomainsFromConfig(policy.AnalyzerConfig)
 
 	rows, err := a.fetchContent(ctx, args)
 	if err != nil {
@@ -171,29 +176,61 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	rows = filterMessagesByMessageTypes(rows, args.MessageTypes)
 	messages := newBatchMessages(ctx, a.logger, rows)
 	scannedCount = len(messages)
-	if len(messages) == 0 {
+
+	exclusions := NewExclusionSet(nil)
+	if policy.PolicyType != PolicyTypePromptBased {
+		exclusions, err = a.policyExclusionSet(ctx, args)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Session-scoped account_identity findings are computed over the batch's
+	// full message-id set, before the message-type filter and CEL scope above
+	// apply: the detector reads the session's account attribution, not message
+	// content, so narrowing a policy's scope must not subset which sessions it
+	// evaluates. Exclusions apply on entry into the pipeline (in
+	// appendSessionFindings below) and disabled_rules at the shared filter
+	// step, mirroring the content path.
+	var session []sessionFinding
+	if newSourceSet(args.Sources).Has(SourceAccountIdentity) {
+		session, err = a.scanAccountIdentity(ctx, args)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(messages) == 0 && len(session) == 0 {
 		if err := a.writeResults(ctx, args, nil); err != nil {
 			return nil, err
 		}
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
 
-	scope, err := CompileScope(a.celEng, policy.ScopeInclude.String, policy.ScopeExempt.String)
-	if err != nil {
-		return nil, fmt.Errorf("compile policy scope: %w", err)
-	}
-	outOfPolicyScope := a.scopeExclusions(ctx, scope, messages)
-
-	var findings [][]Finding
-	switch policy.PolicyType {
-	case PolicyTypePromptBased:
-		findings = a.scanPromptPolicy(ctx, args, policy, messages, outOfPolicyScope)
-	default:
-		findings, err = a.scanStandardPolicyBatch(ctx, args, policy, messages, outOfPolicyScope)
+	findings := make([][]Finding, len(messages))
+	if len(messages) > 0 {
+		scope, err := CompileScope(a.celEng, policy.ScopeInclude.String, policy.ScopeExempt.String)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("compile policy scope: %w", err)
+		}
+		outOfPolicyScope := a.scopeExclusions(ctx, scope, messages)
+
+		switch policy.PolicyType {
+		case PolicyTypePromptBased:
+			findings = a.scanPromptPolicy(ctx, args, policy, messages, outOfPolicyScope)
+		default:
+			findings, err = a.scanStandardPolicyBatch(ctx, args, policy, messages, outOfPolicyScope, exclusions)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
+
+	ids := make([]uuid.UUID, len(messages))
+	for i, msg := range messages {
+		ids[i] = msg.ID
+	}
+	ids, findings = mergeSessionFindings(ids, findings, session, exclusions)
 
 	if disabled := NewDisabledRuleSet(policy.DisabledRules); !disabled.Empty() {
 		for i, batch := range findings {
@@ -201,7 +238,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		}
 	}
 
-	rowsToWrite, findingsCount := a.buildRows(ctx, args, messages, findings)
+	rowsToWrite, findingsCount := a.buildRows(ctx, args, ids, findings)
 	if err := a.writeResults(ctx, args, rowsToWrite); err != nil {
 		return nil, err
 	}
@@ -218,21 +255,58 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	}, nil
 }
 
-func (a *AnalyzeBatch) scanStandardPolicyBatch(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, outOfPolicyScope []bool) ([][]Finding, error) {
+func (a *AnalyzeBatch) scanStandardPolicyBatch(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, outOfPolicyScope []bool, exclusions ExclusionSet) ([][]Finding, error) {
 	customRules, err := a.customRulesForPolicy(ctx, args.ProjectID, policy.CustomRuleIds)
 	if err != nil {
 		return nil, err
 	}
 
+	return a.scanStandardPolicy(ctx, args, messages, customRules, exclusions, outOfPolicyScope)
+}
+
+// policyExclusionSet loads the enabled exclusions that apply to the policy
+// (its own plus globals). Fetched once in Do and shared by the content
+// scanners (via mergeFindings) and the session-scoped account_identity path.
+func (a *AnalyzeBatch) policyExclusionSet(ctx context.Context, args AnalyzeBatchArgs) (ExclusionSet, error) {
 	exclusions, err := repo.New(a.db).ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
 		ProjectID:    args.ProjectID,
 		RiskPolicyID: uuid.NullUUID{UUID: args.RiskPolicyID, Valid: true},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list exclusions: %w", err)
+		return NewExclusionSet(nil), fmt.Errorf("list exclusions: %w", err)
 	}
+	return NewExclusionSet(exclusions), nil
+}
 
-	return a.scanStandardPolicy(ctx, args, messages, customRules, NewExclusionSet(exclusions), outOfPolicyScope)
+// mergeSessionFindings folds session-scoped findings into the
+// message-aligned findings set (ids and findings must be equal length),
+// applying exclusions on the way in (the content path applies them inside
+// mergeFindings, which session findings bypass). A session finding lands on
+// its carrier message's existing slot when that message survived the
+// policy's message-type filter — keeping the "message has findings → no
+// sentinel row" invariant — and appends a new (id, findings) entry
+// otherwise, since session findings deliberately bypass message scoping.
+func mergeSessionFindings(ids []uuid.UUID, findings [][]Finding, session []sessionFinding, exclusions ExclusionSet) ([]uuid.UUID, [][]Finding) {
+	if len(session) == 0 {
+		return ids, findings
+	}
+	index := make(map[uuid.UUID]int, len(ids))
+	for i, id := range ids {
+		index[id] = i
+	}
+	for _, sf := range session {
+		kept := exclusions.FilterFindings(sf.findings)
+		if len(kept) == 0 {
+			continue
+		}
+		if i, ok := index[sf.messageID]; ok {
+			findings[i] = append(findings[i], kept...)
+		} else {
+			ids = append(ids, sf.messageID)
+			findings = append(findings, kept)
+		}
+	}
+	return ids, findings
 }
 
 func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) ([]repo.GetMessageContentBatchRow, error) {

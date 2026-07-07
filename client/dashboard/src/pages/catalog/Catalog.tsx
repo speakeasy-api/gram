@@ -81,7 +81,12 @@ function CatalogInner() {
   const [addingServers, setAddingServers] = useState<PulseMCPServer[]>([]);
   const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
 
-  const { data, isLoading } = useListMCPCatalog();
+  const {
+    data,
+    isLoading,
+    isFetching,
+    refetch: refetchCatalog,
+  } = useListMCPCatalog();
   const { data: deploymentResult, refetch: refetchDeployment } =
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;
@@ -173,6 +178,10 @@ function CatalogInner() {
                   </Page.Toolbar.Count>
                 )}
                 <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
+                <Page.Toolbar.Refresh
+                  onRefresh={() => void refetchCatalog()}
+                  isRefreshing={isFetching}
+                />
               </Page.Toolbar>
 
               {/* Server grid / table */}

@@ -8574,6 +8574,12 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 			res.PromptInjectionRules[i] = val
 		}
 	}
+	if v.ApprovedEmailDomains != nil {
+		res.ApprovedEmailDomains = make([]string, len(v.ApprovedEmailDomains))
+		for i, val := range v.ApprovedEmailDomains {
+			res.ApprovedEmailDomains[i] = val
+		}
+	}
 	if v.DisabledRules != nil {
 		res.DisabledRules = make([]string, len(v.DisabledRules))
 		for i, val := range v.DisabledRules {

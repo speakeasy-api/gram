@@ -129,7 +129,7 @@ const COLLAPSED_BAR_CHART_MAX_ROWS = 6;
 const BAR_THICKNESS = { collapsed: 18, expanded: 24 };
 const BAR_ROW_HEIGHT = { collapsed: 18, expanded: 24 };
 const BAR_ROW_SPACER = { collapsed: 8, expanded: 12 };
-const BAR_BORDER_RADIUS = 5;
+const BAR_BORDER_RADIUS = 0;
 const LINE_CHART_HEIGHT = { collapsed: 250, expanded: 600 };
 
 function displayTargetLabel(
@@ -428,6 +428,8 @@ export function InsightsToolsContent(): JSX.Element {
           summaryIsError={summaryIsError}
           accountType={accountType}
           onAccountTypeChange={handleAccountTypeChange}
+          onRefresh={refetch}
+          isRefreshing={summaryFetching}
         />
       )}
     </>
@@ -465,6 +467,8 @@ function HooksInnerContent({
   summaryIsError,
   accountType,
   onAccountTypeChange,
+  onRefresh,
+  isRefreshing,
 }: {
   isLogsDisabled: boolean;
   isLoading: boolean;
@@ -497,6 +501,8 @@ function HooksInnerContent({
   summaryIsError: boolean;
   accountType: string;
   onAccountTypeChange: (value: string) => void;
+  onRefresh: () => void;
+  isRefreshing: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
   const { from, to } = useMemo(
@@ -564,6 +570,8 @@ function HooksInnerContent({
           serverNameMappings={serverNameMappings}
           accountType={accountType}
           onAccountTypeChange={onAccountTypeChange}
+          onRefresh={onRefresh}
+          isRefreshing={isRefreshing}
         />
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
