@@ -2081,8 +2081,8 @@ jobs:
             -f environment=dev \
             -f commit_hash=${{ github.sha }}
 
-  tunnel-agent-image:
-    name: Tunnel agent image build check
+  tunnel-agent:
+    name: Tunnel agent
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: needs.changes.outputs.tunnel == 'true'
