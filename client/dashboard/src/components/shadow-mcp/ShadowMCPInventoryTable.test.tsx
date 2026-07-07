@@ -69,22 +69,49 @@ vi.mock("@speakeasy-api/moonshine", () => ({
   Table: ({
     columns,
     data,
+    onSortChange,
     rowKey,
+    sort,
   }: {
     columns: Array<{
       header: ReactNode;
+      id?: string;
       key: string;
       render?: (row: ShadowMCPInventoryServer) => ReactNode;
+      sortable?: boolean;
     }>;
     data: ShadowMCPInventoryServer[];
+    onSortChange?: (sort: { id: string; direction: "asc" | "desc" }) => void;
     rowKey: (row: ShadowMCPInventoryServer) => string;
+    sort?: { id: string; direction: "asc" | "desc" } | null;
   }) => (
     <table>
       <thead>
         <tr>
-          {columns.map((column) => (
-            <th key={column.key}>{column.header}</th>
-          ))}
+          {columns.map((column) => {
+            const columnID = column.id ?? column.key;
+            return (
+              <th key={column.key}>
+                {column.sortable ? (
+                  <button
+                    onClick={() => {
+                      onSortChange?.({
+                        id: columnID,
+                        direction:
+                          sort?.id === columnID && sort.direction === "asc"
+                            ? "desc"
+                            : "asc",
+                      });
+                    }}
+                  >
+                    {column.header}
+                  </button>
+                ) : (
+                  column.header
+                )}
+              </th>
+            );
+          })}
         </tr>
       </thead>
       <tbody>
@@ -98,6 +125,29 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       </tbody>
     </table>
   ),
+  sortTableData: (
+    data: ShadowMCPInventoryServer[],
+    columns: Array<{
+      id?: string;
+      key: string;
+      sortValue?: (row: ShadowMCPInventoryServer) => number | string;
+    }>,
+    sort?: { id: string; direction: "asc" | "desc" } | null,
+  ) => {
+    if (!sort) return data;
+    const column = columns.find((c) => (c.id ?? c.key) === sort.id);
+    if (!column?.sortValue) return data;
+
+    return data.slice().sort((a, b) => {
+      const av = column.sortValue!(a);
+      const bv = column.sortValue!(b);
+      const comparison =
+        typeof av === "number" && typeof bv === "number"
+          ? av - bv
+          : String(av).localeCompare(String(bv));
+      return sort.direction === "asc" ? comparison : -comparison;
+    });
+  },
 }));
 
 function inventoryServer(
@@ -211,6 +261,60 @@ describe("ShadowMCPInventoryTable", () => {
       undefined,
       expect.objectContaining({ enabled: true }),
     );
+  });
+
+  it("sorts inventory columns and uses call count for Usage", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "allowed",
+          canonicalServerUrl: "https://alpha.example.com/mcp",
+          lastCalled: new Date("2026-01-03T11:30:00Z"),
+          lastSeen: new Date("2026-01-03T11:30:00Z"),
+          observedUseCount: 20,
+          serverName: "Alpha MCP",
+          userCount: 1,
+        }),
+        inventoryServer({
+          canonicalServerUrl: "https://beta.example.com/mcp",
+          lastCalled: new Date("2026-01-02T11:30:00Z"),
+          lastSeen: new Date("2026-01-04T11:30:00Z"),
+          observedUseCount: 1,
+          serverName: "Beta MCP",
+          userCount: 99,
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("Beta MCP")).toBeTruthy();
+    });
+
+    for (const header of [
+      "Server",
+      "Access",
+      "Last called",
+      "Last seen",
+      "Usage",
+    ]) {
+      expect(screen.getByRole("button", { name: header })).toBeTruthy();
+    }
+
+    let rows = screen.getAllByRole("row").slice(1);
+    expect(within(rows[0]!).getByText("Beta MCP")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Alpha MCP")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Usage" }));
+
+    rows = screen.getAllByRole("row").slice(1);
+    expect(within(rows[0]!).getByText("Beta MCP")).toBeTruthy();
+    expect(within(rows[0]!).getByText("1 call")).toBeTruthy();
+    expect(within(rows[0]!).getByText("99 users")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Alpha MCP")).toBeTruthy();
+    expect(within(rows[1]!).getByText("20 calls")).toBeTruthy();
+    expect(within(rows[1]!).getByText("1 user")).toBeTruthy();
   });
 
   it("allows, blocks, and clears Shadow MCP inventory URL access", async () => {

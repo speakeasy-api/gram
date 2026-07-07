@@ -8,9 +8,17 @@ import {
 import { useAllowShadowMCPInventoryServerMutation } from "@gram/client/react-query/allowShadowMCPInventoryServer.js";
 import { useBlockShadowMCPInventoryServerMutation } from "@gram/client/react-query/blockShadowMCPInventoryServer.js";
 import { useClearShadowMCPInventoryServerAccessMutation } from "@gram/client/react-query/clearShadowMCPInventoryServerAccess.js";
-import { Badge, Button, Column, Table } from "@speakeasy-api/moonshine";
+import {
+  Badge,
+  Button,
+  type Column,
+  type SortDescriptor,
+  Table,
+  sortTableData,
+} from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 
@@ -104,6 +112,10 @@ export function ShadowMCPInventoryTable({
   const allowServer = useAllowShadowMCPInventoryServerMutation();
   const blockServer = useBlockShadowMCPInventoryServerMutation();
   const clearServer = useClearShadowMCPInventoryServerAccessMutation();
+  const [sort, setSort] = useState<SortDescriptor | null>({
+    id: "lastSeen",
+    direction: "desc",
+  });
   const isMutating =
     allowServer.isPending || blockServer.isPending || clearServer.isPending;
 
@@ -168,18 +180,27 @@ export function ShadowMCPInventoryTable({
     {
       key: "server",
       header: "Server",
+      sortable: true,
+      sortValue: (server) =>
+        (server.serverName || server.urlHost || server.canonicalServerUrl)
+          .trim()
+          .toLowerCase(),
       width: "1.7fr",
       render: (server) => <InventoryServerCell server={server} />,
     },
     {
       key: "access",
       header: "Access",
+      sortable: true,
+      sortValue: (server) => accessLabel(server.access),
       width: "0.7fr",
       render: (server) => <AccessStateBadge access={server.access} />,
     },
     {
       key: "lastCalled",
       header: "Last called",
+      sortable: true,
+      sortValue: (server) => server.lastCalled?.getTime() ?? 0,
       width: "0.85fr",
       render: (server) => (
         <Type variant="small">{formatShortDate(server.lastCalled)}</Type>
@@ -188,6 +209,8 @@ export function ShadowMCPInventoryTable({
     {
       key: "lastSeen",
       header: "Last seen",
+      sortable: true,
+      sortValue: (server) => server.lastSeen.getTime(),
       width: "0.85fr",
       render: (server) => (
         <Type variant="small">{formatShortDate(server.lastSeen)}</Type>
@@ -196,6 +219,8 @@ export function ShadowMCPInventoryTable({
     {
       key: "usage",
       header: "Usage",
+      sortable: true,
+      sortValue: (server) => server.observedUseCount,
       width: "0.7fr",
       render: (server) => (
         <div className="space-y-1">
@@ -255,6 +280,13 @@ export function ShadowMCPInventoryTable({
     },
   ];
 
+  const servers = inventoryQuery.data?.servers ?? [];
+  const sortedServers = sortTableData(
+    servers,
+    columns,
+    sort,
+  ) as ShadowMCPInventoryServer[];
+
   if (inventoryQuery.isLoading) {
     return <SkeletonTable />;
   }
@@ -272,7 +304,6 @@ export function ShadowMCPInventoryTable({
     );
   }
 
-  const servers = inventoryQuery.data?.servers ?? [];
   if (servers.length === 0) {
     return <InventoryEmptyState />;
   }
@@ -281,8 +312,10 @@ export function ShadowMCPInventoryTable({
     <div className="overflow-hidden rounded-lg border">
       <Table
         columns={columns}
-        data={servers}
+        data={sortedServers}
         rowKey={(row) => row.canonicalServerUrl}
+        sort={sort}
+        onSortChange={setSort}
         className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
       />
     </div>
