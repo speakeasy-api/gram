@@ -3068,8 +3068,8 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
   CONSTRAINT assistant_mcp_servers_assistant_id_mcp_server_id_key UNIQUE (assistant_id, mcp_server_id)
 );
 
-CREATE INDEX IF NOT EXISTS assistant_mcp_servers_assistant_id_idx ON assistant_mcp_servers (assistant_id);
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_mcp_server_id_idx ON assistant_mcp_servers (mcp_server_id);
+CREATE INDEX IF NOT EXISTS assistant_mcp_servers_project_id_idx ON assistant_mcp_servers (project_id);
 
 -- Plugin definitions: project-scoped distributable bundles of MCP servers.
 -- Admins create plugins and assign them to roles for distribution.

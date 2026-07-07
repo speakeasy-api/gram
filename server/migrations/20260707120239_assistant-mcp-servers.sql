@@ -14,7 +14,7 @@ CREATE TABLE "assistant_mcp_servers" (
   CONSTRAINT "assistant_mcp_servers_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers" ("id") ON UPDATE NO ACTION ON DELETE RESTRICT,
   CONSTRAINT "assistant_mcp_servers_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
--- Create index "assistant_mcp_servers_assistant_id_idx" to table: "assistant_mcp_servers"
-CREATE INDEX "assistant_mcp_servers_assistant_id_idx" ON "assistant_mcp_servers" ("assistant_id");
 -- Create index "assistant_mcp_servers_mcp_server_id_idx" to table: "assistant_mcp_servers"
 CREATE INDEX "assistant_mcp_servers_mcp_server_id_idx" ON "assistant_mcp_servers" ("mcp_server_id");
+-- Create index "assistant_mcp_servers_project_id_idx" to table: "assistant_mcp_servers"
+CREATE INDEX "assistant_mcp_servers_project_id_idx" ON "assistant_mcp_servers" ("project_id");
