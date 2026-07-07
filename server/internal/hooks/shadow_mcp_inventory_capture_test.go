@@ -82,6 +82,7 @@ func TestClaudeSessionStartSkipsHostedMCPInventoryURLs(t *testing.T) {
 			"mcp_inventory_claude_code": "" +
 				"external: https://external.example.com/mcp?token=secret (HTTP) - connected\n" +
 				"gram: https://app.getgram.ai/mcp/hosted (HTTP) - connected\n" +
+				"chat: https://chat.speakeasy.com/mcp/linear (HTTP) - connected\n" +
 				"custom: https://" + customDomain + "/mcp/custom (HTTP) - connected",
 		},
 	})
