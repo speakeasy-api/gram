@@ -37,6 +37,10 @@ const (
 	ScopeRiskPolicyEvaluate      Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass        Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 	ScopeChatRead                Scope = "chat:read"
+	ScopeSkillRead               Scope = "skill:read"
+	ScopeSkillBlockedRead        Scope = "skill:blocked_read"
+	ScopeSkillWrite              Scope = "skill:write"
+	ScopeSkillBlockedWrite       Scope = "skill:blocked_write"
 )
 
 type scopeVisibility int
@@ -61,6 +65,8 @@ var adminScopes = []Scope{
 	ScopeMCPConnect,
 	ScopeEnvironmentRead,
 	ScopeEnvironmentWrite,
+	ScopeSkillRead,
+	ScopeSkillWrite,
 	// chat:read is intentionally NOT a default for any system role: reading
 	// other members' session transcripts is sensitive, so it must be granted
 	// explicitly (via a custom role grant). Everyone reads their own sessions
@@ -93,6 +99,10 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
 	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
 	ScopeChatRead:                scopeVisibilityUserVisible,
+	ScopeSkillRead:               scopeVisibilityUserVisible,
+	ScopeSkillBlockedRead:        scopeVisibilityInternal,
+	ScopeSkillWrite:              scopeVisibilityUserVisible,
+	ScopeSkillBlockedWrite:       scopeVisibilityInternal,
 }
 
 var memberScopes = []Scope{
@@ -100,6 +110,7 @@ var memberScopes = []Scope{
 	ScopeProjectRead,
 	ScopeMCPRead,
 	ScopeMCPConnect,
+	ScopeSkillRead,
 	// environment:read is intentionally NOT a default for members: environment
 	// values include secrets, so viewing them must be granted explicitly via a
 	// custom role. Admins retain environment:read/write via adminScopes.
@@ -173,6 +184,10 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeRiskPolicyEvaluate:      nil,
 	ScopeRiskPolicyBypass:        nil,
 	ScopeChatRead:                nil,
+	ScopeSkillRead:               {ScopeSkillWrite},
+	ScopeSkillBlockedRead:        nil,
+	ScopeSkillWrite:              nil,
+	ScopeSkillBlockedWrite:       {ScopeSkillBlockedRead},
 }
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
@@ -201,6 +216,10 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
 	ScopeRiskPolicyBypass:        "",
 	ScopeChatRead:                "",
+	ScopeSkillRead:               ScopeSkillBlockedRead,
+	ScopeSkillBlockedRead:        "",
+	ScopeSkillWrite:              ScopeSkillBlockedWrite,
+	ScopeSkillBlockedWrite:       "",
 }
 
 // ExclusionScopeFor returns the scope that stores exception grants for the

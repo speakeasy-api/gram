@@ -230,6 +230,15 @@ func TestResourceKindForScope_environmentScopes(t *testing.T) {
 	require.Equal(t, ResourceKindEnvironment, ResourceKindForScope(ScopeEnvironmentBlockedWrite))
 }
 
+func TestResourceKindForScope_skillScopes(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillRead))
+	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillBlockedRead))
+	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillWrite))
+	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillBlockedWrite))
+}
+
 func TestNewSelector_includesResourceKind(t *testing.T) {
 	t.Parallel()
 

@@ -39,6 +39,10 @@ export const Scope = {
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   ChatRead: "chat:read",
+  SkillRead: "skill:read",
+  SkillBlockedRead: "skill:blocked_read",
+  SkillWrite: "skill:write",
+  SkillBlockedWrite: "skill:blocked_write",
 } as const;
 /**
  * The scope slug this grant applies to.

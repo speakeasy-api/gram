@@ -71,6 +71,8 @@ func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
 		{scope: ScopeEnvironmentRead, expected: ScopeEnvironmentBlockedRead},
 		{scope: ScopeEnvironmentWrite, expected: ScopeEnvironmentBlockedWrite},
 		{scope: ScopeRiskPolicyEvaluate, expected: ScopeRiskPolicyBypass},
+		{scope: ScopeSkillRead, expected: ScopeSkillBlockedRead},
+		{scope: ScopeSkillWrite, expected: ScopeSkillBlockedWrite},
 	}
 
 	for _, tc := range cases {
@@ -91,6 +93,7 @@ func TestBlocklistScopeExpansions(t *testing.T) {
 	require.Equal(t, []Scope{ScopeMCPBlockedConnect}, scopeExpansions[ScopeMCPBlockedRead])
 	require.Equal(t, []Scope{ScopeMCPBlockedRead, ScopeMCPBlockedConnect}, scopeExpansions[ScopeMCPBlockedWrite])
 	require.Equal(t, []Scope{ScopeEnvironmentBlockedRead}, scopeExpansions[ScopeEnvironmentBlockedWrite])
+	require.Equal(t, []Scope{ScopeSkillBlockedRead}, scopeExpansions[ScopeSkillBlockedWrite])
 }
 
 func TestCalculateSubScopesExcludesInternalBlocklistScopes(t *testing.T) {
@@ -146,6 +149,27 @@ func TestSystemRoleMemberExcludesEnvironmentRead(t *testing.T) {
 		adminScopes = append(adminScopes, grant.Scope)
 	}
 	require.Contains(t, adminScopes, string(ScopeEnvironmentRead))
+}
+
+// skill scopes ride their own resource kind (not project:*). Members get
+// skill:read by default (skills are not secrets); admins additionally get
+// skill:write.
+func TestSystemRoleSkillGrants(t *testing.T) {
+	t.Parallel()
+
+	memberScopes := make([]string, 0, len(SystemRoleGrants[SystemRoleMember]))
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		memberScopes = append(memberScopes, grant.Scope)
+	}
+	require.Contains(t, memberScopes, string(ScopeSkillRead))
+	require.NotContains(t, memberScopes, string(ScopeSkillWrite))
+
+	adminScopes := make([]string, 0, len(SystemRoleGrants[SystemRoleAdmin]))
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		adminScopes = append(adminScopes, grant.Scope)
+	}
+	require.Contains(t, adminScopes, string(ScopeSkillRead))
+	require.Contains(t, adminScopes, string(ScopeSkillWrite))
 }
 
 func TestCheckExpand_orgRead(t *testing.T) {

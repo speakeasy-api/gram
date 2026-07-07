@@ -148,6 +148,31 @@ func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+func TestEngineRequire_skillScopesOnProject(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+
+	// A skill:write grant satisfies both skill:write and skill:read on the same
+	// project (write expands to read).
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeSkillWrite, "proj_123")})
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeSkillWrite, ResourceID: "proj_123"}))
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeSkillRead, ResourceID: "proj_123"}))
+
+	// A skill:read grant does not satisfy skill:write.
+	readCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeSkillRead, "proj_123")})
+	require.NoError(t, engine.Require(readCtx, Check{Scope: ScopeSkillRead, ResourceID: "proj_123"}))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, engine.Require(readCtx, Check{Scope: ScopeSkillWrite, ResourceID: "proj_123"}), &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+
+	// A grant on a different project does not satisfy the check.
+	require.ErrorAs(t, engine.Require(ctx, Check{Scope: ScopeSkillRead, ResourceID: "proj_other"}), &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
 func TestEngineFilter_returnsAllowedSubset(t *testing.T) {
 	t.Parallel()
 
@@ -992,6 +1017,7 @@ func TestPrepareContext_adminImpersonationGrantsAllScopes(t *testing.T) {
 		ScopeProjectRead, ScopeProjectWrite,
 		ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect,
 		ScopeEnvironmentRead, ScopeEnvironmentWrite,
+		ScopeSkillRead, ScopeSkillWrite,
 	} {
 		err := engine.Require(ctx, Check{Scope: scope, ResourceID: "org_customer"})
 		require.NoError(t, err, "admin impersonation should satisfy scope %s", scope)

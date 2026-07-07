@@ -23,6 +23,8 @@ export const ExclusionScope = {
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentBlockedWrite: "environment:blocked_write",
   RiskPolicyBypass: "risk_policy:bypass",
+  SkillBlockedRead: "skill:blocked_read",
+  SkillBlockedWrite: "skill:blocked_write",
 } as const;
 /**
  * The scope used to store exception rules for this scope.
@@ -39,6 +41,7 @@ export const ResourceType = {
   Environment: "environment",
   RiskPolicy: "risk_policy",
   Chat: "chat",
+  Skill: "skill",
 } as const;
 /**
  * The type of resource this scope applies to.
@@ -70,6 +73,10 @@ export const Slug = {
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   ChatRead: "chat:read",
+  SkillRead: "skill:read",
+  SkillBlockedRead: "skill:blocked_read",
+  SkillWrite: "skill:write",
+  SkillBlockedWrite: "skill:blocked_write",
 } as const;
 /**
  * Unique scope identifier.

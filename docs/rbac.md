@@ -81,6 +81,8 @@ const (
 	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass   Scope = "risk_policy:bypass"
 	ScopeChatRead           Scope = "chat:read"
+	ScopeSkillRead          Scope = "skill:read"
+	ScopeSkillWrite         Scope = "skill:write"
 )
 ```
 
@@ -109,6 +111,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeRiskPolicyEvaluate: nil,
 	ScopeRiskPolicyBypass:   nil,
 	ScopeChatRead:           nil,
+	ScopeSkillRead:          {ScopeSkillWrite},
+	ScopeSkillWrite:         nil,
 }
 ```
 

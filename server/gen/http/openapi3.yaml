@@ -45714,6 +45714,10 @@ components:
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
+                        - skill:read
+                        - skill:blocked_read
+                        - skill:write
+                        - skill:blocked_write
                 selectors:
                     type: array
                     items:
@@ -45745,6 +45749,10 @@ components:
                             - risk_policy:evaluate
                             - risk_policy:bypass
                             - chat:read
+                            - skill:read
+                            - skill:blocked_read
+                            - skill:write
+                            - skill:blocked_write
                     description: The inherited scopes the primary scope grants.
             required:
                 - scope
@@ -50260,6 +50268,10 @@ components:
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
+                        - skill:read
+                        - skill:blocked_read
+                        - skill:write
+                        - skill:blocked_write
                 selectors:
                     type: array
                     items:
@@ -50379,6 +50391,8 @@ components:
                         - environment:blocked_read
                         - environment:blocked_write
                         - risk_policy:bypass
+                        - skill:blocked_read
+                        - skill:blocked_write
                 resource_type:
                     type: string
                     description: The type of resource this scope applies to.
@@ -50389,6 +50403,7 @@ components:
                         - environment
                         - risk_policy
                         - chat
+                        - skill
                 slug:
                     type: string
                     description: Unique scope identifier.
@@ -50414,6 +50429,10 @@ components:
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
+                        - skill:read
+                        - skill:blocked_read
+                        - skill:write
+                        - skill:blocked_write
                 visibility:
                     type: string
                     description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -50849,6 +50868,7 @@ components:
                         - environment
                         - risk_policy
                         - chat
+                        - skill
                         - '*'
                 server_url:
                     type: string
