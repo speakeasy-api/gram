@@ -10,6 +10,17 @@
       "env": {
         "MISE_EXPERIMENTAL": "1"
       }
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest",
+        "--browser=chromium",
+        "--viewport-size",
+        "1920x1080"
+      ],
+      "env": {}
     }
   }
 }
