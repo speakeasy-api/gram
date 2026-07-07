@@ -184,6 +184,7 @@ export * from "./listassistants.js";
 export * from "./listattributekeys.js";
 export * from "./listauditlogfacets.js";
 export * from "./listauditlogs.js";
+export * from "./listbuiltinexclusions.js";
 export * from "./listchallengebuckets.js";
 export * from "./listchallenges.js";
 export * from "./listchats.js";

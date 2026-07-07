@@ -22,6 +22,7 @@ export * from "./assistantsUpdate.js";
 export * from "./attachUserSessionIssuer.js";
 export * from "./auditLogFacets.js";
 export * from "./auditLogs.js";
+export * from "./builtinExclusions.js";
 export * from "./challengeBuckets.js";
 export * from "./challenges.js";
 export * from "./chatDelete.js";

@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -730,6 +731,11 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("create custom rules scanner: %w", err)
 			}
 
+			builtinPresets, err := presetlib.New()
+			if err != nil {
+				return fmt.Errorf("load built-in exclusion library: %w", err)
+			}
+
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:                 guardianPolicy,
 				DB:                             db,
@@ -761,6 +767,7 @@ func newWorkerCommand() *cli.Command {
 				PIIScanner:                     piiScanner,
 				PIScanner:                      piScanner,
 				CustomRuleScanner:              customRuleScanner,
+				BuiltinPresets:                 builtinPresets,
 				ShadowMCPClient:                shadowMCPClient,
 				AuditLogger:                    auditLogger,
 				WorkOSClient:                   backgroundWorkOSClient,

@@ -116,7 +116,7 @@ func UsageCommands() []string {
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|list-tool-usage-traces|get-tool-usage-filter-options|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
@@ -1576,6 +1576,11 @@ func ParseEndpoint(
 		riskListRiskPoliciesSessionTokenFlag     = riskListRiskPoliciesFlags.String("session-token", "", "")
 		riskListRiskPoliciesProjectSlugInputFlag = riskListRiskPoliciesFlags.String("project-slug-input", "", "")
 
+		riskListBuiltinExclusionsFlags                = flag.NewFlagSet("list-builtin-exclusions", flag.ExitOnError)
+		riskListBuiltinExclusionsApikeyTokenFlag      = riskListBuiltinExclusionsFlags.String("apikey-token", "", "")
+		riskListBuiltinExclusionsSessionTokenFlag     = riskListBuiltinExclusionsFlags.String("session-token", "", "")
+		riskListBuiltinExclusionsProjectSlugInputFlag = riskListBuiltinExclusionsFlags.String("project-slug-input", "", "")
+
 		riskGetRiskPolicyFlags                = flag.NewFlagSet("get-risk-policy", flag.ExitOnError)
 		riskGetRiskPolicyIDFlag               = riskGetRiskPolicyFlags.String("id", "REQUIRED", "")
 		riskGetRiskPolicyApikeyTokenFlag      = riskGetRiskPolicyFlags.String("apikey-token", "", "")
@@ -2612,6 +2617,7 @@ func ParseEndpoint(
 	riskFlags.Usage = riskUsage
 	riskCreateRiskPolicyFlags.Usage = riskCreateRiskPolicyUsage
 	riskListRiskPoliciesFlags.Usage = riskListRiskPoliciesUsage
+	riskListBuiltinExclusionsFlags.Usage = riskListBuiltinExclusionsUsage
 	riskGetRiskPolicyFlags.Usage = riskGetRiskPolicyUsage
 	riskUpdateRiskPolicyFlags.Usage = riskUpdateRiskPolicyUsage
 	riskDeleteRiskPolicyFlags.Usage = riskDeleteRiskPolicyUsage
@@ -3808,6 +3814,9 @@ func ParseEndpoint(
 
 			case "list-risk-policies":
 				epf = riskListRiskPoliciesFlags
+
+			case "list-builtin-exclusions":
+				epf = riskListBuiltinExclusionsFlags
 
 			case "get-risk-policy":
 				epf = riskGetRiskPolicyFlags
@@ -5154,6 +5163,9 @@ func ParseEndpoint(
 			case "list-risk-policies":
 				endpoint = c.ListRiskPolicies()
 				data, err = riskc.BuildListRiskPoliciesPayload(*riskListRiskPoliciesApikeyTokenFlag, *riskListRiskPoliciesSessionTokenFlag, *riskListRiskPoliciesProjectSlugInputFlag)
+			case "list-builtin-exclusions":
+				endpoint = c.ListBuiltinExclusions()
+				data, err = riskc.BuildListBuiltinExclusionsPayload(*riskListBuiltinExclusionsApikeyTokenFlag, *riskListBuiltinExclusionsSessionTokenFlag, *riskListBuiltinExclusionsProjectSlugInputFlag)
 			case "get-risk-policy":
 				endpoint = c.GetRiskPolicy()
 				data, err = riskc.BuildGetRiskPolicyPayload(*riskGetRiskPolicyIDFlag, *riskGetRiskPolicyApikeyTokenFlag, *riskGetRiskPolicySessionTokenFlag, *riskGetRiskPolicyProjectSlugInputFlag)
@@ -11870,6 +11882,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-risk-policy: Create a new risk analysis policy for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-policies: List all risk analysis policies for the current project.`)
+	fmt.Fprintln(os.Stderr, `    list-builtin-exclusions: List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy: Get a risk analysis policy by ID.`)
 	fmt.Fprintln(os.Stderr, `    update-risk-policy: Update a risk analysis policy.`)
 	fmt.Fprintln(os.Stderr, `    delete-risk-policy: Delete a risk analysis policy.`)
@@ -11954,6 +11967,28 @@ func riskListRiskPoliciesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-policies --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskListBuiltinExclusionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-builtin-exclusions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-builtin-exclusions --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskGetRiskPolicyUsage() {

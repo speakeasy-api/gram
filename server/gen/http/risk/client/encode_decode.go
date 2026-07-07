@@ -500,6 +500,245 @@ func DecodeListRiskPoliciesResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildListBuiltinExclusionsRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "listBuiltinExclusions"
+// endpoint
+func (c *Client) BuildListBuiltinExclusionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListBuiltinExclusionsRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "listBuiltinExclusions", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListBuiltinExclusionsRequest returns an encoder for requests sent to
+// the risk listBuiltinExclusions server.
+func EncodeListBuiltinExclusionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.ListBuiltinExclusionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "listBuiltinExclusions", "*risk.ListBuiltinExclusionsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListBuiltinExclusionsResponse returns a decoder for responses returned
+// by the risk listBuiltinExclusions endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListBuiltinExclusionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListBuiltinExclusionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListBuiltinExclusionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
+			}
+			err = ValidateListBuiltinExclusionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
+			}
+			res := NewListBuiltinExclusionsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListBuiltinExclusionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
+			}
+			err = ValidateListBuiltinExclusionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
+			}
+			return nil, NewListBuiltinExclusionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListBuiltinExclusionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
+			}
+			err = ValidateListBuiltinExclusionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
+			}
+			return nil, NewListBuiltinExclusionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListBuiltinExclusionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
+			}
+			err = ValidateListBuiltinExclusionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
+			}
+			return nil, NewListBuiltinExclusionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListBuiltinExclusionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
+			}
+			err = ValidateListBuiltinExclusionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
+			}
+			return nil, NewListBuiltinExclusionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListBuiltinExclusionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
+			}
+			err = ValidateListBuiltinExclusionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
+			}
+			return nil, NewListBuiltinExclusionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListBuiltinExclusionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
+			}
+			err = ValidateListBuiltinExclusionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
+			}
+			return nil, NewListBuiltinExclusionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListBuiltinExclusionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
+			}
+			err = ValidateListBuiltinExclusionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
+			}
+			return nil, NewListBuiltinExclusionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListBuiltinExclusionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
+				}
+				err = ValidateListBuiltinExclusionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
+				}
+				return nil, NewListBuiltinExclusionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListBuiltinExclusionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
+				}
+				err = ValidateListBuiltinExclusionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
+				}
+				return nil, NewListBuiltinExclusionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "listBuiltinExclusions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListBuiltinExclusionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listBuiltinExclusions", err)
+			}
+			err = ValidateListBuiltinExclusionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listBuiltinExclusions", err)
+			}
+			return nil, NewListBuiltinExclusionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "listBuiltinExclusions", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetRiskPolicyRequest instantiates a HTTP request object with method and
 // path set to call the "risk" service "getRiskPolicy" endpoint
 func (c *Client) BuildGetRiskPolicyRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -9321,6 +9560,44 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 	}
 	if v.ModelConfig != nil {
 		res.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(v.ModelConfig)
+	}
+
+	return res
+}
+
+// unmarshalBuiltinExclusionCategoryResponseBodyToRiskBuiltinExclusionCategory
+// builds a value of type *risk.BuiltinExclusionCategory from a value of type
+// *BuiltinExclusionCategoryResponseBody.
+func unmarshalBuiltinExclusionCategoryResponseBodyToRiskBuiltinExclusionCategory(v *BuiltinExclusionCategoryResponseBody) *risk.BuiltinExclusionCategory {
+	res := &risk.BuiltinExclusionCategory{
+		Label: *v.Label,
+	}
+	res.Entries = make([]*risk.BuiltinExclusionEntry, len(v.Entries))
+	for i, val := range v.Entries {
+		if val == nil {
+			res.Entries[i] = nil
+			continue
+		}
+		res.Entries[i] = unmarshalBuiltinExclusionEntryResponseBodyToRiskBuiltinExclusionEntry(val)
+	}
+
+	return res
+}
+
+// unmarshalBuiltinExclusionEntryResponseBodyToRiskBuiltinExclusionEntry builds
+// a value of type *risk.BuiltinExclusionEntry from a value of type
+// *BuiltinExclusionEntryResponseBody.
+func unmarshalBuiltinExclusionEntryResponseBodyToRiskBuiltinExclusionEntry(v *BuiltinExclusionEntryResponseBody) *risk.BuiltinExclusionEntry {
+	res := &risk.BuiltinExclusionEntry{
+		ID:          *v.ID,
+		Reason:      *v.Reason,
+		Description: *v.Description,
+	}
+	if v.Samples != nil {
+		res.Samples = make([]string, len(v.Samples))
+		for i, val := range v.Samples {
+			res.Samples[i] = val
+		}
 	}
 
 	return res

@@ -144,6 +144,7 @@ func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool) *risk_anal
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, nil),
 		mustCELEngine(t),
+		nil,
 	)
 }
 

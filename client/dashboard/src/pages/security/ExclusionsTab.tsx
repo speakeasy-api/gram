@@ -24,6 +24,7 @@ import type { JSX, ReactNode } from "react";
 import { Ellipsis, Plus } from "lucide-react";
 import { serializeExclusionExpression } from "./exclusion-expression";
 import { ExclusionSheet, type ExclusionSheetState } from "./exclusion-sheet";
+import { BuiltinLibrary } from "./builtin-library";
 
 export type { ExclusionSheetState } from "./exclusion-sheet";
 
@@ -163,6 +164,7 @@ export function ExclusionsTab({
 
   return (
     <>
+      <BuiltinLibrary />
       {body}
       <ExclusionSheet
         state={sheet}

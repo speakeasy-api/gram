@@ -26295,6 +26295,105 @@ paths:
             x-speakeasy-name-override: userBreakdown
             x-speakeasy-react-hook:
                 name: RiskUserBreakdown
+    /rpc/risk.listBuiltinExclusions:
+        get:
+            description: List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
+            operationId: listBuiltinExclusions
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListBuiltinExclusionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listBuiltinExclusions risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.exclusions
+            x-speakeasy-name-override: listBuiltinExclusions
+            x-speakeasy-react-hook:
+                name: BuiltinExclusions
     /rpc/risk.listCategories:
         get:
             description: 'Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.'
@@ -37774,6 +37873,43 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
+        BuiltinExclusionCategory:
+            type: object
+            properties:
+                entries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/BuiltinExclusionEntry'
+                    description: The rules in this category.
+                label:
+                    type: string
+                    description: Human category label, e.g. "Test credit cards".
+            description: A named group of built-in exclusion rules.
+            required:
+                - label
+                - entries
+        BuiltinExclusionEntry:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Human rationale for why these values are known-safe.
+                id:
+                    type: string
+                    description: Stable rule id.
+                reason:
+                    type: string
+                    description: Label surfaced when this rule suppresses a finding.
+                samples:
+                    type: array
+                    items:
+                        type: string
+                    description: Example values — published test/documentation data, never real secrets.
+            description: One rule in the built-in exclusion library. Deliberately omits internal detection-engine identifiers (sources, rule ids) so they are not exposed to end users.
+            required:
+                - id
+                - reason
+                - description
         CanonicalToolAttributes:
             type: object
             properties:
@@ -43093,6 +43229,20 @@ components:
                     description: The cursor to be used for the next page of results.
             required:
                 - logs
+        ListBuiltinExclusionsResult:
+            type: object
+            properties:
+                categories:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/BuiltinExclusionCategory'
+                    description: The library grouped by category.
+                version:
+                    type: string
+                    description: Catalog checksum/version, for provenance.
+            required:
+                - version
+                - categories
         ListCatalogResponseBody:
             type: object
             properties:

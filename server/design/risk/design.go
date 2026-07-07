@@ -97,6 +97,31 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicies"}`)
 	})
 
+	Method("listBuiltinExclusions", func() {
+		Description("List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListBuiltinExclusionsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listBuiltinExclusions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listBuiltinExclusions")
+		Meta("openapi:extension:x-speakeasy-group", "risk.exclusions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listBuiltinExclusions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "BuiltinExclusions"}`)
+	})
+
 	Method("getRiskPolicy", func() {
 		Description("Get a risk analysis policy by ID.")
 
@@ -1384,6 +1409,28 @@ var TestDetectionRuleResult = Type("TestDetectionRuleResult", func() {
 var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {
 	Attribute("policies", ArrayOf(shared.RiskPolicy), "The list of risk policies.")
 	Required("policies")
+})
+
+var BuiltinExclusionEntry = Type("BuiltinExclusionEntry", func() {
+	Description("One rule in the built-in exclusion library. Deliberately omits internal detection-engine identifiers (sources, rule ids) so they are not exposed to end users.")
+	Attribute("id", String, "Stable rule id.")
+	Attribute("reason", String, "Label surfaced when this rule suppresses a finding.")
+	Attribute("description", String, "Human rationale for why these values are known-safe.")
+	Attribute("samples", ArrayOf(String), "Example values — published test/documentation data, never real secrets.")
+	Required("id", "reason", "description")
+})
+
+var BuiltinExclusionCategory = Type("BuiltinExclusionCategory", func() {
+	Description("A named group of built-in exclusion rules.")
+	Attribute("label", String, "Human category label, e.g. \"Test credit cards\".")
+	Attribute("entries", ArrayOf(BuiltinExclusionEntry), "The rules in this category.")
+	Required("label", "entries")
+})
+
+var ListBuiltinExclusionsResult = Type("ListBuiltinExclusionsResult", func() {
+	Attribute("version", String, "Catalog checksum/version, for provenance.")
+	Attribute("categories", ArrayOf(BuiltinExclusionCategory), "The library grouped by category.")
+	Required("version", "categories")
 })
 
 var ListRiskExclusionsResult = Type("ListRiskExclusionsResult", func() {

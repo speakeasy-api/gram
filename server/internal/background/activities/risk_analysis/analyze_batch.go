@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
@@ -51,6 +52,7 @@ type AnalyzeBatch struct {
 	cliDestructiveScanner  *clidestructive.Scanner
 	destructiveToolScanner *destructivetool.Scanner
 	celEng                 *celenv.Engine
+	builtinPresets         *presetlib.Library
 }
 
 func NewAnalyzeBatch(
@@ -69,6 +71,7 @@ func NewAnalyzeBatch(
 	customRulesPub gcp.Publisher[*riskv1.CustomRulesAnalysis],
 	customRuleScanner *customruleanalyzer.Scanner,
 	celEng *celenv.Engine,
+	builtinPresets *presetlib.Library,
 ) *AnalyzeBatch {
 	logger = logger.With(attr.SlogComponent("risk-analysis-dispatcher"))
 
@@ -97,6 +100,7 @@ func NewAnalyzeBatch(
 		cliDestructiveScanner:  clidestructive.NewScanner(),
 		destructiveToolScanner: destructivetool.NewScanner(shadowMCPClient),
 		celEng:                 celEng,
+		builtinPresets:         builtinPresets,
 	}
 }
 
@@ -119,6 +123,10 @@ type AnalyzeBatchArgs struct {
 	// Like PresidioScoreThreshold, Do derives it from the refetched policy's
 	// analyzer_config, so it is not a caller input.
 	ApprovedEmailDomains []string
+	// BuiltinPresetsEnabled toggles scan-time suppression of built-in catalog
+	// false positives. Do derives it from the refetched policy's analyzer_config
+	// (defaulting ON), so it is not a caller input.
+	BuiltinPresetsEnabled bool
 }
 
 type AnalyzeBatchResult struct {
@@ -172,6 +180,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	// refetched, rather than trusting (possibly omitted) caller values.
 	args.PresidioScoreThreshold = PresidioScoreThresholdFromConfig(policy.AnalyzerConfig)
 	args.ApprovedEmailDomains = ApprovedEmailDomainsFromConfig(policy.AnalyzerConfig)
+	args.BuiltinPresetsEnabled = BuiltinPresetsEnabledFromConfig(policy.AnalyzerConfig)
 
 	rows, err := a.fetchContent(ctx, args)
 	if err != nil {

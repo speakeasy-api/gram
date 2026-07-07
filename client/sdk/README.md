@@ -513,6 +513,7 @@ run();
 
 * [create](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 * [delete](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
+* [listBuiltinExclusions](docs/sdks/exclusions/README.md#listbuiltinexclusions) - listBuiltinExclusions risk
 * [list](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
 * [update](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
 
@@ -939,6 +940,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskExclusionsCreate`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 - [`riskExclusionsDelete`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`riskExclusionsList`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
+- [`riskExclusionsListBuiltinExclusions`](docs/sdks/exclusions/README.md#listbuiltinexclusions) - listBuiltinExclusions risk
 - [`riskExclusionsUpdate`](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
 - [`riskExprCompile`](docs/sdks/expr/README.md#compile) - compileExpr risk
 - [`riskOverviewGet`](docs/sdks/overview/README.md#get) - getRiskOverview risk
@@ -1081,6 +1083,7 @@ To learn about this feature and how to get started, check
 - [`useAttachUserSessionIssuerMutation`](docs/sdks/remotesessionclients/README.md#attachusersessionissuer) - attachUserSessionIssuer remoteSessionClients
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
+- [`useBuiltinExclusions`](docs/sdks/exclusions/README.md#listbuiltinexclusions) - listBuiltinExclusions risk
 - [`useChallengeBuckets`](docs/sdks/access/README.md#listchallengebuckets) - listChallengeBuckets access
 - [`useChallenges`](docs/sdks/access/README.md#listchallenges) - listChallenges access
 - [`useChatDeleteMutation`](docs/sdks/chat/README.md#delete) - deleteChat chat
