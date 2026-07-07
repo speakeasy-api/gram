@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Switch } from "@/components/ui/switch";
+import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   Sheet,
@@ -34,6 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   Icon,
+  Stack,
   Table,
 } from "@speakeasy-api/moonshine";
 import type { BadgeProps, IconName } from "@speakeasy-api/moonshine";
@@ -95,6 +97,11 @@ import {
   policyMessageTypesForForm,
   policyToCategories,
 } from "./policy-form";
+import {
+  getPolicyDeleteImpactText,
+  getPolicyDeleteRuleListItems,
+  getPolicyRuleGroupNamesForDeleteDialog,
+} from "./policy-delete-dialog";
 
 /** Built-in detector categories that only produce findings when Speakeasy hooks
  *  are installed on the agent (no rule list to customize). */
@@ -629,6 +636,7 @@ function PolicyCenterContent() {
   );
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
+  const [policyToDelete, setPolicyToDelete] = useState<PolicyRow | null>(null);
 
   const [activeTab, setActiveTab] = useState<"policies" | "exclusions">(
     "policies",
@@ -651,7 +659,10 @@ function PolicyCenterContent() {
   });
 
   const deleteMutation = useRiskPoliciesDeleteMutation({
-    onSuccess: invalidate,
+    onSuccess: () => {
+      setPolicyToDelete(null);
+      invalidate();
+    },
   });
 
   // Redirect a deep-linked policy to its detail page once its data has loaded.
@@ -668,7 +679,12 @@ function PolicyCenterContent() {
   }, [policyParam, isLoading, data, routes]);
 
   const handleDelete = (row: PolicyRow) => {
-    deleteMutation.mutate({ request: { id: row.policy.id } });
+    setPolicyToDelete(row);
+  };
+
+  const confirmDelete = () => {
+    if (!policyToDelete) return;
+    deleteMutation.mutate({ request: { id: policyToDelete.policy.id } });
   };
 
   // Empty state for the Policies tab only. It must NOT short-circuit the whole
@@ -713,10 +729,10 @@ function PolicyCenterContent() {
         }}
         disabled={createMutation.isPending}
       >
-        <Button.Text>
+        <Button.Text className="flex gap-2">
           {createMutation.isPending ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
               Creating...
             </>
           ) : (
@@ -884,7 +900,9 @@ function PolicyCenterContent() {
               )}
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive cursor-pointer"
-                onSelect={() => handleDelete(row)}
+                onSelect={() => {
+                  setTimeout(() => handleDelete(row), 0);
+                }}
               >
                 Delete
               </DropdownMenuItem>
@@ -902,6 +920,17 @@ function PolicyCenterContent() {
           label: "Create Exclusion",
           onClick: () => setExclusionSheet({ mode: "create" }),
         };
+  const policyDeleteRuleListItems = policyToDelete
+    ? getPolicyDeleteRuleListItems(
+        getPolicyRuleGroupNamesForDeleteDialog(policyToDelete.policy),
+      )
+    : [];
+  const policyDeleteImpactText = policyToDelete
+    ? getPolicyDeleteImpactText(
+        policyToDelete.policy,
+        policyDeleteRuleListItems.length > 0,
+      )
+    : "";
 
   let policiesBody = (
     <Table
@@ -995,6 +1024,61 @@ function PolicyCenterContent() {
             {runPanelPolicy && <RunPanel policy={runPanelPolicy} />}
           </SheetContent>
         </Sheet>
+
+        {/* Delete Policy Confirmation */}
+        <Dialog
+          open={!!policyToDelete}
+          onOpenChange={(open) => {
+            if (!open) setPolicyToDelete(null);
+          }}
+        >
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>Delete Policy</Dialog.Title>
+            </Dialog.Header>
+            <Stack gap={4}>
+              <Type variant="body">
+                <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+                  {policyToDelete?.policy.name}
+                </code>{" "}
+                policy will be permanently deleted.
+              </Type>
+              {policyDeleteImpactText && (
+                <Type variant="body">{policyDeleteImpactText}</Type>
+              )}
+              {policyDeleteRuleListItems.length > 0 && (
+                <div className="space-y-2">
+                  <ul className="list-disc space-y-1 pl-5">
+                    {policyDeleteRuleListItems.map((ruleName, index) => (
+                      <li key={`${ruleName}-${index}`}>
+                        <Type variant="body" muted as="span">
+                          {ruleName}
+                        </Type>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </Stack>
+            <Dialog.Footer>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => setPolicyToDelete(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive-primary"
+                  onClick={confirmDelete}
+                  disabled={deleteMutation.isPending}
+                >
+                  Delete Policy
+                </Button>
+              </div>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog>
       </Page.Body>
     </Page>
   );
