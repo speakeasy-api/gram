@@ -356,6 +356,87 @@ func TestServiceAttachRemoteMcpServerToAssistant(t *testing.T) {
 	require.Equal(t, "https://gram.test/mcp/team-remote-mcp", resolved[0].URL)
 }
 
+// Attaching a server the runtime cannot reach fails the write with a
+// validation error instead of silently vanishing from reads and dispatch:
+// no Gram-hosted endpoint means no /mcp URL to build, and disabled servers
+// 404 at the serving path.
+func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_attach_mcp_server_reject")
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeProjectWrite,
+		Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
+	})
+
+	remote, err := remotemcpRepo.New(conn).CreateServer(t.Context(), remotemcpRepo.CreateServerParams{
+		ID:            uuid.New(),
+		ProjectID:     projectID,
+		Name:          pgtype.Text{String: "External SaaS", Valid: true},
+		Slug:          pgtype.Text{String: "external-remote-src", Valid: true},
+		TransportType: "streamable-http",
+		Url:           "https://mcp.example.com/v1/mcp",
+	})
+	require.NoError(t, err)
+
+	// No mcp_endpoints row for this server.
+	endpointless, err := mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
+		ID:                uuid.New(),
+		ProjectID:         projectID,
+		Name:              pgtype.Text{String: "Endpointless", Valid: true},
+		Slug:              pgtype.Text{String: "endpointless-remote", Valid: true},
+		RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true},
+		Visibility:        "private",
+	})
+	require.NoError(t, err)
+
+	disabled, err := mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
+		ID:                uuid.New(),
+		ProjectID:         projectID,
+		Name:              pgtype.Text{String: "Disabled", Valid: true},
+		Slug:              pgtype.Text{String: "disabled-remote", Valid: true},
+		RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true},
+		Visibility:        "disabled",
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{
+		ProjectID:   projectID,
+		McpServerID: disabled.ID,
+		Slug:        "disabled-remote-endpoint",
+	})
+	require.NoError(t, err)
+
+	for _, tt := range []struct {
+		slug    string
+		wantErr string
+	}{
+		{slug: endpointless.Slug.String, wantErr: "no Gram-hosted MCP endpoint"},
+		{slug: disabled.Slug.String, wantErr: "is disabled"},
+	} {
+		// The resolver carries the reason; the endpoint maps it to a 400.
+		_, resolveErr := svc.core.resolveMcpServerRefsForWrite(t.Context(), projectID, []*types.AssistantMCPServerRef{
+			{McpServerSlug: tt.slug, EnvironmentSlug: nil},
+		})
+		require.ErrorContains(t, resolveErr, tt.wantErr)
+
+		_, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
+			SessionToken:     nil,
+			ProjectSlugInput: nil,
+			Name:             "Assistant " + tt.slug,
+			Model:            "openai/gpt-4o-mini",
+			Instructions:     "",
+			Toolsets:         nil,
+			McpServers: []*types.AssistantMCPServerRef{
+				{McpServerSlug: tt.slug, EnvironmentSlug: nil},
+			},
+			WarmTTLSeconds: nil,
+			MaxConcurrency: nil,
+			Status:         nil,
+		})
+		requireOopsCode(t, err, oops.CodeBadRequest)
+	}
+}
+
 func newRBACService(t *testing.T) (*Service, context.Context, uuid.UUID) {
 	t.Helper()
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_rbac")

@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -118,7 +119,7 @@ func TestResolveAssistantMCPServers_GrantsEachRequestedPlatformToolset(t *testin
 	)
 }
 
-// A directly-attached mcp_server (remote- or tunnelled-backed) is exposed to
+// A directly-attached mcp_server is exposed to
 // the runner as its public /mcp/{endpoint} URL, identified by the server slug,
 // carrying the bound environment. Ordering is toolsets, then mcp servers, then
 // platform servers.
@@ -195,4 +196,60 @@ func TestResolveAssistantMCPServers_AttachedMCPServerWithoutEndpointOmitted(t *t
 
 	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, mcpServers, nil)
 	require.Empty(t, servers)
+}
+
+// A server disabled after attach 404s at the /mcp serving path, so the runtime
+// skips it; the attachment itself stays visible on API reads.
+func TestResolveAssistantMCPServers_DisabledMCPServerOmitted(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://gram.test")
+	require.NoError(t, err)
+
+	mcpServers := []assistantMCPServerRow{
+		{
+			ServerSlug:   pgtype.Text{String: "switched-off", Valid: true},
+			Visibility:   mcpservers.VisibilityDisabled,
+			EndpointSlug: "switched-off-endpoint",
+		},
+		{
+			ServerSlug:   pgtype.Text{String: "remote-saas", Valid: true},
+			Visibility:   mcpservers.VisibilityPublic,
+			EndpointSlug: "team-remote-saas",
+		},
+	}
+
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, mcpServers, nil)
+	require.Len(t, servers, 1)
+	require.Equal(t, "remote-saas", servers[0].ID)
+}
+
+// Toolset slugs and mcp_servers slugs are separate slug spaces, so a direct
+// attachment can collide with an attached toolset's runtime ID. The toolset
+// wins and the colliding server is skipped so the runner never sees duplicate
+// MCP server IDs.
+func TestResolveAssistantMCPServers_CollidingServerSlugOmitted(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://gram.test")
+	require.NoError(t, err)
+
+	toolsets := []assistantToolsetRow{
+		{
+			ToolsetSlug: "billing",
+			McpEnabled:  true,
+			McpSlug:     pgtype.Text{String: "billing-mcp", Valid: true},
+		},
+	}
+	mcpServers := []assistantMCPServerRow{
+		{
+			ServerSlug:   pgtype.Text{String: "billing", Valid: true},
+			EndpointSlug: "billing-remote",
+		},
+	}
+
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, toolsets, mcpServers, nil)
+	require.Len(t, servers, 1)
+	require.Equal(t, "billing", servers[0].ID)
+	require.Equal(t, "https://gram.test/mcp/billing-mcp", servers[0].URL)
 }

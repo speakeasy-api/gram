@@ -859,7 +859,7 @@ function buildAssistantTools(deps: ToolDeps) {
   const attach_mcp_server = defineFrontendTool<AttachMCPServerArgs, ToolResult>(
     {
       description:
-        "Attach an MCP server registered in this project (a remote external-SaaS MCP or a tunnelled MCP server) to the assistant so it can call those tools at runtime. Use this for MCP servers that are NOT backed by a Gram toolset — attach_toolset covers toolset-backed ones. Find the slug with list_mcp_servers. Pass environment_slug only when the server needs a specific environment's variables; most remote servers carry their own connection auth and need none. Replaces any prior reference to the same mcp_server_slug.",
+        "Attach an MCP server registered in this project (a remote external-SaaS MCP server) to the assistant so it can call those tools at runtime. Use this for MCP servers that are NOT backed by a Gram toolset — attach_toolset covers toolset-backed ones. Find the slug with list_mcp_servers; tunnelled or disabled servers are rejected. Pass environment_slug only when the server needs a specific environment's variables; most remote servers carry their own connection auth and need none. Replaces any prior reference to the same mcp_server_slug.",
       parameters: z.object({
         mcp_server_slug: z.string(),
         environment_slug: z
@@ -938,7 +938,7 @@ function buildAssistantTools(deps: ToolDeps) {
   >(
     {
       description:
-        "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Gram toolset.",
+        "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Gram toolset. Only enabled, non-tunnelled servers are attachable.",
       parameters: z.object({}),
       execute: async () => {
         try {

@@ -115,18 +115,16 @@ func (s *ServiceCore) EnableManagedAssistant(
 }
 
 // GetManagedAssistant resolves a project's managed assistant and hydrates its
-// toolsets. Returns pgx.ErrNoRows when the feature isn't enabled for the project.
+// tool sources. Returns pgx.ErrNoRows when the feature isn't enabled for the project.
 func (s *ServiceCore) GetManagedAssistant(ctx context.Context, projectID uuid.UUID) (assistantRecord, error) {
 	row, err := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, projectID)
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("get managed assistant: %w", err)
 	}
 	record := assistantRecordFromManagedRow(row)
-	refs, err := s.loadAssistantToolsets(ctx, projectID, []uuid.UUID{record.ID})
-	if err != nil {
+	if err := s.hydrateAssistantToolSources(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
-	record.Toolsets = refs[record.ID]
 	return record, nil
 }
 

@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -197,6 +198,7 @@ type assistantToolsetRow struct {
 type assistantMCPServerRow struct {
 	MCPServerID     uuid.UUID
 	ServerSlug      pgtype.Text
+	Visibility      string
 	EndpointSlug    string
 	EnvironmentID   uuid.NullUUID
 	EnvironmentSlug pgtype.Text
@@ -775,9 +777,22 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 		return nil, fmt.Errorf("resolve mcp server slugs: %w", err)
 	}
 	for _, row := range serverRows {
-		if row.Slug.Valid {
-			serverIDs[row.Slug.String] = row.ID
+		if !row.Slug.Valid {
+			continue
 		}
+		// Reject servers the runtime cannot reach so a bad attach fails the
+		// write instead of silently vanishing from reads and dispatch:
+		// tunnelled backends have no /mcp serving path, disabled servers 404
+		// there, and without a Gram-hosted endpoint there is no URL to build.
+		switch {
+		case row.Tunneled:
+			return nil, assistantValidationError("mcp server %q is tunnel-backed and cannot be attached to an assistant", row.Slug.String)
+		case row.Visibility == mcpservers.VisibilityDisabled:
+			return nil, assistantValidationError("mcp server %q is disabled", row.Slug.String)
+		case !row.HasGramEndpoint:
+			return nil, assistantValidationError("mcp server %q has no Gram-hosted MCP endpoint", row.Slug.String)
+		}
+		serverIDs[row.Slug.String] = row.ID
 	}
 	for _, slug := range serverSlugs {
 		if _, ok := serverIDs[slug]; !ok {
@@ -875,6 +890,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 		out[row.AssistantID] = append(out[row.AssistantID], assistantMCPServerRow{
 			MCPServerID:     row.McpServerID,
 			ServerSlug:      row.ServerSlug,
+			Visibility:      row.Visibility,
 			EndpointSlug:    row.EndpointSlug,
 			EnvironmentID:   row.EnvironmentID,
 			EnvironmentSlug: row.EnvironmentSlug,
@@ -2785,6 +2801,11 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 
 func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, toolsets []assistantToolsetRow, mcpServers []assistantMCPServerRow, platformToolsets []string) []runtimeMCPServer {
 	servers := make([]runtimeMCPServer, 0, len(toolsets)+len(mcpServers)+len(platformToolsets))
+	// Runtime server IDs must be unique — agentkit namespaces tool names by
+	// them — but toolset slugs and mcp_servers slugs live in separate slug
+	// spaces, so a collision is possible. Toolsets win (first writer);
+	// colliding direct attachments are skipped with a warning.
+	seenIDs := map[string]struct{}{}
 	for _, t := range toolsets {
 		// Misconfiguration (no MCP slug, MCP disabled) is a tenant-side
 		// problem, not a server fault. Skip the broken toolset and let
@@ -2811,6 +2832,7 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 			headers["Gram-Environment"] = envSlug
 		}
 
+		seenIDs[t.ToolsetSlug] = struct{}{}
 		servers = append(servers, runtimeMCPServer{
 			ID:      t.ToolsetSlug,
 			URL:     serverURL.JoinPath("mcp", t.McpSlug.String).String(),
@@ -2826,10 +2848,17 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 	// serveRemoteBackend already proxies, plus an optional bound environment.
 	// loadAssistantMcpServers already dropped rows without a Gram-hosted
 	// endpoint. ServerSlug is the runtime ID (agentkit namespaces tool names by
-	// it, 64-char cap); it shares a slug space with toolsets only by
-	// coincidence, which the attach path is responsible for keeping distinct.
+	// it, 64-char cap). Disabled servers 404 at the /mcp serving path, so
+	// they're skipped here like a not-MCP-reachable toolset: the attachment
+	// stays visible on reads, the runtime just won't dial it.
 	for _, m := range mcpServers {
 		if m.EndpointSlug == "" {
+			continue
+		}
+		if m.Visibility == mcpservers.VisibilityDisabled {
+			logger.WarnContext(ctx, "skipping disabled assistant mcp server",
+				attr.SlogMcpServerID(m.MCPServerID.String()),
+			)
 			continue
 		}
 		headers := map[string]string{}
@@ -2840,6 +2869,13 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 		if m.ServerSlug.Valid && m.ServerSlug.String != "" {
 			id = m.ServerSlug.String
 		}
+		if _, dup := seenIDs[id]; dup {
+			logger.WarnContext(ctx, "skipping assistant mcp server whose runtime ID collides with an attached toolset",
+				attr.SlogMcpServerID(m.MCPServerID.String()),
+			)
+			continue
+		}
+		seenIDs[id] = struct{}{}
 		servers = append(servers, runtimeMCPServer{
 			ID:      id,
 			URL:     serverURL.JoinPath("mcp", m.EndpointSlug).String(),
