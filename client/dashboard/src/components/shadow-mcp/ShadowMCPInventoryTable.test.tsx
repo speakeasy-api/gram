@@ -66,64 +66,78 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
-  Table: ({
-    columns,
-    data,
-    onSortChange,
-    rowKey,
-    sort,
-  }: {
-    columns: Array<{
-      header: ReactNode;
-      id?: string;
-      key: string;
-      render?: (row: ShadowMCPInventoryServer) => ReactNode;
-      sortable?: boolean;
-    }>;
-    data: ShadowMCPInventoryServer[];
-    onSortChange?: (sort: { id: string; direction: "asc" | "desc" }) => void;
-    rowKey: (row: ShadowMCPInventoryServer) => string;
-    sort?: { id: string; direction: "asc" | "desc" } | null;
-  }) => (
-    <table>
-      <thead>
-        <tr>
-          {columns.map((column) => {
-            const columnID = column.id ?? column.key;
-            return (
-              <th key={column.key}>
-                {column.sortable ? (
-                  <button
-                    onClick={() => {
-                      onSortChange?.({
-                        id: columnID,
-                        direction:
-                          sort?.id === columnID && sort.direction === "asc"
-                            ? "desc"
-                            : "asc",
-                      });
-                    }}
-                  >
-                    {column.header}
-                  </button>
-                ) : (
-                  column.header
-                )}
-              </th>
-            );
-          })}
-        </tr>
-      </thead>
-      <tbody>
-        {data.map((row) => (
-          <tr key={rowKey(row)}>
-            {columns.map((column) => (
-              <td key={column.key}>{column.render?.(row)}</td>
-            ))}
+  Table: Object.assign(
+    ({ children }: { children: ReactNode }) => <table>{children}</table>,
+    {
+      Header: ({
+        columns,
+        onSortChange,
+        sort,
+      }: {
+        columns: Array<{
+          header: ReactNode;
+          id?: string;
+          key: string;
+          sortable?: boolean;
+        }>;
+        onSortChange?: (sort: {
+          id: string;
+          direction: "asc" | "desc";
+        }) => void;
+        sort?: { id: string; direction: "asc" | "desc" } | null;
+      }) => (
+        <thead>
+          <tr>
+            {columns.map((column) => {
+              const columnID = column.id ?? column.key;
+              return (
+                <th key={column.key}>
+                  {column.sortable ? (
+                    <button
+                      onClick={() => {
+                        onSortChange?.({
+                          id: columnID,
+                          direction:
+                            sort?.id === columnID && sort.direction === "asc"
+                              ? "desc"
+                              : "asc",
+                        });
+                      }}
+                    >
+                      {column.header}
+                    </button>
+                  ) : (
+                    column.header
+                  )}
+                </th>
+              );
+            })}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+      ),
+      Body: ({
+        columns,
+        data,
+        rowKey,
+      }: {
+        columns: Array<{
+          key: string;
+          render?: (row: ShadowMCPInventoryServer) => ReactNode;
+        }>;
+        data: ShadowMCPInventoryServer[];
+        rowKey: (row: ShadowMCPInventoryServer) => string;
+      }) => (
+        <tbody>
+          {data.map((row) => (
+            <tr key={rowKey(row)}>
+              {columns.map((column) => (
+                <td key={column.key}>{column.render?.(row)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      ),
+    },
   ),
   sortTableData: (
     data: ShadowMCPInventoryServer[],

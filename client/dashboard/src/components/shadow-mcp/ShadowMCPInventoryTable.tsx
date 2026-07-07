@@ -21,6 +21,7 @@ import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
+import { cn } from "@/lib/utils";
 
 const INVENTORY_PAGE_LIMIT = 50;
 
@@ -97,9 +98,11 @@ function InventoryEmptyState() {
 }
 
 export function ShadowMCPInventoryTable({
+  className,
   enabled = true,
   projectID,
 }: {
+  className?: string;
   enabled?: boolean;
   projectID: string;
 }): JSX.Element {
@@ -309,15 +312,19 @@ export function ShadowMCPInventoryTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border">
+    <div className={cn("min-h-0 shrink overflow-hidden", className)}>
       <Table
         columns={columns}
-        data={sortedServers}
-        rowKey={(row) => row.canonicalServerUrl}
-        sort={sort}
-        onSortChange={setSort}
-        className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
-      />
+        className="h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-x-auto overflow-y-hidden"
+      >
+        <Table.Header columns={columns} sort={sort} onSortChange={setSort} />
+        <Table.Body
+          columns={columns}
+          data={sortedServers}
+          rowKey={(row) => row.canonicalServerUrl}
+          className="min-h-0 content-start overflow-y-auto"
+        />
+      </Table>
     </div>
   );
 }

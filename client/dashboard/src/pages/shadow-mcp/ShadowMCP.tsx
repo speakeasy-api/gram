@@ -11,18 +11,18 @@ export default function ShadowMCP(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body>
+      <Page.Body fullHeight overflowHidden className="pb-8">
         <RequireScope scope="org:admin" level="page">
-          <Page.Section>
-            <Page.Section.Title stage="beta">Shadow MCP</Page.Section.Title>
-            <Page.Section.Description>
-              Manage project-scoped Shadow MCP server inventory and URL access
-              rules.
-            </Page.Section.Description>
-            <Page.Section.Body>
-              <ShadowMCPInventoryTable projectID={project.id} />
-            </Page.Section.Body>
-          </Page.Section>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="mb-6 shrink-0">
+              <Page.Section.Title stage="beta">Shadow MCP</Page.Section.Title>
+              <Page.Section.Description>
+                Manage project-scoped Shadow MCP server inventory and URL access
+                rules.
+              </Page.Section.Description>
+            </div>
+            <ShadowMCPInventoryTable projectID={project.id} />
+          </div>
         </RequireScope>
       </Page.Body>
     </Page>
