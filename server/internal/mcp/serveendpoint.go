@@ -129,10 +129,10 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// Implicitly gated servers (private remote/tunneled with no explicit
 	// issuer — see mcpservers.EligibleForImplicitIssuer) accept the same
 	// user-session JWTs against the project-default issuer, but a missing or
-	// non-session bearer falls through to the legacy identity chain (API
-	// keys, chat sessions) instead of failing outright; challengeURL makes
-	// that chain's 401 advertise the OAuth resource metadata so MCP clients
-	// can bootstrap the Gram-as-IdP flow.
+	// non-session bearer falls through to identity auth (API keys, chat
+	// sessions) instead of failing outright; challengeURL makes that
+	// chain's 401 advertise the OAuth resource metadata so MCP clients can
+	// bootstrap the Gram-as-IdP flow.
 	var upstreamTokens map[uuid.UUID]string
 	gateAuthed := false
 	challengeURL := ""
@@ -148,7 +148,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 		}
 		if issuerGated {
 			// Explicit issuer: the gate is mandatory — an explicit binding
-			// opts the server out of the legacy identity chain entirely.
+			// opts the server out of identity auth entirely.
 			newCtx, tokens, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 			if err != nil {
 				return fmt.Errorf("apply issuer gate: %w", err)
@@ -550,9 +550,9 @@ func (s *Service) prepareProxyBackendContext(
 	// gateAuthed marks requests already authenticated by the issuer gate in
 	// serveResolvedMCPEndpoint (explicitly or implicitly gated): the bearer
 	// is a user-session JWT validated against the issuer's audience, and
-	// the AuthContext on ctx is stamped from it. Re-running the legacy
-	// identity-auth chain here would only know how to validate API keys /
-	// OAuth tokens / chat sessions, and would reject a perfectly valid
+	// the AuthContext on ctx is stamped from it. Re-running the identity
+	// auth chain here would only know how to validate API keys / OAuth
+	// tokens / chat sessions, and would reject a perfectly valid
 	// user-session JWT. Skip it and trust the gate.
 	//
 	// challengeURL, when non-empty, is the RFC 9728 protected-resource
