@@ -142,7 +142,7 @@ func DescribeToolsetEntry(
 		}
 
 		tools = make([]*types.ToolEntry, 0, len(definitions))
-		envQueries := make([]toolEnvLookupParams, 0, len(definitions))
+		envQueries := make([]ToolEnvLookupParams, 0, len(definitions))
 		seen := make(map[string]bool, 0)
 		for _, def := range definitions {
 			if _, ok := seen[def.Name]; ok {
@@ -161,11 +161,11 @@ func DescribeToolsetEntry(
 				HTTPMethod:  &def.HttpMethod,
 			}
 
-			envQueries = append(envQueries, toolEnvLookupParams{
-				deploymentID:        def.DeploymentID,
-				openapiv3DocumentID: def.Openapiv3DocumentID,
-				security:            def.Security,
-				serverEnvVar:        def.ServerEnvVar,
+			envQueries = append(envQueries, ToolEnvLookupParams{
+				DeploymentID:        def.DeploymentID,
+				OpenAPIv3DocumentID: def.Openapiv3DocumentID,
+				Security:            def.Security,
+				ServerEnvVar:        def.ServerEnvVar,
 			})
 
 			tools = append(tools, tool)
@@ -933,7 +933,7 @@ func readToolsetTools(
 
 		tools = make([]*types.Tool, 0, len(definitions))
 		seen := make(map[string]bool, 0)
-		envQueries := make([]toolEnvLookupParams, 0, len(definitions))
+		envQueries := make([]ToolEnvLookupParams, 0, len(definitions))
 		for _, def := range definitions {
 			if _, ok := seen[def.HttpToolDefinition.Name]; ok {
 				continue
@@ -994,11 +994,11 @@ func readToolsetTools(
 				),
 			}
 
-			envQueries = append(envQueries, toolEnvLookupParams{
-				deploymentID:        def.HttpToolDefinition.DeploymentID,
-				openapiv3DocumentID: def.HttpToolDefinition.Openapiv3DocumentID,
-				security:            def.HttpToolDefinition.Security,
-				serverEnvVar:        def.HttpToolDefinition.ServerEnvVar,
+			envQueries = append(envQueries, ToolEnvLookupParams{
+				DeploymentID:        def.HttpToolDefinition.DeploymentID,
+				OpenAPIv3DocumentID: def.HttpToolDefinition.Openapiv3DocumentID,
+				Security:            def.HttpToolDefinition.Security,
+				ServerEnvVar:        def.HttpToolDefinition.ServerEnvVar,
 			})
 
 			tools = append(tools, &types.Tool{
@@ -1381,53 +1381,48 @@ func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableDa
 	return functionEnvVars, nil
 }
 
-type toolEnvLookupParams struct {
+// ToolEnvLookupParams captures the fields of a resolved tool needed to
+// determine its security and server environment variable requirements.
+type ToolEnvLookupParams struct {
 	// The deployment ID of the tool.
-	deploymentID uuid.UUID
+	DeploymentID uuid.UUID
 
 	// The OpenAPI document ID of the tool, if the tool came from an OpenAPI source.
-	openapiv3DocumentID uuid.NullUUID
+	OpenAPIv3DocumentID uuid.NullUUID
 
 	// The security requirements for the tool.
-	security []byte
+	Security []byte
 
 	// The server environment variable for the tool if available.
-	serverEnvVar string
+	ServerEnvVar string
 }
 
-func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.UUID, tools []toolEnvLookupParams) ([]*types.SecurityVariable, []*types.ServerVariable, error) {
+func fetchHTTPSecurityDefinitions(ctx context.Context, tx DBTX, tools []ToolEnvLookupParams) (map[string]tsr.HttpSecurity, error) {
 	if len(tools) == 0 {
-		return []*types.SecurityVariable{}, []*types.ServerVariable{}, nil
+		return map[string]tsr.HttpSecurity{}, nil
 	}
 
 	toolsetRepo := tsr.New(tx)
-	mcpmetadataRepo := mcpmetadataR.New(tx)
 
 	securityKeysMap := make(map[string]bool)
-	serverEnvVarsMap := make(map[string]bool)
+	uniqueDeploymentIDs := make(map[uuid.UUID]bool)
+	uniqueOpenAPIv3DocumentIDs := make(map[uuid.UUID]bool)
 	for _, tool := range tools {
-		securityKeys, _, err := security.ParseHTTPToolSecurityKeys(tool.security)
+		securityKeys, _, err := security.ParseHTTPToolSecurityKeys(tool.Security)
 		if err != nil {
-			return nil, nil, fmt.Errorf("http tool security keys: %w", err)
+			return nil, fmt.Errorf("http tool security keys: %w", err)
 		}
 
 		for _, key := range securityKeys {
 			securityKeysMap[key] = true
 		}
 
-		if tool.serverEnvVar != "" {
-			serverEnvVarsMap[tool.serverEnvVar] = true
+		uniqueDeploymentIDs[tool.DeploymentID] = true
+		if tool.OpenAPIv3DocumentID.Valid {
+			uniqueOpenAPIv3DocumentIDs[tool.OpenAPIv3DocumentID.UUID] = true
 		}
 	}
 
-	uniqueDeploymentIDs := make(map[uuid.UUID]bool)
-	uniqueOpenAPIv3DocumentIDs := make(map[uuid.UUID]bool)
-	for _, tool := range tools {
-		uniqueDeploymentIDs[tool.deploymentID] = true
-		if tool.openapiv3DocumentID.Valid {
-			uniqueOpenAPIv3DocumentIDs[tool.openapiv3DocumentID.UUID] = true
-		}
-	}
 	openapiv3DocumentIDs := slices.Collect(maps.Keys(uniqueOpenAPIv3DocumentIDs))
 	if openapiv3DocumentIDs == nil {
 		openapiv3DocumentIDs = []uuid.UUID{}
@@ -1435,57 +1430,85 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.U
 
 	securityEntries, err := toolsetRepo.GetHTTPSecurityDefinitions(ctx, tsr.GetHTTPSecurityDefinitionsParams{
 		SecurityKeys:         slices.Collect(maps.Keys(securityKeysMap)),
-		DeploymentIds:        slices.Collect(maps.Keys(uniqueDeploymentIDs)), // all selected tools share the same deployment
+		DeploymentIds:        slices.Collect(maps.Keys(uniqueDeploymentIDs)),
 		Openapiv3DocumentIds: openapiv3DocumentIDs,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("read toolset security definitions: %w", err)
+		return nil, fmt.Errorf("read toolset security definitions: %w", err)
 	}
 
-	// Fetch header display names from MCP metadata (if available)
-	headerDisplayNames := make(map[string]string)
-	if toolsetID != uuid.Nil {
-		displayNamesJSON, err := mcpmetadataRepo.GetHeaderDisplayNames(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
-		if err == nil && len(displayNamesJSON) > 0 {
-			// Parse the JSONB data into a map
-			_ = json.Unmarshal(displayNamesJSON, &headerDisplayNames)
-		}
-		// If no MCP metadata exists or error occurs, we just use empty map (no display names)
-	}
-
-	// Build security variables map to avoid duplicates
-	securityVarsMap := make(map[string]*types.SecurityVariable)
+	byKey := make(map[string]tsr.HttpSecurity, len(securityEntries))
 	for _, entry := range securityEntries {
-		key := entry.Key
-		if _, exists := securityVarsMap[key]; !exists {
-			// Look up display name from MCP metadata
-			// Display names are keyed by env var name, so we check each env var
-			var displayName *string
-			for _, envVar := range entry.EnvVariables {
-				if dn, ok := headerDisplayNames[envVar]; ok && dn != "" {
-					displayName = &dn
-					break // Use first matching display name
-				}
-			}
-
-			securityVar := &types.SecurityVariable{
-				ID:           entry.ID.String(),
-				Type:         conv.FromPGText[string](entry.Type),
-				Name:         entry.Name.String,
-				DisplayName:  displayName,
-				InPlacement:  entry.InPlacement.String,
-				Scheme:       entry.Scheme.String,
-				BearerFormat: conv.FromPGText[string](entry.BearerFormat),
-				OauthTypes:   entry.OauthTypes,
-				OauthFlows:   entry.OauthFlows,
-				EnvVariables: entry.EnvVariables,
-			}
-
-			securityVarsMap[key] = securityVar
+		if _, exists := byKey[entry.Key]; !exists {
+			byKey[entry.Key] = entry
 		}
 	}
 
-	// Build server variables
+	return byKey, nil
+}
+
+// AssembleEnvironmentVariablesForToolset builds a toolset's security and
+// server environment variables from already-fetched, project-wide security
+// definitions. It is pure (no DB access) so a single toolset's tools can be
+// re-assembled cheaply once the definitions are fetched once for every
+// toolset being described. headerDisplayNames must be the calling toolset's
+// own display-name overrides (mcp_metadata is scoped per toolset) — passing
+// another toolset's map here would silently misattribute display names.
+func AssembleEnvironmentVariablesForToolset(
+	tools []ToolEnvLookupParams,
+	securityEntriesByKey map[string]tsr.HttpSecurity,
+	headerDisplayNames map[string]string,
+) ([]*types.SecurityVariable, []*types.ServerVariable) {
+	if len(tools) == 0 {
+		return []*types.SecurityVariable{}, []*types.ServerVariable{}
+	}
+
+	securityKeysMap := make(map[string]bool)
+	serverEnvVarsMap := make(map[string]bool)
+	for _, tool := range tools {
+		securityKeys, _, err := security.ParseHTTPToolSecurityKeys(tool.Security)
+		if err != nil {
+			continue
+		}
+
+		for _, key := range securityKeys {
+			securityKeysMap[key] = true
+		}
+
+		if tool.ServerEnvVar != "" {
+			serverEnvVarsMap[tool.ServerEnvVar] = true
+		}
+	}
+
+	securityVarsMap := make(map[string]*types.SecurityVariable)
+	for key := range securityKeysMap {
+		entry, ok := securityEntriesByKey[key]
+		if !ok {
+			continue
+		}
+
+		var displayName *string
+		for _, envVar := range entry.EnvVariables {
+			if dn, ok := headerDisplayNames[envVar]; ok && dn != "" {
+				displayName = &dn
+				break
+			}
+		}
+
+		securityVarsMap[key] = &types.SecurityVariable{
+			ID:           entry.ID.String(),
+			Type:         conv.FromPGText[string](entry.Type),
+			Name:         entry.Name.String,
+			DisplayName:  displayName,
+			InPlacement:  entry.InPlacement.String,
+			Scheme:       entry.Scheme.String,
+			BearerFormat: conv.FromPGText[string](entry.BearerFormat),
+			OauthTypes:   entry.OauthTypes,
+			OauthFlows:   entry.OauthFlows,
+			EnvVariables: entry.EnvVariables,
+		}
+	}
+
 	var serverVars []*types.ServerVariable
 	if len(serverEnvVarsMap) > 0 {
 		serverVars = append(serverVars, &types.ServerVariable{
@@ -1494,7 +1517,30 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.U
 		})
 	}
 
-	return slices.Collect(maps.Values(securityVarsMap)), serverVars, nil
+	return slices.Collect(maps.Values(securityVarsMap)), serverVars
+}
+
+func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.UUID, tools []ToolEnvLookupParams) ([]*types.SecurityVariable, []*types.ServerVariable, error) {
+	if len(tools) == 0 {
+		return []*types.SecurityVariable{}, []*types.ServerVariable{}, nil
+	}
+
+	securityEntriesByKey, err := fetchHTTPSecurityDefinitions(ctx, tx, tools)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	headerDisplayNames := make(map[string]string)
+	if toolsetID != uuid.Nil {
+		mcpmetadataRepo := mcpmetadataR.New(tx)
+		displayNamesJSON, err := mcpmetadataRepo.GetHeaderDisplayNames(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
+		if err == nil && len(displayNamesJSON) > 0 {
+			_ = json.Unmarshal(displayNamesJSON, &headerDisplayNames)
+		}
+	}
+
+	securityVars, serverVars := AssembleEnvironmentVariablesForToolset(tools, securityEntriesByKey, headerDisplayNames)
+	return securityVars, serverVars, nil
 }
 
 // dedupeFunctionEnvVars returns function environment variables deduplicated by name.
