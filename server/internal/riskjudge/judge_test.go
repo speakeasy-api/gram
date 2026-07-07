@@ -7,8 +7,11 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 	"unicode/utf8"
 
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
+	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/stretchr/testify/require"
 
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -144,6 +147,42 @@ func TestJudgeSkipsTrulyEmptyMessage(t *testing.T) {
 	require.Zero(t, client.calls.Load(), "a message with no content must not reach the client")
 }
 
+func TestJudgeReturnsUsageForCleanVerdict(t *testing.T) {
+	t.Parallel()
+
+	cost := 0.0123
+	client := &successfulCompletionClient{
+		body: `{"matched":false,"confidence":0.2,"rationale":"safe"}`,
+		usage: openrouter.Usage{
+			PromptTokens:            123,
+			CompletionTokens:        45,
+			TotalTokens:             168,
+			Cost:                    &cost,
+			CostDetails:             nil,
+			PromptTokensDetails:     nil,
+			CompletionTokensDetails: nil,
+		},
+	}
+	j := newTestJudge(t, client)
+
+	verdict := j.Evaluate(t.Context(), ra.JudgeInput{
+		OrgID:     "org-a",
+		ProjectID: "proj",
+		Prompt:    "flag secrets",
+		Message:   ra.NewJudgeMessage(message.User, "", "hello"),
+		Config:    ra.JudgeConfig{Model: "", Temperature: nil, FailOpen: true},
+	})
+
+	require.NotNil(t, verdict)
+	require.False(t, verdict.Matched)
+	require.InDelta(t, 0.2, verdict.Confidence, 0.001)
+	require.Equal(t, "safe", verdict.Rationale)
+	require.InDelta(t, cost, verdict.CostUSD, 0.000001)
+	require.Equal(t, 123, verdict.PromptTokens)
+	require.Equal(t, 45, verdict.CompletionTokens)
+	require.Equal(t, 168, verdict.TotalTokens)
+}
+
 // newTestJudge builds a Judge with a Redis-backed judge limiter on its own
 // logical DB, isolated per test.
 func newTestJudge(t *testing.T, client openrouter.CompletionClient) *Judge {
@@ -185,6 +224,41 @@ func (c *countingCompletionClient) GetCompletionStream(_ context.Context, _ open
 }
 
 func (c *countingCompletionClient) CreateEmbeddings(_ context.Context, _ string, _ string, _ []string, _ ...openrouter.EmbeddingOption) ([][]float32, error) {
+	return nil, errors.New("not implemented")
+}
+
+type successfulCompletionClient struct {
+	body  string
+	usage openrouter.Usage
+}
+
+func (c *successfulCompletionClient) GetObjectCompletion(_ context.Context, _ openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
+	content := or.CreateChatAssistantMessageContentStr(c.body)
+	msg := or.CreateChatMessagesAssistant(or.ChatAssistantMessage{
+		Role:    or.ChatAssistantMessageRoleAssistant,
+		Content: optionalnullable.From(&content),
+	})
+	return &openrouter.CompletionResponse{
+		StartTime:    time.Time{},
+		Message:      &msg,
+		MessageID:    "",
+		Model:        "",
+		Usage:        c.usage,
+		FinishReason: nil,
+		ToolCalls:    nil,
+		Content:      "",
+	}, nil
+}
+
+func (c *successfulCompletionClient) GetCompletion(_ context.Context, _ openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (c *successfulCompletionClient) GetCompletionStream(_ context.Context, _ openrouter.CompletionRequest) (openrouter.StreamReader, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (c *successfulCompletionClient) CreateEmbeddings(_ context.Context, _ string, _ string, _ []string, _ ...openrouter.EmbeddingOption) ([][]float32, error) {
 	return nil, errors.New("not implemented")
 }
 

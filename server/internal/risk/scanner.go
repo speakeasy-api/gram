@@ -549,7 +549,7 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		Message: ra.NewJudgeMessage(messageType, toolName, text),
 		Config:  cfg,
 	})
-	if verdict == nil {
+	if verdict == nil || !verdict.Matched {
 		return nil
 	}
 
