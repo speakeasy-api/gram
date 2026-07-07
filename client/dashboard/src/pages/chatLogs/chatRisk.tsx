@@ -124,9 +124,9 @@ function MaskedMatchInline({ value }: { value: string }): ReactNode {
 
 type FindingSpan = { match: string; field?: string; path?: string };
 
-export type TranscriptFindingSpan = FindingSpan;
+type TranscriptFindingSpan = FindingSpan;
 
-export type TranscriptFinding = {
+type TranscriptFinding = {
   id: string;
   label: string;
   rationale?: string;
@@ -157,7 +157,7 @@ function spanFieldLabel(span: FindingSpan): string | null {
   return span.path ? `${span.field}.${span.path}` : span.field;
 }
 
-export function TranscriptFindingsCard({
+function TranscriptFindingsCard({
   findings,
   title = "Risk Findings",
 }: {

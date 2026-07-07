@@ -1511,7 +1511,7 @@ const ACTION_BADGE_CONFIG: Record<
   block: { label: "Block", variant: "destructive" },
 };
 
-export function ActionBadge({ action }: { action: PolicyAction }): JSX.Element {
+function ActionBadge({ action }: { action: PolicyAction }): JSX.Element {
   const config = ACTION_BADGE_CONFIG[action] ?? ACTION_BADGE_CONFIG.flag;
   return (
     <Badge variant={config.variant}>
