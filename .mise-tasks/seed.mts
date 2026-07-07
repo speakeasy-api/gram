@@ -2684,9 +2684,9 @@ async function seedObservabilityData(init: {
   const COST_CENTERS = ["CC-1000", "CC-2000", "CC-3000", "CC-4000"];
   const ROLE_POOL = ["admin", "developer", "viewer", "billing", "analyst"];
   const GROUP_POOL = ["platform", "growth", "enterprise", "core"];
-  // The consuming surface (gram.hook.source) for chat rows — the hook_source
-  // dimension on telemetry.query. (The hooks seeding block below has its own
-  // HOOK_SOURCES list for hook events.)
+  // The consuming surfaces (gram.hook.source) — the hook_source dimension on
+  // telemetry.query. Shared by both the chat-row and hook-event seeding blocks
+  // so every seeded source matches a real production hook_source value.
   const CHAT_HOOK_SOURCES = ["claude-code", "cursor", "cowork", "codex"];
 
   // AI-account provider per consuming surface, used to stamp the gram.provider
@@ -2698,12 +2698,8 @@ async function seedObservabilityData(init: {
   const SURFACE_PROVIDER: Record<string, string> = {
     "claude-code": "anthropic",
     cowork: "anthropic",
-    claude: "anthropic",
-    api: "anthropic",
     codex: "openai",
-    vscode: "openai",
     cursor: "cursor",
-    cli: "cursor",
   };
   function classifyAccount(
     surface: string,
@@ -3352,9 +3348,11 @@ async function seedObservabilityData(init: {
     }
   }
 
-  // Hook-specific constants
-  const HOOK_SOURCES = ["claude", "vscode", "cli", "api"];
-  const HOOK_SOURCE_WEIGHTS = [45, 39, 11, 6];
+  // Hook-specific constants. Reuse the production consuming surfaces so
+  // hook-event rows carry real hook_source values (not stale placeholders like
+  // "vscode") and the two seeding blocks can't drift apart again.
+  const HOOK_SOURCES = CHAT_HOOK_SOURCES;
+  const HOOK_SOURCE_WEIGHTS = [45, 35, 6, 14]; // claude-code, cursor, cowork, codex
   const HOOK_SOURCE_TOTAL = HOOK_SOURCE_WEIGHTS.reduce((s, w) => s + w, 0);
 
   const MCP_SERVER_CONFIGS = [
