@@ -1,0 +1,76 @@
+name: Review Bypass
+
+# Allows a PR to merge without a human approval when the `review:bypass`
+# label is applied by someone with triage+ access. The gram-bot app submits
+# an approving review that satisfies the "Merge to main" ruleset's required
+# review count. Required status checks and the merge queue are unaffected —
+# CI must still pass before the PR can merge.
+#
+# Runs on pull_request_target so the label event fires with access to
+# secrets, but never checks out PR code, so untrusted code is never executed.
+
+on:
+  pull_request_target:
+    types: [labeled, unlabeled]
+
+permissions: {}
+
+env:
+  BYPASS_LABEL: "review:bypass"
+
+jobs:
+  approve:
+    name: Approve on bypass label
+    if: github.event.action == 'labeled' && github.event.label.name == 'review:bypass'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - name: Generate gram-bot token
+        id: generate-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.GRAM_BOT_APP_ID }}
+          private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
+          permission-pull-requests: write
+
+      - name: Submit approving review
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LABELED_BY: ${{ github.actor }}
+        run: |
+          gh api \
+            "repos/${{ github.repository }}/pulls/${PR_NUMBER}/reviews" \
+            -f event=APPROVE \
+            -f body="Auto-approved: \`${BYPASS_LABEL}\` label applied by @${LABELED_BY}. Required status checks still gate this merge."
+
+  dismiss:
+    name: Dismiss approval on label removal
+    if: github.event.action == 'unlabeled' && github.event.label.name == 'review:bypass'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - name: Generate gram-bot token
+        id: generate-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.GRAM_BOT_APP_ID }}
+          private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
+          permission-pull-requests: write
+
+      - name: Dismiss gram-bot approvals
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          UNLABELED_BY: ${{ github.actor }}
+        run: |
+          review_ids=$(gh api \
+            "repos/${{ github.repository }}/pulls/${PR_NUMBER}/reviews" \
+            --paginate \
+            --jq '.[] | select(.user.login == "gram-bot[bot]" and .state == "APPROVED") | .id')
+
+          for id in $review_ids; do
+            gh api \
+              --method PUT \
+              "repos/${{ github.repository }}/pulls/${PR_NUMBER}/reviews/${id}/dismissals" \
+              -f message="\`${BYPASS_LABEL}\` label removed by @${UNLABELED_BY}." \
+              -f event=DISMISS
+          done
