@@ -895,9 +895,16 @@ LEFT JOIN api_keys AS k
            END
 WHERE iss.project_id = $1
   AND iss.deleted IS FALSE
+  -- "active"/"expired" are keyed off refresh_expires_at (the session/refresh
+  -- lifetime), NOT expires_at (the ~1h access-token lifetime). An active MCP
+  -- connection only refreshes its access token on demand, so a live session
+  -- routinely has a past expires_at while its refresh token is still valid;
+  -- keying "active" off expires_at would drop those sessions and make the
+  -- Active MCP Connections list flicker between showing them and "No active
+  -- sessions" depending on how recently the client last refreshed.
   AND CASE $2::text
-        WHEN 'active'  THEN (s.deleted IS FALSE AND s.expires_at > now())
-        WHEN 'expired' THEN (s.deleted IS FALSE AND s.expires_at <= now())
+        WHEN 'active'  THEN (s.deleted IS FALSE AND s.refresh_expires_at > now())
+        WHEN 'expired' THEN (s.deleted IS FALSE AND s.refresh_expires_at <= now())
         WHEN 'revoked' THEN (s.deleted IS TRUE)
         WHEN 'all'     THEN TRUE
         ELSE (s.deleted IS FALSE)
