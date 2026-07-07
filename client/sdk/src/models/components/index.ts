@@ -404,17 +404,9 @@ export * from "./riskuserbreakdownresult.js";
 export * from "./role.js";
 export * from "./rolegrant.js";
 export * from "./rolesummary.js";
-<<<<<<< HEAD
-<<<<<<< HEAD
-export * from "./saveriskevalreviewrequestbody.js";
-=======
-export * from "./rotatetunnelledmcpserverkeyform.js";
-export * from "./rotatetunnelledmcpserverkeyresult.js";
->>>>>>> 685f2d905 (fix: address tunnelled mcp review)
-=======
 export * from "./rotatetunneledmcpserverkeyform.js";
 export * from "./rotatetunneledmcpserverkeyresult.js";
->>>>>>> eb36f84e0 (refactor: rename tunneled MCP surfaces)
+export * from "./saveriskevalreviewrequestbody.js";
 export * from "./scopedefinition.js";
 export * from "./searchchatsfilter.js";
 export * from "./searchchatspayload.js";

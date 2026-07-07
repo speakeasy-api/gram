@@ -287,15 +287,8 @@ export * from "./revokeriskpolicybypassrequest.js";
 export * from "./revokeusersession.js";
 export * from "./revokeusersessionclient.js";
 export * from "./revokeusersessionconsent.js";
-<<<<<<< HEAD
-<<<<<<< HEAD
-export * from "./saveriskevalreview.js";
-=======
-export * from "./rotatetunnelledmcpserverkey.js";
->>>>>>> 685f2d905 (fix: address tunnelled mcp review)
-=======
 export * from "./rotatetunneledmcpserverkey.js";
->>>>>>> eb36f84e0 (refactor: rename tunneled MCP surfaces)
+export * from "./saveriskevalreview.js";
 export * from "./searchchats.js";
 export * from "./searchlogs.js";
 export * from "./searchtoolcalls.js";

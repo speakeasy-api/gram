@@ -48622,8 +48622,28 @@ components:
         - total_output_tokens
         - total_tokens
         - total_chats
-<<<<<<< HEAD
-<<<<<<< HEAD
+    RotateTunneledMcpServerKeyForm:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the tunneled MCP server
+          format: uuid
+      description: Form for rotating a tunneled MCP server source key
+      required:
+        - id
+    RotateTunneledMcpServerKeyResult:
+      type: object
+      properties:
+        server:
+          $ref: '#/components/schemas/TunneledMcpServer'
+        tunnel_key:
+          type: string
+          description: Plaintext tunnel key. Only returned after rotation.
+      description: Rotated tunneled MCP server plus the one-time replacement tunnel key
+      required:
+        - server
+        - tunnel_key
     SaveRiskEvalReviewRequestBody:
       type: object
       properties:
@@ -48646,33 +48666,6 @@ components:
         - policy_id
         - chat_id
         - verdict
-=======
-    RotateTunnelledMcpServerKeyForm:
-=======
-    RotateTunneledMcpServerKeyForm:
->>>>>>> eb36f84e0 (refactor: rename tunneled MCP surfaces)
-      type: object
-      properties:
-        id:
-          type: string
-          description: The ID of the tunneled MCP server
-          format: uuid
-      description: Form for rotating a tunneled MCP server source key
-      required:
-        - id
-    RotateTunneledMcpServerKeyResult:
-      type: object
-      properties:
-        server:
-          $ref: '#/components/schemas/TunneledMcpServer'
-        tunnel_key:
-          type: string
-          description: Plaintext tunnel key. Only returned after rotation.
-      description: Rotated tunneled MCP server plus the one-time replacement tunnel key
-      required:
-        - server
-        - tunnel_key
->>>>>>> 685f2d905 (fix: address tunnelled mcp review)
     ScopeDefinition:
       type: object
       properties:
