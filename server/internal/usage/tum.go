@@ -56,6 +56,16 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 	if payload.MonthlyTokenLimit != nil {
 		tokenLimit = pgtype.Int8{Int64: *payload.MonthlyTokenLimit, Valid: true}
 	}
+	tunneledMcpServerLimit := pgtype.Int4{Int32: 0, Valid: false}
+	if payload.TunneledMcpServerLimit != nil {
+		if *payload.TunneledMcpServerLimit < 0 {
+			return nil, oops.E(oops.CodeInvalid, nil, "tunneled_mcp_server_limit must be at least 0").LogWarn(ctx, s.logger)
+		}
+		if *payload.TunneledMcpServerLimit > maxTunneledMcpServerLimit {
+			return nil, oops.E(oops.CodeInvalid, nil, "tunneled_mcp_server_limit must be at most %d", maxTunneledMcpServerLimit).LogWarn(ctx, s.logger)
+		}
+		tunneledMcpServerLimit = pgtype.Int4{Int32: int32(*payload.TunneledMcpServerLimit), Valid: true}
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -75,10 +85,11 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 	}
 
 	row, err := qtx.UpsertBillingMetadata(ctx, repo.UpsertBillingMetadataParams{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		TumMonthlyTokenLimit:  tokenLimit,
-		AlertEmail:            conv.PtrToPGText(payload.AlertEmail),
-		BillingCycleAnchorDay: conv.SafeInt32(payload.BillingCycleAnchorDay),
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		TumMonthlyTokenLimit:   tokenLimit,
+		AlertEmail:             conv.PtrToPGText(payload.AlertEmail),
+		BillingCycleAnchorDay:  conv.SafeInt32(payload.BillingCycleAnchorDay),
+		TunneledMcpServerLimit: tunneledMcpServerLimit,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert billing metadata").LogError(ctx, s.logger)
@@ -107,6 +118,7 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 // one) the TUM endpoint reports. Bounded by the 2-year retention of
 // chat_token_summaries; older cycles simply come back empty.
 const tumHistoryCycles = 12
+const maxTunneledMcpServerLimit = 1<<31 - 1
 
 // buildTokensUnderManagement computes TUM consumption per billing cycle for
 // the trailing cycles and combines it with the organization's contract terms.
@@ -170,13 +182,14 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 	}
 
 	return &gen.TokensUnderManagement{
-		PeriodStart:           current.PeriodStart,
-		PeriodEnd:             current.PeriodEnd,
-		Tokens:                current.Tokens,
-		MonthlyTokenLimit:     tokenLimit,
-		BillingCycleAnchorDay: int(max(meta.BillingCycleAnchorDay, 1)),
-		AlertEmail:            alertEmail,
-		History:               history,
+		PeriodStart:            current.PeriodStart,
+		PeriodEnd:              current.PeriodEnd,
+		Tokens:                 current.Tokens,
+		MonthlyTokenLimit:      tokenLimit,
+		TunneledMcpServerLimit: conv.PtrInt32ToInt(conv.FromPGInt4(meta.TunneledMcpServerLimit)),
+		BillingCycleAnchorDay:  int(max(meta.BillingCycleAnchorDay, 1)),
+		AlertEmail:             alertEmail,
+		History:                history,
 	}, nil
 }
 
@@ -189,8 +202,9 @@ func billingMetadataSnapshot(row repo.BillingMetadatum) *audit.BillingMetadataSn
 	}
 
 	return &audit.BillingMetadataSnapshot{
-		TumMonthlyTokenLimit:  tokenLimit,
-		AlertEmail:            conv.FromPGText[string](row.AlertEmail),
-		BillingCycleAnchorDay: int(row.BillingCycleAnchorDay),
+		TumMonthlyTokenLimit:   tokenLimit,
+		TunneledMcpServerLimit: conv.PtrInt32ToInt(conv.FromPGInt4(row.TunneledMcpServerLimit)),
+		AlertEmail:             conv.FromPGText[string](row.AlertEmail),
+		BillingCycleAnchorDay:  int(row.BillingCycleAnchorDay),
 	}
 }

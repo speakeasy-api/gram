@@ -60,6 +60,7 @@ export function BrandingSection({
             id: mcpServer.id,
             name: trimmedDraft,
             remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
+            tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
             toolsetId: mcpServer.toolsetId ?? undefined,
             environmentId: mcpServer.environmentId ?? undefined,
             userSessionIssuerId: mcpServer.userSessionIssuerId ?? undefined,

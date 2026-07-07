@@ -264,4 +264,10 @@ func stampAccountAttribution(attrs map[attr.Key]any, meta SessionMetadata) {
 	if meta.DeviceID != "" {
 		attrs[attr.DeviceIDKey] = meta.DeviceID
 	}
+	// The account's own email, distinct from user.email (the authenticated
+	// actor). Sourced only from ObservedUserEmail — never UserEmail, which on
+	// merged canonical metadata holds the actor.
+	if meta.ObservedUserEmail != "" {
+		attrs[attr.AccountEmailKey] = meta.ObservedUserEmail
+	}
 }

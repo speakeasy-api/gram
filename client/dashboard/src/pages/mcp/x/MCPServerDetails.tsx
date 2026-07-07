@@ -250,6 +250,7 @@ export function MCPServerStatusDropdown({
           id: server.id,
           name: server.name ?? undefined,
           remoteMcpServerId: server.remoteMcpServerId ?? undefined,
+          tunneledMcpServerId: server.tunneledMcpServerId ?? undefined,
           toolsetId: server.toolsetId ?? undefined,
           environmentId: server.environmentId ?? undefined,
           // updateMcpServer is a full-record replace for the optional UUID

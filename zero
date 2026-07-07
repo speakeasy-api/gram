@@ -116,6 +116,7 @@ interactive_only mise run zero:openrouter
 interactive_only mise run zero:idp
 interactive_only mise run zero:melange
 interactive_only mise run zero:fly
+interactive_only mise run zero:local-proxy
 mise run zero:encryption
 mise run zero:tls
 

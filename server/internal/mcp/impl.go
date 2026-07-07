@@ -53,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -72,6 +73,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 // IdentityResolver abstracts the identity operations the authn-challenge OAuth
@@ -135,6 +137,7 @@ type Service struct {
 	// Temporal worker, which constructs *Service for its programmatic
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
+	tunnelManager      *tunnelManager
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -257,6 +260,9 @@ func NewService(
 	userSessionSigner *usersessions.Signer,
 	remoteChallengeMgr *remotesessions.ChallengeManager,
 	remoteProxyManager *remotemcp.ProxyManager,
+	tunnelRoutes route.Store,
+	tunnelForwardToken string,
+	tunnelGatewayCIDRs []string,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -332,6 +338,7 @@ func NewService(
 		userSessionSigner:  userSessionSigner,
 		remoteChallengeMgr: remoteChallengeMgr,
 		remoteProxyManager: remoteProxyManager,
+		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 	}
 }
 
@@ -583,7 +590,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// Extract tokens from headers separately:
 	// - authToken: from Authorization header (for OAuth flows)
 	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
-	authToken := AuthorizationBearerToken(r)
+	authToken := httpheaders.AuthorizationBearerToken(r)
 
 	var tokenInputs []oauthTokenInputs
 	tokenInputs, err = appendRemoteSessionTokenInputs(tokenInputs, extraUpstreamTokens)
@@ -1166,7 +1173,7 @@ func parseTagsFilter(raw string) []string {
 // the supplied resource_metadata URL so MCP clients can initiate OAuth, and
 // returns 401.
 func (s *Service) RequirePrivateIdentityAuth(ctx context.Context, w http.ResponseWriter, r *http.Request, isOAuthCapable bool, oauthResourceID uuid.UUID, wwwAuthResourceMetadataURL string) (context.Context, error) {
-	token := AuthorizationOrChatSessionToken(r)
+	token := httpheaders.AuthorizationOrChatSessionToken(r)
 
 	authedCtx, err := s.authenticateToken(ctx, token, oauthResourceID, isOAuthCapable)
 	if err == nil {
@@ -1187,7 +1194,7 @@ func (s *Service) RequirePrivateIdentityAuth(ctx context.Context, w http.Respons
 // the caller supplies an Authorization or Gram-Chat-Session token. Missing
 // tokens are not an error; an invalid supplied token is.
 func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, isOAuthCapable bool, oauthResourceID uuid.UUID) (context.Context, error) {
-	token := AuthorizationOrChatSessionToken(r)
+	token := httpheaders.AuthorizationOrChatSessionToken(r)
 	if token == "" {
 		return ctx, nil
 	}

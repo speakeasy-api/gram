@@ -113,11 +113,16 @@ const (
 	// Personal-account tracking. These are stamped by hook/OTEL ingest and
 	// materialized into ClickHouse columns of the same suffix (provider,
 	// external_org_id, account_type) for org-level usage dashboards.
+	// account_email is the AI account's own (observed) email, kept separate
+	// from user.email — the authenticated actor — so adopting cached
+	// attribution never rewrites the canonical user identity; it has no
+	// materialized column yet.
 	ProviderKey                    = attribute.Key("gram.provider")
 	ExternalOrgIDKey               = attribute.Key("gram.external_org_id")
 	AccountTypeKey                 = attribute.Key("gram.account_type")
 	BillingModeKey                 = attribute.Key("gram.billing_mode")
 	DeviceIDKey                    = attribute.Key("gram.device_id")
+	AccountEmailKey                = attribute.Key("gram.account_email")
 	ChatIDKey                      = attribute.Key("gram.chat.id")
 	MessageIDKey                   = attribute.Key("gram.message.id")
 	MCPRegistryIDKey               = attribute.Key("gram.mcp_registry.id")
@@ -412,6 +417,7 @@ const (
 	RemoteMCPProxyRemoteStatusClassKey = attribute.Key("gram.remote_mcp.proxy.remote_status_class")
 	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
 	RemoteMCPServerURLKey              = attribute.Key("gram.remote_mcp_server.url")
+	TunneledMCPServerIDKey             = attribute.Key("gram.tunneled_mcp_server.id")
 
 	WorkOSEventIDKey             = attribute.Key("gram.workos_event.id")
 	WorkOSEventTypeKey           = attribute.Key("gram.workos_event.type")
@@ -1228,6 +1234,11 @@ func SlogRemoteMCPServerID(v string) slog.Attr {
 func RemoteMCPServerURL(v string) attribute.KeyValue { return RemoteMCPServerURLKey.String(v) }
 func SlogRemoteMCPServerURL(v string) slog.Attr {
 	return slog.String(string(RemoteMCPServerURLKey), v)
+}
+
+func TunneledMCPServerID(v string) attribute.KeyValue { return TunneledMCPServerIDKey.String(v) }
+func SlogTunneledMCPServerID(v string) slog.Attr {
+	return slog.String(string(TunneledMCPServerIDKey), v)
 }
 
 func RemoteMCPProxyInterceptor(v string) attribute.KeyValue {

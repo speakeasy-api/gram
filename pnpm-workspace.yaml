@@ -6,6 +6,7 @@ packages:
   - "!ts-framework/create-function/gram-template-*"
   - server
   - cli
+  - tunnel
   - functions
   - docs
   - evaluation

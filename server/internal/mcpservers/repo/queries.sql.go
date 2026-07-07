@@ -21,6 +21,7 @@ INSERT INTO mcp_servers (
     environment_id,
     user_session_issuer_id,
     remote_mcp_server_id,
+    tunneled_mcp_server_id,
     toolset_id,
     tool_variations_group_id,
     visibility
@@ -35,7 +36,8 @@ VALUES (
     $7,
     $8,
     $9,
-    $10
+    $10,
+    $11
 )
 RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 `
@@ -48,6 +50,7 @@ type CreateMCPServerParams struct {
 	EnvironmentID         uuid.NullUUID
 	UserSessionIssuerID   uuid.NullUUID
 	RemoteMcpServerID     uuid.NullUUID
+	TunneledMcpServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
@@ -62,6 +65,7 @@ func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams
 		arg.EnvironmentID,
 		arg.UserSessionIssuerID,
 		arg.RemoteMcpServerID,
+		arg.TunneledMcpServerID,
 		arg.ToolsetID,
 		arg.ToolVariationsGroupID,
 		arg.Visibility,
@@ -236,18 +240,25 @@ FROM mcp_servers
 WHERE project_id = $1
   AND deleted IS FALSE
   AND ($2::uuid IS NULL OR remote_mcp_server_id = $2::uuid)
-  AND ($3::uuid IS NULL OR toolset_id = $3::uuid)
+  AND ($3::uuid IS NULL OR tunneled_mcp_server_id = $3::uuid)
+  AND ($4::uuid IS NULL OR toolset_id = $4::uuid)
 ORDER BY created_at DESC
 `
 
 type ListMCPServersByProjectIDParams struct {
-	ProjectID         uuid.UUID
-	RemoteMcpServerID uuid.NullUUID
-	ToolsetID         uuid.NullUUID
+	ProjectID           uuid.UUID
+	RemoteMcpServerID   uuid.NullUUID
+	TunneledMcpServerID uuid.NullUUID
+	ToolsetID           uuid.NullUUID
 }
 
 func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServersByProjectIDParams) ([]McpServer, error) {
-	rows, err := q.db.Query(ctx, listMCPServersByProjectID, arg.ProjectID, arg.RemoteMcpServerID, arg.ToolsetID)
+	rows, err := q.db.Query(ctx, listMCPServersByProjectID,
+		arg.ProjectID,
+		arg.RemoteMcpServerID,
+		arg.TunneledMcpServerID,
+		arg.ToolsetID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -290,11 +301,12 @@ SET
     environment_id = $3,
     user_session_issuer_id = $4,
     remote_mcp_server_id = $5,
-    toolset_id = $6,
-    tool_variations_group_id = $7,
-    visibility = $8,
+    tunneled_mcp_server_id = $6,
+    toolset_id = $7,
+    tool_variations_group_id = $8,
+    visibility = $9,
     updated_at = clock_timestamp()
-WHERE id = $9 AND project_id = $10 AND deleted IS FALSE
+WHERE id = $10 AND project_id = $11 AND deleted IS FALSE
 RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
@@ -304,6 +316,7 @@ type UpdateMCPServerParams struct {
 	EnvironmentID         uuid.NullUUID
 	UserSessionIssuerID   uuid.NullUUID
 	RemoteMcpServerID     uuid.NullUUID
+	TunneledMcpServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
@@ -318,6 +331,7 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		arg.EnvironmentID,
 		arg.UserSessionIssuerID,
 		arg.RemoteMcpServerID,
+		arg.TunneledMcpServerID,
 		arg.ToolsetID,
 		arg.ToolVariationsGroupID,
 		arg.Visibility,

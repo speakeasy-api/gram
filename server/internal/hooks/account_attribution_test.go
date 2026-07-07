@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 )
 
@@ -450,6 +451,51 @@ func TestClaude_LinksChatToUserAccount(t *testing.T) {
 	// The bridged owner is preserved through hook persistence (not discarded by
 	// re-resolving the non-resolving personal email).
 	require.Equal(t, "bridged-employee", chat.UserID.String)
+}
+
+// TestLogs_BackfillsChatAccountLinkOnExistingChat covers the hook-first
+// ordering: the session's first persisted message creates the chat before OTEL
+// attribution lands, and chat creation happens only once — so attribution must
+// backfill the chat -> user_accounts link or the chat stays unlinked forever
+// (invisible to the account-identity risk rules and the personal/team split).
+func TestLogs_BackfillsChatAccountLinkOnExistingChat(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	queries := repo.New(ti.conn)
+
+	sessionID := "backfill-link-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+
+	// The chat already exists, unlinked — as when the first prompt beats the
+	// first OTEL export of the session.
+	_, err := queries.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGTextEmpty(""),
+		ExternalUserID: conv.ToPGTextEmpty("employee@example.com"),
+		UserAccountID:  conv.StringToNullUUID(""),
+		Title:          conv.ToPGText("hook-first chat"),
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	accountUUID := "acct-" + sessionID
+	claudeAccountSession(t, ctx, ti, sessionID, "someone@gmail.com", "org-"+sessionID, accountUUID, "device-"+sessionID, now)
+
+	account, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		Provider:            providerAnthropic,
+		ExternalAccountUuid: accountUUID,
+	})
+	require.NoError(t, err)
+
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+	require.True(t, chat.UserAccountID.Valid)
+	require.Equal(t, account.ID, chat.UserAccountID.UUID)
 }
 
 // TestLogs_NoAccountIdentityDoesNotCreateUserAccount confirms attribution is a

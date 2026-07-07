@@ -66,12 +66,9 @@ func (m *ProxyMetrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpU
 	labels := []attribute.KeyValue{
 		attr.OrganizationID(orgID),
 		attr.McpURL(mcpURL),
-		attr.RemoteMCPServerID(identity.RemoteMCPServerID),
 		attr.ToolName(toolName),
 	}
-	if identity.McpServerID != "" {
-		labels = append(labels, attr.McpServerID(identity.McpServerID))
-	}
+	labels = identity.AppendAttributes(labels)
 
 	m.mcpToolCallCounter.Add(ctx, 1, metric.WithAttributes(labels...))
 }

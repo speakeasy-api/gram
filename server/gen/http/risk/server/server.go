@@ -21,6 +21,7 @@ type Server struct {
 	Mounts                         []*MountPoint
 	CreateRiskPolicy               http.Handler
 	ListRiskPolicies               http.Handler
+	ListBuiltinExclusions          http.Handler
 	GetRiskPolicy                  http.Handler
 	UpdateRiskPolicy               http.Handler
 	DeleteRiskPolicy               http.Handler
@@ -88,6 +89,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"CreateRiskPolicy", "POST", "/rpc/risk.createPolicy"},
 			{"ListRiskPolicies", "GET", "/rpc/risk.listPolicies"},
+			{"ListBuiltinExclusions", "GET", "/rpc/risk.listBuiltinExclusions"},
 			{"GetRiskPolicy", "GET", "/rpc/risk.getPolicy"},
 			{"UpdateRiskPolicy", "PUT", "/rpc/risk.updatePolicy"},
 			{"DeleteRiskPolicy", "DELETE", "/rpc/risk.deletePolicy"},
@@ -127,6 +129,7 @@ func New(
 		},
 		CreateRiskPolicy:               NewCreateRiskPolicyHandler(e.CreateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
 		ListRiskPolicies:               NewListRiskPoliciesHandler(e.ListRiskPolicies, mux, decoder, encoder, errhandler, formatter),
+		ListBuiltinExclusions:          NewListBuiltinExclusionsHandler(e.ListBuiltinExclusions, mux, decoder, encoder, errhandler, formatter),
 		GetRiskPolicy:                  NewGetRiskPolicyHandler(e.GetRiskPolicy, mux, decoder, encoder, errhandler, formatter),
 		UpdateRiskPolicy:               NewUpdateRiskPolicyHandler(e.UpdateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
 		DeleteRiskPolicy:               NewDeleteRiskPolicyHandler(e.DeleteRiskPolicy, mux, decoder, encoder, errhandler, formatter),
@@ -173,6 +176,7 @@ func (s *Server) Service() string { return "risk" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateRiskPolicy = m(s.CreateRiskPolicy)
 	s.ListRiskPolicies = m(s.ListRiskPolicies)
+	s.ListBuiltinExclusions = m(s.ListBuiltinExclusions)
 	s.GetRiskPolicy = m(s.GetRiskPolicy)
 	s.UpdateRiskPolicy = m(s.UpdateRiskPolicy)
 	s.DeleteRiskPolicy = m(s.DeleteRiskPolicy)
@@ -218,6 +222,7 @@ func (s *Server) MethodNames() []string { return risk.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateRiskPolicyHandler(mux, h.CreateRiskPolicy)
 	MountListRiskPoliciesHandler(mux, h.ListRiskPolicies)
+	MountListBuiltinExclusionsHandler(mux, h.ListBuiltinExclusions)
 	MountGetRiskPolicyHandler(mux, h.GetRiskPolicy)
 	MountUpdateRiskPolicyHandler(mux, h.UpdateRiskPolicy)
 	MountDeleteRiskPolicyHandler(mux, h.DeleteRiskPolicy)
@@ -344,6 +349,59 @@ func NewListRiskPoliciesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listRiskPolicies")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListBuiltinExclusionsHandler configures the mux to serve the "risk"
+// service "listBuiltinExclusions" endpoint.
+func MountListBuiltinExclusionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.listBuiltinExclusions", f)
+}
+
+// NewListBuiltinExclusionsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "listBuiltinExclusions" endpoint.
+func NewListBuiltinExclusionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListBuiltinExclusionsRequest(mux, decoder)
+		encodeResponse = EncodeListBuiltinExclusionsResponse(encoder)
+		encodeError    = EncodeListBuiltinExclusionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listBuiltinExclusions")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

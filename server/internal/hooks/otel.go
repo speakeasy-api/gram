@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -115,8 +116,11 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			AccountType:         "",
 			BillingMode:         "",
 			UserAccountID:       "",
-			GramOrgID:           orgID,
-			ProjectID:           projectID,
+			// On this path user.email is the account's own report, so it doubles
+			// as the observed email consumers keep separate from actor identity.
+			ObservedUserEmail: userEmail,
+			GramOrgID:         orgID,
+			ProjectID:         projectID,
 		}
 
 		sessionLogger := logger.With(
@@ -138,13 +142,41 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 
 		attributionBySession[completeMetadata.SessionID] = completeMetadata
 
-		// Process each session independently so a single cache failure does not
-		// abort flushing the remaining sessions in the batch.
-		if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
-			sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
-				attr.SlogEvent("claude_logs_cache_set_failed"),
-				attr.SlogError(err),
-			)
+		// A session's chat row is created once, on its first persisted message.
+		// When that message beat this attribution (hooks and OTEL race at session
+		// start), the chat exists without its account link and no later hook
+		// revisits it — so backfill the link here. Fill-once in SQL; a no-op when
+		// the chat does not exist yet or is already linked. At most one write per
+		// attributed session, since only the attribution path runs this.
+		linkFailed := false
+		if completeMetadata.UserAccountID != "" {
+			if _, err := s.repo.LinkChatUserAccount(ctx, repo.LinkChatUserAccountParams{
+				UserAccountID: conv.StringToNullUUID(completeMetadata.UserAccountID),
+				ID:            sessionIDToUUID(completeMetadata.SessionID),
+				ProjectID:     *authCtx.ProjectID,
+			}); err != nil {
+				linkFailed = true
+				sessionLogger.ErrorContext(ctx, "failed to backfill chat account link",
+					attr.SlogEvent("chat_account_link_backfill_failed"),
+					attr.SlogError(err),
+				)
+			}
+		}
+
+		// Cache only after the backfill: the once-per-session fast path above
+		// keys on the cached UserAccountID, so caching an attribution whose
+		// backfill just failed would freeze the chat unlinked forever. Skipping
+		// the write keeps this batch's row stamping (attributionBySession) and
+		// lets the next batch re-attribute and retry the link. Process each
+		// session independently so a single cache failure does not abort
+		// flushing the remaining sessions in the batch.
+		if !linkFailed {
+			if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
+				sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
+					attr.SlogEvent("claude_logs_cache_set_failed"),
+					attr.SlogError(err),
+				)
+			}
 		}
 
 		s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)

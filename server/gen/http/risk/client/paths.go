@@ -17,6 +17,11 @@ func ListRiskPoliciesRiskPath() string {
 	return "/rpc/risk.listPolicies"
 }
 
+// ListBuiltinExclusionsRiskPath returns the URL path to the risk service listBuiltinExclusions HTTP endpoint.
+func ListBuiltinExclusionsRiskPath() string {
+	return "/rpc/risk.listBuiltinExclusions"
+}
+
 // GetRiskPolicyRiskPath returns the URL path to the risk service getRiskPolicy HTTP endpoint.
 func GetRiskPolicyRiskPath() string {
 	return "/rpc/risk.getPolicy"
