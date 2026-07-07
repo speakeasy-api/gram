@@ -585,17 +585,26 @@ func (q *Queries) ListPluginServers(ctx context.Context, pluginID uuid.UUID) ([]
 }
 
 const listPluginServersByPluginIDs = `-- name: ListPluginServersByPluginIDs :many
-SELECT id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+SELECT plugin_servers.id, plugin_servers.plugin_id, plugin_servers.toolset_id, plugin_servers.mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted
 FROM plugin_servers
-WHERE plugin_id = ANY($1::uuid[])
-  AND deleted IS FALSE
-ORDER BY plugin_id, sort_order ASC, created_at ASC
+JOIN plugins ON plugins.id = plugin_servers.plugin_id
+WHERE plugin_servers.plugin_id = ANY($1::uuid[])
+  AND plugins.project_id = $2
+  AND plugin_servers.deleted IS FALSE
+ORDER BY plugin_servers.plugin_id, plugin_servers.sort_order ASC, plugin_servers.created_at ASC
 `
+
+type ListPluginServersByPluginIDsParams struct {
+	PluginIds []uuid.UUID
+	ProjectID uuid.UUID
+}
 
 // Batch variant of ListPluginServers for callers that need every server for
 // a set of plugins (e.g. ListPlugins) without one round-trip per plugin.
-func (q *Queries) ListPluginServersByPluginIDs(ctx context.Context, pluginIds []uuid.UUID) ([]PluginServer, error) {
-	rows, err := q.db.Query(ctx, listPluginServersByPluginIDs, pluginIds)
+// Joins plugins and scopes by project_id as defense-in-depth, so this stays
+// safe even if a future caller passes plugin IDs it hasn't already scoped.
+func (q *Queries) ListPluginServersByPluginIDs(ctx context.Context, arg ListPluginServersByPluginIDsParams) ([]PluginServer, error) {
+	rows, err := q.db.Query(ctx, listPluginServersByPluginIDs, arg.PluginIds, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}

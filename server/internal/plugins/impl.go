@@ -236,7 +236,10 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 	for i, r := range rows {
 		pluginIDs[i] = r.ID
 	}
-	allServers, err := s.repo.ListPluginServersByPluginIDs(ctx, pluginIDs)
+	allServers, err := s.repo.ListPluginServersByPluginIDs(ctx, repo.ListPluginServersByPluginIDsParams{
+		PluginIds: pluginIDs,
+		ProjectID: *ac.ProjectID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").LogError(ctx, s.logger)
 	}
