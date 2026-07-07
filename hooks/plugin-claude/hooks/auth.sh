@@ -170,47 +170,82 @@ gram_hooks_login_http_response() {
 }
 
 gram_hooks_login_success_html() {
-  printf '<!doctype html><html><head><title>Speakeasy hooks connected</title></head><body style="font-family:sans-serif;text-align:center;padding-top:4rem"><h1>Authentication successful</h1><p>Speakeasy hooks are connected. You can close this tab.</p></body></html>'
+  printf '<!doctype html><html><head><title>Speakeasy hooks connected</title></head><body style="font-family:sans-serif;text-align:center;padding-top:4rem"><h1>Authentication successful</h1><p>Speakeasy hooks are connected. This tab will close itself; if it stays open, you can close it.</p><script>window.close()</script></body></html>'
 }
 
 # gram_hooks_login_handle_request reads one HTTP request from stdin (the nc
-# pipe), captures the /callback query string into a file, and writes the
-# response to stdout (piped back to the client through the fifo). The probe
-# path echoes a per-attempt marker so the readiness check can tell this
-# listener apart from whatever else answers on the port; other requests
-# without api_key (favicon) get a 204 so the serve loop keeps waiting for the
-# dashboard's real redirect. The callback must echo the unguessable state
-# token minted for this attempt — anyone on this machine can reach the
-# listener, and without the token a racing local process could inject its own
-# key and reroute telemetry to an attacker-controlled project.
+# pipe), captures the credential fields into a file, and writes the response
+# to stdout (piped back to the client through the fifo). Dashboards honoring
+# callback_method=post deliver the credentials as a form POST body so the API
+# key never appears in a URL; older dashboards send them in the /callback
+# query string, and both shapes are accepted. The probe path echoes a
+# per-attempt marker so the readiness check can tell this listener apart from
+# whatever else answers on the port; other requests without api_key (favicon)
+# get a 204 so the serve loop keeps waiting for the dashboard's real
+# response. The callback must echo the unguessable state token minted for
+# this attempt — anyone on this machine can reach the listener, and without
+# the token a racing local process could inject its own key and reroute
+# telemetry to an attacker-controlled project.
 gram_hooks_login_handle_request() {
   local dir="$1"
   local state="$2"
   local probe="$3"
-  local request_line="" line="" path_query=""
+  local request_line="" line="" path_query="" method="" content_length=""
   IFS= read -r -t 10 request_line || request_line=""
   request_line="${request_line%$'\r'}"
   if [ -z "$request_line" ]; then
     return 0
   fi
+  method="${request_line%% *}"
   while IFS= read -r -t 10 line; do
     line="${line%$'\r'}"
     if [ -z "$line" ]; then
       break
     fi
+    case "$line" in
+      [Cc][Oo][Nn][Tt][Ee][Nn][Tt]-[Ll][Ee][Nn][Gg][Tt][Hh]:*)
+        content_length="${line#*:}"
+        content_length="${content_length//[[:space:]]/}"
+        # A malformed length must be rejected, not digit-stripped into a
+        # different valid number that would truncate or garble the body.
+        case "$content_length" in
+          '' | *[!0-9]*) content_length="" ;;
+        esac
+        ;;
+    esac
   done
   path_query="${request_line#* }"
   path_query="${path_query%% *}"
   case "$path_query" in
-    /callback\?*api_key=*)
-      case "&${path_query#*\?}&" in
-        *"&state=${state}&"*)
-          printf '%s' "${path_query#*\?}" >"$dir/query.tmp"
-          mv "$dir/query.tmp" "$dir/query"
-          gram_hooks_login_http_response 200 "$(gram_hooks_login_success_html)"
+    /callback\?*)
+      local cb_query="${path_query#*\?}" creds=""
+      if [ "$method" = "POST" ]; then
+        # read -n, not -N: macOS ships bash 3.2, which lacks -N, and -n reads
+        # the exact count anyway because the urlencoded body is newline-free
+        # ASCII. The length-of-length guard keeps oversized values out of the
+        # arithmetic tests, and the size cap plus timeout keep a hostile
+        # local client from ballooning or stalling the capture.
+        if [ -n "$content_length" ] && [ "${#content_length}" -le 5 ] && [ "$content_length" -gt 0 ] && [ "$content_length" -le 16384 ]; then
+          IFS= read -r -t 10 -n "$content_length" creds || true
+        fi
+      else
+        creds="$cb_query"
+      fi
+      case "$creds" in
+        *api_key=*)
+          case "&${cb_query}&" in
+            *"&state=${state}&"*)
+              printf '%s' "$creds" >"$dir/query.tmp"
+              mv "$dir/query.tmp" "$dir/query"
+              gram_hooks_login_http_response 200 "$(gram_hooks_login_success_html)"
+              ;;
+            *)
+              gram_hooks_login_http_response 403 ""
+              ;;
+          esac
           ;;
         *)
-          gram_hooks_login_http_response 403 ""
+          gram_hooks_login_http_response 204 ""
           ;;
       esac
       ;;
@@ -425,8 +460,10 @@ gram_hooks_login() {
   fi
 
   # The callback URL carries the state token as its own query parameter; the
-  # dashboard preserves existing parameters when appending the credentials.
-  local auth_url="${server_url%/}/?from_cli=true&cli_callback_url=http%3A%2F%2F127.0.0.1%3A${port}%2Fcallback%3Fstate%3D${state}&key_scope=hooks"
+  # dashboard preserves it whether it appends the credentials to the query
+  # string (legacy) or, per callback_method=post, delivers them as a form
+  # body that keeps the API key out of URLs.
+  local auth_url="${server_url%/}/?from_cli=true&cli_callback_url=http%3A%2F%2F127.0.0.1%3A${port}%2Fcallback%3Fstate%3D${state}&key_scope=hooks&callback_method=post"
   # Project slugs are URL-safe by construction; anything else would need
   # percent-encoding, so it is dropped rather than corrupt the query string.
   case "$project_hint" in
