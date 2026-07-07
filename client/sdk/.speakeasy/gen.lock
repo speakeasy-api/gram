@@ -179,6 +179,7 @@ trackedFiles:
   docs/models/components/environment.md: {}
   docs/models/components/environmententry.md: {}
   docs/models/components/environmententryinput.md: {}
+  docs/models/components/evaluatepromptguardrailrequestbody.md: {}
   docs/models/components/evolveform.md: {}
   docs/models/components/evolveresult.md: {}
   docs/models/components/exclusionscope.md: {}
@@ -310,6 +311,7 @@ trackedFiles:
   docs/models/components/listremotesessionsresult.md: {}
   docs/models/components/listresourcesresult.md: {}
   docs/models/components/listresponsebody.md: {}
+  docs/models/components/listriskevalreviewsresult.md: {}
   docs/models/components/listriskexclusionsresult.md: {}
   docs/models/components/listriskpoliciesresult.md: {}
   docs/models/components/listriskpolicybypassrequestsresult.md: {}
@@ -430,6 +432,8 @@ trackedFiles:
   docs/models/components/projectentry.md: {}
   docs/models/components/projectoverviewsummary.md: {}
   docs/models/components/projectsummary.md: {}
+  docs/models/components/promptguardrailevalresult.md: {}
+  docs/models/components/promptguardrailmessageverdict.md: {}
   docs/models/components/prompttemplate.md: {}
   docs/models/components/prompttemplateentry.md: {}
   docs/models/components/prompttemplatekind.md: {}
@@ -503,6 +507,7 @@ trackedFiles:
   docs/models/components/riskpolicybypassapprovalrequestbody.md: {}
   docs/models/components/riskpolicybypassrequest.md: {}
   docs/models/components/riskpolicybypassrequeststatus.md: {}
+  docs/models/components/riskpolicyevalreview.md: {}
   docs/models/components/riskpolicymodelconfig.md: {}
   docs/models/components/riskpolicypolicytype.md: {}
   docs/models/components/riskpolicystatus.md: {}
@@ -518,6 +523,8 @@ trackedFiles:
   docs/models/components/role.md: {}
   docs/models/components/rolegrant.md: {}
   docs/models/components/rolesummary.md: {}
+  docs/models/components/saveriskevalreviewrequestbody.md: {}
+  docs/models/components/saveriskevalreviewrequestbodyverdict.md: {}
   docs/models/components/scope.md: {}
   docs/models/components/scopedefinition.md: {}
   docs/models/components/searchchatsfilter.md: {}
@@ -729,6 +736,7 @@ trackedFiles:
   docs/models/components/validatekeyorganization.md: {}
   docs/models/components/validatekeyproject.md: {}
   docs/models/components/validatekeyresult.md: {}
+  docs/models/components/verdict.md: {}
   docs/models/components/verifyonboardinghookssetupresult.md: {}
   docs/models/components/verifyurlform.md: {}
   docs/models/components/verifyurlresult.md: {}
@@ -966,6 +974,10 @@ trackedFiles:
   docs/models/operations/deleteremotesessionissuersecurity.md: {}
   docs/models/operations/deleteremotesessionissuersecurityoption1.md: {}
   docs/models/operations/deleteremotesessionissuersecurityoption2.md: {}
+  docs/models/operations/deleteriskevalreviewrequest.md: {}
+  docs/models/operations/deleteriskevalreviewsecurity.md: {}
+  docs/models/operations/deleteriskevalreviewsecurityoption1.md: {}
+  docs/models/operations/deleteriskevalreviewsecurityoption2.md: {}
   docs/models/operations/deleteriskexclusionrequest.md: {}
   docs/models/operations/deleteriskexclusionsecurity.md: {}
   docs/models/operations/deleteriskexclusionsecurityoption1.md: {}
@@ -1040,6 +1052,10 @@ trackedFiles:
   docs/models/operations/enablewebhookssecurity.md: {}
   docs/models/operations/ensuremanagedassistantrequest.md: {}
   docs/models/operations/ensuremanagedassistantsecurity.md: {}
+  docs/models/operations/evaluatepromptguardrailrequest.md: {}
+  docs/models/operations/evaluatepromptguardrailsecurity.md: {}
+  docs/models/operations/evaluatepromptguardrailsecurityoption1.md: {}
+  docs/models/operations/evaluatepromptguardrailsecurityoption2.md: {}
   docs/models/operations/evolvedeploymentrequest.md: {}
   docs/models/operations/evolvedeploymentsecurity.md: {}
   docs/models/operations/evolvedeploymentsecurityoption1.md: {}
@@ -1399,6 +1415,10 @@ trackedFiles:
   docs/models/operations/listriskcategoriessecurity.md: {}
   docs/models/operations/listriskcategoriessecurityoption1.md: {}
   docs/models/operations/listriskcategoriessecurityoption2.md: {}
+  docs/models/operations/listriskevalreviewsrequest.md: {}
+  docs/models/operations/listriskevalreviewssecurity.md: {}
+  docs/models/operations/listriskevalreviewssecurityoption1.md: {}
+  docs/models/operations/listriskevalreviewssecurityoption2.md: {}
   docs/models/operations/listriskexclusionsrequest.md: {}
   docs/models/operations/listriskexclusionssecurity.md: {}
   docs/models/operations/listriskexclusionssecurityoption1.md: {}
@@ -1593,6 +1613,10 @@ trackedFiles:
   docs/models/operations/revokeusersessionsecurity.md: {}
   docs/models/operations/revokeusersessionsecurityoption1.md: {}
   docs/models/operations/revokeusersessionsecurityoption2.md: {}
+  docs/models/operations/saveriskevalreviewrequest.md: {}
+  docs/models/operations/saveriskevalreviewsecurity.md: {}
+  docs/models/operations/saveriskevalreviewsecurityoption1.md: {}
+  docs/models/operations/saveriskevalreviewsecurityoption2.md: {}
   docs/models/operations/searchchatsrequest.md: {}
   docs/models/operations/searchchatssecurity.md: {}
   docs/models/operations/searchchatssecurityoption1.md: {}
@@ -1836,6 +1860,7 @@ trackedFiles:
   docs/sdks/deployments/README.md: {}
   docs/sdks/domains/README.md: {}
   docs/sdks/environments/README.md: {}
+  docs/sdks/evals/README.md: {}
   docs/sdks/exclusions/README.md: {}
   docs/sdks/expr/README.md: {}
   docs/sdks/external/README.md: {}
@@ -2134,6 +2159,10 @@ trackedFiles:
   src/funcs/riskCustomRulesList.ts: {}
   src/funcs/riskCustomRulesSuggest.ts: {}
   src/funcs/riskCustomRulesUpdate.ts: {}
+  src/funcs/riskEvalsDeleteReview.ts: {}
+  src/funcs/riskEvalsEvaluate.ts: {}
+  src/funcs/riskEvalsListReviews.ts: {}
+  src/funcs/riskEvalsSaveReview.ts: {}
   src/funcs/riskExclusionsCreate.ts: {}
   src/funcs/riskExclusionsDelete.ts: {}
   src/funcs/riskExclusionsList.ts: {}
@@ -2364,6 +2393,7 @@ trackedFiles:
   src/models/components/environment.ts: {}
   src/models/components/environmententry.ts: {}
   src/models/components/environmententryinput.ts: {}
+  src/models/components/evaluatepromptguardrailrequestbody.ts: {}
   src/models/components/evolveform.ts: {}
   src/models/components/evolveresult.ts: {}
   src/models/components/exportmcpmetadatarequestbody.ts: {}
@@ -2484,6 +2514,7 @@ trackedFiles:
   src/models/components/listremotesessionsresult.ts: {}
   src/models/components/listresourcesresult.ts: {}
   src/models/components/listresponsebody.ts: {}
+  src/models/components/listriskevalreviewsresult.ts: {}
   src/models/components/listriskexclusionsresult.ts: {}
   src/models/components/listriskpoliciesresult.ts: {}
   src/models/components/listriskpolicybypassrequestsresult.ts: {}
@@ -2587,6 +2618,8 @@ trackedFiles:
   src/models/components/projectentry.ts: {}
   src/models/components/projectoverviewsummary.ts: {}
   src/models/components/projectsummary.ts: {}
+  src/models/components/promptguardrailevalresult.ts: {}
+  src/models/components/promptguardrailmessageverdict.ts: {}
   src/models/components/prompttemplate.ts: {}
   src/models/components/prompttemplateentry.ts:
     pristine_git_object: 86d6a348005f41e309841cca068a3c309b9d1ef4
@@ -2642,6 +2675,7 @@ trackedFiles:
   src/models/components/riskpolicy.ts: {}
   src/models/components/riskpolicybypassapprovalrequestbody.ts: {}
   src/models/components/riskpolicybypassrequest.ts: {}
+  src/models/components/riskpolicyevalreview.ts: {}
   src/models/components/riskpolicymodelconfig.ts: {}
   src/models/components/riskpolicystatus.ts: {}
   src/models/components/riskresult.ts: {}
@@ -2656,6 +2690,7 @@ trackedFiles:
   src/models/components/role.ts: {}
   src/models/components/rolegrant.ts: {}
   src/models/components/rolesummary.ts: {}
+  src/models/components/saveriskevalreviewrequestbody.ts: {}
   src/models/components/scopedefinition.ts: {}
   src/models/components/searchchatsfilter.ts: {}
   src/models/components/searchchatspayload.ts: {}
@@ -2887,6 +2922,7 @@ trackedFiles:
   src/models/operations/deleteremotemcpserver.ts: {}
   src/models/operations/deleteremotesessionclient.ts: {}
   src/models/operations/deleteremotesessionissuer.ts: {}
+  src/models/operations/deleteriskevalreview.ts: {}
   src/models/operations/deleteriskexclusion.ts: {}
   src/models/operations/deleteriskpolicy.ts: {}
   src/models/operations/deleterole.ts: {}
@@ -2912,6 +2948,7 @@ trackedFiles:
   src/models/operations/enablerbac.ts: {}
   src/models/operations/enablewebhooks.ts: {}
   src/models/operations/ensuremanagedassistant.ts: {}
+  src/models/operations/evaluatepromptguardrail.ts: {}
   src/models/operations/evolvedeployment.ts: {}
   src/models/operations/exportmcpmetadata.ts: {}
   src/models/operations/fetchopenapiv3fromurl.ts: {}
@@ -3032,6 +3069,7 @@ trackedFiles:
   src/models/operations/listremotesessions.ts: {}
   src/models/operations/listresources.ts: {}
   src/models/operations/listriskcategories.ts: {}
+  src/models/operations/listriskevalreviews.ts: {}
   src/models/operations/listriskexclusions.ts: {}
   src/models/operations/listriskpolicies.ts: {}
   src/models/operations/listriskpolicybypassrequests.ts: {}
@@ -3091,6 +3129,7 @@ trackedFiles:
   src/models/operations/revokeusersession.ts: {}
   src/models/operations/revokeusersessionclient.ts: {}
   src/models/operations/revokeusersessionconsent.ts: {}
+  src/models/operations/saveriskevalreview.ts: {}
   src/models/operations/searchchats.ts: {}
   src/models/operations/searchlogs.ts: {}
   src/models/operations/searchtoolcalls.ts: {}
@@ -3527,14 +3566,19 @@ trackedFiles:
   src/react-query/riskCreatePolicy.ts: {}
   src/react-query/riskCreatePolicyBypassRequest.ts: {}
   src/react-query/riskDeleteCustomDetectionRule.ts: {}
+  src/react-query/riskDeleteEvalReview.ts: {}
   src/react-query/riskDeleteExclusion.ts: {}
   src/react-query/riskDenyPolicyBypassRequest.ts: {}
+  src/react-query/riskEvaluatePromptGuardrail.core.ts: {}
+  src/react-query/riskEvaluatePromptGuardrail.ts: {}
   src/react-query/riskGetBlock.core.ts: {}
   src/react-query/riskGetBlock.ts: {}
   src/react-query/riskGetCustomDetectionRule.core.ts: {}
   src/react-query/riskGetCustomDetectionRule.ts: {}
   src/react-query/riskListCustomDetectionRules.core.ts: {}
   src/react-query/riskListCustomDetectionRules.ts: {}
+  src/react-query/riskListEvalReviews.core.ts: {}
+  src/react-query/riskListEvalReviews.ts: {}
   src/react-query/riskListExclusions.core.ts: {}
   src/react-query/riskListExclusions.ts: {}
   src/react-query/riskListPolicies.core.ts: {}
@@ -3559,6 +3603,7 @@ trackedFiles:
   src/react-query/riskRevokePolicyBypassRequest.ts: {}
   src/react-query/riskRuleBreakdown.core.ts: {}
   src/react-query/riskRuleBreakdown.ts: {}
+  src/react-query/riskSaveEvalReview.ts: {}
   src/react-query/riskSubmitBlockFeedback.ts: {}
   src/react-query/riskSuggestCustomRule.ts: {}
   src/react-query/riskTestDetectionRule.ts: {}
@@ -3691,6 +3736,7 @@ trackedFiles:
   src/sdk/deployments.ts: {}
   src/sdk/domains.ts: {}
   src/sdk/environments.ts: {}
+  src/sdk/evals.ts: {}
   src/sdk/exclusions.ts: {}
   src/sdk/expr.ts: {}
   src/sdk/external.ts: {}
@@ -4608,6 +4654,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  deleteRiskEvalReview:
+    speakeasy-default-delete-risk-eval-review:
+      parameters:
+        query:
+          policy_id: "7d33d4a1-10e2-4676-8f01-7b6bb7cc1d94"
+          chat_id: "9f1f3c19-77e1-47bc-8648-eacff83771bc"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   deleteRiskExclusion:
     speakeasy-default-delete-risk-exclusion:
       parameters:
@@ -4856,6 +4913,17 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2025-11-23T20:07:20.423Z", "id": "a2bc1d28-98c6-4e00-a761-bfd9e7745a3f", "instructions": "<value>", "max_concurrency": 762734, "model": "Volt", "name": "<value>", "project_id": "4be9122d-4cc9-42ab-a034-5831eedda143", "status": "active", "toolsets": [], "updated_at": "2025-06-01T23:02:16.393Z", "warm_ttl_seconds": 622901}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  evaluatePromptGuardrail:
+    speakeasy-default-evaluate-prompt-guardrail:
+      requestBody:
+        application/json: {"chat_id": "e4912c42-9ca6-46fd-8057-460714cea6b8", "prompt": "<value>"}
+      responses:
+        "200":
+          application/json: {"chat_id": "99fcfd95-e73a-44bb-932b-3ba233957eb2", "flagged": false, "judged_count": 858712, "total_cost_usd": 8084.19, "total_latency_ms": 17493, "verdicts": [{"completion_tokens": 31617, "confidence": 6257.52, "cost_usd": 4680.52, "latency_ms": 252996, "matched": true, "message_id": "393d54cf-3d9e-45b1-a53f-69257ea013f1", "message_type": "<value>", "prompt_tokens": 448164, "rationale": "<value>", "seq": 140202, "total_tokens": 946723}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -6133,6 +6201,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listRiskEvalReviews:
+    speakeasy-default-list-risk-eval-reviews:
+      parameters:
+        query:
+          policy_id: "12c1410e-6f7a-4401-ba26-030e46dc41b9"
+      responses:
+        "200":
+          application/json: {"reviews": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listRiskExclusions:
     speakeasy-default-list-risk-exclusions:
       responses:
@@ -6756,6 +6836,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  saveRiskEvalReview:
+    speakeasy-default-save-risk-eval-review:
+      requestBody:
+        application/json: {"chat_id": "fb145521-1e78-4d01-bc1a-c91ba7508a75", "policy_id": "d33108fc-9369-4d3c-aa28-b0dd07372081", "verdict": "missed"}
+      responses:
+        "200":
+          application/json: {"chat_id": "be5a4cbd-04fd-4897-a542-4dd007fd14ac", "created_at": "2026-04-13T17:04:32.354Z", "id": "8ecf5e87-3cff-4d4d-9417-e87fdb498b53", "policy_id": "544d059d-4ca0-4863-bb59-a3deec2273c6", "policy_version": 307303, "reviewed_by": "<value>", "updated_at": "2024-07-31T16:20:48.032Z", "verdict": "false_positive"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   searchChats:
     speakeasy-default-search-chats:
       requestBody:

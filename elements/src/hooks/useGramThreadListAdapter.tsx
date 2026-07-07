@@ -107,6 +107,13 @@ export interface ThreadListAdapterOptions {
    * the library — see {@link HistoryConfig.transformChatMessage}.
    */
   transformChatMessage?: ChatMessageTransform;
+  /** See {@link HistoryConfig.resolveCreator}. */
+  resolveCreator?: (chat: {
+    userId?: string;
+    externalUserId?: string;
+  }) => { name?: string; email: string; photoUrl?: string } | undefined;
+  /** See {@link HistoryConfig.isOwnChat}. */
+  isOwnChat?: (chat: { userId?: string; externalUserId?: string }) => boolean;
 }
 
 interface ListChatsResponse {
@@ -123,6 +130,20 @@ function readChatCreatedAt(chat: GramChatOverview): string | undefined {
   const raw = chat as unknown as Record<string, unknown>;
   const value = raw["created_at"] ?? raw["createdAt"];
   return typeof value === "string" ? value : undefined;
+}
+
+/** Reads a chat's creator (Gram user id) from the `chat.list` payload. */
+function readChatUserId(chat: GramChatOverview): string | undefined {
+  const raw = chat as unknown as Record<string, unknown>;
+  const value = raw["user_id"] ?? raw["userId"];
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+/** Reads a chat's external user id from the `chat.list` payload. */
+function readChatExternalUserId(chat: GramChatOverview): string | undefined {
+  const raw = chat as unknown as Record<string, unknown>;
+  const value = raw["external_user_id"] ?? raw["externalUserId"];
+  return typeof value === "string" && value !== "" ? value : undefined;
 }
 
 /**
@@ -400,12 +421,25 @@ export function useGramThreadListAdapter(
           }
 
           const data = (await response.json()) as ListChatsResponse;
-          // Stash creation dates in the side channel before returning the
-          // assistant-ui metadata (which can't carry them) — keyed by chat id,
-          // the same value used for remoteId/externalId below.
+
+          // Stash creation dates + resolved owner in the side channel before
+          // returning the assistant-ui metadata (which can't carry them) —
+          // keyed by chat id, the same value used for remoteId/externalId
+          // below. `resolveCreator` is consumer-supplied and synchronous (the
+          // consumer already holds whatever identity data it needs), so no
+          // extra request goes out here.
+          const { resolveCreator, isOwnChat } = optionsRef.current;
           const nextMeta: Record<string, ThreadMeta> = { ...metaRef.current };
           for (const chat of data.chats) {
-            nextMeta[chat.id] = { createdAt: readChatCreatedAt(chat) };
+            const chatIdentity = {
+              userId: readChatUserId(chat),
+              externalUserId: readChatExternalUserId(chat),
+            };
+            nextMeta[chat.id] = {
+              createdAt: readChatCreatedAt(chat),
+              owner: resolveCreator?.(chatIdentity),
+              readOnly: isOwnChat ? !isOwnChat(chatIdentity) : false,
+            };
           }
           metaRef.current = nextMeta;
           bumpMeta((n) => n + 1);

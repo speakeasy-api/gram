@@ -1280,6 +1280,54 @@ RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.rea
   COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id AND rp.deleted IS FALSE), '')::text AS policy_name;
 
 
+-- name: UpsertRiskPolicyEvalReview :one
+-- Records (or replaces) the current reviewer's ground-truth verdict for one
+-- chat session under a prompt-based policy. Scoped to project_id. Upserts on the
+-- active-row unique key so a reviewer has at most one verdict per session.
+INSERT INTO risk_policy_eval_reviews (
+  project_id, organization_id, risk_policy_id, risk_policy_version, chat_id, verdict, reviewed_by
+) VALUES (
+  @project_id, @organization_id, @risk_policy_id, @risk_policy_version, @chat_id, @verdict, @reviewed_by
+)
+ON CONFLICT (project_id, risk_policy_id, chat_id, reviewed_by) WHERE deleted IS FALSE
+DO UPDATE SET
+  verdict = EXCLUDED.verdict,
+  risk_policy_version = EXCLUDED.risk_policy_version,
+  updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: RiskEvalChatBelongsToProject :one
+SELECT EXISTS (
+  SELECT 1
+  FROM chats
+  WHERE id = @chat_id
+    AND project_id = @project_id
+    AND deleted IS FALSE
+);
+
+-- name: ListRiskPolicyEvalReviews :many
+-- The active regression set for a policy: every reviewer's current verdicts.
+-- Scoped to project_id.
+SELECT *
+FROM risk_policy_eval_reviews
+WHERE project_id = @project_id
+  AND risk_policy_id = @risk_policy_id
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
+
+-- name: SoftDeleteRiskPolicyEvalReview :one
+-- Removes the current reviewer's verdict for one session (the toggle-off path).
+-- Scoped to project_id and reviewed_by so a reviewer only clears their own row.
+UPDATE risk_policy_eval_reviews
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND risk_policy_id = @risk_policy_id
+  AND chat_id = @chat_id
+  AND reviewed_by = @reviewed_by
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: SetRiskResultExcludedForTest :exec
 UPDATE risk_results
 SET excluded_at = clock_timestamp()

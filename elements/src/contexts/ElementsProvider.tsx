@@ -755,6 +755,8 @@ const ElementsProviderWithHistory = ({
     threadListFilters: contextValue?.config.history?.threadListFilters,
     deferThreadIdMinting: contextValue?.config.history?.deferThreadIdMinting,
     transformChatMessage: contextValue?.config.history?.transformChatMessage,
+    resolveCreator: contextValue?.config.history?.resolveCreator,
+    isOwnChat: contextValue?.config.history?.isOwnChat,
   });
   const initialThreadId = contextValue?.config.history?.initialThreadId;
 

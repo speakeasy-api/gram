@@ -157,6 +157,22 @@ type Client struct {
 	// testDetectionRule endpoint.
 	TestDetectionRuleDoer goahttp.Doer
 
+	// EvaluatePromptGuardrail Doer is the HTTP client used to make requests to the
+	// evaluatePromptGuardrail endpoint.
+	EvaluatePromptGuardrailDoer goahttp.Doer
+
+	// SaveRiskEvalReview Doer is the HTTP client used to make requests to the
+	// saveRiskEvalReview endpoint.
+	SaveRiskEvalReviewDoer goahttp.Doer
+
+	// ListRiskEvalReviews Doer is the HTTP client used to make requests to the
+	// listRiskEvalReviews endpoint.
+	ListRiskEvalReviewsDoer goahttp.Doer
+
+	// DeleteRiskEvalReview Doer is the HTTP client used to make requests to the
+	// deleteRiskEvalReview endpoint.
+	DeleteRiskEvalReviewDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -212,6 +228,10 @@ func NewClient(
 		DeleteRiskExclusionDoer:            doer,
 		SuggestCustomDetectionRuleDoer:     doer,
 		TestDetectionRuleDoer:              doer,
+		EvaluatePromptGuardrailDoer:        doer,
+		SaveRiskEvalReviewDoer:             doer,
+		ListRiskEvalReviewsDoer:            doer,
+		DeleteRiskEvalReviewDoer:           doer,
 		RestoreResponseBody:                restoreBody,
 		scheme:                             scheme,
 		host:                               host,
@@ -1055,6 +1075,102 @@ func (c *Client) TestDetectionRule() goa.Endpoint {
 		resp, err := c.TestDetectionRuleDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "testDetectionRule", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// EvaluatePromptGuardrail returns an endpoint that makes HTTP requests to the
+// risk service evaluatePromptGuardrail server.
+func (c *Client) EvaluatePromptGuardrail() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeEvaluatePromptGuardrailRequest(c.encoder)
+		decodeResponse = DecodeEvaluatePromptGuardrailResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildEvaluatePromptGuardrailRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.EvaluatePromptGuardrailDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "evaluatePromptGuardrail", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SaveRiskEvalReview returns an endpoint that makes HTTP requests to the risk
+// service saveRiskEvalReview server.
+func (c *Client) SaveRiskEvalReview() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSaveRiskEvalReviewRequest(c.encoder)
+		decodeResponse = DecodeSaveRiskEvalReviewResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSaveRiskEvalReviewRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SaveRiskEvalReviewDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "saveRiskEvalReview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRiskEvalReviews returns an endpoint that makes HTTP requests to the risk
+// service listRiskEvalReviews server.
+func (c *Client) ListRiskEvalReviews() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRiskEvalReviewsRequest(c.encoder)
+		decodeResponse = DecodeListRiskEvalReviewsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRiskEvalReviewsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRiskEvalReviewsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listRiskEvalReviews", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteRiskEvalReview returns an endpoint that makes HTTP requests to the
+// risk service deleteRiskEvalReview server.
+func (c *Client) DeleteRiskEvalReview() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteRiskEvalReviewRequest(c.encoder)
+		decodeResponse = DecodeDeleteRiskEvalReviewResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteRiskEvalReviewRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteRiskEvalReviewDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "deleteRiskEvalReview", err)
 		}
 		return decodeResponse(resp)
 	}
