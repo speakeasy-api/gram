@@ -1294,7 +1294,7 @@ gram_hooks_login_http_response() {
 }
 
 gram_hooks_login_success_html() {
-  printf '<!doctype html><html><head><title>Speakeasy hooks connected</title></head><body style="font-family:sans-serif;text-align:center;padding-top:4rem"><h1>Authentication successful</h1><p>Speakeasy hooks are connected. This tab will close itself; if it stays open, you can close it.</p><script>window.close()</script></body></html>'
+  printf '<!doctype html><html><head><title>Speakeasy hooks connected</title></head><body style="font-family:sans-serif;text-align:center;padding-top:4rem"><h1>Authentication successful</h1><p>Speakeasy hooks are connected. You can close this tab.</p><script>window.close()</script></body></html>'
 }
 
 # gram_hooks_login_handle_request reads one HTTP request from stdin (the nc
