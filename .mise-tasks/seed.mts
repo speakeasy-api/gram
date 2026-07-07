@@ -3,11 +3,12 @@
 //MISE description="Seed the local database with data"
 
 import assert from "node:assert";
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { intro, log, outro } from "@clack/prompts";
+import { intro, log as clackLog, outro } from "@clack/prompts";
 import { GramCore } from "@gram/client/core.js";
 import { accessEnableRBAC } from "@gram/client/funcs/accessEnableRBAC.js";
 import { assetsUploadFunctions } from "@gram/client/funcs/assetsUploadFunctions.js";
@@ -27,9 +28,51 @@ import { toolsetsCreate } from "@gram/client/funcs/toolsetsCreate.js";
 import { toolsetsUpdateBySlug } from "@gram/client/funcs/toolsetsUpdateBySlug.js";
 import { environmentsCreate } from "@gram/client/funcs/environmentsCreate.js";
 import { environmentsList } from "@gram/client/funcs/environmentsList.js";
-import { ServiceError } from "@gram/client/models/errors";
-import { $ } from "zx";
+import { $, chalk } from "zx";
 import { seedTunnel } from "./seed/tunnel.mts";
+
+function isConflictError(error: unknown): boolean {
+  const data = (error as { data$?: { name?: unknown } } | null)?.data$;
+  return data?.name === "conflict";
+}
+
+const seedStartedAt = performance.now();
+let lastLogAt = seedStartedAt;
+
+function formatDuration(ms: number): string {
+  return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+function lap(): string {
+  const now = performance.now();
+  const elapsed = now - lastLogAt;
+  lastLogAt = now;
+  return chalk.dim(`[+${formatDuration(elapsed)}]`);
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Timed out after ${ms}ms: ${label}`)),
+      ms,
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() =>
+    clearTimeout(timer),
+  ) as Promise<T>;
+}
+
+/** clack log with time-since-previous-statement appended, to surface slow seed steps. */
+const log = {
+  info: (message: string) => clackLog.info(`${message} ${lap()}`),
+  warn: (message: string) => clackLog.warn(`${message} ${lap()}`),
+  error: (message: string) => clackLog.error(`${message} ${lap()}`),
+};
 
 type Asset = {
   slug: string;
@@ -129,7 +172,12 @@ async function seed() {
   intro("Seeding local development environment...");
   using _ = {
     [Symbol.dispose]() {
-      outro(success ? "Seeding complete!" : "Seeding failed.");
+      const total = formatDuration(performance.now() - seedStartedAt);
+      outro(
+        success
+          ? `Seeding complete in ${total}!`
+          : `Seeding failed after ${total}.`,
+      );
     },
   };
   const serverURL = process.env["GRAM_SERVER_URL"];
@@ -640,9 +688,7 @@ async function getOrCreateProject(init: {
     },
   );
   switch (true) {
-    case !res.ok &&
-      res.error instanceof ServiceError &&
-      res.error.data$.name === "conflict":
+    case !res.ok && isConflictError(res.error):
       const getRes = await projectsRead(
         gram,
         { slug },
@@ -690,7 +736,10 @@ async function deployAssets(init: {
       let contentType: string;
 
       if ("url" in asset) {
-        const response = await fetch(asset.url);
+        log.info(`Fetching OpenAPI spec from ${asset.url}...`);
+        const response = await fetch(asset.url, {
+          signal: AbortSignal.timeout(30_000),
+        });
         if (!response.ok) {
           abort(
             `Failed to fetch OpenAPI spec from ${asset.url}`,
@@ -699,15 +748,56 @@ async function deployAssets(init: {
         }
         spec = await response.text();
         contentType = "application/json";
+        log.info(`Fetched OpenAPI spec '${asset.slug}' (${spec.length} bytes)`);
       } else {
         spec = await fs.readFile(asset.filename, "utf-8");
         contentType = asset.filename.endsWith(".yaml")
           ? "application/x-yaml"
           : "application/json";
+        log.info(`Read OpenAPI spec '${asset.slug}' (${spec.length} bytes)`);
       }
 
       const requestBody = new Blob([spec], { type: contentType });
-      const res = await assetsUploadOpenAPIv3(
+      const res = await withTimeout(
+        assetsUploadOpenAPIv3(
+          init.gram,
+          {
+            contentLength: requestBody.size,
+            requestBody,
+          },
+          {
+            option2: {
+              projectSlugHeaderGramProject: projectSlug,
+              sessionHeaderGramSession: sessionId,
+            },
+          },
+        ),
+        60_000,
+        `upload OpenAPI asset '${asset.slug}'`,
+      );
+
+      if (!res.ok) {
+        const source = "url" in asset ? asset.url : asset.filename;
+        abort(`Failed to upload asset \`${source}\``, res.error);
+      }
+
+      const { id: assetId } = await res.value.asset;
+      log.info(
+        `Uploaded OpenAPI asset '${asset.slug}' (asset_id = ${assetId})`,
+      );
+      oapi.push({ assetId, name: asset.slug, slug: asset.slug });
+      continue;
+    }
+
+    const archive = await buildSeedFunctionArchive(asset);
+    log.info(
+      `Built functions archive '${asset.slug}' (${archive.length} bytes)`,
+    );
+    const requestBody = new Blob([new Uint8Array(archive)], {
+      type: "application/zip",
+    });
+    const res = await withTimeout(
+      assetsUploadFunctions(
         init.gram,
         {
           contentLength: requestBody.size,
@@ -719,34 +809,9 @@ async function deployAssets(init: {
             sessionHeaderGramSession: sessionId,
           },
         },
-      );
-
-      if (!res.ok) {
-        const source = "url" in asset ? asset.url : asset.filename;
-        abort(`Failed to upload asset \`${source}\``, res.error);
-      }
-
-      const { id: assetId } = await res.value.asset;
-      oapi.push({ assetId, name: asset.slug, slug: asset.slug });
-      continue;
-    }
-
-    const archive = await buildSeedFunctionArchive(asset);
-    const requestBody = new Blob([new Uint8Array(archive)], {
-      type: "application/zip",
-    });
-    const res = await assetsUploadFunctions(
-      init.gram,
-      {
-        contentLength: requestBody.size,
-        requestBody,
-      },
-      {
-        option2: {
-          projectSlugHeaderGramProject: projectSlug,
-          sessionHeaderGramSession: sessionId,
-        },
-      },
+      ),
+      60_000,
+      `upload functions asset '${asset.slug}'`,
     );
 
     if (!res.ok) {
@@ -754,6 +819,9 @@ async function deployAssets(init: {
     }
 
     const { id: assetId } = await res.value.asset;
+    log.info(
+      `Uploaded functions asset '${asset.slug}' (asset_id = ${assetId})`,
+    );
     functions.push({
       assetId,
       name: asset.slug,
@@ -762,20 +830,25 @@ async function deployAssets(init: {
     });
   }
 
-  const evolveRes = await deploymentsEvolveDeployment(
-    init.gram,
-    {
-      evolveForm: {
-        upsertOpenapiv3Assets: oapi,
-        upsertFunctions: functions,
+  log.info(`Evolving deployment for '${projectSlug}'...`);
+  const evolveRes = await withTimeout(
+    deploymentsEvolveDeployment(
+      init.gram,
+      {
+        evolveForm: {
+          upsertOpenapiv3Assets: oapi,
+          upsertFunctions: functions,
+        },
       },
-    },
-    {
-      option2: {
-        projectSlugHeaderGramProject: projectSlug,
-        sessionHeaderGramSession: sessionId,
+      {
+        option2: {
+          projectSlugHeaderGramProject: projectSlug,
+          sessionHeaderGramSession: sessionId,
+        },
       },
-    },
+    ),
+    60_000,
+    `evolve deployment for '${projectSlug}'`,
   );
 
   if (!evolveRes.ok) {
@@ -787,6 +860,7 @@ async function deployAssets(init: {
     abort("Deployment ID not found", evolveRes.value);
   }
 
+  log.info(`Waiting for deployment ${deploymentId} to complete...`);
   await waitForDeploymentCompletion({
     deploymentId,
     gram: init.gram,
@@ -1427,9 +1501,7 @@ async function upsertToolset(init: {
     },
   );
   switch (true) {
-    case !createRes.ok &&
-      createRes.error instanceof ServiceError &&
-      createRes.error.data$.name === "conflict":
+    case !createRes.ok && isConflictError(createRes.error):
       const updateRes = await toolsetsUpdateBySlug(
         gram,
         {
@@ -1589,9 +1661,7 @@ async function upsertMcpLogsToolset(init: {
 
   let toolset: Toolset;
   switch (true) {
-    case !createRes.ok &&
-      createRes.error instanceof ServiceError &&
-      createRes.error.data$.name === "conflict":
+    case !createRes.ok && isConflictError(createRes.error):
       const updateRes = await toolsetsUpdateBySlug(
         gram,
         {
