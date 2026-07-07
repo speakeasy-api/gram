@@ -135,6 +135,10 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   const [isResolved, setIsResolved] = useState(false);
   const [feedbackHidden, setFeedbackHidden] = useState(false);
   const chatId = useChatId();
+  // Hidden rather than disabled: the backend rejects sends into a chat the
+  // caller can view (e.g. via an admin-level read grant) but didn't create,
+  // so there's no valid action to leave available.
+  const composerHidden = useThreadMeta(chatId ?? undefined)?.readOnly ?? false;
 
   const apiUrl = getApiUrl(config);
   const auth = useAuth({
@@ -235,7 +239,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
                 <div className="aui-thread-viewport-spacer min-h-8 grow" />
               </ThreadPrimitive.If>
 
-              <Composer showFeedback={showFeedback} />
+              {!composerHidden && <Composer showFeedback={showFeedback} />}
             </ThreadPrimitive.Viewport>
 
             {/* Resolution overlay - subtle readonly effect */}
