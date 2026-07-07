@@ -1031,6 +1031,10 @@ FROM (
     AND (sqlc.narg(to_time)::timestamptz IS NULL OR cm.created_at < sqlc.narg(to_time)::timestamptz)
     AND (@rule_id::text = '' OR rr.rule_id ILIKE '%' || @rule_id::text || '%')
     AND (@user_id::text = '' OR c.external_user_id ILIKE '%' || @user_id::text || '%')
+    AND (NOT @non_assistant::boolean OR NOT EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+    ))
     AND (@category::text = '' OR (
     CASE
       WHEN rr.source = 'llm_judge' THEN 'prompt_policy'

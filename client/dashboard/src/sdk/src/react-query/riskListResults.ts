@@ -117,6 +117,7 @@ export function setRiskListResultsData(
       ruleId?: string | undefined;
       userId?: string | undefined;
       uniqueMatch?: boolean | undefined;
+      nonAssistant?: boolean | undefined;
       from?: Date | undefined;
       to?: Date | undefined;
       cursor?: string | undefined;
@@ -143,6 +144,7 @@ export function invalidateRiskListResults(
       ruleId?: string | undefined;
       userId?: string | undefined;
       uniqueMatch?: boolean | undefined;
+      nonAssistant?: boolean | undefined;
       from?: Date | undefined;
       to?: Date | undefined;
       cursor?: string | undefined;

@@ -28331,6 +28331,13 @@ paths:
             description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
             type: boolean
         - allowEmptyValue: true
+          description: If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
+          in: query
+          name: non_assistant
+          schema:
+            description: If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
+            type: boolean
+        - allowEmptyValue: true
           description: Filter results to messages created at or after this timestamp (ISO 8601).
           in: query
           name: from
@@ -28623,6 +28630,13 @@ paths:
           name: unique_match
           schema:
             description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
+            type: boolean
+        - allowEmptyValue: true
+          description: If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
+          in: query
+          name: non_assistant
+          schema:
+            description: If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
             type: boolean
         - allowEmptyValue: true
           description: Filter results to messages created at or after this timestamp (ISO 8601).

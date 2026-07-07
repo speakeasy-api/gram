@@ -2618,7 +2618,11 @@ FROM (
     AND ($5::timestamptz IS NULL OR cm.created_at < $5::timestamptz)
     AND ($6::text = '' OR rr.rule_id ILIKE '%' || $6::text || '%')
     AND ($7::text = '' OR c.external_user_id ILIKE '%' || $7::text || '%')
-    AND ($8::text = '' OR (
+    AND (NOT $8::boolean OR NOT EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+    ))
+    AND ($9::text = '' OR (
     CASE
       WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
@@ -2664,15 +2668,15 @@ FROM (
       WHEN rr.source = 'presidio' THEN 'pii'
       ELSE 'custom'
     END
-  ) = $8::text)
+  ) = $9::text)
 ) sub
 WHERE sub.dedup_rank = 1
   AND (
-    $9::timestamptz IS NULL
-    OR (sub.message_created_at, sub.id) < ($9::timestamptz, $10::uuid)
+    $10::timestamptz IS NULL
+    OR (sub.message_created_at, sub.id) < ($10::timestamptz, $11::uuid)
   )
 ORDER BY sub.message_created_at DESC, sub.id DESC
-LIMIT $11
+LIMIT $12
 `
 
 type ListRiskResultsByProjectFoundParams struct {
@@ -2683,6 +2687,7 @@ type ListRiskResultsByProjectFoundParams struct {
 	ToTime                 pgtype.Timestamptz
 	RuleID                 string
 	UserID                 string
+	NonAssistant           bool
 	Category               string
 	CursorMessageCreatedAt pgtype.Timestamptz
 	CursorID               uuid.NullUUID
@@ -2743,6 +2748,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 		arg.ToTime,
 		arg.RuleID,
 		arg.UserID,
+		arg.NonAssistant,
 		arg.Category,
 		arg.CursorMessageCreatedAt,
 		arg.CursorID,

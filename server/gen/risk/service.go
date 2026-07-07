@@ -708,6 +708,9 @@ type ListRiskResultsForAgentPayload struct {
 	// keeping the most recent occurrence. Useful when the same secret is detected
 	// many times within a single message body.
 	UniqueMatch *bool
+	// If true, only return findings from chats that are not linked to an
+	// assistant. Useful for surfacing events that are missing user attribution.
+	NonAssistant *bool
 	// Filter results to messages created at or after this timestamp (ISO 8601).
 	From *string
 	// Filter results to messages created strictly before this timestamp (ISO 8601).
@@ -751,6 +754,9 @@ type ListRiskResultsPayload struct {
 	// keeping the most recent occurrence. Useful when the same secret is detected
 	// many times within a single message body.
 	UniqueMatch *bool
+	// If true, only return findings from chats that are not linked to an
+	// assistant. Useful for surfacing events that are missing user attribution.
+	NonAssistant *bool
 	// Filter results to messages created at or after this timestamp (ISO 8601).
 	From *string
 	// Filter results to messages created strictly before this timestamp (ISO 8601).

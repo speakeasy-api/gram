@@ -1096,6 +1096,10 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	if payload.UniqueMatch != nil {
 		uniqueMatch = *payload.UniqueMatch
 	}
+	nonAssistant := false
+	if payload.NonAssistant != nil {
+		nonAssistant = *payload.NonAssistant
+	}
 	fromTime, err := parseOptionalTimestamptz(payload.From)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid from").LogError(ctx, s.logger)
@@ -1117,7 +1121,7 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	if err != nil {
 		totalCount = 0
 	}
-	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, policyID, category, ruleID, userID, uniqueMatch, fromTime, toTime)
+	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, policyID, category, ruleID, userID, uniqueMatch, nonAssistant, fromTime, toTime)
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
@@ -1155,6 +1159,7 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 		RuleID:           payload.RuleID,
 		UserID:           payload.UserID,
 		UniqueMatch:      payload.UniqueMatch,
+		NonAssistant:     payload.NonAssistant,
 		From:             payload.From,
 		To:               payload.To,
 		Cursor:           payload.Cursor,
@@ -1571,7 +1576,7 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, policyID uuid.NullUUID, category string, ruleID string, userID string, uniqueMatch bool, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, policyID uuid.NullUUID, category string, ruleID string, userID string, uniqueMatch bool, nonAssistant bool, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
 	cursorCreatedAt, cursorID := cursorToParams(cursor)
 	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
 		ProjectID:              projectID,
@@ -1582,6 +1587,7 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 		RuleID:                 ruleID,
 		UserID:                 userID,
 		UniqueMatch:            uniqueMatch,
+		NonAssistant:           nonAssistant,
 		CursorMessageCreatedAt: cursorCreatedAt,
 		CursorID:               cursorID,
 		PageLimit:              conv.SafeInt32(pageSize + 1),

@@ -415,7 +415,7 @@ func BuildDeleteRiskPolicyPayload(riskDeleteRiskPolicyID string, riskDeleteRiskP
 
 // BuildListRiskResultsPayload builds the payload for the risk listRiskResults
 // endpoint from CLI flags.
-func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCategory string, riskListRiskResultsRuleID string, riskListRiskResultsUserID string, riskListRiskResultsUniqueMatch string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
+func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCategory string, riskListRiskResultsRuleID string, riskListRiskResultsUserID string, riskListRiskResultsUniqueMatch string, riskListRiskResultsNonAssistant string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -463,6 +463,17 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 			uniqueMatch = &val
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for uniqueMatch, must be BOOL")
+			}
+		}
+	}
+	var nonAssistant *bool
+	{
+		if riskListRiskResultsNonAssistant != "" {
+			var val bool
+			val, err = strconv.ParseBool(riskListRiskResultsNonAssistant)
+			nonAssistant = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for nonAssistant, must be BOOL")
 			}
 		}
 	}
@@ -538,6 +549,7 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	v.RuleID = ruleID
 	v.UserID = userID
 	v.UniqueMatch = uniqueMatch
+	v.NonAssistant = nonAssistant
 	v.From = from
 	v.To = to
 	v.Cursor = cursor
@@ -551,7 +563,7 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 
 // BuildListRiskResultsForAgentPayload builds the payload for the risk
 // listRiskResultsForAgent endpoint from CLI flags.
-func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID string, riskListRiskResultsForAgentChatID string, riskListRiskResultsForAgentCategory string, riskListRiskResultsForAgentRuleID string, riskListRiskResultsForAgentUserID string, riskListRiskResultsForAgentUniqueMatch string, riskListRiskResultsForAgentFrom string, riskListRiskResultsForAgentTo string, riskListRiskResultsForAgentCursor string, riskListRiskResultsForAgentLimit string, riskListRiskResultsForAgentApikeyToken string, riskListRiskResultsForAgentSessionToken string, riskListRiskResultsForAgentProjectSlugInput string) (*risk.ListRiskResultsForAgentPayload, error) {
+func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID string, riskListRiskResultsForAgentChatID string, riskListRiskResultsForAgentCategory string, riskListRiskResultsForAgentRuleID string, riskListRiskResultsForAgentUserID string, riskListRiskResultsForAgentUniqueMatch string, riskListRiskResultsForAgentNonAssistant string, riskListRiskResultsForAgentFrom string, riskListRiskResultsForAgentTo string, riskListRiskResultsForAgentCursor string, riskListRiskResultsForAgentLimit string, riskListRiskResultsForAgentApikeyToken string, riskListRiskResultsForAgentSessionToken string, riskListRiskResultsForAgentProjectSlugInput string) (*risk.ListRiskResultsForAgentPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -599,6 +611,17 @@ func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID str
 			uniqueMatch = &val
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for uniqueMatch, must be BOOL")
+			}
+		}
+	}
+	var nonAssistant *bool
+	{
+		if riskListRiskResultsForAgentNonAssistant != "" {
+			var val bool
+			val, err = strconv.ParseBool(riskListRiskResultsForAgentNonAssistant)
+			nonAssistant = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for nonAssistant, must be BOOL")
 			}
 		}
 	}
@@ -674,6 +697,7 @@ func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID str
 	v.RuleID = ruleID
 	v.UserID = userID
 	v.UniqueMatch = uniqueMatch
+	v.NonAssistant = nonAssistant
 	v.From = from
 	v.To = to
 	v.Cursor = cursor

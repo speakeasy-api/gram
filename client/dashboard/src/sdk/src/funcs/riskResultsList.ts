@@ -113,6 +113,7 @@ async function $do(
     "cursor": payload?.cursor,
     "from": payload?.from,
     "limit": payload?.limit,
+    "non_assistant": payload?.non_assistant,
     "policy_id": payload?.policy_id,
     "rule_id": payload?.rule_id,
     "to": payload?.to,

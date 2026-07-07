@@ -50,6 +50,7 @@ const RISK_FILTERS = defineFilters([
     placeholder: "User contains...",
   },
   { id: "unique", label: "Unique matches only", kind: "boolean" },
+  { id: "non_assistant", label: "Non-assistant events only", kind: "boolean" },
 ]);
 
 export default function RiskEvents(): JSX.Element {
@@ -64,6 +65,7 @@ export default function RiskEvents(): JSX.Element {
   const ruleFilter = values.rule_id;
   const userFilter = values.user_id;
   const uniqueOnly = values.unique;
+  const nonAssistantOnly = values.non_assistant;
 
   // The date range maps to the endpoint's from/to. A null preset with no custom
   // range means "all time" (no from/to sent) — Risk Events' previous behavior.
@@ -150,7 +152,15 @@ export default function RiskEvents(): JSX.Element {
   // don't stay at a stale offset and miss the newly filtered results.
   useEffect(() => {
     containerRef.current?.scrollTo({ top: 0 });
-  }, [policyFilter, ruleFilter, userFilter, uniqueOnly, fromIso, toIso]);
+  }, [
+    policyFilter,
+    ruleFilter,
+    userFilter,
+    uniqueOnly,
+    nonAssistantOnly,
+    fromIso,
+    toIso,
+  ]);
 
   const resultsQuery = useInfiniteQuery({
     queryKey: [
@@ -161,6 +171,7 @@ export default function RiskEvents(): JSX.Element {
       ruleFilter,
       userFilter,
       uniqueOnly,
+      nonAssistantOnly,
       fromIso,
       toIso,
     ],
@@ -172,6 +183,7 @@ export default function RiskEvents(): JSX.Element {
         ruleId: ruleFilter || undefined,
         userId: userFilter || undefined,
         uniqueMatch: uniqueOnly || undefined,
+        nonAssistant: nonAssistantOnly || undefined,
         from,
         to,
       });

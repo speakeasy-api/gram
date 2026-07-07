@@ -1504,6 +1504,9 @@ func EncodeListRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.UniqueMatch != nil {
 			values.Add("unique_match", fmt.Sprintf("%v", *p.UniqueMatch))
 		}
+		if p.NonAssistant != nil {
+			values.Add("non_assistant", fmt.Sprintf("%v", *p.NonAssistant))
+		}
 		if p.From != nil {
 			values.Add("from", *p.From)
 		}
@@ -1774,6 +1777,9 @@ func EncodeListRiskResultsForAgentRequest(encoder func(*http.Request) goahttp.En
 		}
 		if p.UniqueMatch != nil {
 			values.Add("unique_match", fmt.Sprintf("%v", *p.UniqueMatch))
+		}
+		if p.NonAssistant != nil {
+			values.Add("non_assistant", fmt.Sprintf("%v", *p.NonAssistant))
 		}
 		if p.From != nil {
 			values.Add("from", *p.From)

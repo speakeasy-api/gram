@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
+	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -256,6 +257,70 @@ func TestListRiskResults_ByUserID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Results, 1)
 	require.Equal(t, "alice@example.com", *result.Results[0].UserID)
+}
+
+// linkAssistantThread attaches a chat to a freshly created assistant so the
+// chat counts as "assistant-driven" for the non_assistant filter.
+func linkAssistantThread(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, chatID uuid.UUID) {
+	t.Helper()
+	ctx := t.Context()
+
+	assistant, err := assistantsrepo.New(ti.conn).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		Name:           "Assistant " + uuid.NewString()[:8],
+		Model:          "anthropic/claude-opus-4.8",
+		Instructions:   "be helpful",
+		WarmTtlSeconds: 300,
+		MaxConcurrency: 1,
+		Status:         "active",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, ti.chatRepo.SeedAssistantThread(ctx, chatrepo.SeedAssistantThreadParams{
+		AssistantID:   assistant.ID,
+		ProjectID:     projectID,
+		CorrelationID: "corr-" + uuid.NewString()[:8],
+		ChatID:        chatID,
+	}))
+}
+
+// The non_assistant filter surfaces only findings whose chat is not linked to
+// an assistant — the events most likely to be missing user attribution.
+func TestListRiskResults_NonAssistant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Non-assistant Filter Test")})
+	require.NoError(t, err)
+	policyID, _ := uuid.Parse(policy.ID)
+
+	// One finding from an assistant-driven chat, one from a plain chat.
+	assistantChat, assistantMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "assistant@example.com")
+	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, assistantMsg, true)
+	linkAssistantThread(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, assistantChat)
+
+	_, humanMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "human@example.com")
+	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, humanMsg, true)
+
+	// Without the filter, both findings are returned.
+	all, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
+	require.NoError(t, err)
+	require.Len(t, all.Results, 2)
+
+	// With non_assistant=true, only the non-assistant finding remains.
+	nonAssistant := true
+	filtered, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		NonAssistant: &nonAssistant,
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered.Results, 1)
+	require.Equal(t, "human@example.com", *filtered.Results[0].UserID)
 }
 
 func TestGetRiskPolicyStatus_WithAnalyzedMessages(t *testing.T) {
