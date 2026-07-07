@@ -103,7 +103,16 @@ export function useRemoteMcpTools(
 
       const client = await createMCPClient({
         name: "gram-dashboard-remote-mcp-client",
-        transport: { type: "http", url: mcpUrl, headers },
+        transport: {
+          type: "http",
+          url: mcpUrl,
+          headers,
+          // @ai-sdk/mcp stores this on the transport instance and calls it as
+          // `this.fetchFn(...)`; handing it bare `window.fetch` throws
+          // "Illegal invocation" in browsers, so bind it via a wrapper.
+          fetch: (...args: Parameters<typeof fetch>) =>
+            globalThis.fetch(...args),
+        },
       });
       try {
         // Use the raw `tools/list` call rather than client.tools(): the latter

@@ -79,7 +79,7 @@ func BuildCreateAssistantPayload(assistantsCreateAssistantBody string, assistant
 	{
 		err = json.Unmarshal([]byte(assistantsCreateAssistantBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"instructions\": \"abc123\",\n      \"max_concurrency\": 1,\n      \"model\": \"abc123\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ],\n      \"warm_ttl_seconds\": 1\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"instructions\": \"abc123\",\n      \"max_concurrency\": 1,\n      \"mcp_servers\": [\n         {\n            \"endpoint_slug\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"mcp_server_slug\": \"abc123\"\n         }\n      ],\n      \"model\": \"abc123\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ],\n      \"warm_ttl_seconds\": 1\n   }'")
 		}
 		if body.Toolsets == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
@@ -125,6 +125,16 @@ func BuildCreateAssistantPayload(assistantsCreateAssistantBody string, assistant
 	} else {
 		v.Toolsets = []*types.AssistantToolsetRef{}
 	}
+	if body.McpServers != nil {
+		v.McpServers = make([]*types.AssistantMCPServerRef, len(body.McpServers))
+		for i, val := range body.McpServers {
+			if val == nil {
+				v.McpServers[i] = nil
+				continue
+			}
+			v.McpServers[i] = marshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef(val)
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -139,7 +149,7 @@ func BuildUpdateAssistantPayload(assistantsUpdateAssistantBody string, assistant
 	{
 		err = json.Unmarshal([]byte(assistantsUpdateAssistantBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"max_concurrency\": 1,\n      \"model\": \"abc123\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ],\n      \"warm_ttl_seconds\": 1\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"max_concurrency\": 1,\n      \"mcp_servers\": [\n         {\n            \"endpoint_slug\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"mcp_server_slug\": \"abc123\"\n         }\n      ],\n      \"model\": \"abc123\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ],\n      \"warm_ttl_seconds\": 1\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.Status != nil {
@@ -180,6 +190,16 @@ func BuildUpdateAssistantPayload(assistantsUpdateAssistantBody string, assistant
 				continue
 			}
 			v.Toolsets[i] = marshalAssistantToolsetRefRequestBodyToTypesAssistantToolsetRef(val)
+		}
+	}
+	if body.McpServers != nil {
+		v.McpServers = make([]*types.AssistantMCPServerRef, len(body.McpServers))
+		for i, val := range body.McpServers {
+			if val == nil {
+				v.McpServers[i] = nil
+				continue
+			}
+			v.McpServers[i] = marshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef(val)
 		}
 	}
 	v.SessionToken = sessionToken
