@@ -40,10 +40,18 @@ import {
   BREAKDOWN_PARAM,
   collectionLabel,
   type Crumb,
+  type Dataset,
+  DATASET_OPTIONS,
+  DATASET_PARAM,
+  datasetDefaultGroupBy,
+  datasetForDim,
+  datasetPivotParent,
+  datasetPivots,
   defaultGroupBy,
   displayName,
   encodeCrumb,
   isAttributionDim,
+  isDataset,
   isDimension,
   isSessionLeaf,
   isSessionsAxis,
@@ -51,8 +59,6 @@ import {
   type Measures,
   nextAvailableDimension,
   parseDrillPath,
-  PIVOTS,
-  pivotParent,
   SESSIONS_AXIS,
   showsTopSessionsWidget,
 } from "./taxonomy";
@@ -148,6 +154,11 @@ export function CostsExplorer(): JSX.Element {
   }, [location.pathname, costsBase]);
 
   const byParam = searchParams.get(BREAKDOWN_PARAM);
+  // The active dataset (spend slice) rides in `?dataset=`; absent/invalid → the
+  // full-project `all` view. It scopes both the breakdown options and, via the
+  // attribution empty-row handling below, which rows count.
+  const datasetParam = searchParams.get(DATASET_PARAM);
+  const dataset: Dataset = isDataset(datasetParam) ? datasetParam : "all";
   // The deepest filter crumb is the entity in view. Agent/Model are leaves —
   // once you're on one, individual sessions are the only meaningful view, so we
   // lock to them: force sessions mode and offer no further dimension breakdown.
@@ -163,13 +174,24 @@ export function CostsExplorer(): JSX.Element {
 
   // Navigate to a node: encode its filter path into the URL and pin the
   // breakdown axis in `?by=`. `replace` for view-only changes (re-pivoting)
-  // that shouldn't add a back-button step.
-  const goToNode = (nextPath: Crumb[], by: Axis, replace = false) => {
+  // that shouldn't add a back-button step. `ds` overrides the dataset param
+  // (e.g. drilling from `all` into an attribution cut promotes to its dataset);
+  // omitted, the current dataset is preserved.
+  const goToNode = (
+    nextPath: Crumb[],
+    by: Axis,
+    replace = false,
+    ds?: Dataset,
+  ) => {
     const tail = nextPath.map(encodeCrumb).join("/");
     // Preserve the rest of the query (the date-range filter lives here too) and
-    // only override the breakdown axis.
+    // only override the breakdown axis (and dataset, when given).
     const params = new URLSearchParams(searchParams);
     params.set(BREAKDOWN_PARAM, by);
+    if (ds !== undefined) {
+      if (ds === "all") params.delete(DATASET_PARAM);
+      else params.set(DATASET_PARAM, ds);
+    }
     const url = `${tail ? `${costsBase}/${tail}` : costsBase}?${params.toString()}`;
     void navigate(url, { replace });
   };
@@ -209,9 +231,17 @@ export function CostsExplorer(): JSX.Element {
     [attrKeysData],
   );
 
-  const groupBy = isDimension(byParam)
-    ? byParam
-    : defaultGroupBy(path, availableDims);
+  // The breakdown axis must belong to the active dataset — a `?by=` left over
+  // from another dataset (or an org dim while in an attribution slice) falls
+  // back to the dataset's default axis.
+  const datasetDimSet = useMemo(
+    () => new Set(datasetPivots(dataset).map((p) => p.dim)),
+    [dataset],
+  );
+  const groupBy =
+    isDimension(byParam) && datasetDimSet.has(byParam)
+      ? byParam
+      : datasetDefaultGroupBy(dataset, path, availableDims);
 
   // Every cost query is scoped to the current project via a project_id filter
   // (the endpoints are org-scoped, but project_id is an allowlisted dimension),
@@ -695,10 +725,17 @@ export function CostsExplorer(): JSX.Element {
     // chains (e.g. the same user/agent twice). The pivot list already hides
     // filtered dims; this guards the mix-card + fallback-chain paths too.
     if (path.some((c) => c.dim === dim)) return;
+    // Drilling from `all` into an attribution cut (e.g. a "Spend by MCP server"
+    // mix-card row) promotes the view into that dataset. Within a dataset the
+    // drill never switches datasets — undefined preserves the current one.
+    const ds =
+      dataset === "all" && isAttributionDim(dim)
+        ? datasetForDim(dim)
+        : undefined;
     // Agent/Model are leaves: drilling a row shows that slice's individual
     // sessions instead of pivoting to another dimension.
     if (isSessionLeaf(dim)) {
-      goToNode([...path, { dim, value }], SESSIONS_AXIS);
+      goToNode([...path, { dim, value }], SESSIONS_AXIS, false, ds);
       return;
     }
     // Otherwise land on the next chain axis that actually has data, skipping
@@ -708,7 +745,7 @@ export function CostsExplorer(): JSX.Element {
     // drilling stays enabled and never blocks prematurely.)
     const next = nextAvailableDimension(dim, availableDims);
     if (next === null) return;
-    goToNode([...path, { dim, value }], next);
+    goToNode([...path, { dim, value }], next, false, ds);
   };
 
   // Drill into a main-table row: use the current breakdown axis.
@@ -729,11 +766,19 @@ export function CostsExplorer(): JSX.Element {
     goToNode(path.slice(0, -1), removed.dim);
   };
 
-  // Jump straight back to the org root (clear all filters).
-  const goHome = () => goToNode([], defaultGroupBy([], availableDims));
+  // Jump straight back to the org root (clear all filters) and reset to the full
+  // `all` dataset — Home always lands on the project-wide overview.
+  const goHome = () =>
+    goToNode([], defaultGroupBy([], availableDims), false, "all");
 
   // Re-pivot the current node's breakdown axis without drilling (view-only).
   const changeGroupBy = (axis: Axis) => goToNode(path, axis, true);
+
+  // Switch datasets: start a fresh drill at that slice's root grouped by its
+  // default axis. A drill path from another dataset (e.g. a division filter)
+  // doesn't carry over, so clear it.
+  const changeDataset = (ds: Dataset) =>
+    goToNode([], datasetDefaultGroupBy(ds, [], availableDims), false, ds);
 
   // Offer a breakdown axis only if it can actually partition the current slice
   // into >1 row. `attributes` (the entity's distinct dimension values) tells us:
@@ -741,12 +786,13 @@ export function CostsExplorer(): JSX.Element {
   // Profile grid instead. Always keep the active axis; show everything at the
   // org root, where there's no slice to measure against yet.
   const filteredDims = new Set(path.map((c) => c.dim));
-  const pivotOptions = PIVOTS.filter((p) => {
+  const pivotOptions = datasetPivots(dataset).filter((p) => {
     if (filteredDims.has(p.dim)) return false;
     if (p.dim === groupBy) return true;
-    // A nested attribution cut (MCP Tool) is only meaningful under its parent
-    // (MCP Server) — offer it as a breakdown axis only once the parent is pinned.
-    const parent = pivotParent(p.dim);
+    // A nested attribution cut (MCP Tool under MCP Server, Skill under Subagent)
+    // is only meaningful once its parent is pinned in the drill path — offer it
+    // as a breakdown axis only then.
+    const parent = datasetPivotParent(dataset, p.dim);
     if (parent && !filteredDims.has(parent)) return false;
     // Hide dimensions the org has no data for at all (IDP doesn't populate them).
     if (availableDims && !availableDims.has(p.dim)) return false;
@@ -959,6 +1005,9 @@ export function CostsExplorer(): JSX.Element {
         }
         onViewSessions={onViewSessions}
         seriesByGroup={seriesByGroup}
+        datasetValue={dataset}
+        datasetOptions={DATASET_OPTIONS}
+        onDatasetChange={(value) => changeDataset(value as Dataset)}
         rangePicker={rangePicker}
         rangeLabel={formatDateRange(from, to)}
         isLoading={loadingSlice}

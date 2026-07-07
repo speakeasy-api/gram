@@ -286,6 +286,12 @@ export type EntityProfileProps = {
   onViewSessions?: () => void;
   // Per-group daily cost series for the row sparklines.
   seriesByGroup: Map<string, number[]>;
+  // The active dataset (spend slice) and its options, rendered as a selector at
+  // the top-right beside the date picker. `all` is the full project spend; the
+  // others narrow to a Claude attribution lens (MCP / Subagents / Skills).
+  datasetValue: string;
+  datasetOptions: { value: string; label: string }[];
+  onDatasetChange: (value: string) => void;
   // The date-range picker control, rendered in the header above the stats.
   rangePicker: ReactNode;
   // Human date-range label (e.g. "June 15–19") for the CSV export filename.
@@ -324,6 +330,9 @@ export function EntityProfile({
   tableOverride,
   onViewSessions,
   seriesByGroup,
+  datasetValue,
+  datasetOptions,
+  onDatasetChange,
   rangePicker,
   rangeLabel,
   widgets,
@@ -432,9 +441,24 @@ export function EntityProfile({
               </span>
             </button>
           </div>
-          {/* Date-range picker pinned to the top-right of the header, in line
-              with the back controls on the left — it scopes every number below. */}
-          <div className="absolute top-5 right-8 z-10">{rangePicker}</div>
+          {/* Dataset selector + date-range picker pinned to the top-right of the
+              header, in line with the back controls on the left. The dataset
+              narrows to a spend slice; the range scopes every number below. */}
+          <div className="absolute top-5 right-8 z-10 flex items-stretch gap-2">
+            <Select value={datasetValue} onValueChange={onDatasetChange}>
+              <SelectTrigger className="border-border bg-background hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto cursor-pointer gap-1.5 rounded-md border py-1 pr-2.5 pl-3 text-sm font-medium shadow-none transition-colors focus-visible:ring-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {datasetOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {rangePicker}
+          </div>
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-4">
               <div className="border-border bg-background flex size-16 shrink-0 items-center justify-center rounded-2xl border">
