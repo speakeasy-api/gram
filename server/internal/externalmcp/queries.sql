@@ -168,6 +168,7 @@ SELECT
   t.id,
   t.tool_urn,
   e.slug,
+  t.header_definitions,
   t.read_only_hint,
   t.destructive_hint,
   t.idempotent_hint,
