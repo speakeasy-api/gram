@@ -804,6 +804,16 @@ func newStartCommand() *cli.Command {
 				billingTracker,
 			)
 
+			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a
+			// typo here would strand tunnels fail-closed with no signal. Reject
+			// misconfiguration at startup instead.
+			tunnelGatewayCIDRs := c.StringSlice("tunnel-gateway-cidr-blocks")
+			for _, cidr := range tunnelGatewayCIDRs {
+				if _, _, err := net.ParseCIDR(cidr); err != nil {
+					return fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
+				}
+			}
+
 			mcpService := mcp.NewService(
 				logger,
 				tracerProvider,
@@ -839,7 +849,7 @@ func newStartCommand() *cli.Command {
 				remoteProxyManager,
 				route.NewRedis(redisClient),
 				c.String("tunnel-forward-token"),
-				c.StringSlice("tunnel-gateway-cidr-blocks"),
+				tunnelGatewayCIDRs,
 			)
 
 			chatClient := chat.NewAgenticChatClient(

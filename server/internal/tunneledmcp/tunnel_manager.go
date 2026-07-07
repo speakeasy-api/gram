@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
@@ -107,6 +108,11 @@ func (m *tunnelManager) deleteRuntimeState(ctx context.Context, logger *slog.Log
 	if m.runtime == nil {
 		return
 	}
+	// Runs after the DB commit: detach from request cancellation so a client
+	// disconnect cannot skip cache cleanup and leave stale route/connection
+	// entries pointing at a deleted or rotated source, but stay bounded.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
 	tunnelID := serverID.String()
 	if err := m.runtime.DeleteConnections(ctx, tunnelID); err != nil {
 		logger.WarnContext(ctx, "delete tunneled mcp connection cache", attr.SlogError(err))
