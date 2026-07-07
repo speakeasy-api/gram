@@ -1,7 +1,6 @@
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { CopyButton } from "@/components/ui/copy-button";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
@@ -102,17 +101,22 @@ function CreateTunneledMcpForm() {
           </Stack>
           <Type muted>
             Use this tunnel key to connect an MCP server running in your own
-            network. The key is only shown now.
+            network.
           </Type>
         </Stack>
 
         <Stack gap={6}>
           <div className="rounded-lg border p-5">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <Type variant="subheading">Tunnel key</Type>
-              <CopyButton text={created.tunnelKey} size="icon-sm" />
-            </div>
-            <CodeBlock language="text">{created.tunnelKey}</CodeBlock>
+            <Type variant="subheading" className="mb-3">
+              Tunnel key
+            </Type>
+            <Stack gap={3}>
+              <Alert variant="warning" dismissible={false}>
+                This key is only shown once. Copy it now and store it securely —
+                you will need to rotate the key to get a new one.
+              </Alert>
+              <CodeBlock language="text">{created.tunnelKey}</CodeBlock>
+            </Stack>
           </div>
 
           <TunneledMcpSetupTabs
