@@ -89,8 +89,13 @@ function DeleteRemoteIdentityProviderDialogBody({
         }
         cursor = page.result.nextCursor || undefined;
       } while (cursor);
+      // Detach (not delete): drop the client ↔ user_session_issuer link so
+      // this server stops using the provider, while the client itself — and
+      // its attachments to other servers' issuers — stays intact.
       for (const id of clientIds) {
-        await client.remoteSessionClients.delete({ id });
+        await client.remoteSessionClients.detachUserSessionIssuer({
+          attachUserSessionIssuerForm: { id, userSessionIssuerId },
+        });
       }
       await Promise.all([
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
