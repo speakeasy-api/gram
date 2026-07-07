@@ -9,17 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type BillingCycleUsage struct {
-	ID             uuid.UUID
-	OrganizationID string
-	CycleStart     pgtype.Timestamptz
-	CycleEnd       pgtype.Timestamptz
-	TumTokens      int64
-	FinalizedAt    pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-}
-
 type BillingMetadatum struct {
 	ID                    uuid.UUID
 	OrganizationID        string
