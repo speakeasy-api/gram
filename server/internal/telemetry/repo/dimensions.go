@@ -32,34 +32,40 @@ type telemetryDimension struct {
 // arbitrary columns or JSON paths.
 var telemetryDimensionRegistry = map[string]telemetryDimension{
 	"department_name": {
-		aggregateColumn: "department_name",
-		rawExpr:         "toString(attributes.user.attributes.department_name)",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "department_name",
+		rawExpr:                "toString(attributes.user.attributes.department_name)",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: false,
 	},
 	"job_title": {
-		aggregateColumn: "job_title",
-		rawExpr:         "toString(attributes.user.attributes.job_title)",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "job_title",
+		rawExpr:                "toString(attributes.user.attributes.job_title)",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: false,
 	},
 	"employee_type": {
-		aggregateColumn: "employee_type",
-		rawExpr:         "toString(attributes.user.attributes.employee_type)",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "employee_type",
+		rawExpr:                "toString(attributes.user.attributes.employee_type)",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: false,
 	},
 	"division_name": {
-		aggregateColumn: "division_name",
-		rawExpr:         "toString(attributes.user.attributes.division_name)",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "division_name",
+		rawExpr:                "toString(attributes.user.attributes.division_name)",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: false,
 	},
 	"cost_center_name": {
-		aggregateColumn: "cost_center_name",
-		rawExpr:         "toString(attributes.user.attributes.cost_center_name)",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "cost_center_name",
+		rawExpr:                "toString(attributes.user.attributes.cost_center_name)",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: false,
 	},
 	"email": {
-		aggregateColumn: "user_email",
-		rawExpr:         "user_email",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "user_email",
+		rawExpr:                "user_email",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: false,
 	},
 	"model": {
 		aggregateColumn: "model",
@@ -67,29 +73,33 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		// attributes.model / gen_ai.request.model, everyone else on
 		// gen_ai.response.model. Matches the aggregate MV + session select so a
 		// Model filter resolves Claude sessions too (see sessionModelExpr).
-		rawExpr: sessionModelExpr,
-		kind:    attributeDimScalar,
+		rawExpr:                sessionModelExpr,
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: false,
 	},
 	"hook_source": {
-		aggregateColumn: "hook_source",
-		rawExpr:         "hook_source",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "hook_source",
+		rawExpr:                "hook_source",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: false,
 	},
 	"account_type": {
 		// AI account classification: 'team' | 'personal' | '' (unclassified).
 		// Materialized on telemetry_logs and a sort-key dimension on
 		// attribute_metrics_summaries, so the column name is identical on both paths.
-		aggregateColumn: "account_type",
-		rawExpr:         "account_type",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "account_type",
+		rawExpr:                "account_type",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: false,
 	},
 	"provider": {
 		// AI provider for the account: 'anthropic' | 'openai' | 'cursor' | ''.
 		// Materialized on telemetry_logs and a sort-key dimension on
 		// attribute_metrics_summaries, so the column name is identical on both paths.
-		aggregateColumn: "provider",
-		rawExpr:         "provider",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "provider",
+		rawExpr:                "provider",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: false,
 	},
 	"billing_mode": {
 		// How the account is billed: 'metered' (pay-per-token; cost is real spend)
@@ -97,9 +107,10 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		// Lets the cost view separate real spend from a token×API-rate estimate.
 		// Materialized on telemetry_logs and a sort-key dimension on
 		// attribute_metrics_summaries, so the column name is identical on both paths.
-		aggregateColumn: "billing_mode",
-		rawExpr:         "billing_mode",
-		kind:            attributeDimScalar,
+		aggregateColumn:        "billing_mode",
+		rawExpr:                "billing_mode",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: false,
 	},
 	"query_source": {
 		aggregateColumn:        "query_source",
@@ -132,19 +143,22 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: true,
 	},
 	"role": {
-		aggregateColumn: "roles",
-		rawExpr:         "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)'))",
-		kind:            attributeDimArray,
+		aggregateColumn:        "roles",
+		rawExpr:                "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)'))",
+		kind:                   attributeDimArray,
+		coLocateSessionFilters: false,
 	},
 	"group": {
-		aggregateColumn: "groups",
-		rawExpr:         "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)'))",
-		kind:            attributeDimArray,
+		aggregateColumn:        "groups",
+		rawExpr:                "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)'))",
+		kind:                   attributeDimArray,
+		coLocateSessionFilters: false,
 	},
 	"project_id": {
-		aggregateColumn: "gram_project_id",
-		rawExpr:         "gram_project_id",
-		kind:            attributeDimProject,
+		aggregateColumn:        "gram_project_id",
+		rawExpr:                "gram_project_id",
+		kind:                   attributeDimProject,
+		coLocateSessionFilters: false,
 	},
 }
 
