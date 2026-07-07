@@ -14,6 +14,7 @@ import (
 	"html/template"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -1246,21 +1247,24 @@ func (s *ExternalOAuthService) exchangeCodeForTokens(
 	redirectURI string,
 	codeVerifier string,
 ) (*ExternalTokenResponse, error) {
-	// Build token request. The client registration does not record the
-	// provider's token_endpoint_auth_method, so credential placement is a
-	// guess: try client_secret_post-style body credentials first, matching
-	// the historical behavior.
-	data := url.Values{}
-	data.Set("grant_type", "authorization_code")
-	data.Set("code", code)
-	data.Set("redirect_uri", redirectURI)
-	data.Set("client_id", config.ClientID)
-	if config.ClientSecret != "" {
-		data.Set("client_secret", config.ClientSecret)
-	}
-	data.Set("code_verifier", codeVerifier)
+	// Build both credential placements up front. The client registration does
+	// not record the provider's token_endpoint_auth_method, so placement is a
+	// guess: baseForm carries no credentials and pairs with basic auth, while
+	// bodyCredsForm embeds them client_secret_post-style.
+	baseForm := url.Values{}
+	baseForm.Set("grant_type", "authorization_code")
+	baseForm.Set("code", code)
+	baseForm.Set("redirect_uri", redirectURI)
+	baseForm.Set("code_verifier", codeVerifier)
 
-	resp, err := s.postTokenRequest(ctx, config.TokenEndpoint, data, "", "")
+	bodyCredsForm := maps.Clone(baseForm)
+	bodyCredsForm.Set("client_id", config.ClientID)
+	if config.ClientSecret != "" {
+		bodyCredsForm.Set("client_secret", config.ClientSecret)
+	}
+
+	// Try body credentials first, matching the historical behavior.
+	resp, err := s.postTokenRequest(ctx, config.TokenEndpoint, bodyCredsForm, "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -1277,9 +1281,7 @@ func (s *ExternalOAuthService) exchangeCodeForTokens(
 			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
 			attr.SlogOAuthIssuer(config.Issuer))
 
-		data.Del("client_id")
-		data.Del("client_secret")
-		resp, err = s.postTokenRequest(ctx, config.TokenEndpoint, data, config.ClientID, config.ClientSecret)
+		resp, err = s.postTokenRequest(ctx, config.TokenEndpoint, baseForm, config.ClientID, config.ClientSecret)
 		if err != nil {
 			return nil, err
 		}
