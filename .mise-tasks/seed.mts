@@ -12,7 +12,6 @@ import { GramCore } from "@gram/client/core.js";
 import { accessEnableRBAC } from "@gram/client/funcs/accessEnableRBAC.js";
 import { assetsUploadFunctions } from "@gram/client/funcs/assetsUploadFunctions.js";
 import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
-import { accessEnableRBAC } from "@gram/client/funcs/accessEnableRBAC.js";
 import { authInfo } from "@gram/client/funcs/authInfo.js";
 import { deploymentsEvolveDeployment } from "@gram/client/funcs/deploymentsEvolveDeployment.js";
 import { deploymentsGetById } from "@gram/client/funcs/deploymentsGetById.js";
