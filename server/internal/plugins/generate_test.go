@@ -133,6 +133,9 @@ if [ -f "$1" ]; then cat "$1" > "$GRAM_TEST_URL_FILE"; else printf '%s' "$1" > "
 			port = match[1]
 			state = match[2]
 		}
+		// The listener advertises form_post so the dashboard POSTs the key in a
+		// request body instead of exposing it in the callback URL.
+		assert.Contains(c, string(raw), "response_mode=form_post", "auth URL must request the form_post token exchange: %s", string(raw))
 	}, 30*time.Second, 100*time.Millisecond, "browser opener was never invoked: %s", output.String())
 
 	// Process arguments are world-readable; the state token must reach the
@@ -143,12 +146,13 @@ if [ -f "$1" ]; then cat "$1" > "$GRAM_TEST_URL_FILE"; else printf '%s' "$1" > "
 	// A callback without the per-attempt state token is an injection attempt
 	// by something else on this machine: rejected, and the listener keeps
 	// waiting for the real redirect.
-	forged := "http://127.0.0.1:" + port + "/callback?api_key=attacker-key&project=evil"
+	forged := "http://127.0.0.1:" + port + "/callback"
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, forged, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, forged, strings.NewReader("api_key=attacker-key&project=evil"))
 		if !assert.NoError(c, err) {
 			return
 		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		resp, err := http.DefaultClient.Do(req)
 		if !assert.NoError(c, err) {
 			return
@@ -157,12 +161,15 @@ if [ -f "$1" ]; then cat "$1" > "$GRAM_TEST_URL_FILE"; else printf '%s' "$1" > "
 		assert.Equal(c, http.StatusForbidden, resp.StatusCode)
 	}, 30*time.Second, 200*time.Millisecond, "forged callback was never rejected: %s", output.String())
 
-	callback := "http://127.0.0.1:" + port + "/callback?state=" + state + "&api_key=test-key-123&project=default&email=a%40b.c"
+	// The dashboard's form_post: the state token stays in the callback URL, but
+	// the credentials arrive in the request body so they never touch the URL.
+	callback := "http://127.0.0.1:" + port + "/callback?state=" + state
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, callback, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, callback, strings.NewReader("api_key=test-key-123&project=default&email=a%40b.c"))
 		if !assert.NoError(c, err) {
 			return
 		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		resp, err := http.DefaultClient.Do(req)
 		if !assert.NoError(c, err) {
 			return
@@ -183,6 +190,50 @@ if [ -f "$1" ]; then cat "$1" > "$GRAM_TEST_URL_FILE"; else printf '%s' "$1" > "
 	require.Contains(t, cached, "project=default\n")
 	require.Contains(t, cached, "email=a@b.c\n")
 	require.NoFileExists(t, authFile+".login-attempt", "successful login must clear the attempt cooldown marker")
+}
+
+// TestSharedAuthScriptHandleRequestFormPost drives the listener's request
+// handler directly to lock in the form_post token exchange and its safeguards:
+// a POST with the valid state captures the body verbatim, an older dashboard's
+// GET redirect still works (so a new plugin keeps authenticating against a
+// dashboard that has not yet learned form_post), and a POST without the state
+// token is rejected without capturing anything.
+func TestSharedAuthScriptHandleRequestFormPost(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+
+	script := `. ./auth.sh
+run_case() {
+  local label="$1" method="$2" target="$3" body="$4"
+  local work; work="$(mktemp -d)"
+  if [ "$method" = "POST" ]; then
+    printf 'POST %s HTTP/1.1\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: %s\r\n\r\n%s' "$target" "${#body}" "$body" \
+      | gram_hooks_login_handle_request "$work" tok probe >"$work/resp"
+  else
+    printf 'GET %s HTTP/1.1\r\n\r\n' "$target" \
+      | gram_hooks_login_handle_request "$work" tok probe >"$work/resp"
+  fi
+  printf '%s-STATUS:%s\n' "$label" "$(head -n1 "$work/resp" | tr -d '\r')"
+  printf '%s-QUERY:%s\n' "$label" "$(cat "$work/query" 2>/dev/null)"
+}
+run_case POST POST '/callback?state=tok' 'api_key=post-key&project=proj&email=a%40b.c'
+run_case GET GET '/callback?state=tok&api_key=get-key&project=proj' ''
+run_case FORGED POST '/callback' 'api_key=attacker&project=evil'
+`
+	cmd := exec.Command("bash", "-c", script)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+	output := string(out)
+
+	require.Contains(t, output, "POST-STATUS:HTTP/1.1 200 OK", "form_post callback must succeed")
+	require.Contains(t, output, "POST-QUERY:api_key=post-key&project=proj&email=a%40b.c", "form_post body must be captured verbatim")
+	require.Contains(t, output, "GET-STATUS:HTTP/1.1 200 OK", "legacy GET redirect must still succeed")
+	require.Contains(t, output, "GET-QUERY:state=tok&api_key=get-key&project=proj", "legacy GET query must still be captured")
+	require.Contains(t, output, "FORGED-STATUS:HTTP/1.1 403 Forbidden", "a POST without the state token must be rejected")
+	require.Contains(t, output, "FORGED-QUERY:\n", "a rejected POST must not capture credentials")
 }
 
 func TestGeneratePluginWithCustomDomainURL(t *testing.T) {

@@ -17,12 +17,22 @@ interface CliCallbackProps {
    */
   codeChallenge?: string | null;
   codeChallengeMethod?: string | null;
+  /**
+   * When `"form_post"`, credentials are delivered by auto-submitting a POST
+   * form to the localhost callback instead of appending them to its URL. This
+   * keeps the minted key out of the browser history and the local listener's
+   * process arguments. Any other value (or absence) preserves the default
+   * query-parameter redirect, so older clients keep working.
+   */
+  responseMode?: string | null;
 }
 
 /**
  * CliCallback is an authentication handler for local clients such as the CLI
  * and coding-agent hooks. By default it generates an API key in the requested
- * scope and returns it to the localhost callback URL as query parameters.
+ * scope and returns it to the localhost callback URL as query parameters. When
+ * the request sets `response_mode=form_post` it instead POSTs the credentials
+ * as a form body, keeping the minted key out of the callback URL.
  *
  * When the request supplies a PKCE `code_challenge`, it instead runs the PKCE
  * enrollment flow: it exchanges the challenge for a short-lived one-time code
@@ -38,6 +48,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     organizationId,
     codeChallenge,
     codeChallengeMethod,
+    responseMode,
   } = props;
   const { session, status } = useSessionData();
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +57,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
   const hasCreatedKey = useRef(false);
   const validCallback = isCallbackLocal(localCallbackUrl);
   const isPkceFlow = Boolean(codeChallenge);
+  const useFormPost = responseMode === "form_post";
 
   useEffect(() => {
     if (status === "pending") return;
@@ -95,7 +107,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
         codeChallengeMethod,
         selectedProjectSlug,
       )
-        .then((code) => transmitCode(localCallbackUrl, code))
+        .then((code) => transmitCode(localCallbackUrl, code, useFormPost))
         .catch((err) => {
           setError(
             err instanceof Error ? err.message : "Failed to authorize device",
@@ -112,6 +124,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
           selectedProjectSlug,
           session.user.email,
           session.activeOrganizationId,
+          useFormPost,
         ),
       )
       .catch((err) => {
@@ -131,6 +144,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     isPkceFlow,
     codeChallenge,
     codeChallengeMethod,
+    useFormPost,
   ]);
 
   if (error) {
@@ -249,22 +263,64 @@ async function transmitKey(
   projectSlug: string | null,
   userEmail: string,
   organizationId?: string | null,
+  useFormPost?: boolean,
 ): Promise<void> {
-  const url = new URL(callbackUrl);
-  url.searchParams.set("api_key", apiKey);
+  const fields: Record<string, string> = { api_key: apiKey };
   if (projectSlug) {
-    url.searchParams.set("project", projectSlug);
+    fields.project = projectSlug;
   }
   if (userEmail) {
-    url.searchParams.set("email", userEmail);
+    fields.email = userEmail;
   }
   // The receiving client binds its credential cache to this org so a cache
   // minted here is never reused by a plugin generated for a different org.
   if (organizationId) {
-    url.searchParams.set("organization_id", organizationId);
+    fields.organization_id = organizationId;
   }
 
+  transmit(callbackUrl, fields, useFormPost);
+}
+
+/**
+ * transmit hands the credential fields to the localhost callback. In form_post
+ * mode it auto-submits a POST form so the secret rides in the request body
+ * (never the URL); otherwise it falls back to a query-parameter redirect.
+ */
+function transmit(
+  callbackUrl: string,
+  fields: Record<string, string>,
+  useFormPost?: boolean,
+): void {
+  if (useFormPost) {
+    postCallback(callbackUrl, fields);
+    return;
+  }
+
+  const url = new URL(callbackUrl);
+  for (const [name, value] of Object.entries(fields)) {
+    url.searchParams.set(name, value);
+  }
   window.location.replace(url.toString());
+}
+
+function postCallback(
+  callbackUrl: string,
+  fields: Record<string, string>,
+): void {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = callbackUrl;
+  // Default enctype (application/x-www-form-urlencoded) URL-encodes the field
+  // values, matching what the localhost listener decodes on the other side.
+  for (const [name, value] of Object.entries(fields)) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  form.submit();
 }
 
 async function authorizePkceCode(
@@ -294,9 +350,10 @@ async function authorizePkceCode(
   return result.code;
 }
 
-async function transmitCode(callbackUrl: string, code: string): Promise<void> {
-  const url = new URL(callbackUrl);
-  url.searchParams.set("code", code);
-
-  window.location.replace(url.toString());
+async function transmitCode(
+  callbackUrl: string,
+  code: string,
+  useFormPost?: boolean,
+): Promise<void> {
+  transmit(callbackUrl, { code }, useFormPost);
 }
