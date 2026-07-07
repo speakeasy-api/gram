@@ -18,6 +18,7 @@ import {
   useThreadId,
 } from "@gram-ai/elements";
 import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
+import { useSession } from "@/contexts/Auth";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
   INSIGHTS_DOCK_VT_CLASS,
@@ -765,6 +766,26 @@ export function InsightsProvider({
     [membersData],
   );
 
+  // The backend only lets a chat's creator send into it (see
+  // CheckDashboardChatOwnership) — admins can still open others' chats via
+  // their chat:read grant, so hide the composer for those rather than let a
+  // send 404. Chats started from the dashboard stash the caller's email in
+  // externalUserId instead of userId (see resolveCreator above).
+  const { user } = useSession();
+  const isOwnChat = useCallback(
+    ({
+      userId,
+      externalUserId,
+    }: {
+      userId?: string;
+      externalUserId?: string;
+    }) => {
+      if (!userId && !externalUserId) return true;
+      return userId === user.id || externalUserId === user.email;
+    },
+    [user.id, user.email],
+  );
+
   // Mount the shared runtime only where it's actually used: a chat route (the
   // page owns the chat) or the open dock — and only where the dock is shown.
   // Pages with their own chat runtime (Playground, Elements, assistant
@@ -873,6 +894,7 @@ export function InsightsProvider({
         // drop framing-only turns — before Elements renders the transcript.
         transformChatMessage: stripMessageContextFraming,
         resolveCreator,
+        isOwnChat,
       },
       api: {
         ...mcpConfig.api,
@@ -911,6 +933,7 @@ export function InsightsProvider({
       wrappedTransport,
       managedAssistantId,
       resolveCreator,
+      isOwnChat,
     ],
   );
 
