@@ -216,6 +216,14 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 		return nil, err
 	}
 
+	// Projects created before the Default plugin existed never got one
+	// provisioned. Heal that lazily here so the dashboard always has a
+	// plugin to publish to, mirroring the AttachToDefaultPlugin callers in
+	// toolsets/mcpendpoints.
+	if err := s.ensureDefaultPlugin(ctx, ac); err != nil {
+		return nil, err
+	}
+
 	rows, err := s.repo.ListPlugins(ctx, repo.ListPluginsParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      *ac.ProjectID,
@@ -251,6 +259,50 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 	}
 
 	return &gen.ListPluginsResult{Plugins: plugins}, nil
+}
+
+// ensureDefaultPlugin provisions the project's Default plugin if it doesn't
+// exist yet, covering projects created before CreateProject started
+// provisioning one. No-ops (no audit event, no error) when the plugin
+// already exists, or when the caller lacks the admin scope that plugin
+// creation normally requires (CreatePlugin/AddPluginServer) — a read-only
+// viewer loading the dashboard shouldn't be able to trigger a write.
+func (s *Service) ensureDefaultPlugin(ctx context.Context, ac *contextvalues.AuthContext) error {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	ensured, err := EnsureDefaultPlugin(ctx, repo.New(tx), ac.ActiveOrganizationID, *ac.ProjectID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "ensure default plugin").LogError(ctx, s.logger)
+	}
+	if !ensured.Created {
+		return nil
+	}
+
+	if err := s.audit.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        *ac.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		PluginID:         ensured.Plugin.ID,
+		PluginName:       ensured.Plugin.Name,
+		PluginSlug:       ensured.Plugin.Slug,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
+	}
+	return nil
 }
 
 func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) (*gen.Plugin, error) {
