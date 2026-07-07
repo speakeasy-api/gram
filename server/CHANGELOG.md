@@ -1,5 +1,16 @@
 # server
 
+## 0.82.0
+
+### Minor Changes
+
+- 7882ed7: Add a built-in preset exclusion library that suppresses known false positives (test credit cards, example API keys/tokens, module/content hashes, placeholder emails) across all detection sources. Adds the `risk.listBuiltinPresets` endpoint and a read-only "Built-in library" section on the Exclusions tab that lists the live catalog.
+- 3e492c4: Add backend APIs and runtime routing for tunneled MCP server sources.
+
+### Patch Changes
+
+- f6ad2fc: fix: key session active/expired status off refresh expiry
+
 ## 0.81.0
 
 ### Minor Changes
