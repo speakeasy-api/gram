@@ -40,9 +40,11 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
     const readWrite: Scope[] = ["project:read", "project:write"];
-    // The Observe surface is gated on its own telemetry:read scope. Basic members
-    // do not hold telemetry:read by default, so Observe is hidden from them.
-    const observe: Scope[] = ["telemetry:read"];
+    // The Observe surface is gated on telemetry:read at the page level (each page
+    // renders an "Access restricted" notice without it, like the Secure section).
+    // The nav items themselves stay visible to any project member (project:read)
+    // so the group isn't silently hidden — mirrors Secure's riskOverview.
+    const observe: Scope[] = ["project:read"];
     return [
       { route: routes.home, scope: read },
       { route: routes.chat, scope: read },

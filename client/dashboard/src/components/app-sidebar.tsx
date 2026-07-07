@@ -83,7 +83,7 @@ export function AppSidebar({
   const { state } = useSidebar();
   // While grants reload (e.g. right after switching projects, when the query
   // cache is cleared), show a skeleton so the scope-gated nav doesn't flash empty.
-  const { isLoading: rbacLoading, hasScope } = useRBAC();
+  const { isLoading: rbacLoading } = useRBAC();
   const telemetry = useTelemetry();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
@@ -107,19 +107,13 @@ export function AppSidebar({
     ...(isAssistantsEnabled ? [routes.assistants] : []),
   ].some((r) => r.active);
 
-  // Gate observeActive on telemetry:read too: the Observe group is hidden for
-  // users without it, so directly navigating to an Observe page must not set
-  // activeGroup to a group that isn't rendered, which would leave the nav with
-  // no visible active/open group.
-  const observeActive =
-    hasScope("telemetry:read") &&
-    [
-      routes.employees,
-      routes.costs,
-      routes.insights,
-      routes.agentSessions,
-      routes.logs,
-    ].some((r) => r.active);
+  const observeActive = [
+    routes.employees,
+    routes.costs,
+    routes.insights,
+    routes.agentSessions,
+    routes.logs,
+  ].some((r) => r.active);
 
   const securityActive = [
     routes.riskOverview,
@@ -204,37 +198,35 @@ export function AppSidebar({
                 <div className="border-border border-t" />
               </li>
 
-              {/* Observe group — gated on telemetry:read; hide it entirely (label
-                  included) from anyone without the scope rather than showing an
-                  empty group. */}
-              <RequireScope scope="telemetry:read" level="section">
-                <CollapsibleNavGroup
-                  label="Observe"
-                  Icon={(p) => <Icon {...p} name="eye" />}
-                  defaultHref={routes.costs.href()}
-                >
-                  <ScopeGatedNavItem
-                    item={routes.costs}
-                    scope={scopeFor(routes.costs)}
-                  />
-                  <ScopeGatedNavItem
-                    item={routes.insights}
-                    scope={scopeFor(routes.insights)}
-                  />
-                  <ScopeGatedNavItem
-                    item={routes.agentSessions}
-                    scope={scopeFor(routes.agentSessions)}
-                  />
-                  <ScopeGatedNavItem
-                    item={routes.logs}
-                    scope={scopeFor(routes.logs)}
-                  />
-                  <ScopeGatedNavItem
-                    item={routes.employees}
-                    scope={scopeFor(routes.employees)}
-                  />
-                </CollapsibleNavGroup>
-              </RequireScope>
+              {/* Observe group — always shown (like Secure). Members without
+                  telemetry:read still see the nav; opening a page renders the
+                  page-level "Access restricted" notice via RequireScope. */}
+              <CollapsibleNavGroup
+                label="Observe"
+                Icon={(p) => <Icon {...p} name="eye" />}
+                defaultHref={routes.costs.href()}
+              >
+                <ScopeGatedNavItem
+                  item={routes.costs}
+                  scope={scopeFor(routes.costs)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.insights}
+                  scope={scopeFor(routes.insights)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.agentSessions}
+                  scope={scopeFor(routes.agentSessions)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.logs}
+                  scope={scopeFor(routes.logs)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.employees}
+                  scope={scopeFor(routes.employees)}
+                />
+              </CollapsibleNavGroup>
 
               {/* Secure group */}
               <CollapsibleNavGroup
