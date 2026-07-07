@@ -3600,6 +3600,11 @@ CREATE TABLE IF NOT EXISTS risk_policy_challenges (
   entity TEXT,
   rule_id TEXT,
 
+  -- SHA-256 (hex) of the exact scanned call input. Scopes an acknowledgement to
+  -- one concrete call, so an ack clears only an identical retry — not every call
+  -- of the same tool under the same policy. NULL for non-call-scoped rows.
+  call_fingerprint TEXT,
+
   challenged_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   acknowledged_at timestamptz,
   -- When an acknowledgement stops suppressing re-challenge (the "remember" window).
@@ -3620,7 +3625,7 @@ CREATE TABLE IF NOT EXISTS risk_policy_challenges (
 COMMENT ON TABLE risk_policy_challenges IS 'Interactive warn/challenge lifecycle for warn-action policies: a warn match records a challenged row; the user self-service acknowledges to proceed on retry. Never stores the raw matched value.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_challenges_current_key
-ON risk_policy_challenges (project_id, user_id, risk_policy_id, tool_name) NULLS NOT DISTINCT
+ON risk_policy_challenges (project_id, user_id, risk_policy_id, tool_name, call_fingerprint) NULLS NOT DISTINCT
 WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS risk_policy_challenges_project_status_updated_idx
@@ -3628,7 +3633,7 @@ ON risk_policy_challenges (project_id, status, updated_at DESC)
 WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS risk_policy_challenges_active_ack_idx
-ON risk_policy_challenges (project_id, user_id, risk_policy_id, tool_name, expires_at)
+ON risk_policy_challenges (project_id, user_id, risk_policy_id, tool_name, call_fingerprint, expires_at)
 WHERE deleted IS FALSE AND status = 'acknowledged';
 
 -- Non-partial indexes backing the ON DELETE CASCADE foreign keys. The RI
