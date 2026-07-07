@@ -254,6 +254,7 @@ function SessionSummary({
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const accountEmail = personalAccountEmail(chat);
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
@@ -302,14 +303,13 @@ function SessionSummary({
           <div className="mb-1 text-sm font-semibold">Session details</div>
           <div className="divide-border divide-y">
             <MetaRow label="User">{chat.externalUserId || "anonymous"}</MetaRow>
-            {personalAccountEmail(chat) && (
+            {accountEmail && (
               <MetaRow label="Account">
                 <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
-                  {personalAccountEmail(chat)}
+                  {accountEmail}
                   <AccountTypeBadge accountType={chat.accountType} noTooltip />
                 </span>
               </MetaRow>
-            )}
             )}
             {chat.source && (
               <MetaRow label="Source">
