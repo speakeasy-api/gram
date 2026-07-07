@@ -60,9 +60,11 @@ import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { UserMessageText } from "@/components/assistant-ui/user-message-text";
 import { ToolMentionAutocomplete } from "@/components/assistant-ui/tool-mention-autocomplete";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useChatId } from "@/contexts/ChatIdContext";
 import { useReplayContext } from "@/contexts/ReplayContext";
+import { useThreadMeta } from "@/contexts/ThreadMetaContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useDensity } from "@/hooks/useDensity";
 import { useElements } from "@/hooks/useElements";
@@ -78,7 +80,7 @@ import {
   type MentionableTool,
   toolSetToMentionableTools,
 } from "@/lib/tool-mentions";
-import { cn } from "@/lib/utils";
+import { cn, initialsOf } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import {
   Tooltip,
@@ -1196,9 +1198,10 @@ const UserMessage: FC = () => {
         <UserMessageAttachments />
 
         <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
+          <UserMessageHeader />
           <div
             className={cn(
-              "aui-user-message-content bg-muted px-5 py-2.5 wrap-break-word text-foreground",
+              "aui-user-message-content ml-auto w-fit bg-blue-500 px-5 py-2.5 wrap-break-word text-white",
               r("xl"),
             )}
           >
@@ -1214,6 +1217,43 @@ const UserMessage: FC = () => {
         <BranchPicker className="aui-user-branch-picker col-span-full col-start-1 row-start-3 -mr-1 justify-end" />
       </div>
     </MessagePrimitive.Root>
+  );
+};
+
+/**
+ * Avatar + name + timestamp above a user turn, identifying who sent it and
+ * when — the name/avatar resolved via `history.resolveCreator` for the
+ * message's thread. Renders nothing when unresolved (no `resolveCreator`
+ * configured, or it returned nothing for this chat).
+ */
+const UserMessageHeader: FC = () => {
+  const id = useAssistantState(
+    ({ threadListItem }) =>
+      threadListItem.remoteId ?? threadListItem.externalId,
+  );
+  const owner = useThreadMeta(id ?? undefined)?.owner;
+  const createdAt = useAssistantState(({ message }) => message.createdAt);
+  if (!owner) return null;
+
+  const display = owner.name || owner.email;
+  const time = createdAt.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return (
+    <div className="aui-user-message-owner mb-1.5 flex items-center justify-end gap-2 pr-5 text-xs text-muted-foreground">
+      <Avatar className="size-7">
+        {owner.photoUrl ? (
+          <AvatarImage src={owner.photoUrl} alt={display} />
+        ) : null}
+        <AvatarFallback className="text-xs font-medium">
+          {initialsOf(display)}
+        </AvatarFallback>
+      </Avatar>
+      <span className="font-medium text-foreground">{display}</span>
+      <span className="h-3 w-px bg-border" aria-hidden="true" />
+      <span>{time}</span>
+    </div>
   );
 };
 

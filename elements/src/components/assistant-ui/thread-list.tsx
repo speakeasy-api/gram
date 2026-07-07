@@ -6,10 +6,11 @@ import {
 } from "@assistant-ui/react";
 import { MessageSquareTextIcon, PlusIcon } from "lucide-react";
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRadius } from "@/hooks/useRadius";
-import { cn } from "@/lib/utils";
+import { cn, initialsOf } from "@/lib/utils";
 import { useDensity } from "@/hooks/useDensity";
 import { useThreadMeta } from "@/contexts/ThreadMetaContext";
 
@@ -133,9 +134,7 @@ const ThreadListItem: FC = () => {
           d("py-sm"),
         )}
       >
-        <span className="aui-thread-list-item-icon flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground">
-          <MessageSquareTextIcon className="size-3.5" />
-        </span>
+        <ThreadListItemIcon />
         <span className="flex min-w-0 flex-col">
           <ThreadListItemTitle />
           <ThreadListItemDate />
@@ -144,6 +143,38 @@ const ThreadListItem: FC = () => {
       {/* Archive button hidden until feature is implemented */}
       {/* <ThreadListItemArchive /> */}
     </ThreadListItemPrimitive.Root>
+  );
+};
+
+/**
+ * Row icon: the chat creator's avatar when `history.resolveCreator` resolves
+ * one, otherwise the default message icon.
+ */
+const ThreadListItemIcon: FC = () => {
+  const id = useAssistantState(
+    ({ threadListItem }) =>
+      threadListItem.remoteId ?? threadListItem.externalId,
+  );
+  const owner = useThreadMeta(id ?? undefined)?.owner;
+
+  if (owner) {
+    const display = owner.name || owner.email;
+    return (
+      <Avatar className="aui-thread-list-item-icon size-7 shrink-0">
+        {owner.photoUrl ? (
+          <AvatarImage src={owner.photoUrl} alt={display} />
+        ) : null}
+        <AvatarFallback className="border border-border bg-card text-[10px] font-medium text-muted-foreground">
+          {initialsOf(display)}
+        </AvatarFallback>
+      </Avatar>
+    );
+  }
+
+  return (
+    <span className="aui-thread-list-item-icon flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground">
+      <MessageSquareTextIcon className="size-3.5" />
+    </span>
   );
 };
 
