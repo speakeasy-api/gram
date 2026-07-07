@@ -19,6 +19,7 @@ local linters = new Mapping<String, Step> {
     fix = "go mod tidy"
   }
   ["gofmt"] {
+    batch = true
     glob = "**/*.go"
     check_list_files =
       """
@@ -31,11 +32,13 @@ local linters = new Mapping<String, Step> {
     fix = "gofmt -s -w {{files}}"
   }
   ["gofix"] {
+    batch = true
     glob = "**/*.go"
     exclude = "**/testdata/**"
     fix = "mise run -q go:fix {{files}}"
   }
   ["oxfmt"] {
+    batch = true
     glob =
       List(
         "**/*.js",
@@ -71,9 +74,11 @@ local linters = new Mapping<String, Step> {
     fix = "pnpm oxfmt --write --no-error-on-unmatched-pattern {{files}}"
   }
   ["ruff-format"] = (Builtins.ruff_format) {
+    batch = true
     exclude = List("**/vendor/**", "**/node_modules/**", "**/dist/**", "**/*_pb2.*")
   }
   ["ruff"] = (Builtins.ruff) {
+    batch = true
     exclude = List("**/vendor/**", "**/node_modules/**", "**/dist/**", "**/*_pb2.*")
   }
 }

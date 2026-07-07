@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/pijudge"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -287,8 +288,8 @@ func loadFloors(dir string) (floors, error) {
 	return fl, nil
 }
 
-func scanL0(ctx context.Context, corpus []labeledCase) ([][]risk_analysis.Finding, error) {
-	out := make([][]risk_analysis.Finding, len(corpus))
+func scanL0(ctx context.Context, corpus []labeledCase) ([][]scanners.Finding, error) {
+	out := make([][]scanners.Finding, len(corpus))
 	for i, c := range corpus {
 		findings, err := risk_analysis.DetectPromptInjection(ctx, c.Text)
 		if err != nil {
@@ -306,7 +307,7 @@ func scanL0(ctx context.Context, corpus []labeledCase) ([][]risk_analysis.Findin
 // model's raw accuracy on every case rather than a throttled subset. Returns a
 // skipped mode when no OpenRouter key is configured, so CI and keyless dev runs
 // still produce the L0 report.
-func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase, l0Findings [][]risk_analysis.Finding) (modeSummary, error) {
+func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase, l0Findings [][]scanners.Finding) (modeSummary, error) {
 	apiKey := firstEnv("OPENROUTER_DEV_KEY", "OPENROUTER_API_KEY")
 	if apiKey == "" || apiKey == "unset" {
 		return skippedMode("l1_opt_in", "OPENROUTER_DEV_KEY not set"), nil
@@ -325,7 +326,7 @@ func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase, l0Fi
 // appends an L1 finding wherever it flags an attack, on a clone of the L0
 // findings. A judge failure leaves the row with its L0 verdict — a stuck or
 // erroring model degrades to L0, matching the engine's fail-open posture.
-func scanJudge(ctx context.Context, opts options, client openrouter.CompletionClient, corpus []labeledCase, l0Findings [][]risk_analysis.Finding) [][]risk_analysis.Finding {
+func scanJudge(ctx context.Context, opts options, client openrouter.CompletionClient, corpus []labeledCase, l0Findings [][]scanners.Finding) [][]scanners.Finding {
 	out := cloneFindings(l0Findings)
 	ruleID, description := risk_analysis.DescribePromptInjection()
 
@@ -354,7 +355,7 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 			if err != nil || !isAttack {
 				return
 			}
-			out[i] = append(out[i], risk_analysis.Finding{
+			out[i] = append(out[i], scanners.Finding{
 				RuleID:           ruleID,
 				Description:      description,
 				Match:            text,
@@ -364,6 +365,11 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 				Confidence:       confidence,
 				Tags:             []string{"llm-judge", "layer-1"},
 				DeadLetterReason: "",
+
+				McpLookupToolCallID: "",
+				SpanGroupKey:        "",
+				Field:               "",
+				Path:                "",
 			})
 		}(i)
 	}
@@ -473,7 +479,7 @@ func (d *devProvisioner) GetModelUsage(_ context.Context, _ string, _ string) (*
 
 var _ openrouter.Provisioner = (*devProvisioner)(nil)
 
-func summarizeFindings(mode string, corpus []labeledCase, findings [][]risk_analysis.Finding) modeSummary {
+func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.Finding) modeSummary {
 	overall := counts{TP: 0, FP: 0, TN: 0, FN: 0}
 	bySource := map[string]*counts{}
 	ruleTP := map[string]int{}
@@ -552,7 +558,7 @@ func summarizeFindings(mode string, corpus []labeledCase, findings [][]risk_anal
 // but the candidate mode now flags — i.e. judge-recovered true positives
 // (label "malicious") or judge-introduced false positives (label "benign").
 // Sorted by confidence desc, capped at limit.
-func changedExamples(corpus []labeledCase, baseline, candidate [][]risk_analysis.Finding, label string, limit int) []exampleCase {
+func changedExamples(corpus []labeledCase, baseline, candidate [][]scanners.Finding, label string, limit int) []exampleCase {
 	examples := []exampleCase{}
 	for i, c := range corpus {
 		if c.Label != label || len(baseline[i]) > 0 || len(candidate[i]) == 0 {
@@ -579,7 +585,7 @@ func changedExamples(corpus []labeledCase, baseline, candidate [][]risk_analysis
 	return examples
 }
 
-func highestConfidenceFinding(findings []risk_analysis.Finding) risk_analysis.Finding {
+func highestConfidenceFinding(findings []scanners.Finding) scanners.Finding {
 	out := findings[0]
 	for _, f := range findings[1:] {
 		if f.Confidence > out.Confidence {
@@ -589,10 +595,10 @@ func highestConfidenceFinding(findings []risk_analysis.Finding) risk_analysis.Fi
 	return out
 }
 
-func cloneFindings(lhs [][]risk_analysis.Finding) [][]risk_analysis.Finding {
-	out := make([][]risk_analysis.Finding, len(lhs))
+func cloneFindings(lhs [][]scanners.Finding) [][]scanners.Finding {
+	out := make([][]scanners.Finding, len(lhs))
 	for i := range lhs {
-		out[i] = append([]risk_analysis.Finding{}, lhs[i]...)
+		out[i] = append([]scanners.Finding{}, lhs[i]...)
 	}
 	return out
 }

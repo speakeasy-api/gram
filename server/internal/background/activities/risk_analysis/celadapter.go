@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // celMessage adapts the structured MessageView into the celenv input model.
@@ -40,26 +41,26 @@ func CompileCELRules(eng *celenv.Engine, rules []customrules.Rule) ([]CompiledCE
 		if err != nil {
 			return nil, fmt.Errorf("custom rule %s: compile %q: %w", rule.RuleID, expr, err)
 		}
-		rule.RuleID = guard(rule.RuleID)
+		rule.RuleID = scanners.GuardRuleID(rule.RuleID)
 		out = append(out, CompiledCELRule{rule: rule, prg: prg})
 	}
 	return out, nil
 }
 
 // ScanCELRules evaluates custom detector rules over a message view.
-func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule) ([]Finding, error) {
+func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule) ([]scanners.Finding, error) {
 	msg := celMessage(view)
-	findings := []Finding{}
+	findings := []scanners.Finding{}
 	for _, r := range rules {
 		spans, matched, err := eng.EvalDetection(r.prg, msg)
 		if err != nil {
-			return []Finding{}, fmt.Errorf("custom rule %s: eval: %w", r.rule.RuleID, err)
+			return []scanners.Finding{}, fmt.Errorf("custom rule %s: eval: %w", r.rule.RuleID, err)
 		}
 		if !matched {
 			continue
 		}
 		for _, s := range spans {
-			findings = append(findings, Finding{
+			findings = append(findings, scanners.Finding{
 				RuleID:              r.rule.RuleID,
 				Description:         r.rule.DisplayDescription(),
 				Match:               s.Value,
@@ -69,10 +70,10 @@ func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule)
 				Source:              SourceCustom,
 				Confidence:          1.0,
 				DeadLetterReason:    "",
-				mcpLookupToolCallID: "",
-				spanGroupKey:        s.ToolCallID,
-				field:               s.Target,
-				path:                s.Path,
+				McpLookupToolCallID: "",
+				SpanGroupKey:        s.ToolCallID,
+				Field:               s.Target,
+				Path:                s.Path,
 			})
 		}
 	}

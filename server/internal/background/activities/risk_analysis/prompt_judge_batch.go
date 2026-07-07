@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // judgeConcurrency bounds the number of in-flight judge calls per batch.
@@ -60,8 +61,8 @@ func judgeFanout(
 	}
 }
 
-func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, outOfPolicyScope []bool) [][]Finding {
-	out := make([][]Finding, len(messages))
+func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, outOfPolicyScope []bool) [][]scanners.Finding {
+	out := make([][]scanners.Finding, len(messages))
 	cfg := ParseJudgeConfig(policy.ModelConfig)
 	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
 		return out
@@ -90,7 +91,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 				TotalTokens:      0,
 			})
 			for _, idx := range indices {
-				out[idx] = []Finding{finding}
+				out[idx] = []scanners.Finding{finding}
 			}
 		}
 		return out
@@ -102,7 +103,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		messages, indices,
 		func(_, idx int, verdict *JudgeVerdict, _ time.Duration) {
 			if verdict != nil && verdict.Matched {
-				out[idx] = []Finding{JudgeFinding(*verdict)}
+				out[idx] = []scanners.Finding{JudgeFinding(*verdict)}
 			}
 		},
 		func(end int) { activity.RecordHeartbeat(ctx, SourceLLMJudge, end) },

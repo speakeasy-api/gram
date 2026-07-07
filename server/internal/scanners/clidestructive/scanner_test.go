@@ -1,9 +1,12 @@
-package risk_analysis
+package clidestructive
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // TestMatchCLIDestructiveString_CuratedPatterns exercises one representative
@@ -142,19 +145,85 @@ func TestScanForCLIDestructive_NestedStructures(t *testing.T) {
 	})
 }
 
-func TestScanMessageDestructiveCLICallsMalformedToolCallsFallback(t *testing.T) {
+// TestCLIDestructivePattern_FullNameProducesCanonicalRuleID verifies the
+// pattern type emits a canonical rule id directly, with no indirection layer.
+func TestCLIDestructivePattern_FullNameProducesCanonicalRuleID(t *testing.T) {
 	t.Parallel()
 
-	var a AnalyzeBatch
-	findings := a.scanMessageDestructiveCLICalls(t.Context(), []recordedToolCall{func() recordedToolCall {
-		var call recordedToolCall
-		call.Function.Name = malformedToolCallsName
-		call.Function.Arguments = `{"command":"rm -rf /tmp/x"`
-		return call
-	}()})
+	assert.Equal(t, "destructive.shell.rm_rf", (cliDestructivePattern{Category: "shell", Name: "rm_rf"}).FullName())
+	assert.Equal(t, "destructive.git.push_force", (cliDestructivePattern{Category: "git", Name: "push_force"}).FullName())
+	assert.Equal(t, "destructive.database.drop", (cliDestructivePattern{Category: "database", Name: "drop"}).FullName())
+	assert.Equal(t, "destructive.cloud.kubectl_delete_namespace", (cliDestructivePattern{Category: "cloud", Name: "kubectl_delete_namespace"}).FullName())
+}
+
+func TestDescribe_IncludesToolAndCommand(t *testing.T) {
+	t.Parallel()
+
+	id, desc := describe(cliDestructivePattern{Category: "shell", Name: "rm_rf"}, "Bash")
+	assert.Equal(t, "destructive.shell.rm_rf", id)
+	assert.Contains(t, desc, "Bash", "description must include the tool name")
+	assert.Contains(t, desc, "rm -rf", "description must include the human-readable command")
+	require.NoError(t, scanners.ValidateRuleID(id))
+}
+
+func TestDescribe_ReturnsCanonicalRuleIDForEveryHumanForm(t *testing.T) {
+	t.Parallel()
+
+	for ruleID := range cliCommandHumanForm {
+		require.NoError(t, scanners.ValidateRuleID(ruleID), "rule id %q must be canonical", ruleID)
+	}
+}
+
+func TestScanner_ReportsFindingPerMatchingCall(t *testing.T) {
+	t.Parallel()
+
+	s := NewScanner()
+	findings := s.Scan([]ToolCall{
+		{Name: "Bash", Arguments: `{"command":"rm -rf /tmp/data"}`},
+		{Name: "echo", Arguments: `{"command":"echo hi"}`},
+		{Name: "psql", Arguments: `{"query":"DROP TABLE users"}`},
+	})
+
+	if assert.Len(t, findings, 2) {
+		assert.Equal(t, Source, findings[0].Source)
+		assert.Equal(t, "destructive.shell.rm_rf", findings[0].RuleID)
+		assert.Equal(t, "Bash", findings[0].Match)
+
+		assert.Equal(t, "destructive.database.drop", findings[1].RuleID)
+		assert.Equal(t, "psql", findings[1].Match)
+	}
+}
+
+func TestScanner_SkipsCallsWithoutName(t *testing.T) {
+	t.Parallel()
+
+	s := NewScanner()
+	findings := s.Scan([]ToolCall{{Name: "", Arguments: `{"command":"rm -rf /"}`}})
+	assert.Empty(t, findings)
+}
+
+// TestScanner_MalformedArgumentsFallBackToRawString proves that when a tool
+// call's arguments are not valid JSON the scanner still scans the raw string,
+// so a destructive payload in an unparseable blob is not silently missed.
+func TestScanner_MalformedArgumentsFallBackToRawString(t *testing.T) {
+	t.Parallel()
+
+	s := NewScanner()
+	findings := s.Scan([]ToolCall{
+		{Name: "tool_calls", Arguments: `{"command":"rm -rf /tmp/x"`}, // missing closing brace
+	})
 
 	if assert.Len(t, findings, 1) {
-		assert.Equal(t, SourceCLIDestructive, findings[0].Source)
+		assert.Equal(t, Source, findings[0].Source)
 		assert.Equal(t, "destructive.shell.rm_rf", findings[0].RuleID)
 	}
+}
+
+func TestScanner_EmptyAndBenignInputs(t *testing.T) {
+	t.Parallel()
+
+	s := NewScanner()
+	assert.Empty(t, s.Scan(nil))
+	assert.Empty(t, s.Scan([]ToolCall{{Name: "Bash", Arguments: ""}}))
+	assert.Empty(t, s.Scan([]ToolCall{{Name: "Bash", Arguments: `{"command":"ls -la"}`}}))
 }

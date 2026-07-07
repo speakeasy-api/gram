@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // SourceAccountIdentity is the policy source value flagging sessions
@@ -21,21 +22,21 @@ const SourceAccountIdentity = "account_identity"
 // DescribeIdentityPersonalAccount returns the canonical rule and description.
 func DescribeIdentityPersonalAccount(email string) (string, string) {
 	if email == "" {
-		return guard(RuleIdentityPersonalAccount), "Session authenticated with a personal AI account."
+		return scanners.GuardRuleID(RuleIdentityPersonalAccount), "Session authenticated with a personal AI account."
 	}
-	return guard(RuleIdentityPersonalAccount), fmt.Sprintf("Session authenticated with the personal AI account %q.", email)
+	return scanners.GuardRuleID(RuleIdentityPersonalAccount), fmt.Sprintf("Session authenticated with the personal AI account %q.", email)
 }
 
 // DescribeIdentityUnapprovedDomain returns the canonical rule and description.
 func DescribeIdentityUnapprovedDomain(email string) (string, string) {
-	return guard(RuleIdentityUnapprovedDomain), fmt.Sprintf("Session authenticated with the AI account %q, whose email domain is not on the approved corporate domain list.", email)
+	return scanners.GuardRuleID(RuleIdentityUnapprovedDomain), fmt.Sprintf("Session authenticated with the AI account %q, whose email domain is not on the approved corporate domain list.", email)
 }
 
 // sessionFinding attaches session-scoped findings to the batch message that
 // carries them.
 type sessionFinding struct {
 	messageID uuid.UUID
-	findings  []Finding
+	findings  []scanners.Finding
 }
 
 // scanAccountIdentity evaluates the batch's chats against the account
@@ -81,7 +82,7 @@ func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatc
 		// idempotent. Only personal_account can be recorded match-less — the
 		// unapproved_domain rule only fires once an email is present.
 		if accountType == "personal" && email != "" &&
-			slices.Contains(row.FlaggedRuleIds, guard(RuleIdentityPersonalAccount)) {
+			slices.Contains(row.FlaggedRuleIds, scanners.GuardRuleID(RuleIdentityPersonalAccount)) {
 			ruleID, description := DescribeIdentityPersonalAccount(email)
 			if _, err := r.RefreshAccountIdentityFindingMatch(ctx, repo.RefreshAccountIdentityFindingMatchParams{
 				Description:       conv.ToPGText(description),
@@ -97,7 +98,7 @@ func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatc
 		}
 
 		findings := evaluateAccountIdentity(accountType, email, approvedDomains)
-		findings = slices.DeleteFunc(findings, func(f Finding) bool {
+		findings = slices.DeleteFunc(findings, func(f scanners.Finding) bool {
 			return slices.Contains(row.FlaggedRuleIds, f.RuleID)
 		})
 		if len(findings) == 0 {
@@ -108,8 +109,8 @@ func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatc
 	return out, nil
 }
 
-func evaluateAccountIdentity(accountType string, email string, approvedDomains map[string]struct{}) []Finding {
-	var findings []Finding
+func evaluateAccountIdentity(accountType string, email string, approvedDomains map[string]struct{}) []scanners.Finding {
+	var findings []scanners.Finding
 	if accountType == "personal" {
 		ruleID, description := DescribeIdentityPersonalAccount(email)
 		findings = append(findings, accountIdentityFinding(ruleID, description, email))
@@ -125,8 +126,8 @@ func evaluateAccountIdentity(accountType string, email string, approvedDomains m
 	return findings
 }
 
-func accountIdentityFinding(ruleID string, description string, email string) Finding {
-	return Finding{
+func accountIdentityFinding(ruleID string, description string, email string) scanners.Finding {
+	return scanners.Finding{
 		Source:              SourceAccountIdentity,
 		RuleID:              ruleID,
 		Description:         description,
@@ -136,10 +137,10 @@ func accountIdentityFinding(ruleID string, description string, email string) Fin
 		Tags:                []string{},
 		Confidence:          1.0,
 		DeadLetterReason:    "",
-		mcpLookupToolCallID: "",
-		spanGroupKey:        "",
-		field:               "",
-		path:                "",
+		McpLookupToolCallID: "",
+		SpanGroupKey:        "",
+		Field:               "",
+		Path:                "",
 	}
 }
 

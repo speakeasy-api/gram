@@ -52,6 +52,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -326,7 +328,7 @@ func newWorkerCommand() *cli.Command {
 			slog.SetDefault(logger)
 
 			if serviceEnv == "local" {
-				risk_analysis.EnableRuleIDFormatEnforcement()
+				scanners.EnableRuleIDFormatEnforcement()
 			}
 
 			ctx, cancel := context.WithCancel(c.Context)
@@ -723,6 +725,11 @@ func newWorkerCommand() *cli.Command {
 
 			piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
+			customRuleScanner, err := customruleanalyzer.NewScanner(db)
+			if err != nil {
+				return fmt.Errorf("create custom rules scanner: %w", err)
+			}
+
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:                 guardianPolicy,
 				DB:                             db,
@@ -753,6 +760,7 @@ func newWorkerCommand() *cli.Command {
 				TemporalEnv:                    temporalEnv,
 				PIIScanner:                     piiScanner,
 				PIScanner:                      piScanner,
+				CustomRuleScanner:              customRuleScanner,
 				ShadowMCPClient:                shadowMCPClient,
 				AuditLogger:                    auditLogger,
 				WorkOSClient:                   backgroundWorkOSClient,
