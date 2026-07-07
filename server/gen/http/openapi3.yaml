@@ -37360,6 +37360,9 @@ components:
         AssistantMCPServerRef:
             type: object
             properties:
+                endpoint_slug:
+                    type: string
+                    description: The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when the server has no Gram-hosted endpoint.
                 environment_slug:
                     type: string
                     description: Optional environment slug used when connecting to the MCP server.

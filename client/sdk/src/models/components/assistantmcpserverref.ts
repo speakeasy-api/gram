@@ -10,6 +10,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AssistantMCPServerRef = {
   /**
+   * The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when the server has no Gram-hosted endpoint.
+   */
+  endpointSlug?: string | undefined;
+  /**
    * Optional environment slug used when connecting to the MCP server.
    */
   environmentSlug?: string | undefined;
@@ -25,11 +29,13 @@ export const AssistantMCPServerRef$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    endpoint_slug: z.optional(z.string()),
     environment_slug: z.optional(z.string()),
     mcp_server_slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "endpoint_slug": "endpointSlug",
       "environment_slug": "environmentSlug",
       "mcp_server_slug": "mcpServerSlug",
     });
@@ -37,6 +43,7 @@ export const AssistantMCPServerRef$inboundSchema: z.ZodMiniType<
 );
 /** @internal */
 export type AssistantMCPServerRef$Outbound = {
+  endpoint_slug?: string | undefined;
   environment_slug?: string | undefined;
   mcp_server_slug: string;
 };
@@ -47,11 +54,13 @@ export const AssistantMCPServerRef$outboundSchema: z.ZodMiniType<
   AssistantMCPServerRef
 > = z.pipe(
   z.object({
+    endpointSlug: z.optional(z.string()),
     environmentSlug: z.optional(z.string()),
     mcpServerSlug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      endpointSlug: "endpoint_slug",
       environmentSlug: "environment_slug",
       mcpServerSlug: "mcp_server_slug",
     });

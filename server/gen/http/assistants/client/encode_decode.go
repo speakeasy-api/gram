@@ -1953,6 +1953,7 @@ func unmarshalAssistantMCPServerRefResponseBodyToTypesAssistantMCPServerRef(v *A
 	res := &types.AssistantMCPServerRef{
 		McpServerSlug:   *v.McpServerSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
+		EndpointSlug:    v.EndpointSlug,
 	}
 
 	return res
@@ -1980,6 +1981,7 @@ func marshalTypesAssistantMCPServerRefToAssistantMCPServerRefRequestBody(v *type
 	res := &AssistantMCPServerRefRequestBody{
 		McpServerSlug:   v.McpServerSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
+		EndpointSlug:    v.EndpointSlug,
 	}
 
 	return res
@@ -2007,6 +2009,7 @@ func marshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef(v *Assi
 	res := &types.AssistantMCPServerRef{
 		McpServerSlug:   v.McpServerSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
+		EndpointSlug:    v.EndpointSlug,
 	}
 
 	return res

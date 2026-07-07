@@ -142,14 +142,12 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
 
   const { data: toolsetsData } = useListToolsets();
   const mcps = useMemo<MCPServerEntry[] | undefined>(() => {
-    const refs = draft.assistant?.toolsets;
-    if (!refs?.length) return undefined;
     const fallbackEnv = draft.assistantEnv?.slug;
     const toolsetBySlug = new Map(
       (toolsetsData?.toolsets ?? []).map((t) => [t.slug, t]),
     );
     const entries: MCPServerEntry[] = [];
-    for (const ref of refs) {
+    for (const ref of draft.assistant?.toolsets ?? []) {
       const toolset = toolsetBySlug.get(ref.toolsetSlug);
       if (!toolset) continue;
       entries.push({
@@ -158,9 +156,22 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
         environment: ref.environmentSlug ?? fallbackEnv,
       });
     }
+    // Directly-attached MCP servers (no backing toolset) connect through the
+    // same Gram-hosted /mcp/{endpoint} path the assistant runtime dials. No
+    // fallback environment: most remote servers carry their own connection
+    // auth, so only an explicitly bound environment is sent.
+    for (const ref of draft.assistant?.mcpServers ?? []) {
+      if (!ref.endpointSlug) continue;
+      entries.push({
+        url: `${getServerURL()}/mcp/${ref.endpointSlug}`,
+        name: ref.mcpServerSlug,
+        environment: ref.environmentSlug,
+      });
+    }
     return entries.length ? entries : undefined;
   }, [
     draft.assistant?.toolsets,
+    draft.assistant?.mcpServers,
     draft.assistantEnv?.slug,
     toolsetsData?.toolsets,
     project.slug,

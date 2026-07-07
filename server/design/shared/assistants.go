@@ -16,6 +16,7 @@ var AssistantMCPServerRef = Type("AssistantMCPServerRef", func() {
 
 	Attribute("mcp_server_slug", String, "The MCP server slug exposed to the assistant. Covers remote- and tunnelled-backed MCP servers, which have no toolset to attach.")
 	Attribute("environment_slug", String, "Optional environment slug used when connecting to the MCP server.")
+	Attribute("endpoint_slug", String, "The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when the server has no Gram-hosted endpoint.")
 
 	Required("mcp_server_slug")
 })

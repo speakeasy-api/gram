@@ -13,4 +13,8 @@ type AssistantMCPServerRef struct {
 	McpServerSlug string
 	// Optional environment slug used when connecting to the MCP server.
 	EnvironmentSlug *string
+	// The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}).
+	// Populated on reads; ignored on writes. Absent when the server has no
+	// Gram-hosted endpoint.
+	EndpointSlug *string
 }

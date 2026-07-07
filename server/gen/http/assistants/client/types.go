@@ -1779,6 +1779,10 @@ type AssistantMCPServerRefResponseBody struct {
 	McpServerSlug *string `form:"mcp_server_slug,omitempty" json:"mcp_server_slug,omitempty" xml:"mcp_server_slug,omitempty"`
 	// Optional environment slug used when connecting to the MCP server.
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
+	// The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}).
+	// Populated on reads; ignored on writes. Absent when the server has no
+	// Gram-hosted endpoint.
+	EndpointSlug *string `form:"endpoint_slug,omitempty" json:"endpoint_slug,omitempty" xml:"endpoint_slug,omitempty"`
 }
 
 // AssistantToolsetRefRequestBody is used to define fields on request body
@@ -1798,6 +1802,10 @@ type AssistantMCPServerRefRequestBody struct {
 	McpServerSlug string `form:"mcp_server_slug" json:"mcp_server_slug" xml:"mcp_server_slug"`
 	// Optional environment slug used when connecting to the MCP server.
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
+	// The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}).
+	// Populated on reads; ignored on writes. Absent when the server has no
+	// Gram-hosted endpoint.
+	EndpointSlug *string `form:"endpoint_slug,omitempty" json:"endpoint_slug,omitempty" xml:"endpoint_slug,omitempty"`
 }
 
 // NewCreateAssistantRequestBody builds the HTTP request body from the payload

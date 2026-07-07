@@ -1021,10 +1021,15 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		ref := &types.AssistantMCPServerRef{
 			McpServerSlug:   row.ServerSlug.String,
 			EnvironmentSlug: nil,
+			EndpointSlug:    nil,
 		}
 		if row.EnvironmentSlug.Valid {
 			envSlug := row.EnvironmentSlug.String
 			ref.EnvironmentSlug = &envSlug
+		}
+		if row.EndpointSlug != "" {
+			endpointSlug := row.EndpointSlug
+			ref.EndpointSlug = &endpointSlug
 		}
 		mcpServers = append(mcpServers, ref)
 	}

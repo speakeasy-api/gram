@@ -1800,6 +1800,7 @@ func marshalTypesAssistantMCPServerRefToAssistantMCPServerRefResponseBody(v *typ
 	res := &AssistantMCPServerRefResponseBody{
 		McpServerSlug:   v.McpServerSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
+		EndpointSlug:    v.EndpointSlug,
 	}
 
 	return res
@@ -1827,6 +1828,7 @@ func unmarshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef(v *As
 	res := &types.AssistantMCPServerRef{
 		McpServerSlug:   *v.McpServerSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
+		EndpointSlug:    v.EndpointSlug,
 	}
 
 	return res
