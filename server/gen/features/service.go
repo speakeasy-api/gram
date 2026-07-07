@@ -70,6 +70,8 @@ type GetProductFeaturesResult struct {
 	// Whether observability mode is enabled, making generated hook plugins fully
 	// non-blocking
 	ObservabilityModeEnabled bool
+	// Whether skills distribution via plugins is enabled for the organization
+	SkillsDistributionEnabled bool
 }
 
 // SetProductFeaturePayload is the payload type of the features service

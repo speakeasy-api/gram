@@ -43516,6 +43516,9 @@ components:
         session_capture_enabled:
           type: boolean
           description: Whether Claude Code session capture is enabled
+        skills_distribution_enabled:
+          type: boolean
+          description: Whether skills distribution via plugins is enabled for the organization
         sso_enabled:
           type: boolean
           description: Whether SSO setup is enabled for the organization
@@ -43534,6 +43537,7 @@ components:
         - sso_enabled
         - scim_enabled
         - observability_mode_enabled
+        - skills_distribution_enabled
     GetProjectForm:
       type: object
       properties:
@@ -50933,6 +50937,7 @@ components:
             - sso
             - scim
             - observability_mode
+            - skills_distribution
           maxLength: 60
       required:
         - feature_name

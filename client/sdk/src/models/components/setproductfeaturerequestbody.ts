@@ -18,6 +18,7 @@ export const FeatureName = {
   Sso: "sso",
   Scim: "scim",
   ObservabilityMode: "observability_mode",
+  SkillsDistribution: "skills_distribution",
 } as const;
 /**
  * Name of the feature to update
