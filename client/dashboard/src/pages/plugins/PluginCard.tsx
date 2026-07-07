@@ -136,7 +136,15 @@ export function PluginCard({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setIsInstallOpen(true)}>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      // Defer until after the dropdown has fully closed to
+                      // avoid a Radix focus-trap/body-lock conflict between
+                      // the closing menu and the opening sheet (same pattern
+                      // as MCPDetails.tsx).
+                      setTimeout(() => setIsInstallOpen(true), 0);
+                    }}
+                  >
                     Install instructions
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />

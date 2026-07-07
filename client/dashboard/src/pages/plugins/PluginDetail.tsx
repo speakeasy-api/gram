@@ -383,7 +383,13 @@ export default function PluginDetail(): JSX.Element | null {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  onClick={() => setIsInstallSheetOpen(true)}
+                  onClick={() => {
+                    // Defer until after the dropdown has fully closed to
+                    // avoid a Radix focus-trap/body-lock conflict between
+                    // the closing menu and the opening sheet (same pattern
+                    // as MCPDetails.tsx).
+                    setTimeout(() => setIsInstallSheetOpen(true), 0);
+                  }}
                   disabled={
                     !publishStatus?.connected ||
                     !publishStatus.repoOwner ||
