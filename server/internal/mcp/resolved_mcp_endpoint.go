@@ -339,6 +339,9 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 			return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
 		}
 		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+		if ref.RouteBase != "" {
+			endpoint.RouteBase = ref.RouteBase
+		}
 		upstreamResource, err := s.resolveUpstreamResource(ctx, s.logger, mcpEndpoint.ProjectID, &mcpServer)
 		if err != nil {
 			return nil, err

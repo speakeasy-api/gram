@@ -243,6 +243,49 @@ func TestListToolUsageTraces_DerivesSkillNameFromToolInput(t *testing.T) {
 	require.Equal(t, "success", *result.Traces[0].HookStatus)
 }
 
+func TestListToolUsageTraces_ClassifiesDirectTunneledMCP(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	fixture := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{
+		name: "Tunneled Postgres MCP",
+		slug: "postgres-tunnel",
+	})
+	now := time.Now().UTC()
+	insertDirectMCPToolEvent(t, ctx, ti, directMCPToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-5 * time.Minute),
+		sourceID:    fixture.sourceID.String(),
+		mcpServerID: fixture.mcpServerID.String(),
+		toolName:    "query",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+
+	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:          now.Add(1 * time.Hour).Format(time.RFC3339),
+		TargetTypes: []gen.ToolUsageTargetType{"tunneled_mcp_server"},
+		Limit:       10,
+		Sort:        "desc",
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1
+	})
+	require.NotNil(t, result)
+	require.Len(t, result.Traces, 1)
+	trace := result.Traces[0]
+	require.Equal(t, gen.ToolUsageTargetType("tunneled_mcp_server"), trace.TargetType)
+	require.Equal(t, gen.ToolUsageTargetKind("server"), trace.TargetKind)
+	require.Equal(t, "postgres-tunnel", trace.TargetID)
+	require.Equal(t, "Tunneled Postgres MCP", trace.TargetLabel)
+	require.Equal(t, "query", trace.ToolName)
+	require.Equal(t, "alice@example.com", trace.UserLabel)
+	require.Nil(t, trace.HookSource)
+}
+
 func TestListToolUsageTraces_FiltersByTargetsUsersAndHookSource(t *testing.T) {
 	t.Parallel()
 

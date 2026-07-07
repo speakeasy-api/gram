@@ -37,6 +37,21 @@ export default defineConfig(({ command }) => {
   if (isDev && !serverUrl) {
     throw new Error("GRAM_SERVER_URL must be set in development");
   }
+  const devProxyServerUrl = process.env["GRAM_SERVER_BACKEND_URL"] || serverUrl;
+
+  const allowedHosts = new Set(["localhost", "127.0.0.1", "devbox"]);
+  for (const hostname of (process.env["VITE_DEV_HOSTNAMES"] || "").split(",")) {
+    const trimmed = hostname.trim();
+    if (trimmed) allowedHosts.add(trimmed);
+  }
+
+  const devProxyTarget = devProxyServerUrl
+    ? {
+        target: devProxyServerUrl,
+        changeOrigin: true,
+        secure: false,
+      }
+    : undefined;
 
   // Two build-time constants, separated so MCP configs / callback URLs /
   // anything operator-facing always report the server's authoritative URL,
@@ -101,20 +116,20 @@ export default defineConfig(({ command }) => {
     },
     server: {
       host: true,
-      allowedHosts: ["localhost", "127.0.0.1", "devbox"],
+      allowedHosts: [...allowedHosts],
       https: key && cert ? { key, cert } : void 0,
       // Setting these up to side-step cors issues experienced during
       // development. Specifically, the Vercel AI SDK does not forward cookies
       // (Eg: gram_session) to the server.
-      proxy: serverUrl
+      proxy: devProxyTarget
         ? {
-            "/rpc": serverUrl,
-            "/chat": serverUrl,
-            "/mcp": serverUrl,
-            "/oauth": serverUrl,
-            "/oauth-external": serverUrl,
-            "/.well-known": serverUrl,
-            "/v1": serverUrl,
+            "/rpc": devProxyTarget,
+            "/chat": devProxyTarget,
+            "/mcp": devProxyTarget,
+            "/oauth": devProxyTarget,
+            "/oauth-external": devProxyTarget,
+            "/.well-known": devProxyTarget,
+            "/v1": devProxyTarget,
           }
         : undefined,
     },

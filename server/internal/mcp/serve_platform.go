@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -51,7 +52,7 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 	}
 
-	token := AuthorizationBearerToken(r)
+	token := httpheaders.AuthorizationBearerToken(r)
 	if token == "" {
 		return oops.C(oops.CodeUnauthorized)
 	}

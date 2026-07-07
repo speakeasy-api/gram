@@ -3,16 +3,22 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
-import { remoteMcpRouteParam } from "@/lib/sources";
+import {
+  formatTunneledMcpDisplay,
+  remoteMcpRouteParam,
+  tunneledMcpRouteParam,
+} from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type {
   McpEndpoint,
   McpServer,
   RemoteMcpServer,
+  TunneledMcpServer,
   ToolsetEntry,
 } from "@gram/client/models/components";
 import {
   useGetRemoteMcpServer,
+  useGetTunneledMcpServer,
   useListToolsets,
   useRemoteSessionClients,
 } from "@gram/client/react-query/index.js";
@@ -97,7 +103,10 @@ function OverviewRows({
 }): JSX.Element {
   const serverAddress = useServerAddressOverview(endpoints, isLoadingEndpoints);
   const authentication = useAuthenticationOverview(mcpServer);
-  const source = useSourceOverview(mcpServer.remoteMcpServerId);
+  const source = useSourceOverview(
+    mcpServer.remoteMcpServerId,
+    mcpServer.tunneledMcpServerId,
+  );
 
   return (
     <section>
@@ -118,7 +127,7 @@ function OverviewRows({
           authentication={authentication}
           onConfigure={onShowAuthentication}
         />
-        {mcpServer.remoteMcpServerId ? (
+        {mcpServer.remoteMcpServerId || mcpServer.tunneledMcpServerId ? (
           <SourceOverviewRow source={source} />
         ) : (
           // /x/mcp only renders mcp_servers-backed (remote MCP) servers, which
@@ -305,28 +314,46 @@ function useAuthenticationOverview(
 
 type SourceOverview = OverviewReadiness & {
   remoteMcpServer: RemoteMcpServer | undefined;
+  tunneledMcpServer: TunneledMcpServer | undefined;
   status: RowStatus | undefined;
 };
 
 function useSourceOverview(
   remoteMcpServerId: string | undefined,
+  tunneledMcpServerId: string | undefined,
 ): SourceOverview {
-  const id = remoteMcpServerId ?? "";
+  const remoteId = remoteMcpServerId ?? "";
+  const tunneledId = tunneledMcpServerId ?? "";
   const {
     data: remoteMcpServer,
-    isLoading,
-    isError,
-  } = useGetRemoteMcpServer({ id }, undefined, {
-    enabled: id !== "",
+    isLoading: isLoadingRemote,
+    isError: isRemoteError,
+  } = useGetRemoteMcpServer({ id: remoteId }, undefined, {
+    enabled: remoteId !== "",
     throwOnError: false,
   });
-  const loading = id !== "" && isLoading;
-  const ready = !loading && !isError && !!remoteMcpServer;
+  const {
+    data: tunneledMcpServer,
+    isLoading: isLoadingTunneled,
+    isError: isTunneledError,
+  } = useGetTunneledMcpServer({ id: tunneledId }, undefined, {
+    enabled: tunneledId !== "",
+    throwOnError: false,
+  });
+
+  const loading =
+    (remoteId !== "" && isLoadingRemote) ||
+    (tunneledId !== "" && isLoadingTunneled);
+  const ready =
+    !loading &&
+    ((!isRemoteError && !!remoteMcpServer) ||
+      (!isTunneledError && !!tunneledMcpServer));
 
   return {
     ready,
     loading,
     remoteMcpServer,
+    tunneledMcpServer,
     status: readyStatus(loading, ready),
   };
 }
@@ -512,41 +539,48 @@ function SourceOverviewRow({ source }: { source: SourceOverview }) {
   const routes = useRoutes();
   const navigate = useNavigate();
   const remoteMcpServer = source.remoteMcpServer;
-  const trimmedName = remoteMcpServer?.name?.trim();
+  const tunneledMcpServer = source.tunneledMcpServer;
 
   let description: ReactNode = "Linked source could not be loaded.";
+  let detail: ReactNode | undefined;
+  let sourceHref: string | undefined;
   if (source.loading) {
     description = <Skeleton className="h-4 w-80 max-w-full" />;
-  } else if (source.ready) {
-    description = trimmedName || "Remote MCP source";
-  }
-
-  const detail =
-    source.ready && remoteMcpServer ? (
+  } else if (remoteMcpServer) {
+    description = remoteMcpServer.name?.trim() || "Remote MCP source";
+    detail = (
       <Type muted small mono as="div" className="break-all">
         {remoteMcpServer.url}
       </Type>
-    ) : undefined;
+    );
+    sourceHref = routes.sources.source.href(
+      "remotemcp",
+      remoteMcpRouteParam(remoteMcpServer),
+    );
+  } else if (tunneledMcpServer) {
+    description = formatTunneledMcpDisplay(tunneledMcpServer);
+    detail = (
+      <Type muted small as="div">
+        Tunneled MCP server
+      </Type>
+    );
+    sourceHref = routes.sources.source.href(
+      "tunneledmcp",
+      tunneledMcpRouteParam(tunneledMcpServer),
+    );
+  }
 
-  const actions =
-    source.ready && remoteMcpServer ? (
-      <Button
-        variant="secondary"
-        onClick={() => {
-          void navigate(
-            routes.sources.source.href(
-              "remotemcp",
-              remoteMcpRouteParam(remoteMcpServer),
-            ),
-          );
-        }}
-      >
+  let actions: ReactNode | undefined;
+  if (sourceHref) {
+    actions = (
+      <Button variant="secondary" onClick={() => void navigate(sourceHref)}>
         <Button.Text>View source</Button.Text>
         <Button.RightIcon>
           <ArrowUpRight className="size-4" />
         </Button.RightIcon>
       </Button>
-    ) : undefined;
+    );
+  }
 
   return (
     <OverviewRow

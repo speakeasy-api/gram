@@ -18,6 +18,10 @@ export type SetBillingMetadataRequestBody = {
    * The contracted monthly tokens under management limit. Omit to clear.
    */
   monthlyTokenLimit?: number | undefined;
+  /**
+   * The contracted tunneled MCP server source cap. Omit to leave the configured value unchanged; never-configured orgs use the plan default.
+   */
+  tunneledMcpServerLimit?: number | undefined;
 };
 
 /** @internal */
@@ -25,6 +29,7 @@ export type SetBillingMetadataRequestBody$Outbound = {
   alert_email?: string | undefined;
   billing_cycle_anchor_day: number;
   monthly_token_limit?: number | undefined;
+  tunneled_mcp_server_limit?: number | undefined;
 };
 
 /** @internal */
@@ -36,12 +41,14 @@ export const SetBillingMetadataRequestBody$outboundSchema: z.ZodMiniType<
     alertEmail: z.optional(z.string()),
     billingCycleAnchorDay: z.int(),
     monthlyTokenLimit: z.optional(z.int()),
+    tunneledMcpServerLimit: z.optional(z.int()),
   }),
   z.transform((v) => {
     return remap$(v, {
       alertEmail: "alert_email",
       billingCycleAnchorDay: "billing_cycle_anchor_day",
       monthlyTokenLimit: "monthly_token_limit",
+      tunneledMcpServerLimit: "tunneled_mcp_server_limit",
     });
   }),
 );

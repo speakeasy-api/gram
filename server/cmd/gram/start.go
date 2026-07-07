@@ -113,11 +113,13 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/tunneledmcp"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/variations"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 // shutdownDrainTimeout is how long srv.Shutdown waits for in-flight requests
@@ -255,6 +257,17 @@ func newStartCommand() *cli.Command {
 			Name:    "openrouter-dev-key",
 			Usage:   "Dev API key for OpenRouter (primarily for local development) - https://openrouter.ai/settings/keys",
 			EnvVars: []string{"OPENROUTER_DEV_KEY"},
+		},
+		&cli.StringFlag{
+			Name:     "tunnel-forward-token",
+			Usage:    "Shared secret presented to the tunnel gateway forward listener to authenticate gram-server",
+			Required: true,
+			EnvVars:  []string{"GRAM_TUNNEL_FORWARD_TOKEN"},
+		},
+		&cli.StringSliceFlag{
+			Name:    "tunnel-gateway-cidr-blocks",
+			Usage:   "CIDR blocks the tunnel gateway advertise addresses live in (cluster pod range). Allowlisted past the guardian egress policy for tunnel forwards only; unset means tunnels to private addresses fail closed",
+			EnvVars: []string{"GRAM_TUNNEL_GATEWAY_CIDR_BLOCKS"},
 		},
 		&cli.StringFlag{
 			Name:    "openrouter-provisioning-key",
@@ -792,6 +805,16 @@ func newStartCommand() *cli.Command {
 				billingTracker,
 			)
 
+			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a
+			// typo here would strand tunnels fail-closed with no signal. Reject
+			// misconfiguration at startup instead.
+			tunnelGatewayCIDRs := c.StringSlice("tunnel-gateway-cidr-blocks")
+			for _, cidr := range tunnelGatewayCIDRs {
+				if _, _, err := net.ParseCIDR(cidr); err != nil {
+					return fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
+				}
+			}
+
 			mcpService := mcp.NewService(
 				logger,
 				tracerProvider,
@@ -825,6 +848,9 @@ func newStartCommand() *cli.Command {
 				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 				remoteChallengeManager,
 				remoteProxyManager,
+				route.NewRedis(redisClient),
+				c.String("tunnel-forward-token"),
+				tunnelGatewayCIDRs,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -1093,6 +1119,7 @@ func newStartCommand() *cli.Command {
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), remoteSessionsService))
 			remotesessions.Attach(mux, remoteSessionsService)
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger))
+			tunneledmcp.Attach(mux, tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, route.NewRedis(redisClient)))
 			xmcp.Attach(mux, xmcp.NewService(logger, db, encryptionClient, mcpService), mcpMetadataService)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))

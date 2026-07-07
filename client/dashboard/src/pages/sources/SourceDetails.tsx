@@ -37,6 +37,7 @@ import { Navigate, useParams } from "react-router";
 import { SourceDeploymentsPanel } from "./SourceDeploymentsPanel";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
 import RemoteMCPDetails from "./remote-mcp/RemoteMCPDetails";
+import TunneledMCPDetails from "./tunneled-mcp/TunneledMCPDetails";
 import { SourceOverviewTab } from "./SourceOverviewTab";
 import { SourceToolsTab } from "./SourceToolsTab";
 import { SourceMCPServersTab } from "./SourceMCPServersTab";
@@ -50,6 +51,7 @@ function attachmentTypeForSourceKind(sourceKind: string | undefined): string {
       return "functions";
     case "externalmcp":
     case "remotemcp":
+    case "tunneledmcp":
       return "external_mcp";
     case undefined:
     default:
@@ -236,6 +238,10 @@ export default function SourceDetails(): JSX.Element {
 
   if (sourceKind === "remotemcp") {
     return <RemoteMCPDetails />;
+  }
+
+  if (sourceKind === "tunneledmcp") {
+    return <TunneledMCPDetails />;
   }
 
   if (!isLoadingDeployment && !source) {

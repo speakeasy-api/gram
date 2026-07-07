@@ -82,25 +82,31 @@ INSERT INTO billing_metadata (
   , tum_monthly_token_limit
   , alert_email
   , billing_cycle_anchor_day
+  , tunneled_mcp_server_limit
 ) VALUES (
     $1
   , $2
   , $3
   , $4
+  , $5
 )
 ON CONFLICT (organization_id) DO UPDATE SET
     tum_monthly_token_limit = EXCLUDED.tum_monthly_token_limit
   , alert_email = EXCLUDED.alert_email
   , billing_cycle_anchor_day = EXCLUDED.billing_cycle_anchor_day
+  -- Omitted (NULL) preserves the configured cap: callers that predate the
+  -- field (dashboard TUM form, older SDKs) must not silently clear it.
+  , tunneled_mcp_server_limit = COALESCE(EXCLUDED.tunneled_mcp_server_limit, billing_metadata.tunneled_mcp_server_limit)
   , updated_at = clock_timestamp()
 RETURNING id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 `
 
 type UpsertBillingMetadataParams struct {
-	OrganizationID        string
-	TumMonthlyTokenLimit  pgtype.Int8
-	AlertEmail            pgtype.Text
-	BillingCycleAnchorDay int32
+	OrganizationID         string
+	TumMonthlyTokenLimit   pgtype.Int8
+	AlertEmail             pgtype.Text
+	BillingCycleAnchorDay  int32
+	TunneledMcpServerLimit pgtype.Int4
 }
 
 func (q *Queries) UpsertBillingMetadata(ctx context.Context, arg UpsertBillingMetadataParams) (BillingMetadatum, error) {
@@ -109,6 +115,7 @@ func (q *Queries) UpsertBillingMetadata(ctx context.Context, arg UpsertBillingMe
 		arg.TumMonthlyTokenLimit,
 		arg.AlertEmail,
 		arg.BillingCycleAnchorDay,
+		arg.TunneledMcpServerLimit,
 	)
 	var i BillingMetadatum
 	err := row.Scan(

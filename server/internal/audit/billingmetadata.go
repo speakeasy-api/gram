@@ -18,9 +18,10 @@ const (
 // BillingMetadataSnapshot captures an organization's billing contract terms
 // for audit before/after snapshots.
 type BillingMetadataSnapshot struct {
-	TumMonthlyTokenLimit  *int64  `json:"tum_monthly_token_limit"`
-	AlertEmail            *string `json:"alert_email"`
-	BillingCycleAnchorDay int     `json:"billing_cycle_anchor_day"`
+	TumMonthlyTokenLimit   *int64  `json:"tum_monthly_token_limit"`
+	TunneledMcpServerLimit *int    `json:"tunneled_mcp_server_limit"`
+	AlertEmail             *string `json:"alert_email"`
+	BillingCycleAnchorDay  int     `json:"billing_cycle_anchor_day"`
 }
 
 type LogBillingMetadataUpdateEvent struct {

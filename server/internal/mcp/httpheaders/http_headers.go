@@ -1,4 +1,5 @@
-package mcp
+// Package httpheaders contains shared MCP request header parsing helpers.
+package httpheaders
 
 import (
 	"net/http"

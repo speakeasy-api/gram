@@ -38,6 +38,7 @@ const SOURCE_ICONS = {
   // appear in failed deployment sources — but the icon map must cover the full
   // SourceType union for the indexed lookup at the call site to typecheck.
   remotemcp: Network,
+  tunneledmcp: Network,
 } as const;
 
 export function FailedSourcesSection({
@@ -134,6 +135,8 @@ export function FailedSourcesSection({
             excludeExternalMcps.push(source.slug);
             break;
           case "remotemcp":
+            break;
+          case "tunneledmcp":
             break;
         }
       }

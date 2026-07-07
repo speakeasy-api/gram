@@ -16,16 +16,21 @@ INSERT INTO billing_metadata (
   , tum_monthly_token_limit
   , alert_email
   , billing_cycle_anchor_day
+  , tunneled_mcp_server_limit
 ) VALUES (
     @organization_id
   , sqlc.narg(tum_monthly_token_limit)
   , sqlc.narg(alert_email)
   , @billing_cycle_anchor_day
+  , sqlc.narg(tunneled_mcp_server_limit)
 )
 ON CONFLICT (organization_id) DO UPDATE SET
     tum_monthly_token_limit = EXCLUDED.tum_monthly_token_limit
   , alert_email = EXCLUDED.alert_email
   , billing_cycle_anchor_day = EXCLUDED.billing_cycle_anchor_day
+  -- Omitted (NULL) preserves the configured cap: callers that predate the
+  -- field (dashboard TUM form, older SDKs) must not silently clear it.
+  , tunneled_mcp_server_limit = COALESCE(EXCLUDED.tunneled_mcp_server_limit, billing_metadata.tunneled_mcp_server_limit)
   , updated_at = clock_timestamp()
 RETURNING *;
 
