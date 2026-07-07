@@ -186,6 +186,35 @@ export function DetectorCard({
   );
 }
 
+/** Per-policy config for the Non-Corporate Accounts category: the list of
+ *  email domains treated as corporate. Rendered inside the category's
+ *  Customize sheet; the parsed list rides on the create/update payload as
+ *  approved_email_domains while the category is selected. */
+function ApprovedDomainsConfig({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium">Approved email domains</Label>
+      <p className="text-muted-foreground text-xs">
+        Sessions from AI accounts whose email domain is not in this list are
+        flagged by the unapproved-domain rule. Matching is exact per domain, so
+        list subdomains explicitly; a leading '@' is allowed. Until at least one
+        domain is configured, only the personal-account rule fires.
+      </p>
+      <Input
+        value={value}
+        onChange={onChange}
+        placeholder="e.g. acme.com, corp.acme.com"
+      />
+    </div>
+  );
+}
+
 /** Side-sheet to pick which rules within a built-in detector category are
  *  active. Disabling a rule adds its canonical rule_id to the policy's
  *  disabled_rules; a search box tames the large categories (e.g. 222 secrets). */
@@ -195,6 +224,8 @@ export function CustomizeRulesSheet({
   setSelectedCategories,
   disabledRules,
   setDisabledRules,
+  approvedDomains,
+  setApprovedDomains,
   onClose,
 }: {
   category: RuleCategory;
@@ -202,6 +233,8 @@ export function CustomizeRulesSheet({
   setSelectedCategories: (v: Set<RuleCategory>) => void;
   disabledRules: Set<string>;
   setDisabledRules: (v: Set<string>) => void;
+  approvedDomains: string;
+  setApprovedDomains: (v: string) => void;
   onClose: () => void;
 }): JSX.Element {
   const meta = RULE_CATEGORY_META[category];
@@ -290,6 +323,14 @@ export function CustomizeRulesSheet({
             Pick which rules in this category are active. All are on by default.
           </SheetDescription>
         </SheetHeader>
+        {category === "account_identity" && (
+          <div className="border-border mx-6 mt-3 border-b pb-4">
+            <ApprovedDomainsConfig
+              value={approvedDomains}
+              onChange={setApprovedDomains}
+            />
+          </div>
+        )}
         <div className="px-6 pt-3">
           <Input
             value={search}
