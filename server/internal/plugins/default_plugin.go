@@ -161,8 +161,10 @@ func AttachToDefaultPlugin(ctx context.Context, q *repo.Queries, params AttachTo
 // plugin-server add event for the attached server. Callers (toolsets on
 // MCP-enable, mcpendpoints on first endpoint, mcpservers on visibility
 // enable) run this inside the same transaction as the triggering write.
-// Returns pluginCreated=true when this call created the Default plugin
-// (project predates the feature) — callers should enqueue an initial
+// Both audit events are scoped to params' organization/project — the same
+// values the plugin rows are written with — while authCtx supplies only the
+// acting user. Returns pluginCreated=true when this call created the Default
+// plugin (project predates the feature) — callers should enqueue an initial
 // marketplace publish for it, but only after their own transaction commits,
 // since this runs pre-commit and the DB writes could still roll back.
 func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams) (bool, error) {
@@ -176,8 +178,8 @@ func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger 
 
 	if attached.PluginCreated {
 		if err := auditLogger.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ProjectID:        *authCtx.ProjectID,
+			OrganizationID:   params.OrganizationID,
+			ProjectID:        params.ProjectID,
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 			ActorDisplayName: authCtx.Email,
 			ActorSlug:        nil,
@@ -203,8 +205,8 @@ func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger 
 	}
 
 	if err := auditLogger.LogPluginServerAdd(ctx, dbtx, audit.LogPluginServerAddEvent{
-		OrganizationID:    authCtx.ActiveOrganizationID,
-		ProjectID:         *authCtx.ProjectID,
+		OrganizationID:    params.OrganizationID,
+		ProjectID:         params.ProjectID,
 		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName:  authCtx.Email,
 		ActorSlug:         nil,
