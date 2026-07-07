@@ -89,7 +89,7 @@ function EnvironmentsInner() {
         </Page.Section.Description>
         <Page.Section.CTA>
           {environments.length > 0 && (
-            <RequireScope scope="project:write" level="component">
+            <RequireScope scope="environment:write" level="component">
               <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
                 <Button.LeftIcon>
                   <Plus className="h-4 w-4" />
@@ -112,7 +112,7 @@ function EnvironmentsInner() {
                 Environments let you store configuration and secrets that can be
                 shared across multiple MCP servers.
               </Type>
-              <RequireScope scope="project:write" level="component">
+              <RequireScope scope="environment:write" level="component">
                 <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
                   <Button.LeftIcon>
                     <Plus className="h-4 w-4" />
