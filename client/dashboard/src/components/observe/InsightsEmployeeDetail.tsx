@@ -702,7 +702,14 @@ function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
   return (
     <section className="bg-card border-border rounded-lg border p-5">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-semibold">Active MCP Connections</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold">Active MCP Connections</span>
+          {!isPending && !isError && sessions.length > 0 && (
+            <span className="text-muted-foreground text-xs">
+              {sessions.length}
+            </span>
+          )}
+        </div>
         <div className="bg-muted/50 rounded-lg p-2">
           <Icon name="key-round" className="text-muted-foreground size-4" />
         </div>
@@ -722,7 +729,7 @@ function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
           No active sessions
         </span>
       ) : (
-        <ul className="divide-border divide-y rounded-md border">
+        <ul className="divide-border max-h-80 divide-y overflow-y-auto rounded-md border">
           {sessions.map((s) => (
             <SessionRow
               key={s.id}
