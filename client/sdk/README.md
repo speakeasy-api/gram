@@ -527,6 +527,8 @@ run();
 ### [Risk.PolicyChallenges](docs/sdks/policychallenges/README.md)
 
 * [acknowledge](docs/sdks/policychallenges/README.md#acknowledge) - acknowledgeRiskPolicyChallenge risk
+* [decline](docs/sdks/policychallenges/README.md#decline) - declineRiskPolicyChallenge risk
+* [get](docs/sdks/policychallenges/README.md#get) - getRiskPolicyChallenge risk
 
 ### [Risk.Results](docs/sdks/results/README.md)
 
@@ -927,6 +929,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskPolicyBypassRequestsList`](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
 - [`riskPolicyBypassRequestsRevoke`](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
 - [`riskPolicyChallengesAcknowledge`](docs/sdks/policychallenges/README.md#acknowledge) - acknowledgeRiskPolicyChallenge risk
+- [`riskPolicyChallengesDecline`](docs/sdks/policychallenges/README.md#decline) - declineRiskPolicyChallenge risk
+- [`riskPolicyChallengesGet`](docs/sdks/policychallenges/README.md#get) - getRiskPolicyChallenge risk
 - [`riskResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`riskResultsListForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
@@ -1273,11 +1277,13 @@ To learn about this feature and how to get started, check
 - [`useRiskCreateExclusionMutation`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 - [`useRiskCreatePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
 - [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
+- [`useRiskDeclinePolicyChallengeMutation`](docs/sdks/policychallenges/README.md#decline) - declineRiskPolicyChallenge risk
 - [`useRiskDeleteCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
 - [`useRiskDeleteExclusionMutation`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`useRiskDenyPolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
 - [`useRiskGetBlock`](docs/sdks/blocks/README.md#get) - getRiskBlock risk
 - [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
+- [`useRiskGetPolicyChallenge`](docs/sdks/policychallenges/README.md#get) - getRiskPolicyChallenge risk
 - [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`useRiskListExclusions`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
 - [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk

@@ -315,6 +315,41 @@ SET status = 'acknowledged'
   , updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: MarkRiskPolicyChallengeDeclined :one
+-- Self-service decline: mark the challenge declined and never grant an ack
+-- window. Upserts so a decline that beats the async challenge insert still works.
+INSERT INTO risk_policy_challenges (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , user_id
+  , tool_name
+  , status
+  , policy_name
+  , challenged_at
+)
+VALUES (
+    @id
+  , @organization_id
+  , @project_id
+  , @risk_policy_id
+  , @user_id
+  , sqlc.narg(tool_name)::text
+  , 'declined'
+  , sqlc.narg(policy_name)::text
+  , clock_timestamp()
+)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name)
+WHERE deleted IS FALSE
+DO UPDATE
+SET status = 'declined'
+  , acknowledged_at = NULL
+  , expires_at = NULL
+  , policy_name = COALESCE(EXCLUDED.policy_name, risk_policy_challenges.policy_name)
+  , updated_at = clock_timestamp()
+RETURNING *;
+
 -- name: GetActiveRiskPolicyAck :one
 -- Hook-time gate: is there a live acknowledgement for this (user, policy, tool)?
 -- The agent retries with NO token, so this table lookup — not the cache token —

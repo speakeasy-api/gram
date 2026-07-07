@@ -157,6 +157,7 @@ trackedFiles:
   docs/models/components/customdomain.md: {}
   docs/models/components/customdomainmcpendpoint.md: {}
   docs/models/components/decision.md: {}
+  docs/models/components/declineriskpolicychallengeresponsebody.md: {}
   docs/models/components/deleteaiintegrationconfigrequest.md: {}
   docs/models/components/deleteglobaltoolvariationresult.md: {}
   docs/models/components/deleterequestbody.md: {}
@@ -226,6 +227,7 @@ trackedFiles:
   docs/models/components/getprojectoverviewresult.md: {}
   docs/models/components/getprojectresult.md: {}
   docs/models/components/getprompttemplateresult.md: {}
+  docs/models/components/getriskpolicychallengeresponsebody.md: {}
   docs/models/components/getsignedasseturlform.md: {}
   docs/models/components/gettoolusagefilteroptionspayload.md: {}
   docs/models/components/gettoolusagefilteroptionsresult.md: {}
@@ -905,6 +907,8 @@ trackedFiles:
   docs/models/operations/createusersessionissuersecurityoption2.md: {}
   docs/models/operations/creditusagerequest.md: {}
   docs/models/operations/creditusagesecurity.md: {}
+  docs/models/operations/declineriskpolicychallengerequest.md: {}
+  docs/models/operations/declineriskpolicychallengesecurity.md: {}
   docs/models/operations/deleteaiintegrationconfigrequest.md: {}
   docs/models/operations/deleteaiintegrationconfigsecurity.md: {}
   docs/models/operations/deleteassistantmemoryrequest.md: {}
@@ -1169,6 +1173,8 @@ trackedFiles:
   docs/models/operations/getriskoverviewsecurity.md: {}
   docs/models/operations/getriskoverviewsecurityoption1.md: {}
   docs/models/operations/getriskoverviewsecurityoption2.md: {}
+  docs/models/operations/getriskpolicychallengerequest.md: {}
+  docs/models/operations/getriskpolicychallengesecurity.md: {}
   docs/models/operations/getriskpolicyrequest.md: {}
   docs/models/operations/getriskpolicysecurity.md: {}
   docs/models/operations/getriskpolicysecurityoption1.md: {}
@@ -2118,6 +2124,8 @@ trackedFiles:
   src/funcs/riskPolicyBypassRequestsList.ts: {}
   src/funcs/riskPolicyBypassRequestsRevoke.ts: {}
   src/funcs/riskPolicyChallengesAcknowledge.ts: {}
+  src/funcs/riskPolicyChallengesDecline.ts: {}
+  src/funcs/riskPolicyChallengesGet.ts: {}
   src/funcs/riskResultsByChat.ts: {}
   src/funcs/riskResultsList.ts: {}
   src/funcs/riskResultsListForAgent.ts: {}
@@ -2308,6 +2316,7 @@ trackedFiles:
   src/models/components/cursorhookresult.ts: {}
   src/models/components/customdomain.ts: {}
   src/models/components/customdomainmcpendpoint.ts: {}
+  src/models/components/declineriskpolicychallengeresponsebody.ts: {}
   src/models/components/deleteaiintegrationconfigrequest.ts: {}
   src/models/components/deleteglobaltoolvariationresult.ts: {}
   src/models/components/deleterequestbody.ts: {}
@@ -2369,6 +2378,7 @@ trackedFiles:
   src/models/components/getprojectoverviewresult.ts: {}
   src/models/components/getprojectresult.ts: {}
   src/models/components/getprompttemplateresult.ts: {}
+  src/models/components/getriskpolicychallengeresponsebody.ts: {}
   src/models/components/getsignedasseturlform.ts: {}
   src/models/components/gettoolusagefilteroptionspayload.ts: {}
   src/models/components/gettoolusagefilteroptionsresult.ts: {}
@@ -2826,6 +2836,7 @@ trackedFiles:
   src/models/operations/createtriggerinstance.ts: {}
   src/models/operations/createusersessionissuer.ts: {}
   src/models/operations/creditusage.ts: {}
+  src/models/operations/declineriskpolicychallenge.ts: {}
   src/models/operations/deleteaiintegrationconfig.ts: {}
   src/models/operations/deleteassistant.ts: {}
   src/models/operations/deleteassistantmemory.ts: {}
@@ -2916,6 +2927,7 @@ trackedFiles:
   src/models/operations/getriskblock.ts: {}
   src/models/operations/getriskoverview.ts: {}
   src/models/operations/getriskpolicy.ts: {}
+  src/models/operations/getriskpolicychallenge.ts: {}
   src/models/operations/getriskpolicystatus.ts: {}
   src/models/operations/getriskrulebreakdown.ts: {}
   src/models/operations/getriskuserbreakdown.ts: {}
@@ -3464,6 +3476,7 @@ trackedFiles:
   src/react-query/riskCreateExclusion.ts: {}
   src/react-query/riskCreatePolicy.ts: {}
   src/react-query/riskCreatePolicyBypassRequest.ts: {}
+  src/react-query/riskDeclinePolicyChallenge.ts: {}
   src/react-query/riskDeleteCustomDetectionRule.ts: {}
   src/react-query/riskDeleteExclusion.ts: {}
   src/react-query/riskDenyPolicyBypassRequest.ts: {}
@@ -3471,6 +3484,8 @@ trackedFiles:
   src/react-query/riskGetBlock.ts: {}
   src/react-query/riskGetCustomDetectionRule.core.ts: {}
   src/react-query/riskGetCustomDetectionRule.ts: {}
+  src/react-query/riskGetPolicyChallenge.core.ts: {}
+  src/react-query/riskGetPolicyChallenge.ts: {}
   src/react-query/riskListCustomDetectionRules.core.ts: {}
   src/react-query/riskListCustomDetectionRules.ts: {}
   src/react-query/riskListExclusions.core.ts: {}
@@ -4325,6 +4340,17 @@ examples:
       responses:
         "200":
           application/json: {"credits_used": 4205.07, "monthly_credits": 586555}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  declineRiskPolicyChallenge:
+    speakeasy-default-decline-risk-policy-challenge:
+      requestBody:
+        application/json: {"ack_token": "<value>"}
+      responses:
+        "200":
+          application/json: {"declined": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -5266,6 +5292,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getRiskPolicyChallenge:
+    speakeasy-default-get-risk-policy-challenge:
+      requestBody:
+        application/json: {"ack_token": "<value>"}
+      responses:
+        "200":
+          application/json: {"acknowledged": true, "message": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getRiskPolicyStatus:
     speakeasy-default-get-risk-policy-status:
       parameters:

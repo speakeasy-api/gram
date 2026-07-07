@@ -92,6 +92,16 @@ func AcknowledgeRiskPolicyChallengeRiskPath() string {
 	return "/rpc/risk.acknowledgePolicyChallenge"
 }
 
+// GetRiskPolicyChallengeRiskPath returns the URL path to the risk service getRiskPolicyChallenge HTTP endpoint.
+func GetRiskPolicyChallengeRiskPath() string {
+	return "/rpc/risk.getPolicyChallenge"
+}
+
+// DeclineRiskPolicyChallengeRiskPath returns the URL path to the risk service declineRiskPolicyChallenge HTTP endpoint.
+func DeclineRiskPolicyChallengeRiskPath() string {
+	return "/rpc/risk.declinePolicyChallenge"
+}
+
 // GetRiskBlockRiskPath returns the URL path to the risk service getRiskBlock HTTP endpoint.
 func GetRiskBlockRiskPath() string {
 	return "/rpc/risk.getBlock"

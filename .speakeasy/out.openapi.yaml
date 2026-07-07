@@ -23751,6 +23751,96 @@ paths:
       x-speakeasy-react-hook:
         name: RiskCreatePolicyBypassRequest
         type: mutation
+  /rpc/risk.declinePolicyChallenge:
+    post:
+      description: 'Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.'
+      operationId: declineRiskPolicyChallenge
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcknowledgeRiskPolicyChallengeRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeclineRiskPolicyChallengeResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: declineRiskPolicyChallenge risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.policyChallenges
+      x-speakeasy-name-override: decline
+      x-speakeasy-react-hook:
+        name: RiskDeclinePolicyChallenge
+        type: mutation
   /rpc/risk.deleteCustomRule:
     post:
       description: Delete a custom detection rule.
@@ -24596,6 +24686,96 @@ paths:
         - risk
       x-speakeasy-group: risk.policies
       x-speakeasy-name-override: get
+  /rpc/risk.getPolicyChallenge:
+    post:
+      description: Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
+      operationId: getRiskPolicyChallenge
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcknowledgeRiskPolicyChallengeRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetRiskPolicyChallengeResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getRiskPolicyChallenge risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.policyChallenges
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: RiskGetPolicyChallenge
+        type: query
   /rpc/risk.getPolicyStatus:
     get:
       description: Get the analysis status of a risk policy including progress and workflow state.
@@ -38370,6 +38550,14 @@ components:
         - project_name
         - project_slug
         - mcp_server_id
+    DeclineRiskPolicyChallengeResponseBody:
+      type: object
+      properties:
+        declined:
+          type: boolean
+          description: Whether the challenge is now declined.
+      required:
+        - declined
     DeleteAIIntegrationConfigRequest:
       type: object
       properties:
@@ -40218,6 +40406,28 @@ components:
           $ref: '#/components/schemas/PromptTemplate'
       required:
         - template
+    GetRiskPolicyChallengeResponseBody:
+      type: object
+      properties:
+        acknowledged:
+          type: boolean
+          description: Whether this challenge has already been acknowledged.
+        expires_at:
+          type: string
+          description: RFC3339 time the acknowledgement link expires.
+          format: date-time
+        message:
+          type: string
+          description: Human-facing challenge message describing what was flagged.
+        policy_name:
+          type: string
+          description: The policy that issued the warning.
+        tool_name:
+          type: string
+          description: The tool the challenge applies to, if any.
+      required:
+        - message
+        - acknowledged
     GetSignedAssetURLForm:
       type: object
       properties:

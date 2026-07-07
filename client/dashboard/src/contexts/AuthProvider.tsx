@@ -57,6 +57,7 @@ const SLUG_EXEMPT_PATHS = [
   "/switch-org",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
+  "/risk-policy-challenge/acknowledge",
   "/blocks",
 ];
 

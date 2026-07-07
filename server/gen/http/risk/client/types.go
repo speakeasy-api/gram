@@ -143,6 +143,20 @@ type AcknowledgeRiskPolicyChallengeRequestBody struct {
 	AckToken string `form:"ack_token" json:"ack_token" xml:"ack_token"`
 }
 
+// GetRiskPolicyChallengeRequestBody is the type of the "risk" service
+// "getRiskPolicyChallenge" endpoint HTTP request body.
+type GetRiskPolicyChallengeRequestBody struct {
+	// Acknowledgement token generated when a warn policy challenged the action.
+	AckToken string `form:"ack_token" json:"ack_token" xml:"ack_token"`
+}
+
+// DeclineRiskPolicyChallengeRequestBody is the type of the "risk" service
+// "declineRiskPolicyChallenge" endpoint HTTP request body.
+type DeclineRiskPolicyChallengeRequestBody struct {
+	// Acknowledgement token generated when a warn policy challenged the action.
+	AckToken string `form:"ack_token" json:"ack_token" xml:"ack_token"`
+}
+
 // SubmitRiskBlockFeedbackRequestBody is the type of the "risk" service
 // "submitRiskBlockFeedback" endpoint HTTP request body.
 type SubmitRiskBlockFeedbackRequestBody struct {
@@ -703,6 +717,28 @@ type AcknowledgeRiskPolicyChallengeResponseBody struct {
 	PolicyName *string `form:"policy_name,omitempty" json:"policy_name,omitempty" xml:"policy_name,omitempty"`
 	// RFC3339 time until which the acknowledgement suppresses re-challenge.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+}
+
+// GetRiskPolicyChallengeResponseBody is the type of the "risk" service
+// "getRiskPolicyChallenge" endpoint HTTP response body.
+type GetRiskPolicyChallengeResponseBody struct {
+	// The policy that issued the warning.
+	PolicyName *string `form:"policy_name,omitempty" json:"policy_name,omitempty" xml:"policy_name,omitempty"`
+	// The tool the challenge applies to, if any.
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Human-facing challenge message describing what was flagged.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// RFC3339 time the acknowledgement link expires.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+	// Whether this challenge has already been acknowledged.
+	Acknowledged *bool `form:"acknowledged,omitempty" json:"acknowledged,omitempty" xml:"acknowledged,omitempty"`
+}
+
+// DeclineRiskPolicyChallengeResponseBody is the type of the "risk" service
+// "declineRiskPolicyChallenge" endpoint HTTP response body.
+type DeclineRiskPolicyChallengeResponseBody struct {
+	// Whether the challenge is now declined.
+	Declined *bool `form:"declined,omitempty" json:"declined,omitempty" xml:"declined,omitempty"`
 }
 
 // GetRiskBlockResponseBody is the type of the "risk" service "getRiskBlock"
@@ -4158,6 +4194,385 @@ type AcknowledgeRiskPolicyChallengeUnexpectedResponseBody struct {
 // "risk" service "acknowledgeRiskPolicyChallenge" endpoint HTTP response body
 // for the "gateway_error" error.
 type AcknowledgeRiskPolicyChallengeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyChallengeUnauthorizedResponseBody is the type of the "risk"
+// service "getRiskPolicyChallenge" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetRiskPolicyChallengeUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyChallengeForbiddenResponseBody is the type of the "risk"
+// service "getRiskPolicyChallenge" endpoint HTTP response body for the
+// "forbidden" error.
+type GetRiskPolicyChallengeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyChallengeBadRequestResponseBody is the type of the "risk"
+// service "getRiskPolicyChallenge" endpoint HTTP response body for the
+// "bad_request" error.
+type GetRiskPolicyChallengeBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyChallengeNotFoundResponseBody is the type of the "risk" service
+// "getRiskPolicyChallenge" endpoint HTTP response body for the "not_found"
+// error.
+type GetRiskPolicyChallengeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyChallengeConflictResponseBody is the type of the "risk" service
+// "getRiskPolicyChallenge" endpoint HTTP response body for the "conflict"
+// error.
+type GetRiskPolicyChallengeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyChallengeUnsupportedMediaResponseBody is the type of the "risk"
+// service "getRiskPolicyChallenge" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetRiskPolicyChallengeUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyChallengeInvalidResponseBody is the type of the "risk" service
+// "getRiskPolicyChallenge" endpoint HTTP response body for the "invalid" error.
+type GetRiskPolicyChallengeInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyChallengeInvariantViolationResponseBody is the type of the
+// "risk" service "getRiskPolicyChallenge" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetRiskPolicyChallengeInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyChallengeUnexpectedResponseBody is the type of the "risk"
+// service "getRiskPolicyChallenge" endpoint HTTP response body for the
+// "unexpected" error.
+type GetRiskPolicyChallengeUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyChallengeGatewayErrorResponseBody is the type of the "risk"
+// service "getRiskPolicyChallenge" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetRiskPolicyChallengeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeclineRiskPolicyChallengeUnauthorizedResponseBody is the type of the "risk"
+// service "declineRiskPolicyChallenge" endpoint HTTP response body for the
+// "unauthorized" error.
+type DeclineRiskPolicyChallengeUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeclineRiskPolicyChallengeForbiddenResponseBody is the type of the "risk"
+// service "declineRiskPolicyChallenge" endpoint HTTP response body for the
+// "forbidden" error.
+type DeclineRiskPolicyChallengeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeclineRiskPolicyChallengeBadRequestResponseBody is the type of the "risk"
+// service "declineRiskPolicyChallenge" endpoint HTTP response body for the
+// "bad_request" error.
+type DeclineRiskPolicyChallengeBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeclineRiskPolicyChallengeNotFoundResponseBody is the type of the "risk"
+// service "declineRiskPolicyChallenge" endpoint HTTP response body for the
+// "not_found" error.
+type DeclineRiskPolicyChallengeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeclineRiskPolicyChallengeConflictResponseBody is the type of the "risk"
+// service "declineRiskPolicyChallenge" endpoint HTTP response body for the
+// "conflict" error.
+type DeclineRiskPolicyChallengeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeclineRiskPolicyChallengeUnsupportedMediaResponseBody is the type of the
+// "risk" service "declineRiskPolicyChallenge" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DeclineRiskPolicyChallengeUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeclineRiskPolicyChallengeInvalidResponseBody is the type of the "risk"
+// service "declineRiskPolicyChallenge" endpoint HTTP response body for the
+// "invalid" error.
+type DeclineRiskPolicyChallengeInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeclineRiskPolicyChallengeInvariantViolationResponseBody is the type of the
+// "risk" service "declineRiskPolicyChallenge" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DeclineRiskPolicyChallengeInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeclineRiskPolicyChallengeUnexpectedResponseBody is the type of the "risk"
+// service "declineRiskPolicyChallenge" endpoint HTTP response body for the
+// "unexpected" error.
+type DeclineRiskPolicyChallengeUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeclineRiskPolicyChallengeGatewayErrorResponseBody is the type of the "risk"
+// service "declineRiskPolicyChallenge" endpoint HTTP response body for the
+// "gateway_error" error.
+type DeclineRiskPolicyChallengeGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -8145,6 +8560,25 @@ func NewAcknowledgeRiskPolicyChallengeRequestBody(p *risk.AcknowledgeRiskPolicyC
 	return body
 }
 
+// NewGetRiskPolicyChallengeRequestBody builds the HTTP request body from the
+// payload of the "getRiskPolicyChallenge" endpoint of the "risk" service.
+func NewGetRiskPolicyChallengeRequestBody(p *risk.GetRiskPolicyChallengePayload) *GetRiskPolicyChallengeRequestBody {
+	body := &GetRiskPolicyChallengeRequestBody{
+		AckToken: p.AckToken,
+	}
+	return body
+}
+
+// NewDeclineRiskPolicyChallengeRequestBody builds the HTTP request body from
+// the payload of the "declineRiskPolicyChallenge" endpoint of the "risk"
+// service.
+func NewDeclineRiskPolicyChallengeRequestBody(p *risk.DeclineRiskPolicyChallengePayload) *DeclineRiskPolicyChallengeRequestBody {
+	body := &DeclineRiskPolicyChallengeRequestBody{
+		AckToken: p.AckToken,
+	}
+	return body
+}
+
 // NewSubmitRiskBlockFeedbackRequestBody builds the HTTP request body from the
 // payload of the "submitRiskBlockFeedback" endpoint of the "risk" service.
 func NewSubmitRiskBlockFeedbackRequestBody(p *risk.SubmitRiskBlockFeedbackPayload) *SubmitRiskBlockFeedbackRequestBody {
@@ -11349,6 +11783,330 @@ func NewAcknowledgeRiskPolicyChallengeUnexpected(body *AcknowledgeRiskPolicyChal
 // NewAcknowledgeRiskPolicyChallengeGatewayError builds a risk service
 // acknowledgeRiskPolicyChallenge endpoint gateway_error error.
 func NewAcknowledgeRiskPolicyChallengeGatewayError(body *AcknowledgeRiskPolicyChallengeGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyChallengeResultOK builds a "risk" service
+// "getRiskPolicyChallenge" endpoint result from a HTTP "OK" response.
+func NewGetRiskPolicyChallengeResultOK(body *GetRiskPolicyChallengeResponseBody) *risk.GetRiskPolicyChallengeResult {
+	v := &risk.GetRiskPolicyChallengeResult{
+		PolicyName:   body.PolicyName,
+		ToolName:     body.ToolName,
+		Message:      *body.Message,
+		ExpiresAt:    body.ExpiresAt,
+		Acknowledged: *body.Acknowledged,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyChallengeUnauthorized builds a risk service
+// getRiskPolicyChallenge endpoint unauthorized error.
+func NewGetRiskPolicyChallengeUnauthorized(body *GetRiskPolicyChallengeUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyChallengeForbidden builds a risk service
+// getRiskPolicyChallenge endpoint forbidden error.
+func NewGetRiskPolicyChallengeForbidden(body *GetRiskPolicyChallengeForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyChallengeBadRequest builds a risk service
+// getRiskPolicyChallenge endpoint bad_request error.
+func NewGetRiskPolicyChallengeBadRequest(body *GetRiskPolicyChallengeBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyChallengeNotFound builds a risk service
+// getRiskPolicyChallenge endpoint not_found error.
+func NewGetRiskPolicyChallengeNotFound(body *GetRiskPolicyChallengeNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyChallengeConflict builds a risk service
+// getRiskPolicyChallenge endpoint conflict error.
+func NewGetRiskPolicyChallengeConflict(body *GetRiskPolicyChallengeConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyChallengeUnsupportedMedia builds a risk service
+// getRiskPolicyChallenge endpoint unsupported_media error.
+func NewGetRiskPolicyChallengeUnsupportedMedia(body *GetRiskPolicyChallengeUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyChallengeInvalid builds a risk service
+// getRiskPolicyChallenge endpoint invalid error.
+func NewGetRiskPolicyChallengeInvalid(body *GetRiskPolicyChallengeInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyChallengeInvariantViolation builds a risk service
+// getRiskPolicyChallenge endpoint invariant_violation error.
+func NewGetRiskPolicyChallengeInvariantViolation(body *GetRiskPolicyChallengeInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyChallengeUnexpected builds a risk service
+// getRiskPolicyChallenge endpoint unexpected error.
+func NewGetRiskPolicyChallengeUnexpected(body *GetRiskPolicyChallengeUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyChallengeGatewayError builds a risk service
+// getRiskPolicyChallenge endpoint gateway_error error.
+func NewGetRiskPolicyChallengeGatewayError(body *GetRiskPolicyChallengeGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeclineRiskPolicyChallengeResultOK builds a "risk" service
+// "declineRiskPolicyChallenge" endpoint result from a HTTP "OK" response.
+func NewDeclineRiskPolicyChallengeResultOK(body *DeclineRiskPolicyChallengeResponseBody) *risk.DeclineRiskPolicyChallengeResult {
+	v := &risk.DeclineRiskPolicyChallengeResult{
+		Declined: *body.Declined,
+	}
+
+	return v
+}
+
+// NewDeclineRiskPolicyChallengeUnauthorized builds a risk service
+// declineRiskPolicyChallenge endpoint unauthorized error.
+func NewDeclineRiskPolicyChallengeUnauthorized(body *DeclineRiskPolicyChallengeUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeclineRiskPolicyChallengeForbidden builds a risk service
+// declineRiskPolicyChallenge endpoint forbidden error.
+func NewDeclineRiskPolicyChallengeForbidden(body *DeclineRiskPolicyChallengeForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeclineRiskPolicyChallengeBadRequest builds a risk service
+// declineRiskPolicyChallenge endpoint bad_request error.
+func NewDeclineRiskPolicyChallengeBadRequest(body *DeclineRiskPolicyChallengeBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeclineRiskPolicyChallengeNotFound builds a risk service
+// declineRiskPolicyChallenge endpoint not_found error.
+func NewDeclineRiskPolicyChallengeNotFound(body *DeclineRiskPolicyChallengeNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeclineRiskPolicyChallengeConflict builds a risk service
+// declineRiskPolicyChallenge endpoint conflict error.
+func NewDeclineRiskPolicyChallengeConflict(body *DeclineRiskPolicyChallengeConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeclineRiskPolicyChallengeUnsupportedMedia builds a risk service
+// declineRiskPolicyChallenge endpoint unsupported_media error.
+func NewDeclineRiskPolicyChallengeUnsupportedMedia(body *DeclineRiskPolicyChallengeUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeclineRiskPolicyChallengeInvalid builds a risk service
+// declineRiskPolicyChallenge endpoint invalid error.
+func NewDeclineRiskPolicyChallengeInvalid(body *DeclineRiskPolicyChallengeInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeclineRiskPolicyChallengeInvariantViolation builds a risk service
+// declineRiskPolicyChallenge endpoint invariant_violation error.
+func NewDeclineRiskPolicyChallengeInvariantViolation(body *DeclineRiskPolicyChallengeInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeclineRiskPolicyChallengeUnexpected builds a risk service
+// declineRiskPolicyChallenge endpoint unexpected error.
+func NewDeclineRiskPolicyChallengeUnexpected(body *DeclineRiskPolicyChallengeUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeclineRiskPolicyChallengeGatewayError builds a risk service
+// declineRiskPolicyChallenge endpoint gateway_error error.
+func NewDeclineRiskPolicyChallengeGatewayError(body *DeclineRiskPolicyChallengeGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -14986,6 +15744,30 @@ func ValidateAcknowledgeRiskPolicyChallengeResponseBody(body *AcknowledgeRiskPol
 	}
 	if body.ExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyChallengeResponseBody runs the validations defined on
+// GetRiskPolicyChallengeResponseBody
+func ValidateGetRiskPolicyChallengeResponseBody(body *GetRiskPolicyChallengeResponseBody) (err error) {
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Acknowledged == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("acknowledged", "body"))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateDeclineRiskPolicyChallengeResponseBody runs the validations defined
+// on DeclineRiskPolicyChallengeResponseBody
+func ValidateDeclineRiskPolicyChallengeResponseBody(body *DeclineRiskPolicyChallengeResponseBody) (err error) {
+	if body.Declined == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("declined", "body"))
 	}
 	return
 }
@@ -19614,6 +20396,489 @@ func ValidateAcknowledgeRiskPolicyChallengeUnexpectedResponseBody(body *Acknowle
 // validations defined on
 // acknowledgeRiskPolicyChallenge_gateway_error_response_body
 func ValidateAcknowledgeRiskPolicyChallengeGatewayErrorResponseBody(body *AcknowledgeRiskPolicyChallengeGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyChallengeUnauthorizedResponseBody runs the validations
+// defined on getRiskPolicyChallenge_unauthorized_response_body
+func ValidateGetRiskPolicyChallengeUnauthorizedResponseBody(body *GetRiskPolicyChallengeUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyChallengeForbiddenResponseBody runs the validations
+// defined on getRiskPolicyChallenge_forbidden_response_body
+func ValidateGetRiskPolicyChallengeForbiddenResponseBody(body *GetRiskPolicyChallengeForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyChallengeBadRequestResponseBody runs the validations
+// defined on getRiskPolicyChallenge_bad_request_response_body
+func ValidateGetRiskPolicyChallengeBadRequestResponseBody(body *GetRiskPolicyChallengeBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyChallengeNotFoundResponseBody runs the validations
+// defined on getRiskPolicyChallenge_not_found_response_body
+func ValidateGetRiskPolicyChallengeNotFoundResponseBody(body *GetRiskPolicyChallengeNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyChallengeConflictResponseBody runs the validations
+// defined on getRiskPolicyChallenge_conflict_response_body
+func ValidateGetRiskPolicyChallengeConflictResponseBody(body *GetRiskPolicyChallengeConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyChallengeUnsupportedMediaResponseBody runs the
+// validations defined on getRiskPolicyChallenge_unsupported_media_response_body
+func ValidateGetRiskPolicyChallengeUnsupportedMediaResponseBody(body *GetRiskPolicyChallengeUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyChallengeInvalidResponseBody runs the validations
+// defined on getRiskPolicyChallenge_invalid_response_body
+func ValidateGetRiskPolicyChallengeInvalidResponseBody(body *GetRiskPolicyChallengeInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyChallengeInvariantViolationResponseBody runs the
+// validations defined on
+// getRiskPolicyChallenge_invariant_violation_response_body
+func ValidateGetRiskPolicyChallengeInvariantViolationResponseBody(body *GetRiskPolicyChallengeInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyChallengeUnexpectedResponseBody runs the validations
+// defined on getRiskPolicyChallenge_unexpected_response_body
+func ValidateGetRiskPolicyChallengeUnexpectedResponseBody(body *GetRiskPolicyChallengeUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyChallengeGatewayErrorResponseBody runs the validations
+// defined on getRiskPolicyChallenge_gateway_error_response_body
+func ValidateGetRiskPolicyChallengeGatewayErrorResponseBody(body *GetRiskPolicyChallengeGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeclineRiskPolicyChallengeUnauthorizedResponseBody runs the
+// validations defined on declineRiskPolicyChallenge_unauthorized_response_body
+func ValidateDeclineRiskPolicyChallengeUnauthorizedResponseBody(body *DeclineRiskPolicyChallengeUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeclineRiskPolicyChallengeForbiddenResponseBody runs the validations
+// defined on declineRiskPolicyChallenge_forbidden_response_body
+func ValidateDeclineRiskPolicyChallengeForbiddenResponseBody(body *DeclineRiskPolicyChallengeForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeclineRiskPolicyChallengeBadRequestResponseBody runs the
+// validations defined on declineRiskPolicyChallenge_bad_request_response_body
+func ValidateDeclineRiskPolicyChallengeBadRequestResponseBody(body *DeclineRiskPolicyChallengeBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeclineRiskPolicyChallengeNotFoundResponseBody runs the validations
+// defined on declineRiskPolicyChallenge_not_found_response_body
+func ValidateDeclineRiskPolicyChallengeNotFoundResponseBody(body *DeclineRiskPolicyChallengeNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeclineRiskPolicyChallengeConflictResponseBody runs the validations
+// defined on declineRiskPolicyChallenge_conflict_response_body
+func ValidateDeclineRiskPolicyChallengeConflictResponseBody(body *DeclineRiskPolicyChallengeConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeclineRiskPolicyChallengeUnsupportedMediaResponseBody runs the
+// validations defined on
+// declineRiskPolicyChallenge_unsupported_media_response_body
+func ValidateDeclineRiskPolicyChallengeUnsupportedMediaResponseBody(body *DeclineRiskPolicyChallengeUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeclineRiskPolicyChallengeInvalidResponseBody runs the validations
+// defined on declineRiskPolicyChallenge_invalid_response_body
+func ValidateDeclineRiskPolicyChallengeInvalidResponseBody(body *DeclineRiskPolicyChallengeInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeclineRiskPolicyChallengeInvariantViolationResponseBody runs the
+// validations defined on
+// declineRiskPolicyChallenge_invariant_violation_response_body
+func ValidateDeclineRiskPolicyChallengeInvariantViolationResponseBody(body *DeclineRiskPolicyChallengeInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeclineRiskPolicyChallengeUnexpectedResponseBody runs the
+// validations defined on declineRiskPolicyChallenge_unexpected_response_body
+func ValidateDeclineRiskPolicyChallengeUnexpectedResponseBody(body *DeclineRiskPolicyChallengeUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeclineRiskPolicyChallengeGatewayErrorResponseBody runs the
+// validations defined on declineRiskPolicyChallenge_gateway_error_response_body
+func ValidateDeclineRiskPolicyChallengeGatewayErrorResponseBody(body *DeclineRiskPolicyChallengeGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -108,9 +108,11 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 				// Unacknowledged warn → warning + ack link (challenge, not a
 				// durable block page). No ack link buildable → fall through to block.
 				if scanResult.Action == "warn" {
-					if warnReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+					// Codex surfaces a single reason (the CLI user reads it), so use
+					// the human-facing framing that carries the ack link.
+					if _, warnUserReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 						blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-						userReason = warnReason
+						userReason = warnUserReason
 						blockPolicyID = scanResult.PolicyID
 						break
 					}
@@ -199,9 +201,9 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
 				!(scanResult.Action == "warn" && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
 				if scanResult.Action == "warn" {
-					if warnReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+					if _, warnUserReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 						blockReason = fmt.Sprintf("Speakeasy challenged this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-						userReason = warnReason
+						userReason = warnUserReason
 						blockPolicyID = scanResult.PolicyID
 						break
 					}

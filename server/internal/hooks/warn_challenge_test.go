@@ -87,13 +87,23 @@ func TestRenderWarnBody_EmptyMatchFallsBackToRuleID(t *testing.T) {
 	assert.NotContains(t, got, "%{")
 }
 
-func TestRenderWarnReason_AppendsAckLink(t *testing.T) {
+func TestRenderWarnUserReason_AppendsAckLink(t *testing.T) {
 	t.Parallel()
 	sr := &risk.ScanResult{Action: "warn", PolicyName: "p", RuleID: "r", Entity: "e"}
-	got := renderWarnReason(sr, "https://example.test/ack#ack_token=rpak1.xyz")
+	got := renderWarnUserReason(sr, "https://example.test/ack#ack_token=rpak1.xyz")
 	assert.Contains(t, got, renderWarnBody(sr))
-	assert.Contains(t, got, "Acknowledge to proceed")
+	assert.Contains(t, got, "open this link and acknowledge")
 	assert.Contains(t, got, "https://example.test/ack#ack_token=rpak1.xyz")
+}
+
+func TestRenderWarnAgentReason_HasNoLinkAndAssertsAuthority(t *testing.T) {
+	t.Parallel()
+	sr := &risk.ScanResult{Action: "warn", PolicyName: "secrets", RuleID: "r", Entity: "e"}
+	got := renderWarnAgentReason(sr)
+	assert.Contains(t, got, "secrets", "names the policy")
+	assert.Contains(t, got, "not tool output", "frames it as a policy decision, not tool output")
+	assert.NotContains(t, got, "http", "the model-facing reason must carry no URL")
+	assert.NotContains(t, got, "ack_token")
 }
 
 func TestTruncateForWarn(t *testing.T) {
@@ -107,45 +117,14 @@ func TestTruncateForWarn(t *testing.T) {
 	assert.Len(t, []rune(strings.TrimSuffix(got, "…")), warnMatchMaxLen)
 }
 
-func TestEmphasizeWarn_WrapsWithMarkerAndAmber(t *testing.T) {
-	t.Parallel()
-	got := emphasizeWarn("watch out")
-	assert.True(t, strings.HasPrefix(got, "⚠ "), "leads with a warning marker")
-	assert.Contains(t, got, ansiAmberBold)
-	assert.Contains(t, got, ansiReset)
-	assert.Contains(t, got, "watch out")
-}
-
-func TestConstructAskResponse_PreToolUseAsks(t *testing.T) {
-	t.Parallel()
-	res := constructAskResponse("PreToolUse", "please confirm")
-	output, ok := res.HookSpecificOutput.(*HookSpecificOutput)
-	require.True(t, ok)
-	require.NotNil(t, output.PermissionDecision)
-	assert.Equal(t, "ask", *output.PermissionDecision)
-	require.NotNil(t, output.PermissionDecisionReason)
-	assert.Equal(t, "please confirm", *output.PermissionDecisionReason)
-	require.NotNil(t, res.SystemMessage)
-	assert.Equal(t, "please confirm", *res.SystemMessage)
-	assert.Nil(t, res.Decision, "ask must not set a top-level block decision")
-}
-
-func TestConstructAskResponse_NonPreToolUseFallsBackToBlock(t *testing.T) {
-	t.Parallel()
-	// UserPromptSubmit has no "ask" primitive, so ask degrades to a fail-safe
-	// block rather than silently allowing.
-	res := constructAskResponse("UserPromptSubmit", "cannot ask here")
-	require.NotNil(t, res.Decision)
-	assert.Equal(t, "block", *res.Decision)
-	require.NotNil(t, res.Reason)
-	assert.Equal(t, "cannot ask here", *res.Reason)
-}
-
 // --- Handler-level tests (use the shared infra-backed service) ---
 
-// A warn (challenge) on a tool call must defer to Claude Code's native
-// confirmation prompt (permissionDecision "ask"), never a hard deny.
-func TestClaude_PreToolUse_Warn_AsksInsteadOfBlocking(t *testing.T) {
+// A warn (challenge) on a tool call must DENY with an out-of-band
+// acknowledgement link — unified with Cursor/Codex on the link flow, not a
+// native permissionDecision "ask" (which `--dangerously-skip-permissions`
+// bypasses). When no ack link can be built it falls back to a hard block;
+// either way the permission decision is "deny", never "ask" or "allow".
+func TestClaude_PreToolUse_Warn_DeniesWithChallenge(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
@@ -159,8 +138,8 @@ func TestClaude_PreToolUse_Warn_AsksInsteadOfBlocking(t *testing.T) {
 
 	sessionID := uuid.NewString()
 	toolName := "Bash"
-	toolUseID := "toolu_warn_ask"
-	userEmail := "warn-ask@example.com"
+	toolUseID := "toolu_warn_deny"
+	userEmail := "warn-deny@example.com"
 
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "PreToolUse",
@@ -176,10 +155,9 @@ func TestClaude_PreToolUse_Warn_AsksInsteadOfBlocking(t *testing.T) {
 	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
 	require.True(t, ok)
 	require.NotNil(t, output.PermissionDecision)
-	assert.Equal(t, "ask", *output.PermissionDecision, "warn must ask, not deny")
+	assert.Equal(t, "deny", *output.PermissionDecision, "warn must deny (challenge/link), never native ask")
 	require.NotNil(t, output.PermissionDecisionReason)
-	assert.Contains(t, *output.PermissionDecisionReason, "rm -rf /tmp/warn", "the matched value is shown in the ephemeral warning")
-	assert.Contains(t, *output.PermissionDecisionReason, "⚠", "the warning is emphasized")
+	assert.Contains(t, *output.PermissionDecisionReason, "danger", "the matched policy is surfaced")
 }
 
 // A warn at prompt submit has no confirmation primitive, so it must pass the

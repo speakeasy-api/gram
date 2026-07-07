@@ -626,6 +626,66 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskAcknowledgePolicyChallenge", "type": "mutation"}`)
 	})
 
+	Method("getRiskPolicyChallenge", func() {
+		Description("Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("ack_token", String, "Acknowledgement token generated when a warn policy challenged the action.")
+			Required("ack_token")
+		})
+
+		Result(func() {
+			Attribute("policy_name", String, "The policy that issued the warning.")
+			Attribute("tool_name", String, "The tool the challenge applies to, if any.")
+			Attribute("message", String, "Human-facing challenge message describing what was flagged.")
+			Attribute("expires_at", String, "RFC3339 time the acknowledgement link expires.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("acknowledged", Boolean, "Whether this challenge has already been acknowledged.")
+			Required("message", "acknowledged")
+		})
+
+		HTTP(func() {
+			POST("/rpc/risk.getPolicyChallenge")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskPolicyChallenge")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policyChallenges")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskGetPolicyChallenge", "type": "query"}`)
+	})
+
+	Method("declineRiskPolicyChallenge", func() {
+		Description("Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("ack_token", String, "Acknowledgement token generated when a warn policy challenged the action.")
+			Required("ack_token")
+		})
+
+		Result(func() {
+			Attribute("declined", Boolean, "Whether the challenge is now declined.")
+			Required("declined")
+		})
+
+		HTTP(func() {
+			POST("/rpc/risk.declinePolicyChallenge")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "declineRiskPolicyChallenge")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policyChallenges")
+		Meta("openapi:extension:x-speakeasy-name-override", "decline")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskDeclinePolicyChallenge", "type": "mutation"}`)
+	})
+
 	Method("getRiskBlock", func() {
 		Description("Get a tool call block by its risk result ID for the durable block page.")
 		Security(security.Session)

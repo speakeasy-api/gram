@@ -46,14 +46,21 @@ const (
 )
 
 // PolicyAckTokenInput is the state a challenge link points at. Deliberately
-// carries no matched value / secret — only the identity needed to record the ack.
+// carries the log-safe identity needed to record the ack, plus ChallengeMessage.
+//
+// ChallengeMessage is the human-facing warning shown on the approval page (the
+// same text rendered to the operator in the terminal). It MAY contain the
+// matched value: this is an ephemeral, token-gated cache record (~10 min TTL) —
+// the same scoped exposure as the terminal display, NOT durable persistence. It
+// must never be copied into ClickHouse, tool_call_blocks, or audit.
 type PolicyAckTokenInput struct {
-	OrganizationID string
-	ProjectID      string
-	UserID         string
-	RiskPolicyID   string
-	PolicyName     string
-	ToolName       *string
+	OrganizationID   string
+	ProjectID        string
+	UserID           string
+	RiskPolicyID     string
+	PolicyName       string
+	ToolName         *string
+	ChallengeMessage string
 	// RememberFor is how long the acknowledgement, once granted, suppresses
 	// re-challenging the same (user, policy, tool). Zero uses the ack window default.
 	RememberFor time.Duration
@@ -61,14 +68,16 @@ type PolicyAckTokenInput struct {
 
 // policyAckRecord is the cached server-side state for an rpak1 token.
 type policyAckRecord struct {
-	OrganizationID string        `json:"organization_id"`
-	ProjectID      string        `json:"project_id"`
-	UserID         string        `json:"user_id"`
-	RiskPolicyID   string        `json:"risk_policy_id"`
-	PolicyName     string        `json:"policy_name,omitempty"`
-	ToolName       *string       `json:"tool_name,omitempty"`
-	RememberFor    time.Duration `json:"remember_for,omitempty"`
-	ExpiresAt      time.Time     `json:"expires_at"`
+	OrganizationID string  `json:"organization_id"`
+	ProjectID      string  `json:"project_id"`
+	UserID         string  `json:"user_id"`
+	RiskPolicyID   string  `json:"risk_policy_id"`
+	PolicyName     string  `json:"policy_name,omitempty"`
+	ToolName       *string `json:"tool_name,omitempty"`
+	// ChallengeMessage — see PolicyAckTokenInput. Ephemeral, token-gated only.
+	ChallengeMessage string        `json:"challenge_message,omitempty"`
+	RememberFor      time.Duration `json:"remember_for,omitempty"`
+	ExpiresAt        time.Time     `json:"expires_at"`
 }
 
 func policyAckCacheKey(id string) string {
@@ -112,14 +121,15 @@ func GeneratePolicyAckToken(ctx context.Context, c cache.Cache, input PolicyAckT
 	now := time.Now()
 	expiry := now.Add(ttl).Truncate(time.Second)
 	record := policyAckRecord{
-		OrganizationID: strings.TrimSpace(input.OrganizationID),
-		ProjectID:      strings.TrimSpace(input.ProjectID),
-		UserID:         strings.TrimSpace(input.UserID),
-		RiskPolicyID:   strings.TrimSpace(input.RiskPolicyID),
-		PolicyName:     strings.TrimSpace(input.PolicyName),
-		ToolName:       normalizeOptionalString(input.ToolName),
-		RememberFor:    input.RememberFor,
-		ExpiresAt:      expiry,
+		OrganizationID:   strings.TrimSpace(input.OrganizationID),
+		ProjectID:        strings.TrimSpace(input.ProjectID),
+		UserID:           strings.TrimSpace(input.UserID),
+		RiskPolicyID:     strings.TrimSpace(input.RiskPolicyID),
+		PolicyName:       strings.TrimSpace(input.PolicyName),
+		ToolName:         normalizeOptionalString(input.ToolName),
+		ChallengeMessage: strings.TrimSpace(input.ChallengeMessage),
+		RememberFor:      input.RememberFor,
+		ExpiresAt:        expiry,
 	}
 	if err := validatePolicyAckFields(record.OrganizationID, record.ProjectID, record.UserID, record.RiskPolicyID); err != nil {
 		return "", time.Time{}, err

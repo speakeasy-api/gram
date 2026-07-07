@@ -199,6 +199,109 @@ func (s *Service) AcknowledgeRiskPolicyChallenge(ctx context.Context, payload *g
 	}, nil
 }
 
+// GetRiskPolicyChallenge returns a warn/challenge's details from its ack link
+// WITHOUT redeeming it, so the approval page can show what was flagged before
+// the operator chooses Approve or Deny. Binds to the session org+user like the
+// redeem path — a leaked link reveals nothing to anyone else.
+func (s *Service) GetRiskPolicyChallenge(ctx context.Context, payload *gen.GetRiskPolicyChallengePayload) (*gen.GetRiskPolicyChallengeResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	record, err := lookupPolicyAckRecord(ctx, s.cache, payload.AckToken)
+	if err != nil {
+		if errors.Is(err, errPolicyAckStoreUnavailable) {
+			return nil, oops.E(oops.CodeUnexpected, err, "load risk policy challenge").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeInvalid, err, "invalid or expired risk policy challenge token")
+	}
+	if record.OrganizationID != authCtx.ActiveOrganizationID || record.UserID != authCtx.UserID {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+
+	// Best-effort: surface whether it was already acknowledged (e.g. the link
+	// was opened twice) so the page can reflect it instead of re-approving.
+	acknowledged := false
+	if projectID, perr := uuid.Parse(record.ProjectID); perr == nil {
+		if policyID, perr2 := uuid.Parse(record.RiskPolicyID); perr2 == nil {
+			if _, gerr := repo.New(s.db).GetActiveRiskPolicyAck(ctx, repo.GetActiveRiskPolicyAckParams{
+				ProjectID:    projectID,
+				UserID:       record.UserID,
+				RiskPolicyID: policyID,
+				ToolName:     toChallengeToolName(ptrValOr(record.ToolName)),
+			}); gerr == nil {
+				acknowledged = true
+			}
+		}
+	}
+
+	exp := record.ExpiresAt.UTC().Format(time.RFC3339)
+	res := &gen.GetRiskPolicyChallengeResult{
+		PolicyName:   nil,
+		ToolName:     nil,
+		Message:      record.ChallengeMessage,
+		ExpiresAt:    &exp,
+		Acknowledged: acknowledged,
+	}
+	if record.PolicyName != "" {
+		res.PolicyName = &record.PolicyName
+	}
+	if record.ToolName != nil && *record.ToolName != "" {
+		res.ToolName = record.ToolName
+	}
+	return res, nil
+}
+
+// DeclineRiskPolicyChallenge marks a warn/challenge declined and invalidates the
+// link so it can't later be approved. The blocked action stays blocked.
+func (s *Service) DeclineRiskPolicyChallenge(ctx context.Context, payload *gen.DeclineRiskPolicyChallengePayload) (*gen.DeclineRiskPolicyChallengeResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	record, err := lookupPolicyAckRecord(ctx, s.cache, payload.AckToken)
+	if err != nil {
+		if errors.Is(err, errPolicyAckStoreUnavailable) {
+			return nil, oops.E(oops.CodeUnexpected, err, "load risk policy challenge").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeInvalid, err, "invalid or expired risk policy challenge token")
+	}
+	if record.OrganizationID != authCtx.ActiveOrganizationID || record.UserID != authCtx.UserID {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	projectID, err := uuid.Parse(record.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy challenge project id")
+	}
+	policyID, err := uuid.Parse(record.RiskPolicyID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy challenge policy id")
+	}
+
+	if _, err := repo.New(s.db).MarkRiskPolicyChallengeDeclined(ctx, repo.MarkRiskPolicyChallengeDeclinedParams{
+		ID:             uuid.New(),
+		OrganizationID: record.OrganizationID,
+		ProjectID:      projectID,
+		RiskPolicyID:   policyID,
+		UserID:         record.UserID,
+		ToolName:       toChallengeToolName(ptrValOr(record.ToolName)),
+		PolicyName:     toChallengeText(record.PolicyName),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "decline risk policy challenge").LogError(ctx, s.logger)
+	}
+
+	// One-shot: drop the cache token so the declined link can't be approved.
+	invalidatePolicyAckToken(ctx, s.cache, payload.AckToken)
+
+	s.logger.InfoContext(ctx, "risk policy challenge declined",
+		attr.SlogRiskPolicyID(policyID.String()),
+		attr.SlogUserID(authCtx.UserID),
+	)
+	return &gen.DeclineRiskPolicyChallengeResult{Declined: true}, nil
+}
+
 func ptrValOr(p *string) string {
 	if p == nil {
 		return ""

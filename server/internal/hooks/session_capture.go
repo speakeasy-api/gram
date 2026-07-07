@@ -146,22 +146,26 @@ func constructBlockResponse(hookEventName, reason string) *gen.ClaudeHookResult 
 	return result
 }
 
-// constructAskResponse defers the decision to the user via Claude Code's native
-// confirmation prompt (PreToolUse `hookSpecificOutput.permissionDecision: "ask"`),
-// which renders as an inline [y/n] and blocks the tool call until the user
-// answers — no out-of-band acknowledgement needed. Only PreToolUse supports
-// "ask"; any other event falls back to a plain block (fail-safe).
-func constructAskResponse(hookEventName, reason string) *gen.ClaudeHookResult {
+// constructWarnChallengeResponse builds a PreToolUse deny for a warn challenge,
+// splitting the model-facing reason (permissionDecisionReason — authoritative,
+// NO link) from the human-facing systemMessage (carries the acknowledgement
+// link). Keeping the link out of the model's reason stops the agent from
+// treating it as an injected instruction and dismissing the challenge. Only
+// PreToolUse carries permissionDecision; any other event falls back to a plain
+// block on the agent reason (fail-safe).
+func constructWarnChallengeResponse(hookEventName, agentReason, userReason string) *gen.ClaudeHookResult {
 	if hookEventName != "PreToolUse" {
-		return constructBlockResponse(hookEventName, reason)
+		return constructBlockResponse(hookEventName, agentReason)
 	}
 	result := makeHookResult(hookEventName)
-	ask := "ask"
+	deny := "deny"
 	if output, ok := result.HookSpecificOutput.(*HookSpecificOutput); ok {
-		output.PermissionDecision = &ask
-		output.PermissionDecisionReason = &reason
+		output.PermissionDecision = &deny
+		output.PermissionDecisionReason = &agentReason
 	}
-	result.SystemMessage = &reason
+	// systemMessage renders directly to the user's terminal — the link belongs
+	// here, addressed to the human, not in the model-facing reason.
+	result.SystemMessage = &userReason
 	return result
 }
 

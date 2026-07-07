@@ -830,15 +830,21 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		return makeHookResult(ev.RawEventType), nil
 	}
 	if s.riskScanner != nil && ev.ConversationID != "" {
-		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+		// Acknowledged warn is excluded from the enforcement block so it falls
+		// through to the shadow-MCP guard below: an ack clears the risk
+		// challenge but must never bypass unapproved-toolset validation.
+		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil &&
+			!(scanResult.Action == "warn" && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+			// Unacknowledged warn → deny + out-of-band acknowledgement link
+			// (challenge). Claude is unified with Cursor/Codex on the link flow
+			// rather than the native permissionDecision "ask", which
+			// `--dangerously-skip-permissions` bypasses. No ack link buildable
+			// (missing site URL / cache / user) → fall through to a hard block
+			// (fail-safe): a warn must never silently allow.
 			if scanResult.Action == "warn" {
-				// Known tradeoff: the native "ask" keeps the y/n inside Claude
-				// Code and its answer is never reported back, so a Claude-transport
-				// challenge row stays `challenged` — acknowledgement analytics
-				// undercount here by design. We record the challenge (a challenge
-				// WAS surfaced) but cannot mark it acknowledged from the server.
-				s.recordWarnChallenge(ctx, ev.Event, scanResult, ev.ToolName)
-				return constructAskResponse(payload.HookEventName, emphasizeWarn(renderWarnBody(scanResult))), nil
+				if agentReason, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+					return constructWarnChallengeResponse(payload.HookEventName, agentReason, userReason), nil
+				}
 			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)

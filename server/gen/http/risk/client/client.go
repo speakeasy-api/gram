@@ -85,6 +85,14 @@ type Client struct {
 	// to the acknowledgeRiskPolicyChallenge endpoint.
 	AcknowledgeRiskPolicyChallengeDoer goahttp.Doer
 
+	// GetRiskPolicyChallenge Doer is the HTTP client used to make requests to the
+	// getRiskPolicyChallenge endpoint.
+	GetRiskPolicyChallengeDoer goahttp.Doer
+
+	// DeclineRiskPolicyChallenge Doer is the HTTP client used to make requests to
+	// the declineRiskPolicyChallenge endpoint.
+	DeclineRiskPolicyChallengeDoer goahttp.Doer
+
 	// GetRiskBlock Doer is the HTTP client used to make requests to the
 	// getRiskBlock endpoint.
 	GetRiskBlockDoer goahttp.Doer
@@ -194,6 +202,8 @@ func NewClient(
 		GetRiskPolicyStatusDoer:            doer,
 		CreateRiskPolicyBypassRequestDoer:  doer,
 		AcknowledgeRiskPolicyChallengeDoer: doer,
+		GetRiskPolicyChallengeDoer:         doer,
+		DeclineRiskPolicyChallengeDoer:     doer,
 		GetRiskBlockDoer:                   doer,
 		SubmitRiskBlockFeedbackDoer:        doer,
 		ListRiskPolicyBypassRequestsDoer:   doer,
@@ -623,6 +633,54 @@ func (c *Client) AcknowledgeRiskPolicyChallenge() goa.Endpoint {
 		resp, err := c.AcknowledgeRiskPolicyChallengeDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "acknowledgeRiskPolicyChallenge", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRiskPolicyChallenge returns an endpoint that makes HTTP requests to the
+// risk service getRiskPolicyChallenge server.
+func (c *Client) GetRiskPolicyChallenge() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRiskPolicyChallengeRequest(c.encoder)
+		decodeResponse = DecodeGetRiskPolicyChallengeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRiskPolicyChallengeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRiskPolicyChallengeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "getRiskPolicyChallenge", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeclineRiskPolicyChallenge returns an endpoint that makes HTTP requests to
+// the risk service declineRiskPolicyChallenge server.
+func (c *Client) DeclineRiskPolicyChallenge() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeclineRiskPolicyChallengeRequest(c.encoder)
+		decodeResponse = DecodeDeclineRiskPolicyChallengeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeclineRiskPolicyChallengeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeclineRiskPolicyChallengeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "declineRiskPolicyChallenge", err)
 		}
 		return decodeResponse(resp)
 	}

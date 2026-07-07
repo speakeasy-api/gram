@@ -1048,6 +1048,56 @@ func BuildAcknowledgeRiskPolicyChallengePayload(riskAcknowledgeRiskPolicyChallen
 	return v, nil
 }
 
+// BuildGetRiskPolicyChallengePayload builds the payload for the risk
+// getRiskPolicyChallenge endpoint from CLI flags.
+func BuildGetRiskPolicyChallengePayload(riskGetRiskPolicyChallengeBody string, riskGetRiskPolicyChallengeSessionToken string) (*risk.GetRiskPolicyChallengePayload, error) {
+	var err error
+	var body GetRiskPolicyChallengeRequestBody
+	{
+		err = json.Unmarshal([]byte(riskGetRiskPolicyChallengeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ack_token\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskPolicyChallengeSessionToken != "" {
+			sessionToken = &riskGetRiskPolicyChallengeSessionToken
+		}
+	}
+	v := &risk.GetRiskPolicyChallengePayload{
+		AckToken: body.AckToken,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildDeclineRiskPolicyChallengePayload builds the payload for the risk
+// declineRiskPolicyChallenge endpoint from CLI flags.
+func BuildDeclineRiskPolicyChallengePayload(riskDeclineRiskPolicyChallengeBody string, riskDeclineRiskPolicyChallengeSessionToken string) (*risk.DeclineRiskPolicyChallengePayload, error) {
+	var err error
+	var body DeclineRiskPolicyChallengeRequestBody
+	{
+		err = json.Unmarshal([]byte(riskDeclineRiskPolicyChallengeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ack_token\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if riskDeclineRiskPolicyChallengeSessionToken != "" {
+			sessionToken = &riskDeclineRiskPolicyChallengeSessionToken
+		}
+	}
+	v := &risk.DeclineRiskPolicyChallengePayload{
+		AckToken: body.AckToken,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGetRiskBlockPayload builds the payload for the risk getRiskBlock
 // endpoint from CLI flags.
 func BuildGetRiskBlockPayload(riskGetRiskBlockID string, riskGetRiskBlockSessionToken string) (*risk.GetRiskBlockPayload, error) {

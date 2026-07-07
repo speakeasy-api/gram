@@ -3035,6 +3035,85 @@ func (q *Queries) MarkRiskPolicyChallengeAcknowledged(ctx context.Context, arg M
 	return i, err
 }
 
+const markRiskPolicyChallengeDeclined = `-- name: MarkRiskPolicyChallengeDeclined :one
+INSERT INTO risk_policy_challenges (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , user_id
+  , tool_name
+  , status
+  , policy_name
+  , challenged_at
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6::text
+  , 'declined'
+  , $7::text
+  , clock_timestamp()
+)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name)
+WHERE deleted IS FALSE
+DO UPDATE
+SET status = 'declined'
+  , acknowledged_at = NULL
+  , expires_at = NULL
+  , policy_name = COALESCE(EXCLUDED.policy_name, risk_policy_challenges.policy_name)
+  , updated_at = clock_timestamp()
+RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type MarkRiskPolicyChallengeDeclinedParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	RiskPolicyID   uuid.UUID
+	UserID         string
+	ToolName       pgtype.Text
+	PolicyName     pgtype.Text
+}
+
+// Self-service decline: mark the challenge declined and never grant an ack
+// window. Upserts so a decline that beats the async challenge insert still works.
+func (q *Queries) MarkRiskPolicyChallengeDeclined(ctx context.Context, arg MarkRiskPolicyChallengeDeclinedParams) (RiskPolicyChallenge, error) {
+	row := q.db.QueryRow(ctx, markRiskPolicyChallengeDeclined,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.UserID,
+		arg.ToolName,
+		arg.PolicyName,
+	)
+	var i RiskPolicyChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.UserID,
+		&i.ToolName,
+		&i.Status,
+		&i.PolicyName,
+		&i.Entity,
+		&i.RuleID,
+		&i.ChallengedAt,
+		&i.AcknowledgedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const reverseExclusionFlagsBatch = `-- name: ReverseExclusionFlagsBatch :many
 
 UPDATE risk_results

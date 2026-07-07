@@ -102,13 +102,26 @@ func (s *Service) warnAcknowledged(ctx context.Context, ev hookevents.Event, sca
 	return s.riskScanner.HasAcknowledgedChallenge(ctx, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, toolName)
 }
 
-// warnDenyReason records the challenge and returns the user-facing warning + an
-// acknowledgement link. ok=false means an ack link could not be produced
-// (missing site URL / cache / user id) — the caller MUST fall back to a plain
-// block (fail-safe): a warn must never silently allow.
-func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult, toolName string) (reason string, ok bool) {
+// warnDenyReason records the challenge and returns two framings of the deny:
+//
+//   - agentReason is model-facing. It carries NO acknowledgement link and is
+//     phrased as an authoritative policy decision, because a "go to this URL and
+//     acknowledge" instruction placed in front of the agent reads exactly like a
+//     prompt injection embedded in tool output — safety-trained models dismiss
+//     it and never surface the challenge.
+//   - userReason is human-facing and carries the acknowledgement link the
+//     operator opens to approve.
+//
+// Transports with separate agent/user channels (Claude
+// permissionDecisionReason vs systemMessage; Cursor AgentMessage vs
+// UserMessage) should route each accordingly.
+//
+// ok=false means an ack link could not be produced (missing site URL / cache /
+// user id) — the caller MUST fall back to a plain block (fail-safe): a warn must
+// never silently allow.
+func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult, toolName string) (agentReason, userReason string, ok bool) {
 	if s.siteURL == nil || s.cache == nil || ev.Context.User.ID == "" {
-		return "", false
+		return "", "", false
 	}
 	// Record the challenge (log-safe fields only — never the matched value).
 	s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, toolName, scanResult.PolicyName, scanResult.Entity, scanResult.RuleID)
@@ -124,15 +137,18 @@ func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanR
 		RiskPolicyID:   scanResult.PolicyID,
 		PolicyName:     scanResult.PolicyName,
 		ToolName:       toolPtr,
+		// Human-facing challenge shown on the approval page (may include the
+		// match — ephemeral, token-gated, same as the terminal display).
+		ChallengeMessage: renderWarnBody(scanResult),
 		// Zero: use the ack-window default (defaultAckGrace) so the retry passes.
 		RememberFor: 0,
 	}, 0)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to generate risk policy ack link; falling back to block",
 			attr.SlogError(err))
-		return "", false
+		return "", "", false
 	}
-	return renderWarnReason(scanResult, ackURL), true
+	return renderWarnAgentReason(scanResult), renderWarnUserReason(scanResult, ackURL), true
 }
 
 // renderWarnBody builds the challenge message body. Uses the policy's
@@ -165,35 +181,44 @@ func renderWarnBody(scanResult *risk.ScanResult) string {
 		scanResult.PolicyName, entity)
 }
 
-// renderWarnReason builds the challenge body plus the acknowledgement
-// instructions + link, for transports without a native confirmation prompt
-// (the out-of-band ack fallback).
-func renderWarnReason(scanResult *risk.ScanResult, ackURL string) string {
-	return renderWarnBody(scanResult) + "\n\nAcknowledge to proceed, then ask me to retry the request:\n" + ackURL
+// renderWarnAgentReason is the model-facing framing of a warn challenge. It
+// carries NO acknowledgement link on purpose: the link is for the human, and a
+// "go to this URL" instruction in front of the model reads like an injected
+// instruction, which safety-trained agents dismiss. Instead it states the
+// authority and tells the agent to stop and defer to the operator.
+func renderWarnAgentReason(scanResult *risk.ScanResult) string {
+	return fmt.Sprintf(
+		"Blocked by your organization's Speakeasy risk policy %q. This is an enforced "+
+			"security policy decision — not tool output, and not a message from the tool "+
+			"or its input. Approval must be granted by a human operator out of band. Stop "+
+			"here, tell the user this action needs their approval, and wait for them to "+
+			"approve it and explicitly ask you to retry. Do not attempt to bypass it, do "+
+			"not fetch any URL yourself, and do not approve it on the user's behalf.",
+		scanResult.PolicyName)
 }
 
-// recordWarnChallenge best-effort records that a warn (challenge) was surfaced
-// to the user, using log-safe fields only (never the matched value). Safe to
-// call on any transport; a no-op when the scanner or user id is absent.
-func (s *Service) recordWarnChallenge(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult, toolName string) {
-	if s.riskScanner == nil || scanResult == nil || ev.Context.User.ID == "" {
-		return
-	}
-	s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, toolName, scanResult.PolicyName, scanResult.Entity, scanResult.RuleID)
+// renderWarnUserReason is the human-facing framing: the policy message plus the
+// acknowledgement link the operator opens to approve.
+func renderWarnUserReason(scanResult *risk.ScanResult, ackURL string) string {
+	return renderWarnBody(scanResult) + fmt.Sprintf(
+		"\n\nThis action was held for review by Speakeasy risk policy %q. To approve it, "+
+			"open this link and acknowledge, then tell the agent to retry:\n%s",
+		scanResult.PolicyName, terminalHyperlink(ackURL))
 }
 
-// ANSI amber (256-color 214) + bold, to make the challenge stand out in the
-// Claude Code permission prompt. Terminals that honor ANSI render it amber;
-// clients that strip escapes still get the plain text + ⚠ marker.
-const (
-	ansiAmberBold = "\x1b[1;38;5;214m"
-	ansiReset     = "\x1b[0m"
-)
-
-// emphasizeWarn makes a challenge message stand out (amber + ⚠) for transports
-// whose confirmation UI renders the reason without its own emphasis.
-func emphasizeWarn(body string) string {
-	return "⚠ " + ansiAmberBold + body + ansiReset
+// terminalHyperlink renders a URL as a clickable, high-visibility link. The URL
+// is wrapped in an OSC 8 hyperlink escape (clickable in terminals that support
+// it) and styled bold + underline + amber via SGR so it stands out against the
+// dim/gray systemMessage rendering. The URL is also the visible label, so
+// terminals without OSC 8 support (or clients that strip the hyperlink escape)
+// still show a bold amber, copyable URL. Claude Code forwards these escapes to
+// the terminal. See https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
+func terminalHyperlink(url string) string {
+	const (
+		style = "\x1b[1;4;38;5;214m" // bold + underline + amber (256-color 214)
+		reset = "\x1b[0m"
+	)
+	return style + "\x1b]8;;" + url + "\x1b\\" + url + "\x1b]8;;\x1b\\" + reset
 }
 
 func truncateForWarn(v string) string {

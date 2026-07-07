@@ -3,6 +3,8 @@
  */
 
 import { riskPolicyChallengesAcknowledge } from "../funcs/riskPolicyChallengesAcknowledge.js";
+import { riskPolicyChallengesDecline } from "../funcs/riskPolicyChallengesDecline.js";
+import { riskPolicyChallengesGet } from "../funcs/riskPolicyChallengesGet.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -21,6 +23,44 @@ export class PolicyChallenges extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.AcknowledgeRiskPolicyChallengeResponseBody> {
     return unwrapAsync(riskPolicyChallengesAcknowledge(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * declineRiskPolicyChallenge risk
+   *
+   * @remarks
+   * Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.
+   */
+  async decline(
+    request: operations.DeclineRiskPolicyChallengeRequest,
+    security?: operations.DeclineRiskPolicyChallengeSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.DeclineRiskPolicyChallengeResponseBody> {
+    return unwrapAsync(riskPolicyChallengesDecline(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getRiskPolicyChallenge risk
+   *
+   * @remarks
+   * Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
+   */
+  async get(
+    request: operations.GetRiskPolicyChallengeRequest,
+    security?: operations.GetRiskPolicyChallengeSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetRiskPolicyChallengeResponseBody> {
+    return unwrapAsync(riskPolicyChallengesGet(
       this,
       request,
       security,
