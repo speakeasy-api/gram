@@ -180,6 +180,9 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // mismatch, jti revoked, unparseable subject URN) when a token was presented
 // and rejected, and is nil when no token was presented at all — so the caller
 // can log a real rejection without logging the no-credentials handshake probe.
+// One non-rejection error shares this return: a token that validated fine but
+// whose org lookup failed wraps errIssuerGateOrgLookup, letting the caller
+// label it as an operational failure rather than a bad credential.
 //
 // Anonymous subjects deliberately leave the context untouched (non-nil
 // subject, no AuthContext set). The request belongs to no known principal, so
@@ -194,6 +197,12 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // silently bypasses on enterprise endpoints (ShouldEnforce returns false
 // when AccountType != "enterprise"; PrepareContext skips when SessionID
 // is nil).
+// errIssuerGateOrgLookup marks the post-validation operational path in
+// validateUserSessionToken: the bearer token itself was accepted but the
+// endpoint's organization could not be described, so the resulting 401 is
+// not a credential rejection.
+var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated endpoint")
+
 func (s *Service) validateUserSessionToken(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, error) {
 	if token == "" {
 		return ctx, nil, nil
@@ -209,7 +218,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 
 	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, endpoint.OrganizationID)
 	if err != nil {
-		return ctx, nil, fmt.Errorf("describe organization for issuer-gated endpoint: %w", err)
+		return ctx, nil, fmt.Errorf("%w: %w", errIssuerGateOrgLookup, err)
 	}
 	projectID := endpoint.ProjectID
 	authCtx := &contextvalues.AuthContext{
@@ -328,14 +337,20 @@ func (s *Service) ApplyIssuerGate(
 	}
 	if subject == nil {
 		// Both the user-session and assistant-runtime paths rejected the
-		// token. valErr is set only when a token was presented and failed
-		// validation (audience mismatch / expiry / bad signature / revoked
-		// jti), so this stays silent for the no-credentials handshake probe
-		// and never fires for a token the assistant path just accepted.
+		// token. valErr is nil for the no-credentials handshake probe and
+		// never set for a token the assistant path just accepted. It usually
+		// carries a credential rejection (audience mismatch / expiry / bad
+		// signature / revoked jti), but the errIssuerGateOrgLookup wrap means
+		// the token validated and the org lookup failed — an operational
+		// error, labeled distinctly so nobody chases a phantom bad token.
 		if valErr != nil {
+			failureReason := "invalid_bearer_token"
+			if errors.Is(valErr, errIssuerGateOrgLookup) {
+				failureReason = "org_lookup_failed"
+			}
 			endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected bearer token",
 				attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
-				attr.SlogOAuthFailureReason("invalid_bearer_token"),
+				attr.SlogOAuthFailureReason(failureReason),
 				attr.SlogError(valErr),
 			)
 		}
@@ -365,7 +380,7 @@ func (s *Service) ApplyIssuerGate(
 			// remotesessions.ResolveAccessToken.
 			endpoint.LogWith(s.logger).WarnContext(newCtx, "mcp issuer gate rejected: upstream remote session missing or unusable",
 				attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
-				attr.SlogOAuthFailureReason("remote_session_required"),
+				attr.SlogOAuthFailureReason("invalid_remote_session"),
 			)
 			return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "")
 		case rerr != nil:
