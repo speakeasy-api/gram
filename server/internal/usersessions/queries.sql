@@ -13,6 +13,26 @@ VALUES (
 )
 RETURNING *;
 
+-- name: CreateDefaultUserSessionIssuer :one
+-- Insert half of the get-or-create backing the implicit project-default
+-- issuer (see GetOrCreateDefaultIssuer). ON CONFLICT DO NOTHING makes
+-- concurrent first-touch callers race-safe; the conflict case returns no
+-- row (pgx.ErrNoRows) and the caller re-reads by slug.
+INSERT INTO user_session_issuers (
+    project_id,
+    slug,
+    authn_challenge_mode,
+    session_duration
+)
+VALUES (
+    @project_id,
+    @slug,
+    @authn_challenge_mode,
+    @session_duration
+)
+ON CONFLICT (project_id, slug) WHERE deleted IS FALSE DO NOTHING
+RETURNING *;
+
 -- name: GetUserSessionIssuerByID :one
 SELECT *
 FROM user_session_issuers

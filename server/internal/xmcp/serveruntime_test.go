@@ -525,7 +525,7 @@ func TestServeMCP_IssuerGatedRemoteBackend_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
-	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, mcpServer.UserSessionIssuerID.UUID)
 
 	// Public OAuth client (token_endpoint_auth_method=none) — no
 	// client_secret_hash, PKCE alone establishes proof-of-possession.
@@ -730,7 +730,7 @@ func TestServeMCP_IssuerGatedToolsetBackend_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
-	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, mcpServer.UserSessionIssuerID.UUID)
 
 	subject := urn.NewAnonymousSubject(uuid.NewString())
 	accessToken := mintIssuerGatedAccessToken(t, ctx, ti, slug, endpoint, issuerID, subject)
@@ -775,7 +775,7 @@ func TestServeMCP_IssuerGatedRemoteBackend_PrivateHappyPath(t *testing.T) {
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
-	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, mcpServer.UserSessionIssuerID.UUID)
 
 	// Private endpoints route through the IDP, which stamps a user
 	// subject (not anonymous) onto the cached challenge state.
@@ -822,7 +822,7 @@ func TestServeMCP_IssuerGatedRemoteBackend_CrossIssuerTokenRejected(t *testing.T
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
-	endpointA := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpointA, &mcpServerA, project.OrganizationID)
+	endpointA := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpointA, &mcpServerA, project.OrganizationID, mcpServerA.UserSessionIssuerID.UUID)
 
 	// Endpoint B: a sibling under a different issuer.
 	slugB, _, _ := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, upstream.URL, "public")
@@ -1121,7 +1121,7 @@ func TestRequireUserSessionIssuer_DanglingFKReturnsNotFound(t *testing.T) {
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
-	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, mcpServer.UserSessionIssuerID.UUID)
 
 	// Sanity check: the issuer FK resolves cleanly before deletion.
 	require.NoError(t, ti.mcpService.RequireUserSessionIssuer(ctx, endpoint))
@@ -1354,7 +1354,7 @@ func TestServeMCP_IssuerGatedToolsetBackend_PrivateHappyPath(t *testing.T) {
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
-	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, mcpServer.UserSessionIssuerID.UUID)
 
 	// Private endpoints route through the IDP and stamp user subjects.
 	subject := urn.NewUserSubject("user_" + uuid.NewString()[:8])

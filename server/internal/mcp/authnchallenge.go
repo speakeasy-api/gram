@@ -312,6 +312,37 @@ func (s *Service) ApplyIssuerGate(
 		return ctx, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
 	}
 
+	newCtx, upstreamTokens, ok, err := s.tryIssuerGate(ctx, authToken, endpoint)
+	switch {
+	case errors.Is(err, remotesessions.ErrNoValidToken):
+		// An attached remote session is missing or invalid — the user
+		// resolves this by re-linking via {routeBase}/{slug}/connect.
+		return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "")
+	case err != nil:
+		return ctx, nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
+	case !ok:
+		return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
+	}
+	return newCtx, upstreamTokens, nil
+}
+
+// tryIssuerGate is the challenge-free core of ApplyIssuerGate: it validates
+// the bearer as a user-session JWT (with the assistant-runtime fallback) and
+// resolves the issuer's upstream remote-session tokens, without writing
+// anything to an http.ResponseWriter.
+//
+// ok=false with a nil error means the token is missing or not a valid
+// session token — the caller decides whether to challenge (ApplyIssuerGate)
+// or fall through to another auth chain (the implicitly-gated serve path in
+// serveResolvedMCPEndpoint). A non-nil error wraps either
+// remotesessions.ErrNoValidToken — the subject authenticated but an
+// attached upstream session is missing or invalid — or an unexpected
+// resolver failure.
+func (s *Service) tryIssuerGate(
+	ctx context.Context,
+	authToken string,
+	endpoint *ResolvedMcpEndpoint,
+) (context.Context, map[uuid.UUID]string, bool, error) {
 	newCtx, subject, ok := s.validateUserSessionToken(ctx, authToken, endpoint)
 	if !ok {
 		// Accept an assistant-runtime JWT, but only when the assistant
@@ -324,7 +355,7 @@ func (s *Service) ApplyIssuerGate(
 		}
 	}
 	if !ok {
-		return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
+		return ctx, nil, false, nil
 	}
 
 	// Resolve the upstream remote_sessions for this subject before
@@ -333,20 +364,16 @@ func (s *Service) ApplyIssuerGate(
 	// otherwise it supplies one upstream access token per linked
 	// remote_session_issuer (fed into tokenInputs so they satisfy the
 	// endpoint's oauth2 schemes downstream) or fails with ErrNoValidToken
-	// when any attached remote session is missing or invalid — which the
-	// user resolves by re-linking via {routeBase}/{slug}/connect.
+	// when any attached remote session is missing or invalid.
 	var upstreamTokens map[uuid.UUID]string
 	if subject != nil {
 		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, *subject, endpoint.UpstreamResource)
-		switch {
-		case errors.Is(rerr, remotesessions.ErrNoValidToken):
-			return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "")
-		case rerr != nil:
-			return ctx, nil, oops.E(oops.CodeUnexpected, rerr, "resolve remote session").LogError(newCtx, s.logger)
+		if rerr != nil {
+			return ctx, nil, false, fmt.Errorf("resolve remote session tokens: %w", rerr)
 		}
 		upstreamTokens = tokens
 	}
-	return newCtx, upstreamTokens, nil
+	return newCtx, upstreamTokens, true, nil
 }
 
 var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not match toolset")

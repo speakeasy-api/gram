@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -231,8 +230,10 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 
 // NewResolvedMcpEndpointFromMcpServer materialises a ResolvedMcpEndpoint
 // from a resolved (mcp_endpoint, mcp_server) pair plus the owning
-// project's organisation id. Caller is responsible for first checking
-// mcpServer.UserSessionIssuerID.Valid; organizationID comes from a
+// project's organisation id and the effective issuer. issuerID is the
+// mcp_server's explicit user_session_issuer_id or, for implicitly gated
+// servers, the project-default issuer resolved by the caller (see
+// BuildResolvedMcpEndpointForServer); organizationID comes from a
 // separate projects lookup since mcp_servers doesn't carry the org id
 // directly. AudienceURN is bound to the issuer URN rather than a
 // backend-specific id so /x/mcp tokens stay portable between
@@ -241,9 +242,10 @@ func NewResolvedMcpEndpointFromMcpServer(
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	mcpServer *mcpservers_repo.McpServer,
 	organizationID string,
+	issuerID uuid.UUID,
 ) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
-		AudienceURN:         urn.NewUserSessionIssuer(mcpServer.UserSessionIssuerID.UUID).String(),
+		AudienceURN:         urn.NewUserSessionIssuer(issuerID).String(),
 		CustomDomainID:      mcpEndpoint.CustomDomainID,
 		IsPublic:            mcpServer.Visibility == mcpservers.VisibilityPublic,
 		McpServerID:         uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
@@ -253,7 +255,7 @@ func NewResolvedMcpEndpointFromMcpServer(
 		Slug:                mcpEndpoint.Slug,
 		ToolsetID:           mcpServer.ToolsetID,
 		UpstreamResource:    "",
-		UserSessionIssuerID: mcpServer.UserSessionIssuerID.UUID,
+		UserSessionIssuerID: issuerID,
 	}
 }
 
@@ -322,32 +324,23 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 		}
-		if !mcpServer.UserSessionIssuerID.Valid {
-			return nil, oops.E(oops.CodeNotFound, nil, "not found")
-		}
 		// Guard against an mcp_endpoint that has been re-pointed mid-flow
 		// at a different mcp_server: the cached challenge belongs to the
 		// original server, not the one the endpoint currently resolves to.
 		if mcpServer.ID != ref.McpServerID.UUID {
 			return nil, errToolsetEndpointMismatch
 		}
-		project, err := projects_repo.New(s.db).GetProjectByID(ctx, mcpEndpoint.ProjectID)
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return nil, oops.E(oops.CodeNotFound, err, "project not found")
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
+		// BuildResolvedMcpEndpointForServer owns the issuer resolution —
+		// explicit FK, implicit project-default, or CodeNotFound — so a
+		// challenge minted against an implicitly gated server keeps
+		// resolving mid-flow. Empty ref.RouteBase falls back to "x/mcp",
+		// the constructor default this path produced before RouteBase was
+		// stamped onto cached refs.
+		routeBase := ref.RouteBase
+		if routeBase == "" {
+			routeBase = "x/mcp"
 		}
-		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
-		if ref.RouteBase != "" {
-			endpoint.RouteBase = ref.RouteBase
-		}
-		upstreamResource, err := s.resolveUpstreamResource(ctx, s.logger, mcpEndpoint.ProjectID, &mcpServer)
-		if err != nil {
-			return nil, err
-		}
-		endpoint.UpstreamResource = upstreamResource
-		return endpoint, nil
+		return s.BuildResolvedMcpEndpointForServer(ctx, s.logger, &mcpEndpoint, &mcpServer, routeBase)
 	}
 
 	toolset, err := s.loadToolset(ctx, ref.McpSlug, ref.CustomDomainID, true)

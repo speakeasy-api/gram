@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -185,10 +186,14 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 // single per-backend dispatch shared by the /mcp (routeBase "mcp") and /x/mcp
 // (routeBase "x/mcp") well-known surfaces:
 //
-//   - Issuer-gated (any backend): emit the Gram-hosted metadata shape rooted
-//     at the resolved endpoint's URL on routeBase's surface.
-//   - Remote-backed, not issuer-gated: 404 — the upstream remote MCP server
-//     publishes its own .well-known and Gram is not its authorization server.
+//   - Issuer-gated, explicitly or implicitly (any backend): emit the
+//     Gram-hosted metadata shape rooted at the resolved endpoint's URL on
+//     routeBase's surface. Implicit gating covers private remote/tunneled
+//     servers with no issuer (mcpservers.EligibleForImplicitIssuer) —
+//     their project-default Gram issuer is materialised on demand.
+//   - Public remote-backed, not issuer-gated: 404 — the upstream remote
+//     MCP server publishes its own .well-known and Gram is not its
+//     authorization server.
 //   - Toolset-backed, not issuer-gated: reuse the legacy wellknown resolver
 //     (oauth_proxy_server_id / external_oauth_server_id).
 func (s *Service) ServeWellKnownProtectedResourceForServer(
@@ -201,7 +206,7 @@ func (s *Service) ServeWellKnownProtectedResourceForServer(
 ) error {
 	ctx := r.Context()
 
-	if mcpServer.UserSessionIssuerID.Valid {
+	if mcpServer.UserSessionIssuerID.Valid || mcpservers.EligibleForImplicitIssuer(mcpServer) {
 		endpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, routeBase)
 		if err != nil {
 			return fmt.Errorf("build resolved mcp endpoint: %w", err)
@@ -243,7 +248,7 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 ) error {
 	ctx := r.Context()
 
-	if mcpServer.UserSessionIssuerID.Valid {
+	if mcpServer.UserSessionIssuerID.Valid || mcpservers.EligibleForImplicitIssuer(mcpServer) {
 		endpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, routeBase)
 		if err != nil {
 			return fmt.Errorf("build resolved mcp endpoint: %w", err)

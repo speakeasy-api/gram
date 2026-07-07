@@ -13,6 +13,56 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const createDefaultUserSessionIssuer = `-- name: CreateDefaultUserSessionIssuer :one
+INSERT INTO user_session_issuers (
+    project_id,
+    slug,
+    authn_challenge_mode,
+    session_duration
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4
+)
+ON CONFLICT (project_id, slug) WHERE deleted IS FALSE DO NOTHING
+RETURNING id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateDefaultUserSessionIssuerParams struct {
+	ProjectID          uuid.UUID
+	Slug               string
+	AuthnChallengeMode string
+	SessionDuration    pgtype.Interval
+}
+
+// Insert half of the get-or-create backing the implicit project-default
+// issuer (see GetOrCreateDefaultIssuer). ON CONFLICT DO NOTHING makes
+// concurrent first-touch callers race-safe; the conflict case returns no
+// row (pgx.ErrNoRows) and the caller re-reads by slug.
+func (q *Queries) CreateDefaultUserSessionIssuer(ctx context.Context, arg CreateDefaultUserSessionIssuerParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, createDefaultUserSessionIssuer,
+		arg.ProjectID,
+		arg.Slug,
+		arg.AuthnChallengeMode,
+		arg.SessionDuration,
+	)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createUserSession = `-- name: CreateUserSession :one
 INSERT INTO user_sessions (
     project_id,
