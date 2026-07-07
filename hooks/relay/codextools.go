@@ -47,12 +47,14 @@ func pushCodexToolID(path, id string) {
 	if path == "" || id == "" {
 		return
 	}
-	lines := readCodexToolQueue(path)
-	lines = append(lines, id)
-	if len(lines) > codexToolQueueCap {
-		lines = lines[len(lines)-codexToolQueueCap:]
-	}
-	_ = os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600)
+	withCodexQueueLock(path, func() {
+		lines := readCodexToolQueue(path)
+		lines = append(lines, id)
+		if len(lines) > codexToolQueueCap {
+			lines = lines[len(lines)-codexToolQueueCap:]
+		}
+		_ = os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600)
+	})
 }
 
 // popCodexToolID removes and returns the oldest queued id, or "".
@@ -60,16 +62,41 @@ func popCodexToolID(path string) string {
 	if path == "" {
 		return ""
 	}
-	lines := readCodexToolQueue(path)
-	if len(lines) == 0 {
-		return ""
+	var first string
+	withCodexQueueLock(path, func() {
+		lines := readCodexToolQueue(path)
+		if len(lines) == 0 {
+			return
+		}
+		first = lines[0]
+		if len(lines) == 1 {
+			_ = os.Remove(path)
+		} else {
+			_ = os.WriteFile(path, []byte(strings.Join(lines[1:], "\n")+"\n"), 0o600)
+		}
+	})
+	return first
+}
+
+// withCodexQueueLock serializes the queue's read-modify-write across
+// concurrent hook processes: the async completion sender can run alongside
+// the next same-tool request's hook. The lock rides a dedicated sibling file
+// that is never removed — locking the queue file itself would race its own
+// unlink. When locking is unavailable the operation degrades to unlocked,
+// the bash sender's posture.
+func withCodexQueueLock(path string, fn func()) {
+	f, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		fn()
+		return
 	}
-	if len(lines) == 1 {
-		_ = os.Remove(path)
-	} else {
-		_ = os.WriteFile(path, []byte(strings.Join(lines[1:], "\n")+"\n"), 0o600)
+	defer func() { _ = f.Close() }()
+	if err := lockFile(f); err != nil {
+		fn()
+		return
 	}
-	return lines[0]
+	defer unlockFile(f)
+	fn()
 }
 
 func readCodexToolQueue(path string) []string {

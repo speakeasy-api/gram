@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -656,6 +657,31 @@ func TestCodexToolCompletionReplaysRequestID(t *testing.T) {
 	require.NotNil(t, doneTool.ID)
 	require.NotEmpty(t, *reqTool.ID)
 	require.Equal(t, *reqTool.ID, *doneTool.ID, "the completion must replay the request's id")
+}
+
+// TestCodexToolQueueConcurrentPushPop: concurrent hook processes share the
+// queue (the async completion sender overlaps the next request's hook); every
+// pushed id must survive and pop exactly once.
+func TestCodexToolQueueConcurrentPushPop(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "queue.ids")
+	var wg sync.WaitGroup
+	for i := range 16 {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			pushCodexToolID(path, "id-"+strconv.Itoa(n))
+		}(i)
+	}
+	wg.Wait()
+
+	seen := map[string]bool{}
+	for range 16 {
+		id := popCodexToolID(path)
+		require.NotEmpty(t, id, "every concurrent push must survive")
+		require.False(t, seen[id], "each queued id pops exactly once")
+		seen[id] = true
+	}
+	require.Empty(t, popCodexToolID(path), "the drained queue yields nothing")
 }
 
 // TestMissingVerdictBlocksGatingEvent: a JSON 2xx whose body carries no
