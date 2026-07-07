@@ -117,30 +117,47 @@ func AttachToDefaultPlugin(ctx context.Context, q *repo.Queries, params AttachTo
 		return nil, fmt.Errorf("check existing default plugin server: %w", err)
 	}
 
+	// De-conflict the display name against the plugin's live rows: collisions
+	// are legitimate (a toolset and an mcp_server sharing a name, or a
+	// same-named server that was deleted and recreated), and the
+	// (plugin_id, display_name) unique index would otherwise fail the
+	// caller's whole transaction — aborting an endpoint create or a server
+	// enable — over a cosmetic label.
+	existing, err := q.ListPluginServers(ctx, ensured.Plugin.ID)
+	if err != nil {
+		return nil, fmt.Errorf("list default plugin servers: %w", err)
+	}
+	taken := make(map[string]struct{}, len(existing))
+	for _, row := range existing {
+		taken[row.DisplayName] = struct{}{}
+	}
+	displayName := params.DisplayName
+	for i := 2; ; i++ {
+		if _, ok := taken[displayName]; !ok {
+			break
+		}
+		displayName = fmt.Sprintf("%s %d", params.DisplayName, i)
+	}
+
 	server, err := q.AddPluginServer(ctx, repo.AddPluginServerParams{
 		PluginID:    ensured.Plugin.ID,
 		ToolsetID:   params.ToolsetID,
 		McpServerID: params.McpServerID,
-		DisplayName: params.DisplayName,
+		DisplayName: displayName,
 		Policy:      "required",
 		SortOrder:   0,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			switch pgErr.ConstraintName {
-			case "plugin_servers_plugin_id_toolset_id_key", "plugin_servers_plugin_id_mcp_server_id_key":
-				// Concurrent attach race lost after the existence check —
-				// already attached, an expected no-op. Note the failed insert
-				// has aborted the surrounding transaction, so the caller's
-				// commit will still fail; a retry then hits the existence
-				// check and no-ops cleanly.
+			// Concurrent attach race lost after the existence and name checks
+			// — either the same server got attached or its name got taken.
+			// An expected no-op: the failed insert has aborted the
+			// surrounding transaction, so the caller's commit still fails; a
+			// retry then passes cleanly.
+			if pgErr.ConstraintName == "plugin_servers_plugin_id_toolset_id_key" ||
+				pgErr.ConstraintName == "plugin_servers_plugin_id_mcp_server_id_key" {
 				return nil, nil
-			default:
-				// display_name collision with a different, already-attached
-				// server (or a manually-added one) is a real conflict, not
-				// "already attached" — surface it instead of silently
-				// dropping the server from the Default plugin.
 			}
 		}
 		return nil, fmt.Errorf("attach server to default plugin: %w", err)

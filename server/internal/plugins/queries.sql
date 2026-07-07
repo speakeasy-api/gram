@@ -148,6 +148,34 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: SoftDeletePluginServersByMcpServerID :many
+-- Soft-deletes every live plugin server backed by an mcp_server, with the
+-- owning plugin joined in for audit logging. Called when the mcp_server
+-- itself is soft-deleted so stale rows don't keep publishing a dead server
+-- or hold its display name against future attaches.
+UPDATE plugin_servers ps
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM plugins p
+WHERE ps.plugin_id = p.id
+  AND p.project_id = @project_id
+  AND ps.mcp_server_id = @mcp_server_id
+  AND ps.deleted IS FALSE
+RETURNING ps.*, p.name AS plugin_name, p.slug AS plugin_slug;
+
+-- name: SoftDeletePluginServersByToolsetID :many
+-- Toolset-backed counterpart of SoftDeletePluginServersByMcpServerID, called
+-- when a toolset is soft-deleted.
+UPDATE plugin_servers ps
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM plugins p
+WHERE ps.plugin_id = p.id
+  AND p.project_id = @project_id
+  AND ps.toolset_id = @toolset_id
+  AND ps.deleted IS FALSE
+RETURNING ps.*, p.name AS plugin_name, p.slug AS plugin_slug;
+
 -- name: AddPluginAssignment :one
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
 VALUES (@plugin_id, @organization_id, @principal_urn)

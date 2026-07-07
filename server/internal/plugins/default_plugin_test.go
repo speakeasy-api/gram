@@ -77,7 +77,7 @@ func TestEnsureDefaultPlugin_ConflictWithExistingNonDefaultPlugin(t *testing.T) 
 	require.Error(t, err)
 }
 
-func TestAttachToDefaultPlugin_DisplayNameCollision_ReturnsError(t *testing.T) {
+func TestAttachToDefaultPlugin_DisplayNameCollision_SuffixesName(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestPluginsService(t)
@@ -97,21 +97,24 @@ func TestAttachToDefaultPlugin_DisplayNameCollision_ReturnsError(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// A different mcp_server that happens to derive the same display name
-	// must not be silently dropped — the display_name unique violation is a
-	// different failure mode than "already attached" and must surface.
+	// A different mcp_server that derives the same display name must still
+	// attach — a name collision is cosmetic and must not fail the caller's
+	// surrounding transaction (an endpoint create or a server enable) — so
+	// the name is de-conflicted with a numeric suffix instead.
 	second := createTestMcpServer(t, ctx, ti.conn, "Attach Test Server 2", mcpservers.VisibilityPublic)
-	_, err = plugins.AttachToDefaultPlugin(ctx, queries, plugins.AttachToDefaultPluginParams{
+	secondResult, err := plugins.AttachToDefaultPlugin(ctx, queries, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		McpServerID:    uuid.NullUUID{UUID: second.id, Valid: true},
 		DisplayName:    "Attach Test Server",
 	})
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.NotNil(t, secondResult)
+	require.Equal(t, "Attach Test Server 2", secondResult.Server.DisplayName)
 
 	servers, err := queries.ListPluginServers(ctx, result.PluginID)
 	require.NoError(t, err)
-	require.Len(t, servers, 1, "the colliding server must not have been attached")
+	require.Len(t, servers, 2)
 }
 
 func TestListPluginPublishCandidates_IncludesNeverPublishedDefaultPlugin(t *testing.T) {

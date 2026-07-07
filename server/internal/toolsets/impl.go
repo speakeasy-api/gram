@@ -43,6 +43,7 @@ import (
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -641,6 +642,37 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return nil
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to delete toolset").LogError(ctx, logger)
+	}
+
+	// Soft-delete plugin_servers rows backed by this toolset. Leaving them
+	// live would keep publishing a dead toolset and hold its display name
+	// against the (plugin_id, display_name) unique index, blocking a
+	// same-named replacement from attaching later.
+	removedPluginServers, err := pluginsrepo.New(dbtx).SoftDeletePluginServersByToolsetID(ctx, pluginsrepo.SoftDeletePluginServersByToolsetIDParams{
+		ProjectID: *authCtx.ProjectID,
+		ToolsetID: uuid.NullUUID{UUID: deleted.ID, Valid: true},
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete plugin servers for toolset").LogError(ctx, logger)
+	}
+
+	deletedToolsetURN := urn.NewToolset(deleted.ID)
+	for _, pluginServer := range removedPluginServers {
+		if err := s.audit.LogPluginServerRemove(ctx, dbtx, audit.LogPluginServerRemoveEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			PluginID:         pluginServer.PluginID,
+			PluginName:       pluginServer.PluginName,
+			PluginSlug:       pluginServer.PluginSlug,
+			ServerID:         pluginServer.ID,
+			ToolsetURN:       &deletedToolsetURN,
+			McpServerURN:     nil,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log plugin server removal").LogError(ctx, logger)
+		}
 	}
 
 	if err := s.audit.LogToolsetDelete(ctx, dbtx, audit.LogToolsetDeleteEvent{

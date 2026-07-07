@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
 func TestToolsetsService_DeleteToolset_Success(t *testing.T) {
@@ -237,4 +238,60 @@ func TestToolsetsService_DeleteToolset_NotFound_NoAuditLog(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetDelete)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount, afterCount)
+}
+
+// TestToolsetsService_DeleteToolset_RemovesDefaultPluginServer guards the
+// delete cascade: a deleted toolset's plugin_servers rows must be
+// soft-deleted too, or they keep publishing a dead toolset and hold its
+// display name against the (plugin_id, display_name) unique index —
+// blocking a same-named replacement from attaching later.
+func TestToolsetsService_DeleteToolset_RemovesDefaultPluginServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	defaultPlugin, err := pluginsQueries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	// The org's first toolset auto-enables MCP and auto-attaches to the
+	// Default plugin.
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Cascade Delete Toolset",
+		Description:            nil,
+		ToolUrns:               []string{},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
+	require.NoError(t, err)
+	require.Len(t, servers, 1)
+
+	beforeRemoveCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerRemove)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{
+		SessionToken:     nil,
+		Slug:             created.Slug,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	servers, err = pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
+	require.NoError(t, err)
+	require.Empty(t, servers, "deleting the toolset must soft-delete its plugin_servers rows")
+
+	afterRemoveCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerRemove)
+	require.NoError(t, err)
+	require.Equal(t, beforeRemoveCount+1, afterRemoveCount)
 }

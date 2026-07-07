@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
 func TestDeleteMcpServer(t *testing.T) {
@@ -150,4 +151,66 @@ func TestDeleteMcpServer_RBACForbidden(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// TestDeleteMcpServer_RemovesDefaultPluginServer guards the delete cascade:
+// a deleted server's plugin_servers rows must be soft-deleted too, or they
+// keep publishing a dead server and hold its display name against the
+// (plugin_id, display_name) unique index — blocking a same-named
+// replacement server from ever attaching (the "attach mcp server to default
+// plugin" error users hit when re-creating a server).
+func TestDeleteMcpServer_RemovesDefaultPluginServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	defaultPlugin, err := pluginsQueries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	created, remoteServerID := createDisabledRemoteServer(t, ctx, ti, *authCtx.ProjectID, "Cascade Delete Server")
+	seedEndpointFor(t, ctx, ti.conn, *authCtx.ProjectID, created.ID)
+
+	// Enable to attach it to the Default plugin.
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                created.ID,
+		Name:              nil,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &remoteServerID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+
+	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
+	require.NoError(t, err)
+	require.Len(t, servers, 1)
+
+	beforeRemoveCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerRemove)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+	})
+	require.NoError(t, err)
+
+	servers, err = pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
+	require.NoError(t, err)
+	require.Empty(t, servers, "deleting the server must soft-delete its plugin_servers rows")
+
+	afterRemoveCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerRemove)
+	require.NoError(t, err)
+	require.Equal(t, beforeRemoveCount+1, afterRemoveCount)
 }

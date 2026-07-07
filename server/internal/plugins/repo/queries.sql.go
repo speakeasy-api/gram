@@ -920,6 +920,146 @@ func (q *Queries) SoftDeletePluginServers(ctx context.Context, pluginID uuid.UUI
 	return err
 }
 
+const softDeletePluginServersByMcpServerID = `-- name: SoftDeletePluginServersByMcpServerID :many
+UPDATE plugin_servers ps
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM plugins p
+WHERE ps.plugin_id = p.id
+  AND p.project_id = $1
+  AND ps.mcp_server_id = $2
+  AND ps.deleted IS FALSE
+RETURNING ps.id, ps.plugin_id, ps.toolset_id, ps.mcp_server_id, ps.display_name, ps.policy, ps.sort_order, ps.created_at, ps.updated_at, ps.deleted_at, ps.deleted, p.name AS plugin_name, p.slug AS plugin_slug
+`
+
+type SoftDeletePluginServersByMcpServerIDParams struct {
+	ProjectID   uuid.UUID
+	McpServerID uuid.NullUUID
+}
+
+type SoftDeletePluginServersByMcpServerIDRow struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	DisplayName string
+	Policy      string
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	Deleted     bool
+	PluginName  string
+	PluginSlug  string
+}
+
+// Soft-deletes every live plugin server backed by an mcp_server, with the
+// owning plugin joined in for audit logging. Called when the mcp_server
+// itself is soft-deleted so stale rows don't keep publishing a dead server
+// or hold its display name against future attaches.
+func (q *Queries) SoftDeletePluginServersByMcpServerID(ctx context.Context, arg SoftDeletePluginServersByMcpServerIDParams) ([]SoftDeletePluginServersByMcpServerIDRow, error) {
+	rows, err := q.db.Query(ctx, softDeletePluginServersByMcpServerID, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SoftDeletePluginServersByMcpServerIDRow
+	for rows.Next() {
+		var i SoftDeletePluginServersByMcpServerIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PluginID,
+			&i.ToolsetID,
+			&i.McpServerID,
+			&i.DisplayName,
+			&i.Policy,
+			&i.SortOrder,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.PluginName,
+			&i.PluginSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const softDeletePluginServersByToolsetID = `-- name: SoftDeletePluginServersByToolsetID :many
+UPDATE plugin_servers ps
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM plugins p
+WHERE ps.plugin_id = p.id
+  AND p.project_id = $1
+  AND ps.toolset_id = $2
+  AND ps.deleted IS FALSE
+RETURNING ps.id, ps.plugin_id, ps.toolset_id, ps.mcp_server_id, ps.display_name, ps.policy, ps.sort_order, ps.created_at, ps.updated_at, ps.deleted_at, ps.deleted, p.name AS plugin_name, p.slug AS plugin_slug
+`
+
+type SoftDeletePluginServersByToolsetIDParams struct {
+	ProjectID uuid.UUID
+	ToolsetID uuid.NullUUID
+}
+
+type SoftDeletePluginServersByToolsetIDRow struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	DisplayName string
+	Policy      string
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	Deleted     bool
+	PluginName  string
+	PluginSlug  string
+}
+
+// Toolset-backed counterpart of SoftDeletePluginServersByMcpServerID, called
+// when a toolset is soft-deleted.
+func (q *Queries) SoftDeletePluginServersByToolsetID(ctx context.Context, arg SoftDeletePluginServersByToolsetIDParams) ([]SoftDeletePluginServersByToolsetIDRow, error) {
+	rows, err := q.db.Query(ctx, softDeletePluginServersByToolsetID, arg.ProjectID, arg.ToolsetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SoftDeletePluginServersByToolsetIDRow
+	for rows.Next() {
+		var i SoftDeletePluginServersByToolsetIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PluginID,
+			&i.ToolsetID,
+			&i.McpServerID,
+			&i.DisplayName,
+			&i.Policy,
+			&i.SortOrder,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.PluginName,
+			&i.PluginSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updatePlugin = `-- name: UpdatePlugin :one
 UPDATE plugins
 SET name = $1,

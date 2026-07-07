@@ -728,3 +728,70 @@ func TestUpdateMcpServer_AlreadyEnabledUpdateDoesNotAttach(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, servers)
 }
+
+// TestUpdateMcpServer_RecreatedServerReattachesUnderOriginalName is the
+// end-to-end regression for the customer flow: attach a server, delete it,
+// re-create a same-named replacement, and enable the replacement. Before the
+// delete cascade freed the display name, the replacement's attach collided
+// with the stale plugin_servers row and failed the enable outright.
+func TestUpdateMcpServer_RecreatedServerReattachesUnderOriginalName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	defaultPlugin, err := pluginsQueries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	original, originalRemoteID := createDisabledRemoteServer(t, ctx, ti, *authCtx.ProjectID, "Ashby")
+	seedEndpointFor(t, ctx, ti.conn, *authCtx.ProjectID, original.ID)
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                original.ID,
+		Name:              nil,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &originalRemoteID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+
+	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               original.ID,
+	})
+	require.NoError(t, err)
+
+	replacement, replacementRemoteID := createDisabledRemoteServer(t, ctx, ti, *authCtx.ProjectID, "Ashby")
+	seedEndpointFor(t, ctx, ti.conn, *authCtx.ProjectID, replacement.ID)
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                replacement.ID,
+		Name:              nil,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &replacementRemoteID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+
+	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
+	require.NoError(t, err)
+	require.Len(t, servers, 1)
+	require.Equal(t, replacement.ID, servers[0].McpServerID.UUID.String())
+	require.Equal(t, "Ashby", servers[0].DisplayName, "the freed display name must be reused, not suffixed")
+}

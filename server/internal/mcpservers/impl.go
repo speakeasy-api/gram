@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -650,6 +651,37 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 			Slug:             endpoint.Slug,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "log mcp endpoint deletion").LogError(ctx, logger)
+		}
+	}
+
+	// Soft-delete plugin_servers rows backed by this server. Leaving them
+	// live would keep publishing a dead server and hold its display name
+	// against the (plugin_id, display_name) unique index, blocking a
+	// same-named replacement server from attaching later.
+	removedPluginServers, err := pluginsrepo.New(dbtx).SoftDeletePluginServersByMcpServerID(ctx, pluginsrepo.SoftDeletePluginServersByMcpServerIDParams{
+		ProjectID:   *authCtx.ProjectID,
+		McpServerID: uuid.NullUUID{UUID: deleted.ID, Valid: true},
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete plugin servers for mcp server").LogError(ctx, logger)
+	}
+
+	deletedServerURN := urn.NewMcpServer(deleted.ID)
+	for _, pluginServer := range removedPluginServers {
+		if err := s.audit.LogPluginServerRemove(ctx, dbtx, audit.LogPluginServerRemoveEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			PluginID:         pluginServer.PluginID,
+			PluginName:       pluginServer.PluginName,
+			PluginSlug:       pluginServer.PluginSlug,
+			ServerID:         pluginServer.ID,
+			ToolsetURN:       nil,
+			McpServerURN:     &deletedServerURN,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log plugin server removal").LogError(ctx, logger)
 		}
 	}
 
