@@ -677,6 +677,26 @@ func TestCodexToolCompletionReplaysRequestID(t *testing.T) {
 	require.Equal(t, *reqTool.ID, *doneTool.ID, "the completion must replay the request's id")
 }
 
+// TestCursorGenericMCPEchoesSkipped: Cursor fires the generic pre/post hooks
+// around MCP:* calls too; the dedicated before/afterMCPExecution events carry
+// the same call, so the echoes must not be ingested a second time.
+func TestCursorGenericMCPEchoesSkipped(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+
+	echoPre := []byte(`{"conversation_id":"conv-echo","hook_event_name":"preToolUse","tool_name":"MCP:create_issue","tool_input":"{}"}`)
+	echoPost := []byte(`{"conversation_id":"conv-echo","hook_event_name":"postToolUse","tool_name":"MCP:create_issue","tool_input":"{}"}`)
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCursor, echoPre, "--variant=cli")
+	require.Equal(t, 0, res.ExitCode)
+	agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCursor, echoPost, "--variant=cli")
+
+	for _, b := range fs.requests {
+		require.NotEqual(t, components.TypeToolRequested, b.Event.Type, "a generic MCP echo must not be ingested")
+		require.NotEqual(t, components.TypeToolCompleted, b.Event.Type, "a generic MCP echo must not be ingested")
+	}
+}
+
 // TestCodexDeniedRequestDoesNotQueueID: a denied codex request never executes,
 // so no completion drains its queue entry; queueing it would attach the next
 // same-tool result to the wrong call.

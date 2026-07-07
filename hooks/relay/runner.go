@@ -277,6 +277,9 @@ func (r *Relay) onToolPre(ctx context.Context, e *agenthooks.ToolPreEvent) (agen
 		r.backfillDeny = ""
 		return agenthooks.Deny(msg).WithSystemMessage(msg), nil
 	}
+	if cursorMCPEcho(&e.Event, e.Tool.Name) {
+		return agenthooks.NoDecision(), nil
+	}
 	v := r.evaluate(ctx, e)
 	if v.block {
 		// The system message mirrors the deny reason so the block text (and
@@ -301,8 +304,27 @@ func (r *Relay) onPermission(ctx context.Context, e *agenthooks.PermissionEvent)
 }
 
 func (r *Relay) onToolPost(ctx context.Context, e *agenthooks.ToolPostEvent) (agenthooks.ToolPostDecision, error) {
+	if cursorMCPEcho(&e.Event, e.Tool.Name) {
+		return agenthooks.Observed(), nil
+	}
 	r.deliver(ctx, e)
 	return agenthooks.Observed(), nil
+}
+
+// cursorMCPEcho reports whether a cursor generic tool event echoes an MCP
+// call: Cursor fires preToolUse/postToolUse/postToolUseFailure around MCP:*
+// calls too, and the dedicated before/afterMCPExecution events carry the same
+// call, so ingesting the echo would double-count telemetry and duplicate
+// block records under the same synthetic tool id.
+func cursorMCPEcho(base *agenthooks.Event, toolName string) bool {
+	if base.Provider != agenthooks.ProviderCursor {
+		return false
+	}
+	switch base.NativeName {
+	case "preToolUse", "postToolUse", "postToolUseFailure":
+		return strings.HasPrefix(toolName, "MCP:")
+	}
+	return false
 }
 
 func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks.StopDecision, error) {
