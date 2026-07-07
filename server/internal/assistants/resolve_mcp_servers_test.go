@@ -253,3 +253,29 @@ func TestResolveAssistantMCPServers_CollidingServerSlugOmitted(t *testing.T) {
 	require.Equal(t, "billing", servers[0].ID)
 	require.Equal(t, "https://gram.test/mcp/billing-mcp", servers[0].URL)
 }
+
+// mcp_servers slugs have no length cap, but agentkit tool names
+// (mcp_<server_id>_<tool>) are rejected by providers past 64 characters, so
+// overlong slugs are capped to a deterministic truncated ID with a hash
+// suffix.
+func TestResolveAssistantMCPServers_OverlongServerSlugCapped(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://gram.test")
+	require.NoError(t, err)
+
+	mcpServers := []assistantMCPServerRow{
+		{
+			ServerSlug: pgtype.Text{
+				String: "a-very-long-mcp-server-slug-created-from-a-long-display-name",
+				Valid:  true,
+			},
+			EndpointSlug: "long-remote",
+		},
+	}
+
+	servers := resolveAssistantMCPServers(t.Context(), testenv.NewLogger(t), serverURL, nil, mcpServers, nil)
+	require.Len(t, servers, 1)
+	require.Equal(t, "a-very-long-mcp-aa65ccda", servers[0].ID)
+	require.Equal(t, "https://gram.test/mcp/long-remote", servers[0].URL)
+}

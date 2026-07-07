@@ -792,7 +792,10 @@ const ElementsProviderWithHistory = ({
     const timeoutId = setTimeout(() => {
       initialThreadSwitched.current = true;
       runtime.threads.switchToThread(initialThreadId).catch((error) => {
-        console.error("Failed to switch to initial thread:", error);
+        trackError(error, {
+          source: "custom",
+          operation: "switch-initial-thread",
+        });
       });
     }, 100);
     return () => clearTimeout(timeoutId);

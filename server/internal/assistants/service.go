@@ -3,6 +3,8 @@ package assistants
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -2804,6 +2806,20 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	return strings.Join(parts, "\n\n"), nil
 }
 
+// capRuntimeMCPServerID bounds a runner-side MCP server ID. agentkit exposes
+// tools as mcp_<server_id>_<tool_name> and completion providers reject tool
+// names over 64 characters, so a 24-character ID keeps 35 characters of
+// headroom for tool names. mcp_servers slugs have no length cap, so overlong
+// ones are truncated with a hash suffix to stay deterministic and unique.
+func capRuntimeMCPServerID(id string) string {
+	const maxLen = 24
+	if len(id) <= maxLen {
+		return id
+	}
+	sum := sha256.Sum256([]byte(id))
+	return id[:maxLen-9] + "-" + hex.EncodeToString(sum[:4])
+}
+
 func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, toolsets []assistantToolsetRow, mcpServers []assistantMCPServerRow, platformToolsets []string) []runtimeMCPServer {
 	servers := make([]runtimeMCPServer, 0, len(toolsets)+len(mcpServers)+len(platformToolsets))
 	// Runtime server IDs must be unique — agentkit namespaces tool names by
@@ -2874,6 +2890,7 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 		if m.ServerSlug.Valid && m.ServerSlug.String != "" {
 			id = m.ServerSlug.String
 		}
+		id = capRuntimeMCPServerID(id)
 		if _, dup := seenIDs[id]; dup {
 			logger.WarnContext(ctx, "skipping assistant mcp server whose runtime ID collides with an attached toolset",
 				attr.SlogMcpServerID(m.MCPServerID.String()),
