@@ -29,11 +29,8 @@ export function useRemoteMcpUserSessionToken({
   mcpServerId: string | undefined;
   isIssuerGated: boolean;
   /**
-   * The server's explicit user_session_issuer_id, or undefined when it is
-   * implicitly gated by the project-default issuer. Part of the query key:
-   * a minted JWT's audience is bound to the issuer, so switching a server
-   * between issuers (attach/detach) must drop the cached token instead of
-   * replaying one with a stale audience.
+   * Explicit issuer id, or undefined when implicitly gated. Part of the
+   * query key so issuer changes drop cached JWTs with a stale audience.
    */
   userSessionIssuerId: string | undefined;
 }): UseRemoteMcpUserSessionTokenResult {

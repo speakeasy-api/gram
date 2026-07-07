@@ -37,10 +37,7 @@ type CreateDefaultUserSessionIssuerParams struct {
 	SessionDuration    pgtype.Interval
 }
 
-// Insert half of the get-or-create backing the implicit project-default
-// issuer (see GetOrCreateDefaultIssuer). ON CONFLICT DO NOTHING makes
-// concurrent first-touch callers race-safe; the conflict case returns no
-// row (pgx.ErrNoRows) and the caller re-reads by slug.
+// ON CONFLICT DO NOTHING returns no row on conflict; the caller re-reads.
 func (q *Queries) CreateDefaultUserSessionIssuer(ctx context.Context, arg CreateDefaultUserSessionIssuerParams) (UserSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, createDefaultUserSessionIssuer,
 		arg.ProjectID,

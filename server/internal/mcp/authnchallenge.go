@@ -326,18 +326,11 @@ func (s *Service) ApplyIssuerGate(
 	return newCtx, upstreamTokens, nil
 }
 
-// tryIssuerGate is the challenge-free core of ApplyIssuerGate: it validates
-// the bearer as a user-session JWT (with the assistant-runtime fallback) and
-// resolves the issuer's upstream remote-session tokens, without writing
-// anything to an http.ResponseWriter.
-//
-// ok=false with a nil error means the token is missing or not a valid
-// session token — the caller decides whether to challenge (ApplyIssuerGate)
-// or fall through to another auth chain (the implicitly-gated serve path in
-// serveResolvedMCPEndpoint). A non-nil error wraps either
-// remotesessions.ErrNoValidToken — the subject authenticated but an
-// attached upstream session is missing or invalid — or an unexpected
-// resolver failure.
+// tryIssuerGate is the challenge-free core of ApplyIssuerGate. ok=false
+// with a nil error means the token isn't a valid session token — callers
+// decide whether to challenge or fall through to another auth chain. A
+// non-nil error wraps remotesessions.ErrNoValidToken (subject valid, an
+// attached upstream session isn't) or an unexpected resolver failure.
 func (s *Service) tryIssuerGate(
 	ctx context.Context,
 	authToken string,

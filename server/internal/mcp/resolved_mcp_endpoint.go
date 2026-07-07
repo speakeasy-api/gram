@@ -229,15 +229,11 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 }
 
 // NewResolvedMcpEndpointFromMcpServer materialises a ResolvedMcpEndpoint
-// from a resolved (mcp_endpoint, mcp_server) pair plus the owning
-// project's organisation id and the effective issuer. issuerID is the
-// mcp_server's explicit user_session_issuer_id or, for implicitly gated
-// servers, the project-default issuer resolved by the caller (see
-// BuildResolvedMcpEndpointForServer); organizationID comes from a
-// separate projects lookup since mcp_servers doesn't carry the org id
-// directly. AudienceURN is bound to the issuer URN rather than a
-// backend-specific id so /x/mcp tokens stay portable between
-// toolset-backed and remote-backed servers under the same issuer.
+// from a resolved (mcp_endpoint, mcp_server) pair. issuerID is the
+// effective issuer — the explicit FK or the caller-resolved implicit
+// default. AudienceURN binds to the issuer URN rather than a
+// backend-specific id so /x/mcp tokens stay portable between backends
+// under the same issuer.
 func NewResolvedMcpEndpointFromMcpServer(
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	mcpServer *mcpservers_repo.McpServer,
@@ -330,12 +326,9 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		if mcpServer.ID != ref.McpServerID.UUID {
 			return nil, errToolsetEndpointMismatch
 		}
-		// BuildResolvedMcpEndpointForServer owns the issuer resolution —
-		// explicit FK, implicit project-default, or CodeNotFound — so a
-		// challenge minted against an implicitly gated server keeps
-		// resolving mid-flow. Empty ref.RouteBase falls back to "x/mcp",
-		// the constructor default this path produced before RouteBase was
-		// stamped onto cached refs.
+		// BuildResolvedMcpEndpointForServer owns issuer resolution, so
+		// implicitly gated challenges keep resolving mid-flow. Empty
+		// ref.RouteBase falls back to this path's "x/mcp" default.
 		routeBase := ref.RouteBase
 		if routeBase == "" {
 			routeBase = "x/mcp"

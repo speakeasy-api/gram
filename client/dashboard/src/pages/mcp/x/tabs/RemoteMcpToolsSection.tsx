@@ -35,11 +35,7 @@ type RemoteMcpToolsSectionProps = {
   mcpServerId: string | undefined;
   /** Whether the server is issuer-gated (explicitly or implicitly). */
   isIssuerGated: boolean;
-  /**
-   * The explicit user_session_issuer_id, or undefined for implicitly gated
-   * servers. Keys the minted-token cache so attach/detach drops JWTs whose
-   * audience targets the old issuer.
-   */
+  /** Explicit issuer id (undefined when implicit); keys the token cache. */
   userSessionIssuerId: string | undefined;
 };
 

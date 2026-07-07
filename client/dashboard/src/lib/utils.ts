@@ -14,9 +14,8 @@ export function getServerURL(): string {
   return __GRAM_SERVER_URL__ ?? window.location.origin;
 }
 
-// Tunnel gateway host convention (see gram-infra tunnel-gateway-ingress):
-// tunnel.getgram.ai for prod, tunnel-pr-N.<env> for previews (single label
-// so the wildcard cert covers it), tunnel.<host> otherwise.
+// tunnel.getgram.ai in prod, tunnel-pr-N.<env> in previews (single label
+// keeps the wildcard cert valid), tunnel.<host> otherwise.
 export function tunnelGatewayURL(): string {
   const server = new URL(getServerURL());
   const host =

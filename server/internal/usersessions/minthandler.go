@@ -225,10 +225,8 @@ func (s *Service) resolveServerMintTarget(ctx context.Context, serverIDStr strin
 
 	issuerID := server.UserSessionIssuerID.UUID
 	if !server.UserSessionIssuerID.Valid {
-		// Private remote/tunneled servers with no explicit issuer are
-		// implicitly gated by the project-default Gram issuer — mint
-		// against it (materialising it on first touch) so the dashboard
-		// can fetch tools without any explicit OAuth configuration.
+		// Implicitly gated servers mint against the project-default
+		// issuer, materialised on first touch.
 		if !mcpservers.EligibleForImplicitIssuer(&server) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "mcp server is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated servers").LogError(ctx, s.logger)
 		}

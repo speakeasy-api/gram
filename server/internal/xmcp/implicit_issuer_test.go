@@ -1,15 +1,7 @@
-// implicit_issuer_test.go covers the implicit Gram-as-IdP surface for
-// private remote/tunneled mcp_servers with no explicit
-// user_session_issuer_id (mcpservers.EligibleForImplicitIssuer):
-//
-//   - Runtime + well-known paths stay read-only: they serve challenges and
-//     metadata without materialising the project-default issuer.
-//   - The OAuth entry points (register, via LoadResolvedMcpEndpointBySlug)
-//     materialise the issuer on first touch.
-//   - A user-session JWT minted against the materialised default issuer
-//     passes the serve gate; identity-auth fallbacks (API keys) are covered
-//     by the pre-existing private-backend tests, which now run against an
-//     implicit-eligible server.
+// implicit_issuer_test.go covers the implicit Gram-as-IdP surface
+// (mcpservers.EligibleForImplicitIssuer): runtime and well-known paths
+// stay read-only, OAuth entry points materialise the default issuer, and
+// a JWT minted against it passes the serve gate.
 package xmcp_test
 
 import (

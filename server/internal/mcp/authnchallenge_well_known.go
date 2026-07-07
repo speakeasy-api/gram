@@ -188,9 +188,7 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 //
 //   - Issuer-gated, explicitly or implicitly (any backend): emit the
 //     Gram-hosted metadata shape rooted at the resolved endpoint's URL on
-//     routeBase's surface. Implicit gating covers private remote/tunneled
-//     servers with no issuer (mcpservers.EligibleForImplicitIssuer) —
-//     their project-default Gram issuer is materialised on demand.
+//     routeBase's surface.
 //   - Public remote-backed, not issuer-gated: 404 — the upstream remote
 //     MCP server publishes its own .well-known and Gram is not its
 //     authorization server.

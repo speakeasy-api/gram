@@ -19,10 +19,8 @@ export function ToolsTab({
     isLoadingEndpoints,
   );
 
-  // Private remote/tunneled servers with no explicit issuer are implicitly
-  // gated by the project-default Gram issuer (mirrors the server-side
-  // mcpservers.EligibleForImplicitIssuer), so the tools connection needs a
-  // minted user-session JWT for them too.
+  // Mirrors mcpservers.EligibleForImplicitIssuer: implicitly gated servers
+  // need a minted JWT too.
   const implicitlyGated =
     mcpServer.visibility === "private" &&
     !mcpServer.userSessionIssuerId &&

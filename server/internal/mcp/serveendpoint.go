@@ -126,13 +126,10 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// remote-backed proxying forwards the upstream remote-session token
 	// via AuthorizationOverride.
 	//
-	// Implicitly gated servers (private remote/tunneled with no explicit
-	// issuer — see mcpservers.EligibleForImplicitIssuer) accept the same
-	// user-session JWTs against the project-default issuer, but a missing or
-	// non-session bearer falls through to identity auth (API keys, chat
-	// sessions) instead of failing outright; challengeURL makes that
-	// chain's 401 advertise the OAuth resource metadata so MCP clients can
-	// bootstrap the Gram-as-IdP flow.
+	// Implicitly gated servers accept the same user-session JWTs, but a
+	// missing or non-session bearer falls through to identity auth;
+	// challengeURL makes that chain's 401 advertise the OAuth resource
+	// metadata so MCP clients can bootstrap.
 	var upstreamTokens map[uuid.UUID]string
 	gateAuthed := false
 	challengeURL := ""
@@ -147,8 +144,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, logger)
 		}
 		if issuerGated {
-			// Explicit issuer: the gate is mandatory — an explicit binding
-			// opts the server out of identity auth entirely.
+			// Explicit issuer: mandatory gate, no identity-auth fallback.
 			newCtx, tokens, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 			if err != nil {
 				return fmt.Errorf("apply issuer gate: %w", err)
@@ -162,10 +158,8 @@ func (s *Service) serveResolvedMCPEndpoint(
 			newCtx, tokens, ok, gerr := s.tryIssuerGate(ctx, httpheaders.AuthorizationBearerToken(r), resolvedEndpoint)
 			switch {
 			case errors.Is(gerr, remotesessions.ErrNoValidToken):
-				// The session itself is valid but a linked upstream
-				// credential is missing or expired: the caller must re-link
-				// via /connect, so challenge rather than falling back to the
-				// identity chain.
+				// Valid session, broken upstream link: challenge to re-link
+				// via /connect rather than falling back to identity auth.
 				return WriteAuthenticateChallenge(w, challengeURL, "")
 			case gerr != nil:
 				return oops.E(oops.CodeUnexpected, gerr, "resolve remote session").LogError(ctx, logger)
@@ -281,13 +275,9 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 //
 //   - Addressing hit: build the endpoint from the (mcp_endpoint,
 //     mcp_server) pair. BuildResolvedMcpEndpointForServer accepts
-//     explicitly issuer-gated servers and implicitly gated ones (private
-//     remote/tunneled with no issuer — the project-default Gram issuer is
-//     materialised on demand), and returns CodeNotFound for everything
-//     else. The mcp_server is authoritative for the slug, so a non-OAuth
-//     hit does NOT fall back — this keeps public non-issuer-gated
-//     remote-backed servers returning not-found, matching the well-known
-//     surface.
+//     explicitly and implicitly gated servers and 404s everything else.
+//     The mcp_server is authoritative for the slug, so a non-OAuth hit
+//     does NOT fall back — matching the well-known surface.
 //   - Addressing miss (CodeNotFound): fall back to the legacy
 //     toolsets.mcp_slug lookup so issuer-gated toolset-backed servers
 //     without an mcp_endpoint row (predating the toolsets → mcp_servers
@@ -300,12 +290,9 @@ func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
-		// The OAuth flow handlers behind this resolver (register,
-		// authorize, connect, token, revoke, first-party connect) write
-		// rows carrying NOT NULL issuer FKs, so an implicitly gated
-		// server's project-default issuer is materialised here — the
-		// stateful entry point — keeping the runtime hot paths behind
-		// BuildResolvedMcpEndpointForServer read-only.
+		// The OAuth flow handlers behind this resolver write rows with
+		// NOT NULL issuer FKs, so the implicit project-default issuer is
+		// materialised here; runtime hot paths stay read-only.
 		if !mcpServer.UserSessionIssuerID.Valid && mcpservers.EligibleForImplicitIssuer(mcpServer) {
 			if _, ierr := usersessions.GetOrCreateDefaultIssuer(ctx, s.db, mcpEndpoint.ProjectID); ierr != nil {
 				return nil, oops.E(oops.CodeUnexpected, ierr, "materialise implicit user session issuer").LogError(ctx, logger)
@@ -326,17 +313,13 @@ func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 //
 //   - Explicit user_session_issuer_id: used as-is, with a live-FK check
 //     that 404s if the issuer row has since been deleted.
-//   - Implicitly gated (mcpservers.EligibleForImplicitIssuer — private
-//     remote/tunneled with no issuer): the project-default Gram issuer,
-//     resolved READ-ONLY via usersessions.GetDefaultIssuer. When no OAuth
-//     flow has materialised it yet the endpoint carries a zero issuer id:
-//     no JWT can validate against it (minting one requires the row), so
-//     runtime gates naturally fall through, and the metadata/URL surface —
-//     which never depends on the id — still works. Materialisation is the
-//     job of the OAuth entry points (LoadResolvedMcpEndpointBySlug) and
-//     the dashboard mint, keeping this hot-path helper write-free.
-//   - Anything else: CodeNotFound — the server has no Gram-as-AS OAuth
-//     surface.
+//   - Implicitly gated (mcpservers.EligibleForImplicitIssuer): the
+//     project-default issuer, resolved READ-ONLY. Before any OAuth flow
+//     materialises it the endpoint carries a zero issuer id — no JWT can
+//     validate against it, and the metadata/URL surface never depends on
+//     it. This helper stays write-free; materialisation belongs to
+//     LoadResolvedMcpEndpointBySlug and the dashboard mint.
+//   - Anything else: CodeNotFound.
 //
 // mcpRouteBase ("mcp" or "x/mcp") is applied to the resolved endpoint so
 // subsequent URL building lands on the request's surface.
@@ -381,8 +364,7 @@ func (s *Service) BuildResolvedMcpEndpointForServer(
 	}
 	resolved.UpstreamResource = upstreamResource
 	if mcpServer.UserSessionIssuerID.Valid {
-		// Implicit issuers were just read or created; only an explicit FK
-		// can dangle.
+		// Only an explicit FK can dangle.
 		if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
 			return nil, fmt.Errorf("require user session issuer: %w", err)
 		}
@@ -547,18 +529,11 @@ func (s *Service) prepareProxyBackendContext(
 	// in the default branch — disabled was already filtered upstream in
 	// ResolveMCPEndpointAndServer.
 	//
-	// gateAuthed marks requests already authenticated by the issuer gate in
-	// serveResolvedMCPEndpoint (explicitly or implicitly gated): the bearer
-	// is a user-session JWT validated against the issuer's audience, and
-	// the AuthContext on ctx is stamped from it. Re-running the identity
-	// auth chain here would only know how to validate API keys / OAuth
-	// tokens / chat sessions, and would reject a perfectly valid
-	// user-session JWT. Skip it and trust the gate.
-	//
-	// challengeURL, when non-empty, is the RFC 9728 protected-resource
-	// metadata URL of an implicitly gated server: identity-auth failures
-	// then advertise it via WWW-Authenticate so MCP clients can bootstrap
-	// the Gram-as-IdP OAuth flow instead of dead-ending on a bare 401.
+	// gateAuthed marks requests the issuer gate already authenticated;
+	// re-running identity auth would reject a valid user-session JWT, so
+	// skip it and trust the gate. challengeURL, when non-empty, makes
+	// identity-auth failures advertise the RFC 9728 resource metadata via
+	// WWW-Authenticate instead of dead-ending on a bare 401.
 	switch mcpServer.Visibility {
 	case mcpservers.VisibilityPrivate:
 		// Private mcp_servers require identity auth, that the caller's

@@ -14,10 +14,7 @@ VALUES (
 RETURNING *;
 
 -- name: CreateDefaultUserSessionIssuer :one
--- Insert half of the get-or-create backing the implicit project-default
--- issuer (see GetOrCreateDefaultIssuer). ON CONFLICT DO NOTHING makes
--- concurrent first-touch callers race-safe; the conflict case returns no
--- row (pgx.ErrNoRows) and the caller re-reads by slug.
+-- ON CONFLICT DO NOTHING returns no row on conflict; the caller re-reads.
 INSERT INTO user_session_issuers (
     project_id,
     slug,
