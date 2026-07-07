@@ -14,7 +14,7 @@ import CatalogDetail, {
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
 import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
-import CLIs from "./pages/CLIs";
+import Skills from "./pages/skills/Skills";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
@@ -339,7 +339,7 @@ const ROUTE_STRUCTURE = {
     title: "Skills",
     url: "clis",
     icon: "terminal",
-    component: CLIs,
+    component: Skills,
   },
   mcp: {
     title: "MCP",

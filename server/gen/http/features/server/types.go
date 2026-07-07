@@ -43,6 +43,8 @@ type GetProductFeaturesResponseBody struct {
 	// Whether observability mode is enabled, making generated hook plugins fully
 	// non-blocking
 	ObservabilityModeEnabled bool `form:"observability_mode_enabled" json:"observability_mode_enabled" xml:"observability_mode_enabled"`
+	// Whether the Skills page is enabled for the organization
+	SkillsEnabled bool `form:"skills_enabled" json:"skills_enabled" xml:"skills_enabled"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -430,6 +432,7 @@ func NewGetProductFeaturesResponseBody(res *features.GetProductFeaturesResult) *
 		SsoEnabled:                   res.SsoEnabled,
 		ScimEnabled:                  res.ScimEnabled,
 		ObservabilityModeEnabled:     res.ObservabilityModeEnabled,
+		SkillsEnabled:                res.SkillsEnabled,
 	}
 	return body
 }
@@ -758,8 +761,8 @@ func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (e
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "webhooks" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "observability_mode") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "webhooks", "sso", "scim", "observability_mode"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "webhooks" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "observability_mode" || *body.FeatureName == "skills") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "webhooks", "sso", "scim", "observability_mode", "skills"}))
 		}
 	}
 	if body.FeatureName != nil {

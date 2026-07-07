@@ -41,6 +41,8 @@ type GetProductFeaturesResponseBody struct {
 	// Whether observability mode is enabled, making generated hook plugins fully
 	// non-blocking
 	ObservabilityModeEnabled *bool `form:"observability_mode_enabled,omitempty" json:"observability_mode_enabled,omitempty" xml:"observability_mode_enabled,omitempty"`
+	// Whether the Skills page is enabled for the organization
+	SkillsEnabled *bool `form:"skills_enabled,omitempty" json:"skills_enabled,omitempty" xml:"skills_enabled,omitempty"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -438,6 +440,7 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		SsoEnabled:                   *body.SsoEnabled,
 		ScimEnabled:                  *body.ScimEnabled,
 		ObservabilityModeEnabled:     *body.ObservabilityModeEnabled,
+		SkillsEnabled:                *body.SkillsEnabled,
 	}
 
 	return v
@@ -769,6 +772,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.ObservabilityModeEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("observability_mode_enabled", "body"))
+	}
+	if body.SkillsEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skills_enabled", "body"))
 	}
 	return
 }

@@ -20,6 +20,7 @@ import {
   Loader2,
   Mail,
   ShieldCheck,
+  Terminal,
   Webhook,
 } from "lucide-react";
 import { ComponentType, ReactElement, useState } from "react";
@@ -338,6 +339,19 @@ function ProductFeaturesSection(): ReactElement {
         onToggle={handleToggle}
         error={
           pendingFeature === FeatureName.Scim ? mutError?.message : undefined
+        }
+      />
+
+      <FeatureToggle
+        label="Skills"
+        description="Unlocks the real Skills page for this organization. While disabled, members see the Coming Soon placeholder."
+        icon={Terminal}
+        featureName={FeatureName.Skills}
+        enabled={features.skillsEnabled}
+        isPending={isPending && pendingFeature === FeatureName.Skills}
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.Skills ? mutError?.message : undefined
         }
       />
     </div>
