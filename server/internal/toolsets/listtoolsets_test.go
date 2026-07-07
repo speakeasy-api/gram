@@ -1,6 +1,7 @@
 package toolsets_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -404,4 +405,55 @@ func TestToolsetsService_ListToolsets_MultipleToolsetsWithResources(t *testing.T
 	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestToolsetsService_ListToolsets_ManyToolsetsNoCrossContamination(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	dep := createPetstoreDeployment(t, ctx, ti)
+	repo := testrepo.New(ti.conn)
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment tools")
+	require.GreaterOrEqual(t, len(tools), 4, "expected at least 4 tools from petstore")
+
+	// 4 toolsets, each with a disjoint single tool — if the batch rewrite
+	// leaks results across toolsets, one of these will end up with the
+	// wrong tool or an extra one.
+	created := make([]*types.Toolset, 0, 4)
+	for i := range 4 {
+		ts, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+			SessionToken:           nil,
+			Name:                   fmt.Sprintf("Toolset %d", i),
+			Description:            new(fmt.Sprintf("Toolset %d description", i)),
+			ToolUrns:               []string{tools[i].ToolUrn.String()},
+			ResourceUrns:           nil,
+			DefaultEnvironmentSlug: nil,
+			ProjectSlugInput:       nil,
+		})
+		require.NoError(t, err)
+		created = append(created, ts)
+	}
+
+	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Toolsets, 4)
+
+	byID := make(map[string]*types.ToolsetEntry, len(result.Toolsets))
+	for _, ts := range result.Toolsets {
+		byID[ts.ID] = ts
+	}
+
+	for i, ts := range created {
+		entry := byID[ts.ID]
+		require.NotNil(t, entry, "toolset %d missing from result", i)
+		require.Len(t, entry.Tools, 1, "toolset %d should have exactly 1 tool", i)
+		require.Equal(t, tools[i].ToolUrn.String(), entry.Tools[0].ToolUrn, "toolset %d has the wrong tool", i)
+		require.Len(t, entry.ToolUrns, 1)
+		require.Equal(t, tools[i].ToolUrn.String(), entry.ToolUrns[0])
+	}
 }
