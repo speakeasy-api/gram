@@ -207,6 +207,8 @@ func TestToolsetsService_ListToolsets_VerifyDetails(t *testing.T) {
 	require.Equal(t, "detailed-toolset", string(toolset.Slug))
 	require.Equal(t, "A toolset with details", *toolset.Description)
 	require.Empty(t, toolset.Tools)
+	require.Nil(t, toolset.SecurityVariables, "toolsets with no tool URNs should have nil SecurityVariables, not an empty slice")
+	require.Nil(t, toolset.ServerVariables, "toolsets with no tool URNs should have nil ServerVariables, not an empty slice")
 	require.NotNil(t, toolset.CreatedAt)
 	require.NotNil(t, toolset.UpdatedAt)
 	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)

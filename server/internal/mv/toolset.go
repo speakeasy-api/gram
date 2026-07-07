@@ -725,7 +725,11 @@ func DescribeToolsetEntries(
 			functionEnvVars = append(functionEnvVars, envVars...)
 		}
 
-		securityVars, serverVars := AssembleEnvironmentVariablesForToolset(toolsetEnvLookups, securityEntriesByKey, headerDisplayNamesByToolsetID[toolset.ID])
+		var securityVars []*types.SecurityVariable
+		var serverVars []*types.ServerVariable
+		if len(toolUrns) > 0 {
+			securityVars, serverVars = AssembleEnvironmentVariablesForToolset(toolsetEnvLookups, securityEntriesByKey, headerDisplayNamesByToolsetID[toolset.ID])
+		}
 
 		promptTemplates := make([]*types.PromptTemplateEntry, 0, len(promptTemplateRowsByToolsetID[toolset.ID]))
 		for _, pt := range promptTemplateRowsByToolsetID[toolset.ID] {
