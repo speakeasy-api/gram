@@ -35,7 +35,7 @@ function NewCostsPage(): JSX.Element {
         <Page.Header.Breadcrumbs substitutions={breadcrumbSubstitutions} />
       </Page.Header>
       <Page.Body noPadding fullWidth>
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
+        <RequireScope scope="environment:read" level="page">
           <CostsExplorer />
         </RequireScope>
       </Page.Body>

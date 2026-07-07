@@ -78,7 +78,7 @@ export function InsightsEmployeesLayout(): JSX.Element {
 
 export function InsightsHooksPage(): JSX.Element {
   return (
-    <RequireScope scope={["project:read", "project:write"]} level="page">
+    <RequireScope scope="environment:read" level="page">
       <InsightsToolsContent />
     </RequireScope>
   );
@@ -86,7 +86,7 @@ export function InsightsHooksPage(): JSX.Element {
 
 export function InsightsEmployeesPage(): JSX.Element {
   return (
-    <RequireScope scope="project:read" level="page">
+    <RequireScope scope="environment:read" level="page">
       <InsightsEmployeesContent />
     </RequireScope>
   );
@@ -94,7 +94,7 @@ export function InsightsEmployeesPage(): JSX.Element {
 
 export function InsightsEmployeeDetailPage(): JSX.Element {
   return (
-    <RequireScope scope="project:read" level="page">
+    <RequireScope scope="environment:read" level="page">
       <InsightsEmployeeDetailContent />
     </RequireScope>
   );
@@ -103,7 +103,7 @@ export function InsightsEmployeeDetailPage(): JSX.Element {
 export function InsightsAgentsPage(): JSX.Element {
   return (
     <ObservePageShell>
-      <RequireScope scope="project:read" level="page">
+      <RequireScope scope="environment:read" level="page">
         <InsightsAgentsContent />
       </RequireScope>
     </ObservePageShell>

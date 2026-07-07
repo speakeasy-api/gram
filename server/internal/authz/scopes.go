@@ -100,7 +100,10 @@ var memberScopes = []Scope{
 	ScopeProjectRead,
 	ScopeMCPRead,
 	ScopeMCPConnect,
-	ScopeEnvironmentRead,
+	// environment:read is intentionally NOT a default for members: environment
+	// values include secrets, so viewing them (and the observability surface that
+	// exposes them) must be granted explicitly via a custom role. Admins retain
+	// environment:read/write via adminScopes.
 }
 
 func (s Scope) Parts() ScopeParts {

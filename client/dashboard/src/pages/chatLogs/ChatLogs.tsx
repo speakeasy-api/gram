@@ -10,7 +10,7 @@ export default function ChatLogs(): JSX.Element {
           <Page.Header.Breadcrumbs fullWidth />
         </Page.Header>
         <Page.Body fullWidth fullHeight overflowHidden noPadding>
-          <RequireScope scope="project:read" level="page">
+          <RequireScope scope="environment:read" level="page">
             <LogsAgentsContent />
           </RequireScope>
         </Page.Body>

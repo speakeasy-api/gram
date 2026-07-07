@@ -198,33 +198,37 @@ export function AppSidebar({
                 <div className="border-border border-t" />
               </li>
 
-              {/* Observe group */}
-              <CollapsibleNavGroup
-                label="Observe"
-                Icon={(p) => <Icon {...p} name="eye" />}
-                defaultHref={routes.costs.href()}
-              >
-                <ScopeGatedNavItem
-                  item={routes.costs}
-                  scope={scopeFor(routes.costs)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.insights}
-                  scope={scopeFor(routes.insights)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.agentSessions}
-                  scope={scopeFor(routes.agentSessions)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.logs}
-                  scope={scopeFor(routes.logs)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.employees}
-                  scope={scopeFor(routes.employees)}
-                />
-              </CollapsibleNavGroup>
+              {/* Observe group — the whole group exposes environment-derived
+                  telemetry, so hide it entirely (label included) from anyone
+                  without environment:read rather than showing an empty group. */}
+              <RequireScope scope="environment:read" level="section">
+                <CollapsibleNavGroup
+                  label="Observe"
+                  Icon={(p) => <Icon {...p} name="eye" />}
+                  defaultHref={routes.costs.href()}
+                >
+                  <ScopeGatedNavItem
+                    item={routes.costs}
+                    scope={scopeFor(routes.costs)}
+                  />
+                  <ScopeGatedNavItem
+                    item={routes.insights}
+                    scope={scopeFor(routes.insights)}
+                  />
+                  <ScopeGatedNavItem
+                    item={routes.agentSessions}
+                    scope={scopeFor(routes.agentSessions)}
+                  />
+                  <ScopeGatedNavItem
+                    item={routes.logs}
+                    scope={scopeFor(routes.logs)}
+                  />
+                  <ScopeGatedNavItem
+                    item={routes.employees}
+                    scope={scopeFor(routes.employees)}
+                  />
+                </CollapsibleNavGroup>
+              </RequireScope>
 
               {/* Secure group */}
               <CollapsibleNavGroup

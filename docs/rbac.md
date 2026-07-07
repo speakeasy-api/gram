@@ -484,8 +484,9 @@ org:read
 project:read
 mcp:read
 mcp:connect
-environment:read
 ```
+
+`member` intentionally does not receive `environment:read`. Environment values include secrets, and the Observe/observability surface exposes them, so viewing environments must be granted explicitly through a custom role. Admins keep `environment:read` and `environment:write`.
 
 System roles are seeded when RBAC is enabled for an organization. They are not meant to be edited like custom roles. Changing the default grants of a system role is a product behavior change and should be treated carefully, especially for existing organizations.
 
