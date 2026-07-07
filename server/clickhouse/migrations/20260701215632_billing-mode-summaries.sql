@@ -8,7 +8,7 @@ ALTER TABLE `attribute_metrics_summaries`
   MODIFY ORDER BY (`gram_project_id`, `time_bucket`, `department_name`, `job_title`, `employee_type`, `division_name`, `cost_center_name`, `user_email`, `model`, `hook_source`, `roles`, `groups`, `account_type`, `provider`, `billing_mode`);
 -- Materialize gram.billing_mode on telemetry_logs so the MV (and raw reads) can
 -- group/filter on it.
-ALTER TABLE `telemetry_logs` ADD COLUMN `billing_mode` String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token, cost is real spend) | flat_rate (subscription seat, cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).';
+ALTER TABLE `telemetry_logs` ADD COLUMN `billing_mode` String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token; cost is real spend) | flat_rate (subscription seat; cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).';
 ALTER TABLE `telemetry_logs` ADD INDEX `idx_telemetry_logs_mat_billing_mode` ((billing_mode)) TYPE set(0) GRANULARITY 4;
 -- Recreate the MV so its SELECT/GROUP BY carry billing_mode. The MV owns no data
 -- (rows live in attribute_metrics_summaries), so dropping + recreating it is
