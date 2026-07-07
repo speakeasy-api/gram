@@ -38875,6 +38875,9 @@ components:
         Chat:
             type: object
             properties:
+                account_email:
+                    type: string
+                    description: Email of the AI account that produced the chat, resolved from the linked AI account. May differ from the employee's work email (e.g. a personal account).
                 account_type:
                     type: string
                     description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
@@ -39031,6 +39034,9 @@ components:
         ChatOverview:
             type: object
             properties:
+                account_email:
+                    type: string
+                    description: Email of the AI account that produced the chat, resolved from the linked AI account. May differ from the employee's work email (e.g. a personal account).
                 account_type:
                     type: string
                     description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.

@@ -27,3 +27,18 @@ export function providerLabel(provider: string): string {
   if (known) return known;
   return provider.charAt(0).toUpperCase() + provider.slice(1);
 }
+
+// The email to display for a session produced by a personal AI account (e.g. a
+// gmail on Claude Max), or undefined for team/unclassified sessions so callers
+// fall back to the employee identity. Personal sessions are attributed to the
+// employee via the device bridge, so the session's user fields carry the WORK
+// email — this surfaces the account actually used.
+export function personalAccountEmail(chat: {
+  accountType?: string | undefined;
+  accountEmail?: string | undefined;
+}): string | undefined {
+  if (chat.accountType === "personal" && chat.accountEmail) {
+    return chat.accountEmail;
+  }
+  return undefined;
+}
