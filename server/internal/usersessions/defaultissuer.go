@@ -35,15 +35,16 @@ const defaultIssuerSessionDuration = 30 * 24 * time.Hour
 // write; only the OAuth flow entry points and the dashboard mint create
 // the row, via GetOrCreateDefaultIssuer.
 func GetDefaultIssuer(ctx context.Context, db repo.DBTX, projectID uuid.UUID) (repo.UserSessionIssuer, bool, error) {
+	var zero repo.UserSessionIssuer
 	row, err := repo.New(db).GetUserSessionIssuerBySlug(ctx, repo.GetUserSessionIssuerBySlugParams{
 		Slug:      DefaultIssuerSlug,
 		ProjectID: projectID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return repo.UserSessionIssuer{}, false, nil
+		return zero, false, nil
 	case err != nil:
-		return repo.UserSessionIssuer{}, false, fmt.Errorf("get default user session issuer: %w", err)
+		return zero, false, fmt.Errorf("get default user session issuer: %w", err)
 	}
 	return row, true, nil
 }
@@ -58,11 +59,12 @@ func GetDefaultIssuer(ctx context.Context, db repo.DBTX, projectID uuid.UUID) (r
 // uses ON CONFLICT DO NOTHING plus a re-read to stay race-safe when two
 // first requests arrive concurrently.
 func GetOrCreateDefaultIssuer(ctx context.Context, db repo.DBTX, projectID uuid.UUID) (repo.UserSessionIssuer, error) {
+	var zero repo.UserSessionIssuer
 	q := repo.New(db)
 
 	row, found, err := GetDefaultIssuer(ctx, db, projectID)
 	if err != nil {
-		return repo.UserSessionIssuer{}, err
+		return zero, err
 	}
 	if found {
 		return row, nil
@@ -83,7 +85,7 @@ func GetOrCreateDefaultIssuer(ctx context.Context, db repo.DBTX, projectID uuid.
 		return row, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return repo.UserSessionIssuer{}, fmt.Errorf("create default user session issuer: %w", err)
+		return zero, fmt.Errorf("create default user session issuer: %w", err)
 	}
 
 	// Lost the create race: a concurrent request inserted the row between
@@ -93,7 +95,7 @@ func GetOrCreateDefaultIssuer(ctx context.Context, db repo.DBTX, projectID uuid.
 		ProjectID: projectID,
 	})
 	if err != nil {
-		return repo.UserSessionIssuer{}, fmt.Errorf("re-read default user session issuer after create race: %w", err)
+		return zero, fmt.Errorf("re-read default user session issuer after create race: %w", err)
 	}
 	return row, nil
 }
