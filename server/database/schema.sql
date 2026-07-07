@@ -3948,3 +3948,77 @@ WHERE deleted IS FALSE;
 -- rows that the partial unique indexes above exclude.
 CREATE INDEX IF NOT EXISTS json_web_keys_set_tenant_idx
 ON json_web_keys (organization_id, json_web_key_set_id);
+
+-- Skills are project-scoped, named units of reusable instructions. This row is
+-- the stable identity; content lives in immutable skill_versions rows, with
+-- latest_version_id pointing at the current one.
+CREATE TABLE IF NOT EXISTS skills (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  -- Normalized (slug-like) name, unique per project among non-archived skills.
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  display_name TEXT CHECK (display_name <> '' AND CHAR_LENGTH(display_name) <= 100),
+  summary TEXT CHECK (summary <> '' AND CHAR_LENGTH(summary) <= 500),
+
+  -- How the skill was produced. App-side consts are canonical (no DB enum):
+  -- 'manual' today; 'captured' reserved.
+  source_kind TEXT NOT NULL DEFAULT 'manual',
+  -- App-side consts are canonical (no DB enum): 'custom' today; 'built_in' reserved.
+  classification TEXT NOT NULL DEFAULT 'custom',
+
+  -- Points at the current skill_versions row. No FK constraint: skills and
+  -- skill_versions reference each other, and schema.sql is DDL-only (no ALTER
+  -- to break the cycle). Integrity is maintained app-side; a deleted version
+  -- only happens via the skill's own cascade delete, so no orphan pointer.
+  latest_version_id uuid,
+
+  -- Archiving frees the name for reuse (see partial unique index below).
+  archived_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skills_pkey PRIMARY KEY (id),
+  CONSTRAINT skills_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+-- One active (non-archived) skill per name within a project; archiving the skill
+-- frees the name for a new one.
+CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_name_key
+ON skills (project_id, name)
+WHERE archived_at IS NULL;
+
+-- Non-partial index backing the project_id cascade (the partial unique index
+-- above excludes archived rows).
+CREATE INDEX IF NOT EXISTS skills_project_id_idx ON skills (project_id);
+
+-- Immutable content versions for a skill. Rows are never updated (no
+-- updated_at); each content change inserts a new version.
+CREATE TABLE IF NOT EXISTS skill_versions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  skill_id uuid NOT NULL,
+
+  -- Raw skill content, capped at 64KB measured in bytes.
+  content TEXT NOT NULL CHECK (OCTET_LENGTH(content) <= 65536),
+
+  -- Manifest digest over sorted (path, file_digest) pairs. For the v1 manifest
+  -- this is a single SKILL.md entry digesting canonicalized content.
+  canonical_sha256 TEXT NOT NULL,
+  -- Digest of the raw, unprocessed content.
+  raw_sha256 TEXT NOT NULL,
+
+  -- Description extracted from the skill content.
+  description TEXT,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+  spec_valid BOOLEAN NOT NULL DEFAULT FALSE,
+  validation_errors JSONB NOT NULL DEFAULT '[]'::jsonb,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_by TEXT,
+
+  CONSTRAINT skill_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_versions_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
+  CONSTRAINT skill_versions_skill_id_canonical_sha256_key UNIQUE (skill_id, canonical_sha256)
+);
