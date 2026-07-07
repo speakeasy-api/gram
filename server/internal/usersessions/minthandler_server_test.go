@@ -17,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -123,6 +125,66 @@ func TestMintUserSessionForServerRejectsUngatedServer(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// TestMintUserSessionForServerImplicitIssuer covers the implicit
+// Gram-as-IdP mint: a private remote-backed server with no explicit
+// user_session_issuer_id mints against the project-default issuer,
+// materialising it on first touch (mcpservers.EligibleForImplicitIssuer).
+func TestMintUserSessionForServerImplicitIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	require.NotNil(t, authCtx.ProjectID)
+
+	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{
+		ProjectID:     *authCtx.ProjectID,
+		TransportType: "streamable-http",
+		Url:           "https://upstream.invalid/mcp",
+	})
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                    uuid.New(),
+		ProjectID:             *authCtx.ProjectID,
+		Name:                  pgtype.Text{String: "mint-server-implicit", Valid: true},
+		Slug:                  pgtype.Text{String: "mint-server-implicit", Valid: true},
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: remote.ID, Valid: true},
+		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+
+	ctx = withExactAuthzGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeMCPConnect, server.ID.String()),
+	)
+
+	got, err := ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{
+		ToolsetID:        nil,
+		McpServerID:      conv.PtrEmpty(server.ID.String()),
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, got.AccessToken)
+
+	// The mint materialised the project-default issuer and bound the JWT
+	// audience to it.
+	issuer, found, err := usersessions.GetDefaultIssuer(ctx, ti.conn, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.True(t, found, "mint must materialise the default issuer")
+	require.Equal(t, usersessions.DefaultIssuerSlug, issuer.Slug)
+
+	_, err = usersessions.NewSigner("test-jwt-secret").Validate(
+		got.AccessToken,
+		urn.NewUserSessionIssuer(issuer.ID).String(),
+	)
+	require.NoError(t, err)
 }
 
 // createIssuerGatedMintServer creates an issuer-gated mcp_server. It's backed by
