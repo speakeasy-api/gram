@@ -652,11 +652,11 @@ type DialogProps = ContentProps & {
 const providerLabel = (id: Provider): string =>
   providers.find((p) => p.id === id)?.label ?? id;
 
-function InstallInstructionsDialog({
+export function InstallInstructionsDialog({
   open,
   onOpenChange,
   ...content
-}: DialogProps) {
+}: DialogProps): JSX.Element {
   const [selected, setSelected] = useState<Provider | null>(null);
   const [selectedPluginSlug, setSelectedPluginSlug] = useState<string | null>(
     content.pluginSlug ?? null,

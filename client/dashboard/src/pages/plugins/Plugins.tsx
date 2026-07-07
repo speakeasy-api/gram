@@ -1,19 +1,19 @@
 import { CreateResourceCard } from "@/components/create-resource-card";
+import { type FilterValue, useFilterState } from "@/components/filters";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
-import { SearchBar } from "@/components/ui/search-bar";
+import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
-import { InstallInstructionsButton } from "./InstallInstructionsDialog";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useRoutes } from "@/routes";
+import type { PublishStatusResult } from "@gram/client/models/components";
 import { Plugin } from "@gram/client/models/components";
 import { useCreatePluginMutation } from "@gram/client/react-query/createPlugin";
 import {
   invalidateAllPlugins,
   usePluginsSuspense,
 } from "@gram/client/react-query/plugins";
-import { useDeletePluginMutation } from "@gram/client/react-query/deletePlugin";
 import {
   invalidateAllPublishStatus,
   usePublishStatusSuspense,
@@ -25,6 +25,7 @@ import {
 } from "@gram/client/react-query/marketplaceSettings";
 import { useUpdateMarketplaceSettingsMutation } from "@gram/client/react-query/updateMarketplaceSettings";
 import {
+  Badge,
   Button,
   DropdownMenu,
   DropdownMenuContent,
@@ -38,7 +39,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
+import { PlatformInstrumentationSheet } from "../setup/components/platform-instrumentation-sheet";
+import { MarketplaceCard } from "./MarketplaceCard";
 import { PluginCard } from "./PluginCard";
+import {
+  matchesPluginFilters,
+  PLUGINS_FILTERS,
+  pluginServerFilterOptions,
+} from "./plugins-filter-schema";
 import { PublishDialog } from "./PublishDialog";
 
 export function PluginsRoot(): JSX.Element {
@@ -48,7 +56,8 @@ export function PluginsRoot(): JSX.Element {
 export default function Plugins(): JSX.Element {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
-  const [pluginToDelete, setPluginToDelete] = useState<Plugin | null>(null);
+  const [isManageCollaboratorsOpen, setIsManageCollaboratorsOpen] =
+    useState(false);
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
   const routes = useRoutes();
@@ -99,6 +108,7 @@ export default function Plugins(): JSX.Element {
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
       setIsPublishDialogOpen(false);
+      setIsManageCollaboratorsOpen(false);
       void invalidateAllPublishStatus(queryClient);
       toast.success("Plugins published to GitHub", {
         description: data.repoUrl,
@@ -117,28 +127,29 @@ export default function Plugins(): JSX.Element {
 
   const hasPlugins = (data?.plugins ?? []).length > 0;
 
+  const pluginFilters = useFilterState(PLUGINS_FILTERS);
+  const pluginFilterOptions = useMemo(
+    () => pluginServerFilterOptions(data?.plugins ?? []),
+    [data?.plugins],
+  );
+
   const filteredPlugins = useMemo(() => {
     const plugins = data?.plugins ?? [];
     const q = search.trim().toLowerCase();
-    if (!q) return plugins;
-    return plugins.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q),
-    );
-  }, [data?.plugins, search]);
+    return plugins.filter((p) => {
+      if (!matchesPluginFilters(p, pluginFilters.values)) return false;
+      if (!q) return true;
+      return (
+        p.name.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q)
+      );
+    });
+  }, [data?.plugins, search, pluginFilters.values]);
 
   const createMutation = useCreatePluginMutation({
     onSuccess: async (data) => {
       setIsCreateDialogOpen(false);
       await invalidateAllPlugins(queryClient);
       void navigate(routes.plugins.detail.href(data.id));
-    },
-  });
-
-  const deleteMutation = useDeletePluginMutation({
-    onSuccess: async () => {
-      setPluginToDelete(null);
-      await invalidateAllPlugins(queryClient);
     },
   });
 
@@ -156,14 +167,6 @@ export default function Plugins(): JSX.Element {
           description: description || undefined,
         },
       },
-    });
-  };
-
-  const handleDelete = () => {
-    if (!pluginToDelete) return;
-    deleteMutation.mutate({
-      security: { sessionHeaderGramSession: "" },
-      request: { id: pluginToDelete.id },
     });
   };
 
@@ -269,147 +272,90 @@ export default function Plugins(): JSX.Element {
                   <Icon name="settings" className="h-4 w-4" />
                 </Button.LeftIcon>
               </Button>
-              {publishStatus?.configured && (
+              {/* Once connected, publishing moves to the plugin detail page
+                  and the marketplace card below — this CTA is only the
+                  first-time "connect GitHub" entrypoint. */}
+              {publishStatus?.configured && !publishStatus.connected && (
                 <Button
                   variant="secondary"
                   onClick={() => setIsPublishDialogOpen(true)}
                   disabled={publishMutation.isPending}
                 >
                   <Button.LeftIcon>
-                    <Icon
-                      name={publishStatus.connected ? "refresh-cw" : "upload"}
-                      className="h-4 w-4"
-                    />
+                    <Icon name="upload" className="h-4 w-4" />
                   </Button.LeftIcon>
                   <Button.Text>
                     {publishMutation.isPending
                       ? "Publishing..."
-                      : publishStatus.connected
-                        ? "Re-publish"
-                        : "Publish Private Marketplace"}
+                      : "Publish Private Marketplace"}
                   </Button.Text>
                 </Button>
               )}
             </Stack>
           </Page.Section.CTA>
           <Page.Section.Body>
-            <Stack direction="vertical" gap={4}>
+            <Stack direction="vertical" gap={8}>
               {publishStatus?.connected && publishStatus.repoUrl && (
-                <div className="bg-muted/30 border-border/60 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                      Marketplace
-                    </span>
-                    <a
-                      href={publishStatus.repoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:text-primary text-foreground font-mono text-sm hover:underline"
-                    >
-                      {publishStatus.repoOwner && publishStatus.repoName
-                        ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
-                        : publishStatus.repoUrl}
-                    </a>
-                  </div>
-                  {publishStatus.repoOwner && publishStatus.repoName && (
-                    <InstallInstructionsButton
-                      repoOwner={publishStatus.repoOwner}
-                      repoName={publishStatus.repoName}
-                      marketplaceUrl={publishStatus.marketplaceUrl}
-                    />
-                  )}
-                </div>
+                <>
+                  <MarketplaceCard
+                    publishStatus={publishStatus}
+                    onManageCollaborators={() =>
+                      setIsManageCollaboratorsOpen(true)
+                    }
+                  />
+                  <div className="border-border border-t" />
+                </>
               )}
               {hasPlugins && (
-                <SearchBar
-                  value={search}
-                  onChange={setSearch}
-                  placeholder="Search plugins"
-                  className="w-64"
-                />
+                <Page.Toolbar>
+                  <Page.Toolbar.Search
+                    value={search}
+                    onChange={setSearch}
+                    placeholder="Search plugins"
+                  />
+                  <Page.Toolbar.Filters
+                    schema={PLUGINS_FILTERS}
+                    values={pluginFilters.values}
+                    optionsById={pluginFilterOptions}
+                    onChange={
+                      pluginFilters.setValue as (
+                        id: string,
+                        value: FilterValue,
+                      ) => void
+                    }
+                    onClear={pluginFilters.clearValue as (id: string) => void}
+                    onClearAll={pluginFilters.clearAll}
+                  />
+                </Page.Toolbar>
               )}
               <PluginGrid
                 plugins={filteredPlugins}
+                publishStatus={publishStatus}
                 searchQuery={hasPlugins ? search : ""}
-                onDelete={setPluginToDelete}
                 createCard={createCard}
               />
-            </Stack>
-          </Page.Section.Body>
-        </Page.Section>
-
-        <Page.Section>
-          <Page.Section.Title>Observability hooks</Page.Section.Title>
-          <Page.Section.Description className="w-3/4">
-            The observability plugin forwards tool events from your team's
-            Claude Code, Cursor and Codex installs to your project dashboard.
-            When you publish to GitHub, it ships first in your marketplace
-            marked Required. You can also download a single-plugin ZIP per
-            platform here for direct install — each download mints a fresh
-            hooks-scoped API key.
-          </Page.Section.Description>
-          <Page.Section.Body>
-            <Stack direction="horizontal" gap={3} align="center">
-              <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
-                <Activity className="text-primary h-5 w-5" />
+              <div className="flex items-center gap-3">
+                <div className="border-border flex-1 border-t" />
+                <Type
+                  small
+                  muted
+                  className="shrink-0 font-mono text-xs tracking-wide uppercase"
+                >
+                  Platform Plugins
+                </Type>
+                <div className="border-border flex-1 border-t" />
               </div>
-              <Stack direction="vertical" gap={1} className="flex-1">
-                <Type variant="body" className="font-medium">
-                  Observability plugin
-                </Type>
-                <Type small muted>
-                  {publishStatus?.connected
-                    ? "Included in your published marketplace as required."
-                    : "Available as a direct ZIP download. Connect GitHub publishing to also ship it via the marketplace."}
-                </Type>
-              </Stack>
-              <DropdownMenu
-                open={isObservabilityDownloadMenuOpen}
-                onOpenChange={setIsObservabilityDownloadMenuOpen}
-              >
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={isDownloadingObservability !== null}
-                  >
-                    <Button.LeftIcon>
-                      <Icon name="download" className="h-4 w-4" />
-                    </Button.LeftIcon>
-                    <Button.Text>
-                      {isDownloadingObservability
-                        ? "Downloading..."
-                        : "Download Observability Plugin"}
-                    </Button.Text>
-                    <Button.RightIcon>
-                      <Icon name="chevron-down" className="h-4 w-4" />
-                    </Button.RightIcon>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void handleObservabilityDownload("claude");
-                    }}
-                  >
-                    Claude
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void handleObservabilityDownload("cursor");
-                    }}
-                  >
-                    Cursor
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void handleObservabilityDownload("codex");
-                    }}
-                  >
-                    Codex
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="grid grid-cols-2 gap-6">
+                <ObservabilityPluginCard
+                  publishStatus={publishStatus}
+                  isDownloadMenuOpen={isObservabilityDownloadMenuOpen}
+                  onDownloadMenuOpenChange={setIsObservabilityDownloadMenuOpen}
+                  isDownloading={isDownloadingObservability !== null}
+                  onDownload={(platform) => {
+                    void handleObservabilityDownload(platform);
+                  }}
+                />
+              </div>
             </Stack>
           </Page.Section.Body>
         </Page.Section>
@@ -442,40 +388,16 @@ export default function Plugins(): JSX.Element {
           </Dialog.Content>
         </Dialog>
 
-        {/* Delete Confirmation Dialog */}
-        <Dialog
-          open={!!pluginToDelete}
-          onOpenChange={() => setPluginToDelete(null)}
-        >
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Delete Plugin</Dialog.Title>
-              <Dialog.Description>
-                Are you sure you want to delete &quot;{pluginToDelete?.name}
-                &quot;? This will remove it from all assigned users on the next
-                publish.
-              </Dialog.Description>
-            </Dialog.Header>
-            <Dialog.Footer>
-              <Button
-                variant="secondary"
-                onClick={() => setPluginToDelete(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive-primary"
-                onClick={handleDelete}
-                disabled={deleteMutation.isPending}
-              >
-                Delete
-              </Button>
-            </Dialog.Footer>
-          </Dialog.Content>
-        </Dialog>
         <PublishDialog
           open={isPublishDialogOpen}
           onOpenChange={setIsPublishDialogOpen}
+          onPublish={handlePublish}
+          isPending={publishMutation.isPending}
+        />
+        <PublishDialog
+          mode="manage"
+          open={isManageCollaboratorsOpen}
+          onOpenChange={setIsManageCollaboratorsOpen}
           onPublish={handlePublish}
           isPending={publishMutation.isPending}
         />
@@ -555,15 +477,142 @@ export default function Plugins(): JSX.Element {
   );
 }
 
+// Platform-provided plugin, not a real `Plugin` row — always ships first in
+// the marketplace and has no detail page, so it gets its own card rather than
+// reusing PluginCard. The accent border + "Platform" badge are its "special
+// affordance" distinguishing it from user-created plugins in the grid.
+function ObservabilityPluginCard({
+  publishStatus,
+  isDownloadMenuOpen,
+  onDownloadMenuOpenChange,
+  isDownloading,
+  onDownload,
+}: {
+  publishStatus: PublishStatusResult | undefined;
+  isDownloadMenuOpen: boolean;
+  onDownloadMenuOpenChange: (open: boolean) => void;
+  isDownloading: boolean;
+  onDownload: (platform: "claude" | "cursor" | "codex") => void;
+}) {
+  const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
+  const isConnected = !!publishStatus?.connected;
+  const installTarget =
+    isConnected && publishStatus?.repoOwner && publishStatus.repoName
+      ? {
+          repoOwner: publishStatus.repoOwner,
+          repoName: publishStatus.repoName,
+          marketplaceUrl: publishStatus.marketplaceUrl,
+        }
+      : undefined;
+
+  return (
+    <DotCard
+      className="border-primary/30 bg-primary/[0.02]"
+      icon={<Activity className="text-primary h-10 w-10 opacity-80" />}
+    >
+      <div className="mb-2 flex items-center gap-1.5">
+        <Type
+          variant="subheading"
+          as="div"
+          className="text-md truncate"
+          title="Observability"
+        >
+          Observability
+        </Type>
+        <Badge variant="information">
+          <Badge.Text>Platform</Badge.Text>
+        </Badge>
+      </div>
+
+      <Type small muted className="mb-3 line-clamp-3">
+        Forwards tool events from your team&apos;s Claude Code, Cursor and Codex
+        installs to your project dashboard. Ships first in your marketplace,
+        marked Required.
+      </Type>
+
+      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+        <Type small muted>
+          {isConnected
+            ? "Included in your marketplace"
+            : "Available as a direct download"}
+        </Type>
+        {/* Split button (GitHub "Merge pull request" style): primary click
+            launches the install sheet, the attached caret opens the zip
+            download's platform picker. */}
+        <div className="flex items-stretch">
+          <Button
+            variant="primary"
+            size="sm"
+            className="rounded-r-none"
+            disabled={!installTarget}
+            onClick={() => setIsInstallSheetOpen(true)}
+          >
+            <Button.Text>Install</Button.Text>
+          </Button>
+          <DropdownMenu
+            open={isDownloadMenuOpen}
+            onOpenChange={onDownloadMenuOpenChange}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="primary"
+                size="sm"
+                className="border-primary-foreground/25 -ml-px rounded-l-none border-l px-1.5"
+                disabled={isDownloading}
+                aria-label="Download as zip"
+              >
+                <Icon name="chevron-down" className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => {
+                  onDownload("claude");
+                }}
+              >
+                Download as zip — Claude
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  onDownload("cursor");
+                }}
+              >
+                Download as zip — Cursor
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  onDownload("codex");
+                }}
+              >
+                Download as zip — Codex
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* Reuses the onboarding wizard's platform-by-platform setup sheet
+          (real per-platform slugs, API key minting, full instructions)
+          instead of the generic single-plugin install dialog — no
+          preselected platform, so the sheet opens on its own platform
+          picker first. */}
+      <PlatformInstrumentationSheet
+        open={isInstallSheetOpen}
+        onOpenChange={setIsInstallSheetOpen}
+      />
+    </DotCard>
+  );
+}
+
 function PluginGrid({
   plugins,
+  publishStatus,
   searchQuery,
-  onDelete,
   createCard,
 }: {
   plugins: Plugin[];
+  publishStatus: PublishStatusResult | undefined;
   searchQuery: string;
-  onDelete: (plugin: Plugin) => void;
   createCard: React.ReactNode;
 }) {
   if (plugins.length === 0) {
@@ -572,17 +621,19 @@ function PluginGrid({
         {searchQuery ? (
           <Type muted>No plugins matching &ldquo;{searchQuery}&rdquo;</Type>
         ) : null}
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          {createCard}
-        </div>
+        <div className="grid grid-cols-2 gap-6">{createCard}</div>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+    <div className="grid grid-cols-2 gap-6">
       {plugins.map((plugin) => (
-        <PluginCard key={plugin.id} plugin={plugin} onDelete={onDelete} />
+        <PluginCard
+          key={plugin.id}
+          plugin={plugin}
+          publishStatus={publishStatus}
+        />
       ))}
       {createCard}
     </div>
