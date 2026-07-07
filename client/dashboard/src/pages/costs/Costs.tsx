@@ -8,7 +8,7 @@ import { CostsExplorer } from "./CostsExplorer";
 import { displayName, parseDrillPath } from "./taxonomy";
 
 // New cost-taxonomy dashboard. Part of the Observe surface, so gate on
-// observe:read (basic members do not hold it; admins and custom roles do).
+// telemetry:read (basic members do not hold it; admins and custom roles do).
 function NewCostsPage(): JSX.Element {
   const location = useLocation();
 
@@ -36,7 +36,7 @@ function NewCostsPage(): JSX.Element {
         <Page.Header.Breadcrumbs substitutions={breadcrumbSubstitutions} />
       </Page.Header>
       <Page.Body noPadding fullWidth>
-        <RequireScope scope="observe:read" level="page">
+        <RequireScope scope="telemetry:read" level="page">
           <CostsExplorer />
         </RequireScope>
       </Page.Body>

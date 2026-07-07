@@ -107,12 +107,12 @@ export function AppSidebar({
     ...(isAssistantsEnabled ? [routes.assistants] : []),
   ].some((r) => r.active);
 
-  // Gate observeActive on observe:read too: the Observe group is hidden for
+  // Gate observeActive on telemetry:read too: the Observe group is hidden for
   // users without it, so directly navigating to an Observe page must not set
   // activeGroup to a group that isn't rendered, which would leave the nav with
   // no visible active/open group.
   const observeActive =
-    hasScope("observe:read") &&
+    hasScope("telemetry:read") &&
     [
       routes.employees,
       routes.costs,
@@ -204,10 +204,10 @@ export function AppSidebar({
                 <div className="border-border border-t" />
               </li>
 
-              {/* Observe group — gated on observe:read; hide it entirely (label
+              {/* Observe group — gated on telemetry:read; hide it entirely (label
                   included) from anyone without the scope rather than showing an
                   empty group. */}
-              <RequireScope scope="observe:read" level="section">
+              <RequireScope scope="telemetry:read" level="section">
                 <CollapsibleNavGroup
                   label="Observe"
                   Icon={(p) => <Icon {...p} name="eye" />}
