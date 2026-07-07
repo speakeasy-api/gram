@@ -125,9 +125,19 @@ func TestLogs_CodexPayloadContinuesThroughUsagePath(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	chClient := enableHookTelemetryLogger(t, ctx, ti)
 	authCtx := hookAuthContext(t, ctx)
-	timestamp := time.Unix(0, 1780468942284000000)
 
-	err := ti.service.Logs(ctx, codexLogsPayload(tokenBearingRecord()))
+	// Stamp the usage row with a recent time rather than tokenBearingRecord's
+	// fixed 2026-06-03 constant. telemetry_logs carries a 30-day TTL on
+	// time_unix_nano (server/clickhouse/schema.sql), so an absolute past
+	// timestamp ages out: once wall-clock passes constant+30d the row is
+	// TTL-expired and evicted on the next merge (which concurrent inserts from
+	// the parallel suite trigger), making this test rot into a flake. A relative
+	// timestamp keeps the row inside the retention window forever.
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	rec := tokenBearingRecord()
+	rec.ObservedTimeUnixNano = new(nanoString(timestamp))
+
+	err := ti.service.Logs(ctx, codexLogsPayload(rec))
 	require.NoError(t, err)
 
 	codexLogs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexUsageMetricsURN, timestamp, 1)
@@ -185,14 +195,14 @@ func TestLogs_CachesMultiSessionBatchPerSessionWithoutLeakingIdentity(t *testing
 	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey("claude-session-a"), &sessionA))
 	require.Equal(t, "claude-session-a", sessionA.SessionID)
 	require.Equal(t, "a@example.com", sessionA.UserEmail)
-	require.Equal(t, "claude-org-a", sessionA.ClaudeOrgID)
+	require.Equal(t, "claude-org-a", sessionA.ExternalOrgID)
 	require.Equal(t, userID, sessionA.UserID)
 
 	var sessionB SessionMetadata
 	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey("claude-session-b"), &sessionB))
 	require.Equal(t, "claude-session-b", sessionB.SessionID)
 	require.Empty(t, sessionB.UserEmail)
-	require.Empty(t, sessionB.ClaudeOrgID)
+	require.Empty(t, sessionB.ExternalOrgID)
 	require.Empty(t, sessionB.UserID)
 }
 
@@ -243,7 +253,7 @@ func TestExtractSessionMetadataSkipsNilOTELAttributeElements(t *testing.T) {
 	require.Equal(t, "claude-code", sessions[0].ServiceName)
 	require.Equal(t, "claude-session-1", sessions[0].SessionID)
 	require.Equal(t, "dev@example.com", sessions[0].UserEmail)
-	require.Equal(t, "claude-org-1", sessions[0].ClaudeOrgID)
+	require.Equal(t, "claude-org-1", sessions[0].ExternalOrgID)
 
 	require.Empty(t, extractLogData(&gen.OTELLogRecord{Attributes: []*gen.OTELAttribute{nil}}).SessionID)
 	require.Empty(t, extractAttributeString([]*gen.OTELAttribute{nil}, "session.id"))
@@ -286,7 +296,7 @@ func TestExtractSessionMetadataKeepsEmailFromEarlierRecordInBatch(t *testing.T) 
 	require.Len(t, sessions, 1)
 	require.Equal(t, sessionID, sessions[0].SessionID)
 	require.Equal(t, "dev@example.com", sessions[0].UserEmail)
-	require.Equal(t, "claude-org-1", sessions[0].ClaudeOrgID)
+	require.Equal(t, "claude-org-1", sessions[0].ExternalOrgID)
 }
 
 func TestExtractSessionMetadataIsolatesIdentityAcrossSessionsInBatch(t *testing.T) {
@@ -322,11 +332,38 @@ func TestExtractSessionMetadataIsolatesIdentityAcrossSessionsInBatch(t *testing.
 
 	require.Equal(t, "claude-session-a", sessions[0].SessionID)
 	require.Equal(t, "a@example.com", sessions[0].UserEmail)
-	require.Equal(t, "claude-org-a", sessions[0].ClaudeOrgID)
+	require.Equal(t, "claude-org-a", sessions[0].ExternalOrgID)
 
 	require.Equal(t, "claude-session-b", sessions[1].SessionID)
 	require.Empty(t, sessions[1].UserEmail)
-	require.Empty(t, sessions[1].ClaudeOrgID)
+	require.Empty(t, sessions[1].ExternalOrgID)
+}
+
+func TestExtractSessionMetadataCapturesDeviceAndAccountIdentity(t *testing.T) {
+	t.Parallel()
+
+	payload := claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "device-identity-session"),
+				strAttr("user.email", "dev@example.com"),
+				strAttr("organization.id", "ext-org"),
+				strAttr("user.account_uuid", "acct-uuid"),
+				strAttr("user.account_id", "user_tagged"),
+				strAttr("user.id", "device-xyz"),
+			},
+		},
+	)
+
+	sessions := extractSessionMetadata(payload)
+	require.Len(t, sessions, 1)
+	require.Equal(t, "device-identity-session", sessions[0].SessionID)
+	require.Equal(t, "ext-org", sessions[0].ExternalOrgID)
+	require.Equal(t, "acct-uuid", sessions[0].ExternalAccountUUID)
+	require.Equal(t, "user_tagged", sessions[0].ExternalAccountID)
+	require.Equal(t, "device-xyz", sessions[0].DeviceID)
 }
 
 func enableHookTelemetryLogger(t *testing.T, ctx context.Context, ti *testInstance) *telemetryrepo.Queries {

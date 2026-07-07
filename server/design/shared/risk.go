@@ -55,6 +55,46 @@ func RiskPolicyAudienceTypeEnum() {
 	Enum("everyone", "targeted")
 }
 
+// RiskPolicyEvalVerdictEnum constrains a policy-eval review verdict. It is the
+// reviewer's ground-truth judgment of a chat session under a prompt-based
+// policy: `correct` (guardrail agreed), `false_positive` (guardrail flagged a
+// session it should not — tighten), `missed` (guardrail missed one it should
+// flag — broaden).
+func RiskPolicyEvalVerdictEnum() {
+	Enum("correct", "false_positive", "missed")
+}
+
+// RiskPolicyEvalReview is one reviewer's saved ground-truth verdict on a chat
+// session under a prompt-based policy — a row in the policy's durable regression
+// set. Kept physically separate from live findings: eval review activity never
+// touches risk_results, the outbox, or enforcement.
+var RiskPolicyEvalReview = Type("RiskPolicyEvalReview", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("id", String, "The review ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_id", String, "The prompt-based policy the verdict belongs to.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_version", Int64, "The policy version in effect when the verdict was recorded (provenance).")
+	Attribute("chat_id", String, "The chat session being judged.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("verdict", String, "The reviewer's ground-truth verdict.", func() {
+		RiskPolicyEvalVerdictEnum()
+	})
+	Attribute("reviewed_by", String, "User id of the reviewer who recorded the verdict.")
+	Attribute("created_at", String, "When the verdict was first recorded.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, "When the verdict was last updated.", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "policy_id", "policy_version", "chat_id", "verdict", "reviewed_by", "created_at", "updated_at")
+})
+
 var RiskPolicy = Type("RiskPolicy", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -77,6 +117,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		Example(0.75)
 	})
 	Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.")
+	Attribute("approved_email_domains", ArrayOf(String), "For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty means the domain rule is inert.")
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
 	Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.")

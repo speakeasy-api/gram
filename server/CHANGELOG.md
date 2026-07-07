@@ -1,5 +1,67 @@
 # server
 
+## 0.82.0
+
+### Minor Changes
+
+- 7882ed7: Add a built-in preset exclusion library that suppresses known false positives (test credit cards, example API keys/tokens, module/content hashes, placeholder emails) across all detection sources. Adds the `risk.listBuiltinPresets` endpoint and a read-only "Built-in library" section on the Exclusions tab that lists the live catalog.
+- 3e492c4: Add backend APIs and runtime routing for tunneled MCP server sources.
+
+### Patch Changes
+
+- f6ad2fc: fix: key session active/expired status off refresh expiry
+
+## 0.81.0
+
+### Minor Changes
+
+- 25ce5ea: Email org admins when a new access request is submitted.
+- c9eaac0: Skill activations in Codex sessions are now tracked best-effort: opening a skill's SKILL.md and explicit $skill-name prompt mentions surface as skill.activated events in observability, matching Claude Code sessions.
+- f92917c: Add the `adminRemoteSessions` management service for curating a platform-wide catalog of remote session providers. A "global" provider is a `remote_session_issuer` paired with one or more `remote_session_client` records that have no owning project and no owning organization (`project_id IS NULL AND organization_id IS NULL`), so it is shared across every organization rather than scoped to one. The service exposes CRUD over global issuers and clients (`createGlobalIssuer`, `listGlobalIssuers`, `getGlobalIssuer`, `updateGlobalIssuer`, `deleteGlobalIssuer`, and the matching `*GlobalClient` methods, plus `listGlobalClients` by issuer). Every method is gated to platform admins (Speakeasy employees) and is session-authenticated only. Issuer slugs are unique within the global scope, deleting an issuer is blocked while a live client still references it, and client secrets are write-only. This ships the creation/administration surface only; the runtime consumption path (projects inheriting global providers) is a separate follow-up, so global rows exist but nothing reads them yet.
+- f16bde1: Re-introduce the unified `/rpc/hooks.ingest` endpoint with working self-serve authentication for hook plugins. On session start the plugin opens the Gram dashboard in a browser, receives a hooks-scoped API key on a localhost callback, and caches it per device — no python or manual key setup required. Machines that have never authenticated are not blocked: sessions proceed with a warning, Claude is prompted to offer connecting via the bundled login helper, and enforcement only becomes strict after the first successful sign-in.
+- e9ff915: Add the Non-Corporate Accounts risk-policy category (detection source `account_identity`). Policies can now flag sessions authenticated with a personal AI account (`identity.personal_account`) or with an AI-account email domain outside a configurable approved list (`identity.unapproved_domain`), reusing the account attribution captured by session ingest. The create/update policy endpoints accept `approved_email_domains`, findings are emitted once per session, and the Policy Center exposes the approved-domains input in the category's Customize sheet (flag-only, like other agent-integrity detectors).
+- ad4e76d: Adds a prompt guardrail replay endpoint with per-message judge verdicts, cost and latency details, and CEL scope support.
+  Adds persistent reviewer verdict save, list, and delete endpoints for policy eval regression sets.
+
+### Patch Changes
+
+- 548e704: Assistants can now attach MCP servers directly, including remote (external‑SaaS) and tunnelled servers that aren't backed by a Gram toolset. The assistant setup chat can list the project's MCP servers and attach one by name, and the assistant's runtime connects to it alongside its toolsets.
+- 34b8a1b: Editing an environment now requires `environment:write` instead of `project:write`. Creating, updating, and deleting environments previously gated on `project:write`, so principals holding only `environment:write` were rejected. The dashboard gates for these actions were realigned to match.
+- 8104660: chore: use icons to delineate team vs personal accounts
+- ed49c7d: Clear stale cached hooks credentials on auth rejection so Claude prompt submission can continue and prompt users to reconnect.
+- 5828815: Preserve assistant setup chat history: list prior onboarding threads and make them URL-addressable (scoped by source_kind).
+
+## 0.80.0
+
+### Minor Changes
+
+- 9275f02: Adjust API endpoint paths to follow existing RPC API conventions
+- fedda7c: Add a `cliAuth` service for device-agent enrollment (DNO-388). `cliAuth.authorize` (session-authenticated, member `org:read` scope) stores a PKCE-bound one-time code, and `cliAuth.redeem` (no session — the PKCE code + verifier is the credential) atomically exchanges it for a per-user `[agent, hooks]` API key, returned once. The dashboard CLI callback uses this flow when the request carries `client=device-agent`, so the raw key never travels in a URL; the existing CLI producer-key login is unchanged.
+
+### Patch Changes
+
+- 59a1029: Drop US_DRIVER_LICENSE Presidio findings at the finding level so they never surface, even when a policy pins no entities and Presidio scans its full default recognizer set.
+- 9bc41b9: Surface Claude attribution dimensions in telemetry query results and the cost explorer.
+- 4adc65b: Disable HTTP keep-alives on function-runner calls and give that path its own timeout, so retries dial fresh connections instead of reusing pooled connections to Fly machines that were autostopped mid-flight (which surfaced as instant EOFs). The function-runner timeout now sits above the runner's 5-minute execution budget so long tool calls are no longer cancelled by the caller.
+- b95233f: Risk Events now shows historical findings for turned-off policies. Filtering the Risk Events page by a disabled policy previously returned no results because the query required the policy to be enabled; explicit policy filters now surface a disabled policy's past matches. The dashboard flags the inactive policy (a banner plus an "(inactive)" label in the filter) so it's clear the data is historical. The default unfiltered view is unchanged and still lists only active policies.
+- d09b418: Fix a nil pointer panic in telemetry SearchUsers when called without a filter.
+
+## 0.79.0
+
+### Minor Changes
+
+- 57bf9af: Public well-known OAuth/MCP metadata responses now send `Cache-Control: public, max-age=60` and a strong `ETag` with `If-None-Match` 304 revalidation, so clients and proxies can cache them. The OAuth Client ID Metadata Document keeps `max-age=3600` and gains an `ETag`. This is a prerequisite for fronting these responses with an ingress cache or CDN.
+- 2186673: Support organization-level remote session clients. A `remote_session_client` can now be created with no project (organization-level) so every project in the organization can attach and use it, mirroring organization-level remote session issuers. On `organizationRemoteSessionIssuers.createClient` and `createCimdClient` an omitted `project_id` under an organization-level issuer creates an organization-level client (the same `project_id`-omission convention `createIssuer` already uses), while a supplied `project_id` scopes the client to that project. The consent/token runtime resolver, the project-scoped client reads, and the attach-time single-client invariant now resolve both a project's own clients and organization-level clients in its organization, so a project admin can attach, detach, and use an organization-level client from their own user session issuer but cannot edit or delete it (those stay on the org-admin surface). The `RemoteSessionClient` API shape adds `organization_id` and allows an empty `project_id` for organization-level clients, mirroring the issuer change.
+- 5c825a9: Default to Claude Sonnet 5 (`anthropic/claude-sonnet-5`) for in-app model usage and newly created assistants. The model is added to the allowlist and all model pickers (playground, elements, onboarding). The backend `DefaultChatModel`, the platform-managed assistant, the onboarding assistant default, and the playground/MCP chat surfaces now select Sonnet 5. Specialized models (risk/PromptIntel judges, chat segmentation, embeddings, follow-on suggestions) are unchanged.
+- fcfd78e: Add server-side controls for unmasking redacted secrets
+- 400f471: Plugin marketplaces now send a human-readable `displayName` to Claude Code, so plugins show with their admin-entered name and capitalization (e.g. "MoonPay MCP Servers") instead of the de-slugified lowercase name ("Moonpay mcp servers"). The synthesized observability plugin displays as "<Org> Observability". The plugin `name` remains the kebab-case slug used for namespacing and claude.ai marketplace sync. Older Claude Code clients ignore the field and fall back to prior behavior.
+- c8597b1: Add the unified `/rpc/hooks.ingest` endpoint for third-party hook ingestion while preserving existing provider-specific hook endpoints. Hook plugins now authenticate each developer locally through the browser callback flow and store a hooks-scoped key on the device.
+
+### Patch Changes
+
+- d7b8ec9: Gate the "click to reveal" secret action in Risk Events behind the `chat:read` scope. Users without `chat:read` now see flagged secret values as a non-interactive "Hidden" placeholder (with an explanatory tooltip) instead of a reveal control, and the page-level "Reveal all" toggle is hidden for them. The `chat:read` scope description in the role editor is updated to note that the grant also controls unmasking flagged secrets in Risk Events.
+- 98de65f: mig: add session_capture_exclusions table
+
 ## 0.78.0
 
 ### Minor Changes

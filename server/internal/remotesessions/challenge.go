@@ -77,6 +77,9 @@ type ParentChallenge struct {
 	McpSlug             string
 	RouteBase           string
 	FinalRedirectURI    string
+	// Resource is the RFC 8707 resource indicator sent on the authorize
+	// redirect and code exchange. Empty omits the parameter.
+	Resource string
 }
 
 // RemoteLoginState is the per-remote-leg Redis state, keyed by the opaque
@@ -95,6 +98,7 @@ type RemoteLoginState struct {
 	TokenEndpoint         string              `json:"token_endpoint"`
 	RedirectURI           string              `json:"redirect_uri"`
 	CodeVerifier          string              `json:"code_verifier"`
+	Resource              string              `json:"resource,omitempty"`
 	Subject               *urn.SessionSubject `json:"subject,omitempty"`
 	McpSlug               string              `json:"mcp_slug"`
 	// RouteBase is "mcp" or "x/mcp" — drives the post-callback redirect
@@ -328,6 +332,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		TokenEndpoint:         client.TokenEndpoint,
 		RedirectURI:           redirectURI,
 		CodeVerifier:          verifier,
+		Resource:              parent.Resource,
 		Subject:               parent.Subject,
 		McpSlug:               parent.McpSlug,
 		RouteBase:             parent.RouteBase,
@@ -350,6 +355,9 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	}
 	if client.Audience != "" {
 		q.Set("audience", client.Audience)
+	}
+	if parent.Resource != "" {
+		q.Set("resource", parent.Resource)
 	}
 	for _, ic := range m.authorizeInterceptors {
 		if ic.Match(client.IssuerURL) {
@@ -413,6 +421,9 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		attr.SlogToolsetMCPSlug(mcpSlug),
 		attr.SlogProjectID(state.ProjectID.String()),
 	)
+	if state.Resource != "" {
+		logger = logger.With(attr.SlogOAuthResource(state.Resource))
+	}
 
 	// Hoisted above the DB lookup + upstream code exchange so a state with a
 	// missing/zero Subject fails fast — otherwise we burn the single-use
@@ -442,7 +453,10 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		clientSecret = decoded
 	}
 
-	authMethod := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String)
+	authMethod, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, clientSecret)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "the remote session client is misconfigured").LogError(ctx, logger)
+	}
 	audience := conv.FromPGTextOrEmpty[string](client.Audience)
 	tok, err := m.exchangeCode(ctx, state, client.ClientID, clientSecret, authMethod, audience, code)
 	if err != nil {
@@ -548,10 +562,12 @@ func (m *ChallengeManager) exchangeCode(
 	form.Set("grant_type", "authorization_code")
 	form.Set("code", code)
 	form.Set("redirect_uri", state.RedirectURI)
-	form.Set("client_id", externalClientID)
 	form.Set("code_verifier", state.CodeVerifier)
 	if audience != "" {
 		form.Set("audience", audience)
+	}
+	if state.Resource != "" {
+		form.Set("resource", state.Resource)
 	}
 
 	req, err := newTokenEndpointRequest(ctx, state.TokenEndpoint, form, authMethod, externalClientID, clientSecret)

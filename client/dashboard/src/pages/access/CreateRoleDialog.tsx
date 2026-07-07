@@ -50,13 +50,9 @@ import {
   membersWithRole,
 } from "./changeRoleState";
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
-import type {
-  ActivePanel,
-  RoleGrant,
-  Scope,
-  ScopeRule,
-  Selector,
-} from "./types";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Selector } from "@gram/client/models/components/selector.js";
+import type { ActivePanel, RoleGrant, ScopeRule } from "./types";
 import {
   isSaveDisabled,
   effectiveGrantCount,

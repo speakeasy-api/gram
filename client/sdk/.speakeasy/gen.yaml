@@ -48,6 +48,7 @@ typescript:
     private: true
   additionalScripts: {}
   alwaysIncludeInboundAndOutbound: false
+  apiPromiseHelpers: false
   author: Speakeasy
   baseErrorName: GramError
   clientServerStatusCodesAsErrors: true
@@ -60,6 +61,7 @@ typescript:
   enableReactQuery: true
   enumFormat: union
   envVarPrefix: GRAM
+  eventStreamClassName: EventStream
   exportZodModelNamespace: false
   fixEnumNameSanitization: false
   flatAdditionalProperties: false
@@ -91,6 +93,8 @@ typescript:
   packageName: '@gram/client'
   preApplyUnionDiscriminators: true
   preserveModelFieldNames: false
+  privateIdentifierPrefix: '#'
+  requestExtras: false
   responseFormat: flat
   sseFlatResponse: false
   templateVersion: v2

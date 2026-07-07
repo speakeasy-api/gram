@@ -4,13 +4,15 @@ import { Spinner } from "@/components/ui/spinner";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { ReactNode, Suspense } from "react";
 import { ErrorBoundary as ReactErrorBoundary } from "react-error-boundary";
-import { handleError } from "@/lib/errors";
+import { handleError, toError } from "@/lib/errors";
 
 interface ContentErrorFallbackProps {
-  error: Error;
+  error: unknown;
 }
 
-function ContentErrorFallback({ error }: ContentErrorFallbackProps) {
+function ContentErrorFallback({ error: rawError }: ContentErrorFallbackProps) {
+  const error = toError(rawError);
+
   // Log error to our error handler for consistent logging
   handleError(error, { silent: true });
 

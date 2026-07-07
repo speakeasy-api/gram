@@ -320,6 +320,42 @@ func (q *Queries) ExpireStaleInvitations(ctx context.Context, arg ExpireStaleInv
 	return err
 }
 
+const filterOrganizationMemberUserIDs = `-- name: FilterOrganizationMemberUserIDs :many
+SELECT user_id::text AS user_id
+FROM organization_user_relationships
+WHERE organization_id = $1
+  AND user_id = ANY($2::text[])
+  AND deleted_at IS NULL
+`
+
+type FilterOrganizationMemberUserIDsParams struct {
+	OrganizationID string
+	UserIds        []string
+}
+
+// Returns the subset of the given Gram user IDs that are active members of
+// the organization. Used to mask Speakeasy staff identities in customer-facing
+// audit feeds.
+func (q *Queries) FilterOrganizationMemberUserIDs(ctx context.Context, arg FilterOrganizationMemberUserIDsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, filterOrganizationMemberUserIDs, arg.OrganizationID, arg.UserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getInvitationByID = `-- name: GetInvitationByID :one
 SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
 FROM organization_invitations

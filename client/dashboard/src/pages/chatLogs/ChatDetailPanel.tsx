@@ -52,7 +52,7 @@ import { Switch } from "@/components/ui/switch";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
-import { handleError } from "@/lib/errors";
+import { handleError, toError } from "@/lib/errors";
 import {
   ExclusionEditor,
   type ExclusionSheetState,
@@ -152,9 +152,10 @@ function totalTokensFor(chat: {
 // ContentErrorBoundary and wiping the rest of Risk Events / Chat Logs behind
 // it. Retry resets the boundary and any errored queries in place.
 function ChatDetailErrorFallback({
-  error,
+  error: rawError,
   resetErrorBoundary,
 }: FallbackProps): JSX.Element {
+  const error = toError(rawError);
   handleError(error, { silent: true });
 
   return (
@@ -230,6 +231,7 @@ function SessionSummary({
   chat,
   messageCount,
   toolCount,
+  compact = false,
 }: {
   chat: {
     externalUserId?: string;
@@ -244,6 +246,7 @@ function SessionSummary({
   };
   messageCount: number;
   toolCount: number;
+  compact?: boolean;
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
@@ -259,20 +262,29 @@ function SessionSummary({
           type="button"
           className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
         >
-          {hasCost && (
-            <span className="tabular-nums">
-              {formatUsageCost(chat.totalCost!)}
+          {compact ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Info className="size-3.5" />
+              Details
             </span>
+          ) : (
+            <>
+              {hasCost && (
+                <span className="tabular-nums">
+                  {formatUsageCost(chat.totalCost!)}
+                </span>
+              )}
+              {hasCost && tokens > 0 && (
+                <span aria-hidden className="text-muted-foreground/40">
+                  |
+                </span>
+              )}
+              {tokens > 0 && <span>{formatTokenCount(tokens)} tokens</span>}
+            </>
           )}
-          {hasCost && tokens > 0 && (
-            <span aria-hidden className="text-muted-foreground/40">
-              |
-            </span>
-          )}
-          {tokens > 0 && <span>{formatTokenCount(tokens)} tokens</span>}
           {/* No cost telemetry for this session (e.g. ClickHouse miss) — show a
               neutral "Details" label so the trigger is never an empty pill. */}
-          {!hasCost && tokens === 0 && (
+          {!compact && !hasCost && tokens === 0 && (
             <span className="inline-flex items-center gap-1.5">
               <Info className="size-3.5" />
               Details
@@ -317,6 +329,63 @@ function SessionSummary({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function HeaderMetadataBadge({ children }: { children: ReactNode }) {
+  return (
+    <Badge variant="neutral" className="shrink-0 font-mono text-[10px]">
+      <Badge.Text>{children}</Badge.Text>
+    </Badge>
+  );
+}
+
+function ChatDetailMetadataBadges({
+  chatId,
+  chat,
+  messageCount,
+  toolCount,
+}: {
+  chatId: string;
+  chat: Parameters<typeof SessionSummary>[0]["chat"];
+  messageCount: number;
+  toolCount: number;
+}) {
+  const tokens = totalTokensFor(chat);
+  const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
+      <HeaderMetadataBadge>
+        {messageCount.toLocaleString()} messages
+      </HeaderMetadataBadge>
+      {toolCount > 0 && (
+        <HeaderMetadataBadge>
+          {toolCount.toLocaleString()} tool calls
+        </HeaderMetadataBadge>
+      )}
+      {chat.source && (
+        <Badge variant="neutral" className="shrink-0 text-[10px]">
+          <Badge.Text>
+            <span className="inline-flex items-center gap-1.5">
+              <HookSourceIcon source={chat.source} className="size-3" />
+              {chat.source}
+            </span>
+          </Badge.Text>
+        </Badge>
+      )}
+      {hasCost && (
+        <HeaderMetadataBadge>
+          {formatUsageCost(chat.totalCost!)}
+        </HeaderMetadataBadge>
+      )}
+      {tokens > 0 && (
+        <HeaderMetadataBadge>
+          {formatTokenCount(tokens)} tokens
+        </HeaderMetadataBadge>
+      )}
+    </div>
   );
 }
 
@@ -526,6 +595,7 @@ function ChatDetailHeader({
   messageCount,
   toolCount,
   canManageChat,
+  compactMetadata,
   showFilter,
   typeFilter,
   onTypeFilterChange,
@@ -543,6 +613,7 @@ function ChatDetailHeader({
   messageCount: number;
   toolCount: number;
   canManageChat: boolean;
+  compactMetadata: boolean;
   showFilter: boolean;
   typeFilter: ReadonlySet<MessageCategory>;
   onTypeFilterChange: (next: Set<MessageCategory>) => void;
@@ -573,12 +644,16 @@ function ChatDetailHeader({
                   ({format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm")})
                 </span>
               </span>
-              <Badge
-                variant="neutral"
-                className="shrink-0 font-mono text-[10px]"
-              >
-                <Badge.Text>{getTraceId(chatId)}</Badge.Text>
-              </Badge>
+              {compactMetadata ? (
+                <ChatDetailMetadataBadges
+                  chatId={chatId}
+                  chat={chat}
+                  messageCount={messageCount}
+                  toolCount={toolCount}
+                />
+              ) : (
+                <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
+              )}
             </div>
           </SheetDescription>
         </div>
@@ -587,6 +662,7 @@ function ChatDetailHeader({
             chat={chat}
             messageCount={messageCount}
             toolCount={toolCount}
+            compact={compactMetadata}
           />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1101,6 +1177,7 @@ function ChatDetailPanel({
         messageCount={chat.numMessages}
         toolCount={toolLogs.length}
         canManageChat={canManageChat}
+        compactMetadata={riskFocus}
         showFilter={view === "chat"}
         typeFilter={typeFilter}
         onTypeFilterChange={setTypeFilter}

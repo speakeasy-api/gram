@@ -35,6 +35,7 @@ const (
 	CategoryShadowMCP       Category = "shadow_mcp"
 	CategoryDestructiveTool Category = "destructive_tool"
 	CategoryCLIDestructive  Category = "cli_destructive"
+	CategoryAccountIdentity Category = "account_identity"
 	CategoryCustom          Category = "custom"
 )
 
@@ -93,6 +94,13 @@ var Definitions = []Definition{
 		Source:      "cli_destructive",
 	},
 	{
+		Category:    CategoryAccountIdentity,
+		Label:       "Non-Corporate Accounts",
+		Description: "Sessions authenticated with a personal AI account or an account whose email domain is not on the organization's approved list. Uses the account attribution captured by session ingest.",
+		Icon:        "user-x",
+		Source:      "account_identity",
+	},
+	{
 		Category:    CategoryPromptPolicy,
 		Label:       "Prompt Policies",
 		Description: "Natural-language guardrails evaluated by the policy judge",
@@ -123,7 +131,7 @@ var Definitions = []Definition{
 	{
 		Category:    CategoryGovernmentIDs,
 		Label:       "Government Identifiers",
-		Description: "SSNs, passport numbers, driver's licenses, tax IDs",
+		Description: "SSNs, passport numbers, national IDs, tax IDs",
 		Icon:        "landmark",
 		RuleIDs: []string{
 			"pii.us_ssn",

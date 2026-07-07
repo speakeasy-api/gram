@@ -1,3 +1,4 @@
+import { AccountTypeIcon } from "@/components/account-type-icon";
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -248,7 +249,7 @@ export function ChatLogsTable({
                   {/* Metadata row */}
                   <div className="text-muted-foreground flex items-center gap-4 text-sm">
                     <span className="flex items-center gap-1.5">
-                      <Icon name="user" className="size-4 opacity-60" />
+                      <AccountTypeIcon accountType={chat.accountType} />
                       <span className="max-w-[120px] truncate">
                         {ownerLabel(chat, user)}
                       </span>

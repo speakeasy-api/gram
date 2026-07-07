@@ -223,7 +223,13 @@ func attributeDimensionValuesExpr(groupBy string) string {
 			collected = "groupUniqArray(" + capStr + ")(" + dim.column + ")"
 		}
 		// Drop empty strings so absent attributes don't surface as a blank value.
+		// billing_mode is the exception: '' marks an unclassified contributor, and
+		// the cost view must see it so a scope mixing metered and unclassified
+		// spend is never presented as confidently metered (DNO-384).
 		valExpr := "arrayFilter(x -> x != '', " + collected + ")"
+		if k == "billing_mode" {
+			valExpr = collected
+		}
 		parts = append(parts, "'"+k+"', "+valExpr)
 	}
 	return "map(" + strings.Join(parts, ", ") + ") AS dimension_values"

@@ -40,6 +40,7 @@ import {
   type FilterValue,
   type OptionsById,
 } from "@/components/filters";
+import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import { Page } from "@/components/page-layout";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
@@ -165,6 +166,12 @@ const COST_FILTERS = defineFilters([
     defaultPreset: "30d",
   },
   { id: "client", label: "Agent", kind: "select" },
+  {
+    id: "account_type",
+    label: "Account type",
+    kind: "select",
+    allLabel: "All",
+  },
 ]);
 
 export function InsightsAgentsContent(): JSX.Element {
@@ -184,6 +191,7 @@ export function InsightsAgentsContent(): JSX.Element {
   const customRange = dateValue.customRange;
   const customRangeLabel = dateValue.customLabel;
   const clientFilter = costFilters.values.client ?? "all";
+  const accountType = costFilters.values.account_type ?? "";
 
   const [valueMode, setValueMode] = useState<ValueMode>("tokens");
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
@@ -233,8 +241,10 @@ export function InsightsAgentsContent(): JSX.Element {
       from.toISOString(),
       to.toISOString(),
       memberIdentifiers,
+      accountType,
     ],
-    queryFn: () => fetchAllUsers(client, from, to, memberIdentifiers),
+    queryFn: () =>
+      fetchAllUsers(client, from, to, memberIdentifiers, accountType),
     enabled: memberIdentifiers.length > 0,
     throwOnError: false,
   });
@@ -259,6 +269,7 @@ export function InsightsAgentsContent(): JSX.Element {
       from.toISOString(),
       to.toISOString(),
       clientFilter,
+      accountType,
     ],
     queryFn: () =>
       fetchOverview(
@@ -266,6 +277,7 @@ export function InsightsAgentsContent(): JSX.Element {
         from,
         to,
         clientFilter !== "all" ? clientFilter : undefined,
+        accountType || undefined,
       ),
     placeholderData: keepPreviousData,
     throwOnError: false,
@@ -279,8 +291,10 @@ export function InsightsAgentsContent(): JSX.Element {
       from.toISOString(),
       to.toISOString(),
       memberIdentifiers,
+      accountType,
     ],
-    queryFn: () => fetchRoleUsage(client, from, to, memberIdentifiers),
+    queryFn: () =>
+      fetchRoleUsage(client, from, to, memberIdentifiers, accountType),
     enabled: groupByDimension === "role" && memberIdentifiers.length > 0,
     throwOnError: false,
   });
@@ -489,7 +503,12 @@ export function InsightsAgentsContent(): JSX.Element {
               <Page.Toolbar.Filters
                 schema={COST_FILTERS}
                 values={costFilters.values}
-                optionsById={{ client: availableClients } satisfies OptionsById}
+                optionsById={
+                  {
+                    client: availableClients,
+                    account_type: ACCOUNT_TYPE_OPTIONS,
+                  } satisfies OptionsById
+                }
                 onChange={
                   costFilters.setValue as (
                     id: string,
@@ -502,6 +521,20 @@ export function InsightsAgentsContent(): JSX.Element {
               <Page.Toolbar.Actions>
                 <ValueModeToggle mode={valueMode} onChange={setValueMode} />
               </Page.Toolbar.Actions>
+              <Page.Toolbar.Refresh
+                onRefresh={() => {
+                  void usersQuery.refetch();
+                  void projectQuery.refetch();
+                  void overviewQuery.refetch();
+                  void roleUsageQuery.refetch();
+                }}
+                isRefreshing={
+                  usersQuery.isFetching ||
+                  projectQuery.isFetching ||
+                  overviewQuery.isFetching ||
+                  roleUsageQuery.isFetching
+                }
+              />
             </Page.Toolbar>
           </div>
 
@@ -1491,6 +1524,7 @@ async function fetchAllUsers(
   from: Date,
   to: Date,
   userIds: string[],
+  accountType?: string,
 ): Promise<UserSummary[]> {
   const users: UserSummary[] = [];
   let cursor: string | undefined;
@@ -1499,7 +1533,7 @@ async function fetchAllUsers(
       telemetrySearchUsers(client, {
         searchUsersPayload: {
           cursor,
-          filter: { from, to, userIds },
+          filter: { from, to, userIds, accountType: accountType || undefined },
           limit: 1000,
           sort: "desc",
           userType: "internal",
@@ -1517,11 +1551,12 @@ async function fetchRoleUsage(
   from: Date,
   to: Date,
   userIds: string[],
+  accountType?: string,
 ): Promise<RoleSummary[]> {
   const result = await unwrapAsync(
     telemetrySearchUsers(client, {
       searchUsersPayload: {
-        filter: { from, to, userIds },
+        filter: { from, to, userIds, accountType: accountType || undefined },
         groupBy: "role",
         limit: 1000,
         sort: "desc",
@@ -1550,6 +1585,7 @@ async function fetchOverview(
   from: Date,
   to: Date,
   hookSource?: string,
+  accountType?: string,
 ): Promise<GetObservabilityOverviewResult> {
   return unwrapAsync(
     telemetryGetObservabilityOverview(client, {
@@ -1558,6 +1594,7 @@ async function fetchOverview(
         to,
         includeTimeSeries: true,
         hookSource,
+        accountType,
       },
     }),
   );

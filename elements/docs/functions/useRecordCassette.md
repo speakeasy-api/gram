@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.39.0**](../README.md)
+[**@gram-ai/elements v1.41.0**](../README.md)
 
 ***
 
@@ -22,7 +22,7 @@ Whether recording is currently active.
 
 Current number of messages in the thread.
 
-### startRecording()
+### startRecording
 
 > **startRecording**: () => `void`
 
@@ -32,7 +32,7 @@ Start recording from the current point in the conversation.
 
 `void`
 
-### stopRecording()
+### stopRecording
 
 > **stopRecording**: () => `void`
 
@@ -42,7 +42,7 @@ Stop recording.
 
 `void`
 
-### download()
+### download
 
 > **download**: (`filename?`) => `void`
 

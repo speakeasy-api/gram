@@ -276,7 +276,7 @@ var _ = Service("access", func() {
 		Result(ListShadowMCPApprovalRequestsResult)
 
 		HTTP(func() {
-			GET("/rpc/access.shadowMcp.requests.list")
+			GET("/rpc/access.listShadowMcpRequests")
 			Param("status")
 			Param("project_id")
 			Param("limit")
@@ -302,7 +302,7 @@ var _ = Service("access", func() {
 		Result(ShadowMCPApprovalRequestModel)
 
 		HTTP(func() {
-			POST("/rpc/access.shadowMcp.requests.create")
+			POST("/rpc/access.createShadowMcpRequest")
 			security.SessionHeader()
 			Response(StatusCreated)
 		})
@@ -324,7 +324,7 @@ var _ = Service("access", func() {
 		Result(ShadowMCPApprovalDecisionResult)
 
 		HTTP(func() {
-			POST("/rpc/access.shadowMcp.requests.approve")
+			POST("/rpc/access.approveShadowMcpRequest")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -346,7 +346,7 @@ var _ = Service("access", func() {
 		Result(ShadowMCPApprovalDecisionResult)
 
 		HTTP(func() {
-			POST("/rpc/access.shadowMcp.requests.deny")
+			POST("/rpc/access.denyShadowMcpRequest")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -382,7 +382,7 @@ var _ = Service("access", func() {
 		Result(ListShadowMCPAccessRulesResult)
 
 		HTTP(func() {
-			GET("/rpc/access.shadowMcp.rules.list")
+			GET("/rpc/access.listShadowMcpRules")
 			Param("disposition")
 			Param("access_scope")
 			Param("project_id")
@@ -409,7 +409,7 @@ var _ = Service("access", func() {
 		Result(CreateShadowMCPAccessRuleResult)
 
 		HTTP(func() {
-			POST("/rpc/access.shadowMcp.rules.create")
+			POST("/rpc/access.createShadowMcpRule")
 			security.SessionHeader()
 			Response(StatusCreated)
 		})
@@ -431,7 +431,7 @@ var _ = Service("access", func() {
 		Result(ShadowMCPAccessRuleModel)
 
 		HTTP(func() {
-			PUT("/rpc/access.shadowMcp.rules.update")
+			PUT("/rpc/access.updateShadowMcpRule")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -454,7 +454,7 @@ var _ = Service("access", func() {
 		})
 
 		HTTP(func() {
-			DELETE("/rpc/access.shadowMcp.rules.delete")
+			DELETE("/rpc/access.deleteShadowMcpRule")
 			Param("id")
 			security.SessionHeader()
 			Response(StatusNoContent)

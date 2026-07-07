@@ -116,6 +116,55 @@ func TestLoadChat_AuditsSessionAccess(t *testing.T) {
 	require.Equal(t, ti.projectID, rec.ProjectID.UUID)
 }
 
+// A Speakeasy admin impersonating an org via the dev-tools override is blocked
+// from opening chat sessions outright, even though impersonation grants every
+// scope, and no chat_session:access audit event is written.
+func TestLoadChat_ImpersonatingAdminBlocked(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.IsAdmin = true
+
+	other := seedChat(t, ctx, ti, "someone-else", "", "their session")
+
+	adminCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource))
+	adminCtx = contextvalues.SetAdminOverrideInContext(adminCtx, "customer-org")
+
+	before, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
+	require.NoError(t, err)
+
+	_, err = ti.service.LoadChat(adminCtx, loadPayload(other.String()))
+	require.Error(t, err)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeForbidden, shareable.Code)
+
+	after, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
+	require.NoError(t, err)
+	require.Equal(t, before, after, "blocked opens must not record an access audit event")
+}
+
+// A stray admin-override cookie on a non-admin session has no effect: auth
+// ignores the override for non-admins, so LoadChat must not block them.
+func TestLoadChat_OverrideWithoutAdminNotBlocked(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	own := seedChat(t, ctx, ti, authCtx.UserID, "", "my session")
+
+	selfCtx := authztest.WithExactGrants(t, ctx)
+	selfCtx = contextvalues.SetAdminOverrideInContext(selfCtx, "customer-org")
+
+	res, err := ti.service.LoadChat(selfCtx, loadPayload(own.String()))
+	require.NoError(t, err)
+	require.Equal(t, own.String(), res.ID)
+}
+
 // Scroll pagination (before_seq/after_seq) does not emit additional audit
 // events: only the initial open of a session is recorded.
 func TestLoadChat_RBAC_PaginationNotReAudited(t *testing.T) {

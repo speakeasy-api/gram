@@ -7,7 +7,7 @@
 [tools]
 "aqua:ariga/atlas" = "1.0.0"
 "github:speakeasy-api/openapi" = "1.24.0"
-"github:speakeasy-api/speakeasy" = "1.761.5"
+"github:speakeasy-api/speakeasy" = "1.788.0"
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.20"
 flyctl = "0.4.62"
@@ -108,6 +108,13 @@ GRAM_HOST = "localhost" # Only needed for local development. In production, you 
 GRAM_SITE_PORT = "5173"
 GRAM_SITE_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SITE_PORT}}"
 GRAM_SERVER_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SERVER_PORT}}"
+## Local proxy uses one gram.local origin while forwarding to the real dev ports.
+GRAM_LOCAL_PROXY_HOST = "gram.local"
+GRAM_LOCAL_PROXY_BIND_ADDRESS = "127.0.0.1"
+GRAM_LOCAL_PROXY_PORT = "8443"
+GRAM_LOCAL_PROXY_URL = "https://{{env.GRAM_LOCAL_PROXY_HOST}}:{{env.GRAM_LOCAL_PROXY_PORT}}"
+GRAM_SERVER_BACKEND_URL = "https://localhost:{{env.GRAM_SERVER_PORT}}"
+GRAM_SITE_BACKEND_URL = "https://localhost:{{env.GRAM_SITE_PORT}}"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
 ## The following variable is used to encrypt env vars stored in the database.
@@ -117,6 +124,8 @@ GRAM_REDIS_CACHE_PORT = "5445"
 GRAM_REDIS_CACHE_ADDR = "{{env.GRAM_REDIS_CACHE_HOST}}:{{env.GRAM_REDIS_CACHE_PORT}}"
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
 GRAM_REDIS_ENABLE_TRACING = "false"
+## Local-only value; real deployments inject this via secrets.
+GRAM_TUNNEL_FORWARD_TOKEN = "local-dev-tunnel-forward-token"
 OPENROUTER_DEV_KEY = "unset"
 ## The dev-idp is a top-level project (dev-idp/) backed by SQLite.
 ## GRAM_DEVIDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.
@@ -233,10 +242,6 @@ GRAM_ASSISTANT_RUNTIME_PROVIDER = "flyio"
 ##################
 ## MCP Registry ##
 ##################
-## Options below configure where your optional local registry container will be
-## discoverable by the Gram application.
-LOCAL_MCP_REGISTRY_PORT = "9847"
-LOCAL_MCP_REGISTRY_URL = "http://localhost:{{env.LOCAL_MCP_REGISTRY_PORT}}"
 PULSE_REGISTRY_TENANT = "unset"
 PULSE_REGISTRY_KEY = "unset"
 

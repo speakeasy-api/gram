@@ -6,6 +6,7 @@ packages:
   - "!ts-framework/create-function/gram-template-*"
   - server
   - cli
+  - tunnel
   - functions
   - docs
   - evaluation
@@ -16,12 +17,12 @@ packages:
 catalog:
   "@ai-sdk/react": ^3.0.211
   "@modelcontextprotocol/sdk": ^1.29.0
-  "@tanstack/react-query": 5.90.10
+  "@tanstack/react-query": 5.101.1
   "@types/react": ^19.2.17
   "@types/react-dom": ^19.2.3
   "@assistant-ui/react": ^0.11.0
   ai: ^6.0.209
-  "lucide-react": ^1.8.0
+  "lucide-react": ^1.21.0
   typescript: 5.9.3
 
 minimumReleaseAge: 10080
@@ -37,6 +38,11 @@ overrides:
   glob@>=10.0 <10.5.0: 10.5.0
   # Without this, @polar-sh/ui resolves Recharts v3 while Elements/Tremor stay on v2.
   recharts: 2.15.4
+  # Radix sub-packages pin exact react-dismissable-layer versions, so mixed Radix
+  # releases load multiple copies with separate layer-stack contexts — nested dismiss
+  # layers then can't see each other (e.g. the filter sheet closing when dismissing a
+  # dropdown inside it, DNO-393/AIS-168). Force one copy so all primitives share a stack.
+  "@radix-ui/react-dismissable-layer": 1.1.13
 
 allowBuilds:
   bun: true
@@ -46,3 +52,4 @@ allowBuilds:
   cpu-features: false
   msw: false
   ssh2: false
+  "@openrouter/sdk": false

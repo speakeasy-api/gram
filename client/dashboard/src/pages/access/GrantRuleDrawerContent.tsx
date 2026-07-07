@@ -21,12 +21,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
-import type {
-  ActivePanel,
-  AnnotationHint,
-  ResourceType,
-  Selector,
-} from "./types";
+import type { Selector } from "@gram/client/models/components/selector.js";
+import type { ActivePanel, AnnotationHint, ResourceType } from "./types";
 import { ANNOTATION_TO_DISPOSITION } from "./types";
 import { computePanelState, type CollectionGroup } from "./computePanelState";
 

@@ -1,18 +1,18 @@
 package remotesessions_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// createGlobalIssuer seeds a global remote_session_issuer through the admin
-// surface and returns its view. The caller supplies an admin context.
-func createGlobalIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string) *adminrsgen.CreateGlobalIssuerPayload {
+// createGlobalIssuer builds a CreateGlobalIssuer payload for the given slug. The
+// caller passes it to CreateGlobalIssuer under an admin context.
+func createGlobalIssuer(t *testing.T, slug string) *adminrsgen.CreateGlobalIssuerPayload {
 	t.Helper()
 	payload := &adminrsgen.CreateGlobalIssuerPayload{
 		SessionToken:                      nil,
@@ -40,7 +40,7 @@ func TestAdminRemoteSessions_CreateGlobalIssuer_Success(t *testing.T) {
 	ctx, ti := newTestService(t)
 	ctx = withAdmin(t, ctx)
 
-	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, ctx, ti, "hubspot"))
+	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "hubspot"))
 	require.NoError(t, err)
 	require.NotEmpty(t, issuer.ID)
 	require.Equal(t, "hubspot", issuer.Slug)
@@ -54,7 +54,7 @@ func TestAdminRemoteSessions_CreateGlobalIssuer_RequiresAdmin(t *testing.T) {
 	ctx, ti := newTestService(t)
 	// Default (non-admin) context.
 
-	_, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, ctx, ti, "hubspot"))
+	_, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "hubspot"))
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
@@ -63,10 +63,10 @@ func TestAdminRemoteSessions_CreateGlobalIssuer_SlugConflict(t *testing.T) {
 	ctx, ti := newTestService(t)
 	ctx = withAdmin(t, ctx)
 
-	_, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, ctx, ti, "dupe"))
+	_, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "dupe"))
 	require.NoError(t, err)
 
-	_, err = ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, ctx, ti, "dupe"))
+	_, err = ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "dupe"))
 	requireOopsCode(t, err, oops.CodeConflict)
 }
 
@@ -75,7 +75,7 @@ func TestAdminRemoteSessions_ListAndGetGlobalIssuers(t *testing.T) {
 	ctx, ti := newTestService(t)
 	ctx = withAdmin(t, ctx)
 
-	created, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, ctx, ti, "google-workspace"))
+	created, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "google-workspace"))
 	require.NoError(t, err)
 
 	list, err := ti.service.ListGlobalIssuers(ctx, &adminrsgen.ListGlobalIssuersPayload{Cursor: nil, Limit: nil, SessionToken: nil})
@@ -102,7 +102,7 @@ func TestAdminRemoteSessions_UpdateGlobalIssuer(t *testing.T) {
 	ctx, ti := newTestService(t)
 	ctx = withAdmin(t, ctx)
 
-	created, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, ctx, ti, "rename-me"))
+	created, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "rename-me"))
 	require.NoError(t, err)
 
 	newSlug := "renamed"
@@ -129,12 +129,60 @@ func TestAdminRemoteSessions_UpdateGlobalIssuer(t *testing.T) {
 	require.Equal(t, "renamed", updated.Slug)
 }
 
+func TestAdminRemoteSessions_IssuerFieldsStoredTrimmed(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	// Create persists the trimmed slug/issuer, not the padded input.
+	payload := createGlobalIssuer(t, "padded")
+	payload.Slug = "  padded  "
+	payload.Issuer = "\thttps://padded.example.com \n"
+	created, err := ti.service.CreateGlobalIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "padded", created.Slug)
+	require.Equal(t, "https://padded.example.com", created.Issuer)
+
+	// Update persists trimmed values too.
+	newSlug := "  renamed-padded  "
+	newIssuer := " https://renamed.example.com "
+	updated, err := ti.service.UpdateGlobalIssuer(ctx, &adminrsgen.UpdateGlobalIssuerPayload{
+		SessionToken:                      nil,
+		ID:                                created.ID,
+		Slug:                              &newSlug,
+		Issuer:                            &newIssuer,
+		Name:                              nil,
+		LogoAssetID:                       nil,
+		AuthorizationEndpoint:             nil,
+		TokenEndpoint:                     nil,
+		RegistrationEndpoint:              nil,
+		JwksURI:                           nil,
+		ScopesSupported:                   nil,
+		GrantTypesSupported:               nil,
+		ResponseTypesSupported:            nil,
+		TokenEndpointAuthMethodsSupported: nil,
+		Oidc:                              nil,
+		Passthrough:                       nil,
+		ClientIDMetadataDocumentSupported: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "renamed-padded", updated.Slug)
+	require.Equal(t, "https://renamed.example.com", updated.Issuer)
+
+	// A padded variant of an existing slug now collides instead of slipping
+	// past the unique index as a visually identical duplicate.
+	dupe := createGlobalIssuer(t, "renamed-padded")
+	dupe.Slug = " renamed-padded "
+	_, err = ti.service.CreateGlobalIssuer(ctx, dupe)
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
 func TestAdminRemoteSessions_GlobalClientLifecycle(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	ctx = withAdmin(t, ctx)
 
-	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, ctx, ti, "client-host"))
+	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "client-host"))
 	require.NoError(t, err)
 
 	secret := "s3cr3t"
@@ -174,6 +222,143 @@ func TestAdminRemoteSessions_GlobalClientLifecycle(t *testing.T) {
 
 	err = ti.service.DeleteGlobalIssuer(ctx, &adminrsgen.DeleteGlobalIssuerPayload{ID: issuer.ID, SessionToken: nil})
 	require.NoError(t, err)
+}
+
+func TestAdminRemoteSessions_GetGlobalClient(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "get-client-host"))
+	require.NoError(t, err)
+
+	created, err := ti.service.CreateGlobalClient(ctx, &adminrsgen.CreateGlobalClientPayload{
+		SessionToken:            nil,
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                "client-get",
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	require.NoError(t, err)
+
+	got, err := ti.service.GetGlobalClient(ctx, &adminrsgen.GetGlobalClientPayload{ID: created.ID, SessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, created.ID, got.ID)
+	require.Equal(t, "client-get", got.ClientID)
+
+	_, err = ti.service.GetGlobalClient(ctx, &adminrsgen.GetGlobalClientPayload{ID: "00000000-0000-0000-0000-000000000000", SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestAdminRemoteSessions_UpdateGlobalClient(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "update-client-host"))
+	require.NoError(t, err)
+
+	created, err := ti.service.CreateGlobalClient(ctx, &adminrsgen.CreateGlobalClientPayload{
+		SessionToken:            nil,
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                "client-update",
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	require.NoError(t, err)
+
+	newSecret := "rotated-s3cr3t"
+	authMethod := "client_secret_post"
+	audience := "https://api.example.com"
+	updated, err := ti.service.UpdateGlobalClient(ctx, &adminrsgen.UpdateGlobalClientPayload{
+		SessionToken:            nil,
+		ID:                      created.ID,
+		ClientSecret:            &newSecret,
+		TokenEndpointAuthMethod: &authMethod,
+		Scope:                   []string{"read:things"},
+		Audience:                &audience,
+	})
+	require.NoError(t, err)
+	require.Equal(t, created.ID, updated.ID)
+	require.Equal(t, []string{"read:things"}, updated.Scope)
+	require.Equal(t, "client_secret_post", conv.PtrValOrEmpty(updated.TokenEndpointAuthMethod, ""))
+	require.Equal(t, "https://api.example.com", conv.PtrValOrEmpty(updated.Audience, ""))
+
+	// A blank rotated secret is rejected rather than silently encrypted.
+	blank := "   "
+	_, err = ti.service.UpdateGlobalClient(ctx, &adminrsgen.UpdateGlobalClientPayload{
+		SessionToken:            nil,
+		ID:                      created.ID,
+		ClientSecret:            &blank,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestAdminRemoteSessions_UpdateGlobalClient_NotFound(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	secret := "s3cr3t"
+	_, err := ti.service.UpdateGlobalClient(ctx, &adminrsgen.UpdateGlobalClientPayload{
+		SessionToken:            nil,
+		ID:                      "00000000-0000-0000-0000-000000000000",
+		ClientSecret:            &secret,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestAdminRemoteSessions_ClientMethods_RequireAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	// Default (non-admin) context.
+
+	someID := "00000000-0000-0000-0000-000000000001"
+
+	_, err := ti.service.CreateGlobalClient(ctx, &adminrsgen.CreateGlobalClientPayload{
+		SessionToken:            nil,
+		RemoteSessionIssuerID:   someID,
+		ClientID:                "client-forbidden",
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	_, err = ti.service.ListGlobalClients(ctx, &adminrsgen.ListGlobalClientsPayload{
+		RemoteSessionIssuerID: someID,
+		Cursor:                nil,
+		Limit:                 nil,
+		SessionToken:          nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	_, err = ti.service.GetGlobalClient(ctx, &adminrsgen.GetGlobalClientPayload{ID: someID, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	_, err = ti.service.UpdateGlobalClient(ctx, &adminrsgen.UpdateGlobalClientPayload{
+		SessionToken:            nil,
+		ID:                      someID,
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	err = ti.service.DeleteGlobalClient(ctx, &adminrsgen.DeleteGlobalClientPayload{ID: someID, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestAdminRemoteSessions_CreateGlobalClient_RejectsNonGlobalIssuer(t *testing.T) {

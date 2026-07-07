@@ -1,3 +1,4 @@
+import { AccountTypeIcon } from "@/components/account-type-icon";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-dock";
@@ -331,6 +332,37 @@ export function LogsTools(): JSX.Element {
     [attributeFilters],
   );
 
+  // Account-type scope ("team" | "personal" | ""), persisted in the URL. It
+  // filters on the materialized gram.account_type column via the raw-logs path.
+  // "team" is expressed as "not personal" so unclassified rows count as team
+  // (matching the badge semantics elsewhere).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const accountType = ((): string => {
+    const v = searchParams.get("account_type");
+    return v === "team" || v === "personal" ? v : "";
+  })();
+  const setAccountType = useCallback(
+    (value: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) {
+            next.set("account_type", value);
+          } else {
+            next.delete("account_type");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+  // account_type is sent as a first-class payload filter (below), not an
+  // attribute filter, so it stays on the fast trace_summaries path rather than
+  // forcing the raw-logs scan.
+  const queryFilters = attributeSdkFilters;
+
   const {
     data: tracesData,
     error,
@@ -352,7 +384,8 @@ export function LogsTools(): JSX.Element {
         userFilters,
         hookSources,
         attributeSearchQuery,
-        attributeSdkFilters,
+        queryFilters,
+        accountType,
       ],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
@@ -367,11 +400,9 @@ export function LogsTools(): JSX.Element {
               targetTypes,
               userFilters: userFilters.length > 0 ? userFilters : undefined,
               hookSources: hookSources.length > 0 ? hookSources : undefined,
+              accountType: accountType || undefined,
               query: attributeSearchQuery ?? undefined,
-              filters:
-                attributeSdkFilters.length > 0
-                  ? attributeSdkFilters
-                  : undefined,
+              filters: queryFilters.length > 0 ? queryFilters : undefined,
               cursor: pageParam,
               limit: perPage,
               sort: "desc",
@@ -467,6 +498,7 @@ export function LogsTools(): JSX.Element {
           <LogsToolsContent
             isLoading={isLoading}
             isFetching={isFetching}
+            onRefresh={refetch}
             error={displayError}
             traces={traces}
             serverOptionGroups={serverOptionGroups}
@@ -509,6 +541,8 @@ export function LogsTools(): JSX.Element {
             onAttributeSearchSubmit={updateAttributeSearchQuery}
             onAttributeFiltersChange={updateAttributeFilters}
             onAddFilterFromLog={handleAddFilterFromLog}
+            accountType={accountType}
+            onAccountTypeChange={setAccountType}
             from={from}
             to={to}
           />
@@ -521,6 +555,7 @@ export function LogsTools(): JSX.Element {
 function LogsToolsContent({
   isLoading,
   isFetching,
+  onRefresh,
   error,
   traces,
   serverOptionGroups,
@@ -561,11 +596,14 @@ function LogsToolsContent({
   onAttributeSearchSubmit,
   onAttributeFiltersChange,
   onAddFilterFromLog,
+  accountType,
+  onAccountTypeChange,
   from,
   to,
 }: {
   isLoading: boolean;
   isFetching: boolean;
+  onRefresh: () => void;
   error: Error | null;
   traces: ToolUsageTraceSummary[];
   serverOptionGroups: Parameters<
@@ -608,6 +646,8 @@ function LogsToolsContent({
   onAttributeSearchSubmit: (query: string) => void;
   onAttributeFiltersChange: (filters: ActiveLogFilter[]) => void;
   onAddFilterFromLog: (path: string, op: Operator, value: string) => void;
+  accountType: string;
+  onAccountTypeChange: (value: string) => void;
   from: Date;
   to: Date;
 }) {
@@ -659,6 +699,8 @@ function LogsToolsContent({
             onClearCustomRange={onClearCustomRange}
             projectSlug={projectSlug}
             serverNameMappings={serverNameMappings}
+            accountType={accountType}
+            onAccountTypeChange={onAccountTypeChange}
             attributeSearchControl={
               <div className="min-w-[260px] flex-[1.2]">
                 <LogFilterBar
@@ -672,6 +714,8 @@ function LogsToolsContent({
                 />
               </div>
             }
+            onRefresh={onRefresh}
+            isRefreshing={isFetching}
           />
 
           {isCustomSearchActive(attributeSearchQuery, attributeFilters) && (
@@ -712,6 +756,7 @@ function LogsToolsContent({
                       selectedTypes.length > 0 ||
                       selectedRoleIds.length > 0 ||
                       attributeFilters.length > 0 ||
+                      accountType !== "" ||
                       Boolean(attributeSearchQuery)
                     }
                     expandedTraceId={expandedTraceId}
@@ -965,8 +1010,14 @@ function LogsToolsTraceRow({
           </div>
         </div>
 
-        <div className="text-muted-foreground min-w-[200px] flex-1 truncate text-xs">
-          {userLabel || "—"}
+        <div className="flex min-w-[200px] flex-1 items-center gap-2 text-xs">
+          <AccountTypeIcon
+            accountType={trace.accountType}
+            className="shrink-0"
+          />
+          <span className="text-muted-foreground min-w-0 truncate">
+            {userLabel || "—"}
+          </span>
         </div>
 
         <div className="flex min-w-28 shrink-0 items-center gap-2">
@@ -1048,6 +1099,11 @@ function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
     case "hosted_mcp_server":
       return {
         label: "Hosted MCP",
+        className: "bg-primary/15 text-primary",
+      };
+    case "tunneled_mcp_server":
+      return {
+        label: "Tunneled MCP",
         className: "bg-primary/15 text-primary",
       };
     case "shadow_mcp_server":

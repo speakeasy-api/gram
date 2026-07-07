@@ -725,24 +725,40 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return SessionMetadata{
-			SessionID:   "",
-			ServiceName: "",
-			UserEmail:   "",
-			UserID:      "",
-			ClaudeOrgID: "",
-			GramOrgID:   "",
-			ProjectID:   "",
+			SessionID:           "",
+			ServiceName:         "",
+			UserEmail:           "",
+			UserID:              "",
+			Provider:            "",
+			ExternalOrgID:       "",
+			ExternalAccountUUID: "",
+			ExternalAccountID:   "",
+			DeviceID:            "",
+			AccountType:         "",
+			BillingMode:         "",
+			UserAccountID:       "",
+			ObservedUserEmail:   "",
+			GramOrgID:           "",
+			ProjectID:           "",
 		}, false
 	}
 
 	metadata := SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "",
-		UserEmail:   userEmail,
-		UserID:      "",
-		ClaudeOrgID: "",
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   authCtx.ProjectID.String(),
+		SessionID:           sessionID,
+		ServiceName:         "",
+		UserEmail:           userEmail,
+		UserID:              "",
+		Provider:            providerAnthropic,
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
+		AccountType:         "",
+		BillingMode:         "",
+		UserAccountID:       "",
+		ObservedUserEmail:   "",
+		GramOrgID:           authCtx.ActiveOrganizationID,
+		ProjectID:           authCtx.ProjectID.String(),
 	}
 	if metadata.UserEmail != "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
@@ -782,7 +798,13 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, m
 		return
 	}
 
-	metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+	// Resolve the owning user from email only when it isn't already known. A
+	// personal account's email won't resolve, but mergeClaudeAuthContextMetadata
+	// may have already supplied the owner via the device bridge — don't discard
+	// it by re-resolving from the (non-resolving) personal email.
+	if metadata.UserID == "" {
+		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+	}
 
 	if isConversationEvent(payload.HookEventName) {
 		if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
@@ -899,7 +921,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// org/project come from the auth context — same pattern as recordHook.
 	// This lets the shadow-MCP guard run on the very first PreToolUse of a
 	// session, before OTEL Logs has had a chance to seed Redis. Redis is still
-	// consulted to enrich UserEmail / ServiceName / ClaudeOrgID for the
+	// consulted to enrich UserEmail / ServiceName / ExternalOrgID for the
 	// downstream ClickHouse row, but absence of cached fields is non-fatal.
 	payloadUserEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
 	metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, payloadUserEmail)
@@ -1113,8 +1135,31 @@ func (s *Service) mergeClaudeAuthContextMetadata(ctx context.Context, metadata S
 	if cached.UserEmail != "" {
 		metadata.UserEmail = cached.UserEmail
 	}
-	metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-	metadata.ClaudeOrgID = cached.ClaudeOrgID
+	// Prefer email resolution, which is authoritative for team accounts and
+	// avoids trusting a possibly-stale cached id. Only a personal account — whose
+	// email never resolves to an org member — adopts the owner the OTEL path
+	// attributed via the device bridge.
+	switch resolved := s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID); {
+	case resolved != "":
+		metadata.UserID = resolved
+	case cached.AccountType == accountTypePersonal:
+		metadata.UserID = cached.UserID
+	default:
+		metadata.UserID = ""
+	}
+	// Carry the provider account identity learned on the OTEL ingest path so
+	// hook-time writes (chat linking, telemetry) reflect it.
+	metadata.Provider = cached.Provider
+	metadata.ExternalOrgID = cached.ExternalOrgID
+	metadata.ExternalAccountUUID = cached.ExternalAccountUUID
+	metadata.ExternalAccountID = cached.ExternalAccountID
+	metadata.DeviceID = cached.DeviceID
+	metadata.AccountType = cached.AccountType
+	metadata.BillingMode = cached.BillingMode
+	metadata.UserAccountID = cached.UserAccountID
+	// The OTEL path's UserEmail is the account's own report; fall back to it
+	// for cache entries written before ObservedUserEmail existed.
+	metadata.ObservedUserEmail = conv.Default(cached.ObservedUserEmail, cached.UserEmail)
 	return metadata
 }
 

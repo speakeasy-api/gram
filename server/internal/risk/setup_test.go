@@ -17,7 +17,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -26,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -37,6 +40,21 @@ func testCELEngine(t *testing.T) *celenv.Engine {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 	return eng
+}
+
+func testPresetLibrary(t *testing.T) *presetlib.Library {
+	t.Helper()
+	lib, err := presetlib.New()
+	require.NoError(t, err)
+	return lib
+}
+
+func newTestCustomRuleAnalyzer(t *testing.T, conn riskrepo.DBTX) *customruleanalyzer.Scanner {
+	t.Helper()
+	scanner, err := customruleanalyzer.NewScanner(conn)
+	require.NoError(t, err)
+
+	return scanner
 }
 
 var infra *testenv.Environment
@@ -85,6 +103,20 @@ func (c *syncResultsCleaner) Clean(ctx context.Context, projectID, policyID uuid
 	return nil
 }
 
+// stubJudge is a settable ra.PromptJudge for eval-endpoint tests. When evaluate
+// is nil it never matches; otherwise it delegates so a test can flag messages by
+// content.
+type stubJudge struct {
+	evaluate func(in ra.JudgeInput) *ra.JudgeVerdict
+}
+
+func (s *stubJudge) Evaluate(_ context.Context, in ra.JudgeInput) *ra.JudgeVerdict {
+	if s.evaluate == nil {
+		return nil
+	}
+	return s.evaluate(in)
+}
+
 type testInstance struct {
 	service        *risk.Service
 	conn           *pgxpool.Pool
@@ -93,6 +125,7 @@ type testInstance struct {
 	chatRepo       *chatrepo.Queries
 	flags          *feature.InMemory
 	cacheAdapter   cache.Cache
+	judge          *stubJudge
 }
 
 func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
@@ -127,7 +160,9 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 	auditLogger := audit.NewLogger()
 	flags := &feature.InMemory{}
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, nil, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", nil, nil, flags, testCELEngine(t))
+	judge := &stubJudge{evaluate: nil}
+
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, nil, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -137,6 +172,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 		chatRepo:       chatrepo.New(conn),
 		flags:          flags,
 		cacheAdapter:   cacheAdapter,
+		judge:          judge,
 	}
 }
 

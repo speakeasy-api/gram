@@ -114,7 +114,7 @@ The server's design authors the contract; clients receive it through generated O
 
 **HTTP routes.** `/rpc/<service>.<method>`. Method names are derived from the Goa `Service`/`Method` names — renaming them is a breaking change for CLI and any direct HTTP callers.
 
-**OpenAPI.** `server/gen/http/openapi3.yaml` and `openapi3.json` are the raw Goa outputs. `.speakeasy/workflow.yaml` defines two sources (`Gram-Internal`, `Gram-Public`) that apply overlays from `.speakeasy/overlays/` to produce `.speakeasy/out.openapi.yaml` and `.speakeasy/openapi-public.yaml`. The TypeScript SDK is generated from the internal spec.
+**OpenAPI.** `server/gen/http/openapi3.yaml` is the raw Goa output (Goa also emits a sibling `openapi3.json`, but it is gitignored — nothing consumes it). `.speakeasy/workflow.yaml` defines two sources (`Gram-Internal`, `Gram-Public`) that apply overlays from `.speakeasy/overlays/` to produce `.speakeasy/out.openapi.yaml` and `.speakeasy/openapi-public.yaml`. The TypeScript SDK is generated from the internal spec.
 
 **TypeScript SDK.** `client/sdk/` — per-operation modules under `src/funcs/`, a per-service class under `src/sdk/`, React Query hooks under `src/react-query/`, and model types under `src/models/{components,operations}/`.
 
@@ -187,16 +187,17 @@ Order matters because each step's output is the next step's input.
 
 ## Relevant mise tasks
 
-| Task                       | Purpose                                                                                                                                                         |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mise run build:server`    | Build the server binary.                                                                                                                                        |
-| `mise run gen:goa-server`  | Regenerate everything under `server/gen/**` from the Goa design files.                                                                                          |
-| `mise run gen:sdk`         | Apply Speakeasy overlays and regenerate the TypeScript SDK and both public/internal OpenAPI files. Flags: `--check`, `--skip-versioning`, `--skip-upload-spec`. |
-| `mise run gen:server`      | Convenience: runs `gen:sqlc-server` then `gen:goa-server`.                                                                                                      |
-| `mise run gen:sqlc-server` | Regenerate every `repo/` package from every `queries.sql`. Requires `mise run infra:start` (sqlc connects to the local Postgres to type-check queries).         |
-| `mise run go:tidy`         | `go mod tidy` across the workspace.                                                                                                                             |
-| `mise run lint:server`     | `golangci-lint` over the server tree including `exhaustruct`.                                                                                                   |
-| `mise run test:server`     | Runs `go test` across the server tree; accepts `go test` arguments.                                                                                             |
+| Task                            | Purpose                                                                                                                                                         |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mise run build:server`         | Build the server binary.                                                                                                                                        |
+| `mise run build:tunnel-gateway` | Build the tunnel gateway binary.                                                                                                                                |
+| `mise run gen:goa-server`       | Regenerate everything under `server/gen/**` from the Goa design files.                                                                                          |
+| `mise run gen:sdk`              | Apply Speakeasy overlays and regenerate the TypeScript SDK and both public/internal OpenAPI files. Flags: `--check`, `--skip-versioning`, `--skip-upload-spec`. |
+| `mise run gen:server`           | Convenience: runs `gen:sqlc-server` then `gen:goa-server`.                                                                                                      |
+| `mise run gen:sqlc-server`      | Regenerate every `repo/` package from every `queries.sql`. Requires `mise run infra:start` (sqlc connects to the local Postgres to type-check queries).         |
+| `mise run go:tidy`              | `go mod tidy` across the workspace.                                                                                                                             |
+| `mise run lint:server`          | `golangci-lint` over the server tree including `exhaustruct`.                                                                                                   |
+| `mise run test:server`          | Runs `go test` across the server tree; accepts `go test` arguments.                                                                                             |
 
 ## Maintaining this skill
 

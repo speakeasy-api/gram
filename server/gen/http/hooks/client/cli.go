@@ -246,6 +246,72 @@ func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hook
 	return v, nil
 }
 
+// BuildIngestPayload builds the payload for the hooks ingest endpoint from CLI
+// flags.
+func BuildIngestPayload(hooksIngestBody string, hooksIngestApikeyToken string, hooksIngestProjectSlugInput string, hooksIngestIdempotencyKey string) (*hooks.IngestPayload, error) {
+	var err error
+	var body IngestRequestBody
+	{
+		err = json.Unmarshal([]byte(hooksIngestBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data\": {\n         \"mcp\": {\n            \"command\": \"abc123\",\n            \"result_json\": \"abc123\",\n            \"server_identity\": \"abc123\",\n            \"server_name\": \"abc123\",\n            \"url\": \"abc123\"\n         },\n         \"message\": {\n            \"duration_ms\": 1,\n            \"role\": \"abc123\",\n            \"text\": \"abc123\"\n         },\n         \"notification\": {\n            \"message\": \"abc123\",\n            \"title\": \"abc123\",\n            \"type\": \"abc123\"\n         },\n         \"prompt\": {\n            \"text\": \"abc123\"\n         },\n         \"skill\": {\n            \"name\": \"abc123\",\n            \"source\": \"abc123\"\n         },\n         \"tool_call\": {\n            \"duration_ms\": 1,\n            \"error\": \"abc123\",\n            \"id\": \"abc123\",\n            \"input\": \"abc123\",\n            \"is_interrupt\": false,\n            \"name\": \"abc123\",\n            \"output\": \"abc123\",\n            \"permission_type\": \"abc123\",\n            \"status\": \"abc123\"\n         },\n         \"usage\": {\n            \"cache_read_tokens\": 1,\n            \"cache_write_tokens\": 1,\n            \"cost\": 1,\n            \"input_tokens\": 1,\n            \"loop_count\": 1,\n            \"output_tokens\": 1,\n            \"status\": \"abc123\"\n         }\n      },\n      \"event\": {\n         \"occurred_at\": \"1970-01-01T00:00:01Z\",\n         \"type\": \"session.updated\"\n      },\n      \"raw\": \"abc123\",\n      \"schema_version\": \"abc123\",\n      \"session\": {\n         \"cwd\": \"abc123\",\n         \"id\": \"abc123\",\n         \"model\": \"abc123\",\n         \"turn_id\": \"abc123\"\n      },\n      \"source\": {\n         \"adapter\": \"abc123\",\n         \"adapter_version\": \"abc123\",\n         \"hostname\": \"abc123\",\n         \"raw_event_name\": \"abc123\"\n      }\n   }'")
+		}
+		if body.Source == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+		}
+		if body.Event == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("event", "body"))
+		}
+		if body.Event != nil {
+			if err2 := ValidateHookIngestEventRequestBody(body.Event); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if hooksIngestApikeyToken != "" {
+			apikeyToken = &hooksIngestApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if hooksIngestProjectSlugInput != "" {
+			projectSlugInput = &hooksIngestProjectSlugInput
+		}
+	}
+	var idempotencyKey *string
+	{
+		if hooksIngestIdempotencyKey != "" {
+			idempotencyKey = &hooksIngestIdempotencyKey
+		}
+	}
+	v := &hooks.IngestPayload{
+		SchemaVersion: body.SchemaVersion,
+		Raw:           body.Raw,
+	}
+	if body.Source != nil {
+		v.Source = marshalHookIngestSourceRequestBodyToHooksHookIngestSource(body.Source)
+	}
+	if body.Session != nil {
+		v.Session = marshalHookIngestSessionRequestBodyToHooksHookIngestSession(body.Session)
+	}
+	if body.Event != nil {
+		v.Event = marshalHookIngestEventRequestBodyToHooksHookIngestEvent(body.Event)
+	}
+	if body.Data != nil {
+		v.Data = marshalHookIngestDataRequestBodyToHooksHookIngestData(body.Data)
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.IdempotencyKey = idempotencyKey
+
+	return v, nil
+}
+
 // BuildLogsPayload builds the payload for the hooks logs endpoint from CLI
 // flags.
 func BuildLogsPayload(hooksLogsBody string, hooksLogsApikeyToken string, hooksLogsProjectSlugInput string) (*hooks.LogsPayload, error) {

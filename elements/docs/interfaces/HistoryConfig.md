@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.39.0**](../README.md)
+[**@gram-ai/elements v1.41.0**](../README.md)
 
 ***
 
@@ -39,7 +39,7 @@ false
 
 ### threadListFilters?
 
-> `optional` **threadListFilters**: `Record`\<`string`, `string`\>
+> `optional` **threadListFilters?**: `Record`\<`string`, `string`\>
 
 Extra query parameters forwarded to the thread-list request, used to
 filter which conversations are shown. Opaque to Elements — the consumer
@@ -50,7 +50,7 @@ omitted, all of the caller's chats are listed.
 
 ### deferThreadIdMinting?
 
-> `optional` **deferThreadIdMinting**: `boolean`
+> `optional` **deferThreadIdMinting?**: `boolean`
 
 Let the backend own chat-id creation. When true, a brand-new thread does not
 get a client-generated id; instead the transport assigns the id (e.g. one
@@ -59,9 +59,9 @@ the server minted on the first send, reported via the transport context's
 
 ***
 
-### transformChatMessage()?
+### transformChatMessage?
 
-> `optional` **transformChatMessage**: (`message`) => [`GramChatMessage`](GramChatMessage.md) \| `null`
+> `optional` **transformChatMessage?**: (`message`) => [`GramChatMessage`](GramChatMessage.md) \| `null`
 
 Optional hook to transform or drop each persisted message before it is
 rendered from history. Return a (possibly rewritten) message to render it,
@@ -97,7 +97,7 @@ transformChatMessage: (msg) => {
 
 ### showThreadList?
 
-> `optional` **showThreadList**: `boolean`
+> `optional` **showThreadList?**: `boolean`
 
 Whether to show the thread list sidebar/panel.
 Only applicable for widget and sidecar variants.
@@ -113,7 +113,7 @@ true when history.enabled is true
 
 ### initialThreadId?
 
-> `optional` **initialThreadId**: `string`
+> `optional` **initialThreadId?**: `string`
 
 Initial thread ID to load when the component mounts.
 When provided, Elements will automatically load and switch to this thread.
@@ -132,4 +132,78 @@ const threadId = searchParams.get('threadId')
     initialThreadId: threadId ?? undefined,
   },
 }}>
+```
+
+***
+
+### resolveCreator?
+
+> `optional` **resolveCreator?**: (`chat`) => \{ `name?`: `string`; `email`: `string`; `photoUrl?`: `string`; \} \| `undefined`
+
+Resolve a chat's creator to a displayable identity, shown as an avatar on
+each thread-list row. Called for every chat returned by the thread list
+with that chat's `userId`/`externalUserId`; return the creator's info to
+show it, or `undefined` to fall back to the default row icon.
+
+Elements has no notion of who a `userId` refers to — resolve it however
+the consumer's own identity system works (e.g. looking it up in an
+already-fetched member list) and return the result synchronously.
+
+#### Parameters
+
+##### chat
+
+###### userId?
+
+`string`
+
+###### externalUserId?
+
+`string`
+
+#### Returns
+
+\{ `name?`: `string`; `email`: `string`; `photoUrl?`: `string`; \} \| `undefined`
+
+#### Example
+
+```ts
+resolveCreator: ({ userId }) => {
+  const member = members.find((m) => m.id === userId);
+  return member && { name: member.name, email: member.email, photoUrl: member.photoUrl };
+}
+```
+
+***
+
+### isOwnChat?
+
+> `optional` **isOwnChat?**: (`chat`) => `boolean`
+
+Report whether the signed-in caller owns a chat returned by the thread
+list. Called for every chat with that chat's `userId`/`externalUserId`;
+return `false` to hide the composer for that chat — the backend rejects
+sends into a chat the caller can view (e.g. via an admin-level read
+grant) but didn't create. Omit to always show the composer.
+
+#### Parameters
+
+##### chat
+
+###### userId?
+
+`string`
+
+###### externalUserId?
+
+`string`
+
+#### Returns
+
+`boolean`
+
+#### Example
+
+```ts
+isOwnChat: ({ userId }) => userId === currentUser.id
 ```

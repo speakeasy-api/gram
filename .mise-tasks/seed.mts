@@ -3,13 +3,13 @@
 //MISE description="Seed the local database with data"
 
 import assert from "node:assert";
-import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import { intro, log, outro } from "@clack/prompts";
 import { GramCore } from "@gram/client/core.js";
+import { accessEnableRBAC } from "@gram/client/funcs/accessEnableRBAC.js";
 import { assetsUploadFunctions } from "@gram/client/funcs/assetsUploadFunctions.js";
 import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
 import { authInfo } from "@gram/client/funcs/authInfo.js";
@@ -29,6 +29,7 @@ import { environmentsCreate } from "@gram/client/funcs/environmentsCreate.js";
 import { environmentsList } from "@gram/client/funcs/environmentsList.js";
 import { ServiceError } from "@gram/client/models/errors";
 import { $ } from "zx";
+import { seedTunnel } from "./seed/tunnel.mts";
 
 type Asset = {
   slug: string;
@@ -163,6 +164,11 @@ async function seed() {
   if (!activeOrgID) {
     abort("Active organization ID not found", sessionJSON);
   }
+  const activeUserID = sessionInfo.result.userId;
+  if (!activeUserID) {
+    abort("Active user ID not found", sessionJSON);
+  }
+  await seedCurrentUserSuperAdmin(activeUserID);
 
   const orgs = sessionInfo.result.organizations;
   const org = orgs.find(
@@ -203,6 +209,20 @@ async function seed() {
     const err = e as { stderr?: string; message?: string };
     log.warn(
       `Failed to set org whitelisted: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
+  }
+
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs:`.quiet();
+    log.info("Enabled local logs and tool_io_logs features");
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.warn(
+      `Failed to enable local log features: ${err.message || err.stderr || JSON.stringify(e)}`,
     );
   }
 
@@ -312,6 +332,7 @@ async function seed() {
       `${env.created ? "Created" : "Found existing"} environment '${env.slug}' for project '${projectSlug}'`,
     );
   }
+  await seedTunnel();
 
   // Seed observability data for the first seeded project
   const firstSeededProjectSlug = Object.keys(projectToolUrns)[0];
@@ -331,7 +352,35 @@ async function seed() {
       projectId: firstProject.id,
       organizationId: activeOrgID,
     });
+    // Personal-account tracking data: employees with team + personal accounts,
+    // the device bridge, and account-linked chats. Runs after observability so
+    // its blanket chat delete doesn't wipe these account-linked chats.
+    await seedPersonalAccounts({
+      projectId: firstProject.id,
+      organizationId: activeOrgID,
+    });
+    // Non-corporate account risk policy + findings over the personal-account
+    // chats seeded just above. Runs last so seedRiskFindings' blanket
+    // risk_results reset can't wipe these events.
+    await seedNonCorporateAccountFindings({
+      projectId: firstProject.id,
+      organizationId: activeOrgID,
+    });
   }
+
+  // Give the local dev user the "see all org sessions" admin view that the
+  // Agent Sessions page promises. That view is gated behind RBAC enforcement
+  // plus a chat:read grant, so enable RBAC and grant the dev user the admin
+  // scope set (chat:read is intentionally not part of any system role). Runs
+  // after asset/toolset seeding so those admin API calls aren't gated, and
+  // before the enterprise-account-type flip below (enforcement only activates
+  // once the org is enterprise).
+  await enableRBACForDevUser({
+    sessionId,
+    organizationId: activeOrgID,
+    userId: sessionInfo.result.userId,
+    gram,
+  });
 
   // Set enterprise account type last so RBAC enforcement doesn't block seeding.
   try {
@@ -346,7 +395,131 @@ async function seed() {
     );
   }
 
+  const enableRBACRes = await accessEnableRBAC(gram, undefined, {
+    sessionHeaderGramSession: sessionId,
+  });
+  if (!enableRBACRes.ok) {
+    abort("Failed to enable RBAC and seed system roles", enableRBACRes.error);
+  }
+  log.info("Enabled RBAC and seeded system roles");
+
+  await seedCurrentUserAdminRole({
+    organizationId: activeOrgID,
+    userId: activeUserID,
+  });
+
   success = true;
+}
+
+async function seedCurrentUserAdminRole(init: {
+  organizationId: string;
+  userId: string;
+}): Promise<void> {
+  const { organizationId, userId } = init;
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const sql = `
+WITH admin_role AS (
+  SELECT id
+  FROM global_roles
+  WHERE workos_slug = 'admin'
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+  LIMIT 1
+),
+active_user AS (
+  SELECT users.id AS user_id, users.workos_id, our.workos_membership_id
+  FROM users
+  JOIN organization_user_relationships AS our
+    ON our.user_id = users.id
+  WHERE users.id = :'user_id'
+    AND our.organization_id = :'organization_id'
+    AND users.workos_id IS NOT NULL
+    AND our.deleted IS FALSE
+  LIMIT 1
+),
+upserted AS (
+  INSERT INTO organization_role_assignments (
+    organization_id,
+    workos_user_id,
+    user_id,
+    role_urn,
+    workos_membership_id,
+    workos_updated_at,
+    workos_last_event_id
+  )
+  SELECT
+    :'organization_id',
+    active_user.workos_id,
+    active_user.user_id,
+    'role:global:' || admin_role.id::text,
+    active_user.workos_membership_id,
+    clock_timestamp(),
+    NULL
+  FROM active_user
+  CROSS JOIN admin_role
+  ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL
+  DO UPDATE SET
+    user_id = EXCLUDED.user_id,
+    workos_membership_id = EXCLUDED.workos_membership_id,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = NULL,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+  RETURNING id
+)
+SELECT COUNT(*) FROM upserted;
+`;
+  const result = await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v organization_id=${organizationId} -v user_id=${userId} -tA -f -`.quiet();
+
+  if (result.stdout.trim() !== "1") {
+    abort("Failed to assign current user to seeded Admin role", {
+      organizationId,
+      userId,
+      assignments: result.stdout.trim(),
+    });
+  }
+  log.info("Assigned current user to seeded Admin role");
+}
+
+async function seedCurrentUserSuperAdmin(userId: string): Promise<void> {
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const sql = `
+WITH updated AS (
+  UPDATE users
+  SET admin = TRUE,
+      updated_at = clock_timestamp()
+  WHERE id = :'user_id'
+  RETURNING id
+)
+SELECT COALESCE((SELECT id FROM updated), '');
+`;
+  const result = await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v user_id=${userId} -tA -f -`.quiet();
+
+  if (result.stdout.trim() !== userId) {
+    abort("Failed to mark current user as super admin", {
+      userId,
+      updatedUserId: result.stdout.trim(),
+    });
+  }
+
+  try {
+    const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL ${`userInfo:${userId}:`}`.quiet();
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.warn(
+      `Marked current user as super admin, but failed to clear user info cache: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
+    return;
+  }
+
+  log.info("Marked current user as super admin");
 }
 
 async function initAPIKey(init: {
@@ -1514,6 +1687,9 @@ function generateChatUUID(chatNumber: number): string {
 // can't collide on a global primary key and silently skip policy creation.
 const SEED_RISK_POLICY_NAME = "Seeded Detection Policy";
 
+// Same reset-by-name convention for the seeded account_identity policy.
+const SEED_NONCORP_POLICY_NAME = "Seeded Non-Corporate Account Policy";
+
 // Risk-finding catalog spanning every detection source the dashboard knows
 // about. The raw `source` (gitleaks/presidio/...) is what the insights
 // assistant groups by, while `rule_id` drives the customer-facing category
@@ -1791,6 +1967,662 @@ async function seedRiskFindings(init: {
   }
 }
 
+// Inserts an account_identity ("Non-Corporate Accounts") policy plus the risk
+// events it would produce over the personal-account chats seeded by
+// seedPersonalAccounts. Mirrors the scanner's real semantics: findings are
+// session-scoped (one per chat per rule, attached to the chat's first
+// message), the match column carries the account email verbatim (the
+// account_identity redaction carve-out), and the unapproved-domain rule fires
+// only for emails outside the policy's approved_email_domains list. Must run
+// AFTER seedRiskFindings (whose idempotent reset blanket-deletes the
+// project's risk_results) and AFTER seedPersonalAccounts (which creates the
+// account-linked chats these findings attach to).
+async function seedNonCorporateAccountFindings(init: {
+  projectId: string;
+  organizationId: string;
+}): Promise<void> {
+  const { projectId, organizationId } = init;
+
+  // The org's corporate domain. Every seeded team account is @speakeasy.com,
+  // so exactly the personal (gmail/outlook) accounts trip the domain rule.
+  const APPROVED_DOMAIN = "speakeasy.com";
+
+  const pgSQL = `
+    BEGIN;
+    -- Idempotent reset scoped to this policy only: the blanket risk_results
+    -- wipe already happened in seedRiskFindings earlier in the run, but a
+    -- targeted delete keeps this function safe to re-run on its own.
+    DELETE FROM risk_results
+    WHERE project_id = '${projectId}'
+      AND risk_policy_id IN (
+        SELECT id FROM risk_policies
+        WHERE project_id = '${projectId}' AND name = '${SEED_NONCORP_POLICY_NAME}'
+      );
+    DELETE FROM risk_policies
+    WHERE project_id = '${projectId}' AND name = '${SEED_NONCORP_POLICY_NAME}';
+
+    WITH pol AS (
+      INSERT INTO risk_policies (
+        project_id, organization_id, name, policy_type, sources,
+        analyzer_config, enabled, action, version
+      ) VALUES (
+        '${projectId}', '${organizationId}', '${SEED_NONCORP_POLICY_NAME}', 'standard',
+        ARRAY['account_identity'],
+        '{"account_identity":{"approved_email_domains":["${APPROVED_DOMAIN}"]}}'::jsonb,
+        TRUE, 'flag', 1
+      )
+      RETURNING id
+    ),
+    -- One row per personal-account chat: the account email plus the chat's
+    -- first message, which is where the scanner attaches its session-scoped
+    -- finding.
+    personal_chats AS (
+      SELECT
+        ua.email,
+        ROW_NUMBER() OVER (ORDER BY c.created_at, c.id) AS rn,
+        (
+          SELECT cm.id FROM chat_messages cm
+          WHERE cm.chat_id = c.id
+          ORDER BY cm.created_at ASC, cm.id ASC
+          LIMIT 1
+        ) AS first_message_id
+      FROM chats c
+      JOIN user_accounts ua ON ua.id = c.user_account_id
+      WHERE c.project_id = '${projectId}'
+        AND ua.account_type = 'personal'
+        AND c.deleted IS FALSE
+        AND ua.deleted IS FALSE
+    )
+    INSERT INTO risk_results (
+      project_id, organization_id, risk_policy_id, risk_policy_version,
+      chat_message_id, source, found, rule_id, description, match, confidence, created_at
+    )
+    SELECT
+      '${projectId}', '${organizationId}', pol.id, 1,
+      pc.first_message_id, 'account_identity', TRUE, r.rule_id,
+      CASE r.rule_id
+        WHEN 'identity.personal_account'
+          THEN 'Session authenticated with the personal AI account "' || pc.email || '".'
+        ELSE 'Session authenticated with the AI account "' || pc.email || '", whose email domain is not on the approved corporate domain list.'
+      END,
+      pc.email, 1.0,
+      -- Spread across the last 6 days so Risk Overview trends and the default
+      -- Risk Events window both have data.
+      now() - ((pc.rn % 6) || ' days')::interval - ((pc.rn % 23) || ' hours')::interval
+    FROM personal_chats pc
+    CROSS JOIN pol
+    CROSS JOIN (VALUES ('identity.personal_account'), ('identity.unapproved_domain')) AS r(rule_id)
+    WHERE pc.first_message_id IS NOT NULL
+      AND (
+        r.rule_id = 'identity.personal_account'
+        OR split_part(pc.email, '@', 2) <> '${APPROVED_DOMAIN}'
+      );
+    COMMIT;
+  `;
+
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    const tmpFile = path.join(process.cwd(), ".seed-noncorp-risk.sql");
+    await fs.writeFile(tmpFile, pgSQL, "utf-8");
+    try {
+      await $`docker compose cp ${tmpFile} gram-db:/tmp/seed-noncorp-risk.sql`.quiet();
+      await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f /tmp/seed-noncorp-risk.sql`.quiet();
+      log.info(
+        `Seeded the "${SEED_NONCORP_POLICY_NAME}" (account_identity) policy with per-session findings over the personal-account chats`,
+      );
+    } finally {
+      await fs.unlink(tmpFile).catch(() => {});
+    }
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    log.warn(
+      `Failed to seed non-corporate account findings: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
+}
+
+// enableRBACForDevUser turns on RBAC for the org and grants the local dev user
+// the admin scope set plus chat:read. The Agent Sessions page only shows every
+// member's sessions to a caller holding an unrestricted chat:read grant under
+// RBAC enforcement; without it the list is scoped to the caller's own sessions.
+// We grant the full admin scope set too so existing admin actions keep working
+// once enforcement is on (locally the dev user has no WorkOS-synced role
+// assignment to inherit those from). Idempotent: enableRBAC no-ops if already
+// enabled and the grant insert is ON CONFLICT DO NOTHING.
+async function enableRBACForDevUser(init: {
+  sessionId: string;
+  organizationId: string;
+  userId: string;
+  gram: GramCore;
+}): Promise<void> {
+  const { sessionId, organizationId, userId, gram } = init;
+  log.info("Enabling RBAC + granting dev user full session visibility...");
+
+  // EnableRBAC is gated by requirePlatformAdmin (access/impl.go): the caller
+  // must have a @speakeasy.com/@speakeasyapi.dev email OR the users.admin flag.
+  // Locally the dev user's email is neither (e.g. a personal gmail address) and
+  // admin defaults to false, so the call 403s. Promote the dev user to admin in
+  // the DB first so the platform-admin check passes. Idempotent.
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -c ${`UPDATE users SET admin = TRUE WHERE id = '${userId.replace(/'/g, "''")}';`}`.quiet();
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    abort(
+      `Failed to promote dev user to admin: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
+
+  // EnableRBAC seeds the built-in system roles and flips the org feature flag.
+  const res = await accessEnableRBAC(gram, undefined, {
+    sessionHeaderGramSession: sessionId,
+  });
+  if (!res.ok) {
+    abort("Failed to enable RBAC", res.error);
+  }
+
+  // The admin system role intentionally omits chat:read, and the dev user has
+  // no role assignment locally anyway, so grant the scopes directly to the user
+  // principal. Selectors mirror authz.NewSelector: one
+  // {resource_kind, resource_id:"*"} object per scope, effect NULL = allow.
+  const SCOPES: { scope: string; kind: string }[] = [
+    { scope: "org:read", kind: "org" },
+    { scope: "org:admin", kind: "org" },
+    { scope: "project:read", kind: "project" },
+    { scope: "project:write", kind: "project" },
+    { scope: "mcp:read", kind: "mcp" },
+    { scope: "mcp:write", kind: "mcp" },
+    { scope: "mcp:connect", kind: "mcp" },
+    { scope: "environment:read", kind: "environment" },
+    { scope: "environment:write", kind: "environment" },
+    { scope: "chat:read", kind: "chat" },
+  ];
+  const sqlStr = (v: string) => `'${v.replace(/'/g, "''")}'`;
+  const principalUrn = `user:${userId}`;
+  const values = SCOPES.map(
+    ({ scope, kind }) =>
+      `(${sqlStr(organizationId)}, ${sqlStr(principalUrn)}, ${sqlStr(scope)}, NULL, ${sqlStr(
+        JSON.stringify({ resource_kind: kind, resource_id: "*" }),
+      )}::jsonb)`,
+  ).join(",\n");
+  const pgSQL = `
+    INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors) VALUES
+    ${values}
+    ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors) DO NOTHING;
+  `;
+
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    const tmpFile = path.join(process.cwd(), ".seed-dev-grants.sql");
+    await fs.writeFile(tmpFile, pgSQL, "utf-8");
+    try {
+      await $`docker compose cp ${tmpFile} gram-db:/tmp/seed-dev-grants.sql`.quiet();
+      await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f /tmp/seed-dev-grants.sql`.quiet();
+    } finally {
+      await fs.unlink(tmpFile).catch(() => {});
+    }
+    log.info(
+      `Enabled RBAC and granted dev user ${SCOPES.length} scopes (admin + chat:read); Agent Sessions now shows all org sessions.`,
+    );
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    abort(
+      `Failed to grant dev user RBAC scopes: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
+}
+
+// seedPersonalAccounts populates the personal-account-tracking tables for the
+// Speakeasy org: a handful of employees, each with a team (enterprise Claude)
+// account and — for most — a personal account, linked to the employee through
+// the device bridge (device_owners). It then seeds messaging data (chats +
+// messages) for both account types in the given project so dashboards have
+// team-vs-personal data to render. The majority of personal accounts are Claude
+// (anthropic), the primary tracked provider.
+async function seedPersonalAccounts(init: {
+  projectId: string;
+  organizationId: string;
+}): Promise<void> {
+  const { projectId, organizationId } = init;
+  log.info(
+    "Seeding personal-account data (user_accounts + device bridge + chats)...",
+  );
+
+  // Speakeasy's shared enterprise Claude org (Claude organization.id). Every
+  // team account sits under it, so it reads as the enterprise org (many
+  // employees) — the classification heuristic's "shared org" signal.
+  const ENTERPRISE_CLAUDE_ORG = "b4a85ab1-50cb-42d7-8dc8-e57acf2518cf";
+
+  // An employee can hold several personal accounts across providers (Claude Max,
+  // Codex/OpenAI, Cursor). An account's identity is (provider, email): the same
+  // email registered on two providers is two distinct accounts, so the UI must
+  // surface the provider alongside the email.
+  type Personal = {
+    email: string;
+    provider: "anthropic" | "openai" | "cursor";
+  };
+  type Employee = { name: string; work: string; personals?: Personal[] };
+
+  // A spread of personal accounts across providers, including employees with
+  // multiple accounts and the same email reused on different providers. Sam is
+  // team-only (no personal account).
+  const EMPLOYEES: Employee[] = [
+    {
+      name: "Mira Chen",
+      work: "mira.chen@speakeasy.com",
+      // Claude Max + Cursor, same personal email on both providers.
+      personals: [
+        { email: "mira.chen.dev@gmail.com", provider: "anthropic" },
+        { email: "mira.chen.dev@gmail.com", provider: "cursor" },
+      ],
+    },
+    {
+      name: "Omar Farouk",
+      work: "omar.farouk@speakeasy.com",
+      // Deliberately account-heavy to exercise the "many accounts" edge case in
+      // the UI (scrollable list): the same email reused across providers plus a
+      // spread of extra personal emails on each agent.
+      personals: [
+        { email: "ofarouk.codes@gmail.com", provider: "anthropic" },
+        { email: "ofarouk.codes@gmail.com", provider: "openai" },
+        { email: "omar.dev@gmail.com", provider: "anthropic" },
+        { email: "omar.side@gmail.com", provider: "openai" },
+        { email: "omar.experiments@gmail.com", provider: "cursor" },
+        { email: "ofarouk.personal@outlook.com", provider: "anthropic" },
+        { email: "omar.codes2@gmail.com", provider: "openai" },
+        { email: "omar.cursor@gmail.com", provider: "cursor" },
+        { email: "ofarouk.labs@gmail.com", provider: "anthropic" },
+      ],
+    },
+    {
+      name: "Lena Petrova",
+      work: "lena.petrova@speakeasy.com",
+      personals: [{ email: "lena.builds@gmail.com", provider: "anthropic" }],
+    },
+    {
+      name: "Raj Patel",
+      work: "raj.patel@speakeasy.com",
+      // Codex + Cursor on distinct personal emails.
+      personals: [
+        { email: "raj.patel.ai@gmail.com", provider: "openai" },
+        { email: "raj.codes@gmail.com", provider: "cursor" },
+      ],
+    },
+    {
+      name: "Tess Nguyen",
+      work: "tess.nguyen@speakeasy.com",
+      personals: [{ email: "tess.nguyen.gpt@gmail.com", provider: "openai" }],
+    },
+    { name: "Sam Rivera", work: "sam.rivera@speakeasy.com" },
+  ];
+
+  const MODELS: Record<Personal["provider"], string[]> = {
+    anthropic: ["claude-opus-4-8", "claude-sonnet-4-6"],
+    openai: ["gpt-5.4", "gpt-4o"],
+    // Cursor brokers multiple model vendors, so its sessions span both.
+    cursor: ["claude-sonnet-4-6", "gpt-4o"],
+  };
+  const USER_PROMPTS = [
+    "Refactor the checkout handler to validate the cart total",
+    "Why is the orders endpoint returning 500 on large payloads?",
+    "Add pagination to the products list query",
+    "Write a unit test for the discount calculator",
+    "Explain how the inventory reservation flow works",
+  ];
+  const ASSISTANT_REPLIES = [
+    "Here's a refactor that validates the cart total before charging the card.",
+    "The 500 comes from an unbounded JSON decode — stream and cap the body instead.",
+    "Added keyset pagination on (created_at, id) with an opaque cursor.",
+    "Here's a table-driven test covering the discount edge cases.",
+    "Reservation places a hold row, then confirms it on successful payment.",
+  ];
+
+  const sqlStr = (v: string) => `'${v.replace(/'/g, "''")}'`;
+  const sha = (s: string) => crypto.createHash("sha1").update(s).digest("hex");
+  const userId = (email: string) => `usr_seed_${sha(email).slice(0, 16)}`;
+  const workosId = (email: string) => `seed_workos_${sha(email).slice(0, 16)}`;
+  const deviceId = (email: string) =>
+    crypto.createHash("sha256").update(`pat-device:${email}`).digest("hex"); // 64-hex, like Claude user.id
+  const accountId = (email: string) => `user_${sha(email).slice(0, 22)}`; // tagged id, like user.account_id
+  const seedUUID = (key: string) => {
+    const h = crypto.createHash("sha1").update(`pat-seed:${key}`).digest();
+    h[6] = (h[6] & 0x0f) | 0x50;
+    h[8] = (h[8] & 0x3f) | 0x80;
+    const x = h.toString("hex").slice(0, 32);
+    return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20, 32)}`;
+  };
+
+  const usersValues: string[] = [];
+  const orgRelValues: string[] = [];
+  const deviceValues: string[] = [];
+  const accountValues: string[] = [];
+  // One account = (id, email, provider, account_type, externalOrgId, ownerUserId,
+  // device). device + externalOrgId + ownerUserId are also stamped onto the
+  // ClickHouse usage telemetry below.
+  const accounts: {
+    id: string;
+    email: string;
+    provider: string;
+    type: "team" | "personal";
+    ownerUserId: string;
+    externalOrgId: string;
+    device: string;
+  }[] = [];
+
+  for (const emp of EMPLOYEES) {
+    const uid = userId(emp.work);
+    const wid = workosId(emp.work);
+    const dev = deviceId(emp.work);
+    usersValues.push(
+      `(${sqlStr(uid)}, ${sqlStr(emp.work)}, ${sqlStr(emp.name)}, NULL, ${sqlStr(wid)})`,
+    );
+    orgRelValues.push(
+      `(${sqlStr(organizationId)}, ${sqlStr(uid)}, ${sqlStr(wid)}, ${sqlStr(`seed_mem_${uid}`)})`,
+    );
+
+    // Device bridge: this machine is owned by the employee (learned from their
+    // team session), so their personal accounts on the same device resolve to
+    // them on the ingest path. The bridge is keyed by (org, provider, device),
+    // so emit one row per provider the employee uses (team is always Claude).
+    const providers = new Set<string>([
+      "anthropic",
+      ...(emp.personals ?? []).map((p) => p.provider),
+    ]);
+    for (const provider of providers) {
+      deviceValues.push(
+        `(${sqlStr(organizationId)}, ${sqlStr(provider)}, ${sqlStr(dev)}, ${sqlStr(uid)})`,
+      );
+    }
+
+    // Team (enterprise Claude) account.
+    const teamAcctId = seedUUID(`team:${emp.work}`);
+    accountValues.push(
+      `(${sqlStr(teamAcctId)}, ${sqlStr(organizationId)}, ${sqlStr(uid)}, 'anthropic', ${sqlStr(ENTERPRISE_CLAUDE_ORG)}, ${sqlStr(seedUUID(`team-uuid:${emp.work}`))}, ${sqlStr(accountId(emp.work))}, ${sqlStr(emp.work)}, 'team')`,
+    );
+    accounts.push({
+      id: teamAcctId,
+      email: emp.work,
+      provider: "anthropic",
+      type: "team",
+      ownerUserId: uid,
+      externalOrgId: ENTERPRISE_CLAUDE_ORG,
+      device: dev,
+    });
+
+    // Personal accounts. An account is keyed by (provider, email), so the same
+    // email on two providers yields two distinct account entities. External org
+    // id is unique per personal account (each personal org is its own org).
+    for (const p of emp.personals ?? []) {
+      const acctKey = `${p.provider}:${p.email}`;
+      const persOrg = seedUUID(`personal-org:${acctKey}`);
+      const persAcctId = seedUUID(`personal:${acctKey}`);
+      accountValues.push(
+        `(${sqlStr(persAcctId)}, ${sqlStr(organizationId)}, ${sqlStr(uid)}, ${sqlStr(p.provider)}, ${sqlStr(persOrg)}, ${sqlStr(seedUUID(`personal-uuid:${acctKey}`))}, ${sqlStr(accountId(acctKey))}, ${sqlStr(p.email)}, 'personal')`,
+      );
+      accounts.push({
+        id: persAcctId,
+        email: p.email,
+        provider: p.provider,
+        type: "personal",
+        ownerUserId: uid,
+        externalOrgId: persOrg,
+        device: dev,
+      });
+    }
+  }
+
+  // Chats + messages for every account, in this project.
+  const now = Date.now();
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const CHATS_PER_ACCOUNT = 3;
+
+  const chatIds: string[] = [];
+  const chatValues: string[] = [];
+  const messageValues: string[] = [];
+
+  accounts.forEach((acct, acctIdx) => {
+    const models =
+      MODELS[acct.provider as Personal["provider"]] ?? MODELS.anthropic;
+    for (let c = 0; c < CHATS_PER_ACCOUNT; c++) {
+      const chatId = seedUUID(`chat:${acct.id}:${c}`);
+      chatIds.push(chatId);
+      const model = models[c % models.length];
+      const promptIdx = (acctIdx + c) % USER_PROMPTS.length;
+      const title = USER_PROMPTS[promptIdx];
+      const daysAgo = (acctIdx * CHATS_PER_ACCOUNT + c) % 30;
+      const start = new Date(now - daysAgo * msPerDay - c * 3600 * 1000);
+      const end = new Date(start.getTime() + 5 * 60 * 1000);
+
+      chatValues.push(
+        `(${sqlStr(chatId)}, ${sqlStr(projectId)}, ${sqlStr(organizationId)}, ${sqlStr(acct.ownerUserId)}, ${sqlStr(acct.email)}, ${sqlStr(acct.id)}, ${sqlStr(title)}, ${sqlStr(start.toISOString())}, ${sqlStr(end.toISOString())})`,
+      );
+
+      // 2 user + 2 assistant turns.
+      let t = start.getTime();
+      for (let turn = 0; turn < 2; turn++) {
+        const idx = (promptIdx + turn) % USER_PROMPTS.length;
+        t += 20 * 1000;
+        messageValues.push(
+          `(${sqlStr(chatId)}, ${sqlStr(projectId)}, 'user', ${sqlStr(USER_PROMPTS[idx])}, ${sqlStr(model)}, ${sqlStr(new Date(t).toISOString())})`,
+        );
+        t += 25 * 1000;
+        messageValues.push(
+          `(${sqlStr(chatId)}, ${sqlStr(projectId)}, 'assistant', ${sqlStr(ASSISTANT_REPLIES[idx])}, ${sqlStr(model)}, ${sqlStr(new Date(t).toISOString())})`,
+        );
+      }
+    }
+  });
+
+  // The employee user ids are stable (hashed from the work email), so cleaning
+  // up prior seeded artifacts by uid is robust even when the account/chat key
+  // derivation changes between runs (which would otherwise orphan old rows that
+  // the keyed upserts can't reach, leaving duplicates).
+  const uidList = EMPLOYEES.map((e) => userId(e.work))
+    .map(sqlStr)
+    .join(", ");
+  const pgSQL = `
+    BEGIN;
+    INSERT INTO users (id, email, display_name, photo_url, workos_id) VALUES
+    ${usersValues.join(",\n")}
+    ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name, workos_id = EXCLUDED.workos_id;
+
+    INSERT INTO organization_user_relationships (organization_id, user_id, workos_user_id, workos_membership_id) VALUES
+    ${orgRelValues.join(",\n")}
+    ON CONFLICT (organization_id, user_id) DO NOTHING;
+
+    INSERT INTO device_owners (organization_id, provider, device_id, linked_user_id) VALUES
+    ${deviceValues.join(",\n")}
+    ON CONFLICT (organization_id, provider, device_id) WHERE deleted_at IS NULL
+    DO UPDATE SET linked_user_id = EXCLUDED.linked_user_id, last_seen_at = clock_timestamp();
+
+    DELETE FROM user_accounts WHERE organization_id = ${sqlStr(organizationId)} AND user_id IN (${uidList});
+    INSERT INTO user_accounts (id, organization_id, user_id, provider, external_org_id, external_account_uuid, external_account_id, email, account_type) VALUES
+    ${accountValues.join(",\n")}
+    ON CONFLICT (organization_id, provider, external_account_uuid) WHERE deleted_at IS NULL
+    DO UPDATE SET user_id = EXCLUDED.user_id, account_type = EXCLUDED.account_type, email = EXCLUDED.email, external_org_id = EXCLUDED.external_org_id, last_seen_at = clock_timestamp();
+
+    DELETE FROM chat_messages WHERE chat_id IN (SELECT id FROM chats WHERE project_id = ${sqlStr(projectId)} AND user_id IN (${uidList}));
+    DELETE FROM chats WHERE project_id = ${sqlStr(projectId)} AND user_id IN (${uidList});
+    INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, user_account_id, title, created_at, updated_at) VALUES
+    ${chatValues.join(",\n")};
+    INSERT INTO chat_messages (chat_id, project_id, role, content, model, created_at) VALUES
+    ${messageValues.join(",\n")};
+    COMMIT;
+  `;
+
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    const tmpFile = path.join(process.cwd(), ".seed-personal-accounts.sql");
+    await fs.writeFile(tmpFile, pgSQL, "utf-8");
+    try {
+      await $`docker compose cp ${tmpFile} gram-db:/tmp/seed-personal-accounts.sql`.quiet();
+      await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f /tmp/seed-personal-accounts.sql`.quiet();
+    } finally {
+      await fs.unlink(tmpFile).catch(() => {});
+    }
+    const personalCount = accounts.filter((a) => a.type === "personal").length;
+    const byProvider = accounts
+      .filter((a) => a.type === "personal")
+      .reduce<Record<string, number>>((acc, a) => {
+        acc[a.provider] = (acc[a.provider] ?? 0) + 1;
+        return acc;
+      }, {});
+    const providerBreakdown = Object.entries(byProvider)
+      .map(([p, n]) => `${n} ${p}`)
+      .join(", ");
+    log.info(
+      `Seeded ${accounts.length} AI accounts (${personalCount} personal: ${providerBreakdown}) across ${EMPLOYEES.length} employees, plus ${chatValues.length} chats.`,
+    );
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    log.warn(
+      `Failed to seed personal-account data: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+    return;
+  }
+
+  // ClickHouse usage telemetry: token-usage rows per account, stamped with the
+  // gram.{provider,account_type,external_org_id,device_id} attributes that
+  // materialize into the like-named columns, so usage dashboards can split team
+  // vs personal. user.id is the owning employee (matching the identity
+  // enrichment), so personal usage rolls up under the employee. Idempotent via
+  // the targeted DELETE on the usage URNs (which observability seeding, running
+  // first, doesn't use).
+  const USAGE_URN: Record<string, string> = {
+    anthropic: "claude-code:usage:metrics",
+    openai: "codex:usage:metrics",
+    cursor: "cursor:usage:metrics",
+  };
+  const SERVICE: Record<string, string> = {
+    anthropic: "claude-code",
+    openai: "codex",
+    cursor: "cursor",
+  };
+  const EVENTS_PER_ACCOUNT = 8;
+  const chRows: string[] = [];
+  accounts.forEach((acct, acctIdx) => {
+    const models =
+      MODELS[acct.provider as Personal["provider"]] ?? MODELS.anthropic;
+    const urn = USAGE_URN[acct.provider] ?? USAGE_URN.anthropic;
+    const svc = SERVICE[acct.provider] ?? SERVICE.anthropic;
+    for (let k = 0; k < EVENTS_PER_ACCOUNT; k++) {
+      const model = models[k % models.length];
+      const daysAgo = (acctIdx + k * 3) % 30;
+      const eventTime = new Date(now - daysAgo * msPerDay - k * 1800 * 1000);
+      const timeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
+      const traceId = crypto.randomBytes(16).toString("hex");
+      const sessionId = seedUUID(`sess:${acct.id}:${k}`);
+      const inputTokens = 1200 + ((acctIdx * 7 + k * 53) % 5000);
+      const outputTokens = 300 + ((acctIdx * 11 + k * 29) % 1800);
+      const totalTokens = inputTokens + outputTokens;
+      const cost = ((inputTokens * 3 + outputTokens * 15) / 1_000_000).toFixed(
+        6,
+      );
+      const attrs = `{"gram.provider": "${acct.provider}", "gram.account_type": "${acct.type}", "gram.external_org_id": "${acct.externalOrgId}", "gram.device_id": "${acct.device}", "gen_ai.conversation.id": "${sessionId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.total_tokens": ${totalTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${acct.provider}", "gram.resource.urn": "${urn}", "gram.project.id": "${projectId}", "user.id": "${acct.ownerUserId}", "gram.hook.source": "${svc}"}`;
+      chRows.push(
+        `(${timeNano}, ${timeNano}, 'INFO', '${acct.type} account usage', '${traceId}', '${attrs}', '{"service.name": "${svc}"}', '${projectId}', '${urn}', '${svc}', '${sessionId}')`,
+      );
+    }
+  });
+
+  // Hook tool-call traces tagged with gram.account_type, so the Tool Logs page
+  // (/logs) has team/personal data to filter on. Each call is a complete trace
+  // — a PreToolUse plus a PostToolUse/PostToolUseFailure sharing the trace id —
+  // so trace_summaries derives a real success/failure status instead of leaving
+  // the trace pending (status comes from gen_ai.tool.call.result /
+  // gram.hook.error; a Pre-only trace never resolves). Rows are attributed to
+  // the owning employee and stamped with the account's provider/account_type.
+  const TOOL_NAMES = [
+    "search_products",
+    "create_order",
+    "get_inventory",
+    "update_cart",
+    "list_customers",
+  ];
+  const TOOL_CALLS_PER_ACCOUNT = 6;
+  const toolRows: string[] = [];
+  const toolSessionIds: string[] = [];
+  accounts.forEach((acct, acctIdx) => {
+    const svc = SERVICE[acct.provider] ?? SERVICE.anthropic;
+    for (let k = 0; k < TOOL_CALLS_PER_ACCOUNT; k++) {
+      const sessionId = seedUUID(`tcsess:${acct.id}:${k}`);
+      toolSessionIds.push(sessionId);
+      const traceId = crypto
+        .createHash("sha256")
+        .update(`tctrace:${acct.id}:${k}`)
+        .digest("hex")
+        .slice(0, 32);
+      const toolUseId = seedUUID(`tcuse:${acct.id}:${k}`);
+      const toolName = TOOL_NAMES[(acctIdx + k) % TOOL_NAMES.length];
+      const daysAgo = (acctIdx + k * 2) % 30;
+      const eventTime = new Date(now - daysAgo * msPerDay - k * 1200 * 1000);
+      const timeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
+      // Deterministic ~1-in-5 failure so both statuses show up in the UI.
+      const isFailure = (acctIdx + k) % 5 === 4;
+
+      // Attributes shared by the Pre and Post rows of this trace.
+      const baseAttrs =
+        `"gram.event.source": "hook", "gram.tool.name": "${toolName}", ` +
+        `"gram.hook.source": "${svc}", "gram.tool_call.source": "ecommerce", ` +
+        `"gram.account_type": "${acct.type}", "gram.provider": "${acct.provider}", ` +
+        `"gram.external_org_id": "${acct.externalOrgId}", "gram.device_id": "${acct.device}", ` +
+        `"gram.project.id": "${projectId}", "gen_ai.conversation.id": "${sessionId}", ` +
+        `"gen_ai.tool_call.id": "${toolUseId}", "user.id": "${acct.ownerUserId}", "user.email": "${acct.email}"`;
+
+      toolRows.push(
+        `(${timeNano}, ${timeNano}, 'INFO', 'Tool: ${toolName}, Hook: PreToolUse', '${traceId}', '{"gram.hook.event": "PreToolUse", ${baseAttrs}}', '{}', '${projectId}', '${toolName}', '${svc}', '${sessionId}')`,
+      );
+
+      const postHookEvent = isFailure ? "PostToolUseFailure" : "PostToolUse";
+      const outcomeAttr = isFailure
+        ? `"gram.hook.error": "Tool execution failed"`
+        : `"gen_ai.tool.call.result": "ok"`;
+      const postTimeNano = timeNano + BigInt((1 + (k % 4)) * 1000000); // 1-4ms later
+      toolRows.push(
+        `(${postTimeNano}, ${postTimeNano}, '${isFailure ? "ERROR" : "INFO"}', 'Tool: ${toolName}, Hook: ${postHookEvent}', '${traceId}', '{"gram.hook.event": "${postHookEvent}", ${outcomeAttr}, ${baseAttrs}}', '{}', '${projectId}', '${toolName}', '${svc}', '${sessionId}')`,
+      );
+    }
+  });
+
+  // Idempotency: clear every provider's usage URN (derived from USAGE_URN so new
+  // providers like cursor are covered automatically) and the prior tool-call
+  // traces (by their deterministic chat ids) before re-inserting.
+  const usageUrnList = Object.values(USAGE_URN)
+    .map((urn) => `'${urn}'`)
+    .join(", ");
+  const toolSessionIdList = toolSessionIds.map((id) => `'${id}'`).join(", ");
+  const chSQL = `
+    SET mutations_sync = 1;
+    ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}' AND gram_urn IN (${usageUrnList});
+    ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}' AND gram_chat_id IN (${toolSessionIdList});
+    INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
+    ${chRows.concat(toolRows).join(",\n")};
+  `;
+
+  try {
+    const tmpFile = path.join(process.cwd(), ".seed-personal-accounts-ch.sql");
+    await fs.writeFile(tmpFile, chSQL, "utf-8");
+    try {
+      await $`docker cp ${tmpFile} gram-clickhouse-1:/tmp/seed-personal-accounts-ch.sql`.quiet();
+      await $`docker exec gram-clickhouse-1 clickhouse-client --multiquery --queries-file /tmp/seed-personal-accounts-ch.sql`.quiet();
+    } finally {
+      await fs.unlink(tmpFile).catch(() => {});
+    }
+    log.info(
+      `Seeded ${chRows.length} usage rows + ${toolRows.length / 2} tool-call traces (team/personal) into ClickHouse.`,
+    );
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    log.warn(
+      `Failed to seed personal-account ClickHouse telemetry: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
+}
+
 async function seedObservabilityData(init: {
   projectId: string;
   organizationId: string;
@@ -1852,10 +2684,37 @@ async function seedObservabilityData(init: {
   const COST_CENTERS = ["CC-1000", "CC-2000", "CC-3000", "CC-4000"];
   const ROLE_POOL = ["admin", "developer", "viewer", "billing", "analyst"];
   const GROUP_POOL = ["platform", "growth", "enterprise", "core"];
-  // The consuming surface (gram.hook.source) for chat rows, exposed as the
-  // "provider" dimension on telemetry.query. (The hooks seeding block below has
-  // its own HOOK_SOURCES list for hook events.)
+  // The consuming surface (gram.hook.source) for chat rows — the hook_source
+  // dimension on telemetry.query. (The hooks seeding block below has its own
+  // HOOK_SOURCES list for hook events.)
   const CHAT_HOOK_SOURCES = ["claude-code", "cursor", "cowork", "codex"];
+
+  // AI-account provider per consuming surface, used to stamp the gram.provider
+  // attribute (the `provider` dimension) together with a deterministic
+  // team/personal split (gram.account_type), so /costs and /insights have
+  // populated, drillable account_type + provider breakdowns. A deterministic
+  // slice is left unmarked ('') to exercise the unclassified bucket — matching
+  // production, where rows are unclassified until the classifier labels them.
+  const SURFACE_PROVIDER: Record<string, string> = {
+    "claude-code": "anthropic",
+    cowork: "anthropic",
+    claude: "anthropic",
+    api: "anthropic",
+    codex: "openai",
+    vscode: "openai",
+    cursor: "cursor",
+    cli: "cursor",
+  };
+  function classifyAccount(
+    surface: string,
+    seed: number,
+  ): { accountType: string; provider: string } {
+    if (seed % 7 === 0) return { accountType: "", provider: "" };
+    return {
+      accountType: seed % 4 === 0 ? "personal" : "team",
+      provider: SURFACE_PROVIDER[surface] ?? "anthropic",
+    };
+  }
 
   // Stable non-negative hash so attributes can be derived from a string key
   // (e.g. an email) as well as a numeric user index.
@@ -2407,7 +3266,11 @@ async function seedObservabilityData(init: {
 
     // Chat completion event - same trace ID links it to the tool call.
     // Token usage attributes feed metrics_summaries (raw "total tokens") and
-    // chat_token_summaries (tokens under management).
+    // chat_token_summaries (tokens under management). gen_ai.operation.name="chat"
+    // (in the attrs below) also satisfies the attribute_metrics MV cost gate
+    // (operation.name='chat' AND cost != ''), so this rich, WorkOS-attributed
+    // cost/token data flows to the cost explorer (/costs) and /insights, drillable
+    // by account_type + provider — not just the personal-account usage rows.
     const finishReason =
       Math.random() < 0.65 ? "stop" : Math.random() < 0.9 ? "length" : "error";
     const duration = 30 + Math.floor(Math.random() * 150);
@@ -2422,8 +3285,15 @@ async function seedObservabilityData(init: {
     // Rough blended price ($3/M input, $15/M output) so cost charts are non-zero.
     const cost = ((inputTokens * 3 + outputTokens * 15) / 1_000_000).toFixed(6);
 
+    // Stamp account_type + provider (the new telemetry.query dimensions) so the
+    // cost/token/chat breakdowns on /costs and /insights are drillable by them.
+    const acct = classifyAccount(hookSource, userIndex);
+    const acctFrag = acct.accountType
+      ? `"gram.account_type": "${acct.accountType}", "gram.provider": "${acct.provider}", `
+      : "";
+
     chInserts.push(
-      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '${traceId}', '{"gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.total_tokens": ${inputTokens + outputTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${provider}", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}, ${uaFrag}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
+      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '${traceId}', '{${acctFrag}"gen_ai.operation.name": "chat", "gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.total_tokens": ${inputTokens + outputTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${provider}", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}, ${uaFrag}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
     );
 
     // Resolution event (70% of chats) - same trace ID
@@ -2728,6 +3598,14 @@ async function seedObservabilityData(init: {
       USER_EMAIL_TOTAL,
     );
 
+    // account_type + provider for this session's hook events, so the tool-call
+    // breakdown on /insights is drillable by them. Seeded by user/session so a
+    // session's events share one classification; a slice stays unmarked.
+    const acct = classifyAccount(
+      hookSource,
+      hashToIndex(userEmail || sessionId),
+    );
+
     const eventTime = new Date(now - daysAgo * msPerDay);
     const baseTimeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
 
@@ -2749,6 +3627,10 @@ async function seedObservabilityData(init: {
       if (userEmail) {
         attrs["user.email"] = userEmail;
         Object.assign(attrs, workosAttrObject(hashToIndex(userEmail)));
+      }
+      if (acct.accountType) {
+        attrs["gram.account_type"] = acct.accountType;
+        attrs["gram.provider"] = acct.provider;
       }
 
       chInserts.push(
@@ -2773,6 +3655,10 @@ async function seedObservabilityData(init: {
       if (userEmail) {
         preToolAttrs["user.email"] = userEmail;
         Object.assign(preToolAttrs, workosAttrObject(hashToIndex(userEmail)));
+      }
+      if (acct.accountType) {
+        preToolAttrs["gram.account_type"] = acct.accountType;
+        preToolAttrs["gram.provider"] = acct.provider;
       }
       if (mcpServer && toolName !== "Skill")
         preToolAttrs["gram.tool_call.source"] = mcpServer;
@@ -2803,6 +3689,10 @@ async function seedObservabilityData(init: {
         postToolAttrs["user.email"] = userEmail;
         Object.assign(postToolAttrs, workosAttrObject(hashToIndex(userEmail)));
       }
+      if (acct.accountType) {
+        postToolAttrs["gram.account_type"] = acct.accountType;
+        postToolAttrs["gram.provider"] = acct.provider;
+      }
       if (mcpServer && toolName !== "Skill")
         postToolAttrs["gram.tool_call.source"] = mcpServer;
       if (skillName)
@@ -2822,6 +3712,7 @@ async function seedObservabilityData(init: {
     SET mutations_sync = 1;
     ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}';
     ALTER TABLE trace_summaries DELETE WHERE gram_project_id = '${projectId}';
+    ALTER TABLE attribute_metrics_summaries DELETE WHERE gram_project_id = '${projectId}';
     ALTER TABLE chat_token_summaries DELETE WHERE gram_project_id = '${projectId}';
     INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
     ${chInserts.join(",\n")};

@@ -171,6 +171,29 @@ func TestCreateMcpServer_WithUserSessionIssuer(t *testing.T) {
 	require.Equal(t, issuerID, *result.UserSessionIssuerID)
 }
 
+func TestCreateMcpServer_TunneledMcpRejectsPublicVisibility(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	tunneledServerID := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "public tunneled mcp server",
+		EnvironmentID:       nil,
+		TunneledMcpServerID: &tunneledServerID,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("public"),
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
 func TestCreateMcpServer_InvalidUserSessionIssuer(t *testing.T) {
 	t.Parallel()
 

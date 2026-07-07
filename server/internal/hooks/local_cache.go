@@ -84,13 +84,21 @@ func (c *localSessionCache) fallbackSessionMetadata(ctx context.Context, session
 	userID, userEmail := c.localFallbackUser(ctx, orgID)
 
 	metadata := SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "claude-code",
-		UserEmail:   userEmail,
-		UserID:      userID,
-		ClaudeOrgID: orgID,
-		GramOrgID:   orgID,
-		ProjectID:   projectID,
+		SessionID:           sessionID,
+		ServiceName:         "claude-code",
+		UserEmail:           userEmail,
+		UserID:              userID,
+		Provider:            providerAnthropic,
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
+		AccountType:         "",
+		BillingMode:         "",
+		UserAccountID:       "",
+		ObservedUserEmail:   "",
+		GramOrgID:           orgID,
+		ProjectID:           projectID,
 	}
 
 	return metadata, nil
@@ -112,9 +120,9 @@ func (c *localSessionCache) enrichLocalSessionMetadata(ctx context.Context, meta
 	if metadata.GramOrgID == "" {
 		metadata.GramOrgID = project.OrganizationID
 	}
-	if metadata.ClaudeOrgID == "" {
-		metadata.ClaudeOrgID = metadata.GramOrgID
-	}
+	// ExternalOrgID is the provider's organization id (the personal-vs-team
+	// discriminator) and must never be synthesized from the Gram org id — doing
+	// so would mislabel every local session as having a known provider org.
 
 	userID, userEmail := c.localFallbackUser(ctx, metadata.GramOrgID)
 	if userID == "" {

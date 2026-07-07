@@ -200,7 +200,8 @@ await pokeHTTPService(
 
 const gramHost = process.env["GRAM_HOST"] ?? "localhost";
 const gramSitePort = process.env["GRAM_SITE_PORT"] ?? "5173";
-const gramDashboardURL = `https://${gramHost}:${gramSitePort}`;
+const gramDashboardURL =
+  process.env["GRAM_SITE_URL"] ?? `https://${gramHost}:${gramSitePort}`;
 await pokeHTTPService("Gram dashboard", gramDashboardURL, gramDashboardURL);
 
 tableRows.sort(([nameA, runningA], [nameB, runningB]) => {

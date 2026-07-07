@@ -91,6 +91,8 @@ func (s *GetObservabilityOverview) Call(ctx context.Context, _ toolconfig.ToolCa
 		McpServerID:       input.McpServerID,
 		EventSource:       input.EventSource,
 		HookSource:        input.HookSource,
+		AccountType:       nil,
+		ExternalOrgID:     nil,
 		IncludeTimeSeries: input.IncludeTimeSeries,
 	})
 	if err != nil {

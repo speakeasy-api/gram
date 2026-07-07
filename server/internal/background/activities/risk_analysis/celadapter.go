@@ -2,13 +2,13 @@ package risk_analysis
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/google/cel-go/cel"
 
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // celMessage adapts the structured MessageView into the celenv input model.
@@ -18,17 +18,6 @@ func celMessage(view MessageView) celenv.Message {
 		tools[i] = celenv.Tool{Name: t.Name, Server: t.Server, Function: t.Function, Args: t.Arguments}
 	}
 	return celenv.Message{Content: view.Content, Type: view.Type, Tools: tools}
-}
-
-// effectiveDetectionExpr returns the stored CEL predicate or a legacy regex fallback.
-func effectiveDetectionExpr(rule customrules.Rule) string {
-	if expr := strings.TrimSpace(rule.DetectionExpr); expr != "" {
-		return expr
-	}
-	if pattern := strings.TrimSpace(rule.Regex); pattern != "" {
-		return "content.matchRegex(" + strconv.Quote(pattern) + ")"
-	}
-	return ""
 }
 
 // CompiledCELRule is a custom rule whose detection predicate is compiled once.
@@ -44,7 +33,7 @@ func CompileCELRules(eng *celenv.Engine, rules []customrules.Rule) ([]CompiledCE
 	}
 	out := make([]CompiledCELRule, 0, len(rules))
 	for _, rule := range rules {
-		expr := effectiveDetectionExpr(rule)
+		expr := rule.EffectiveDetectionExpr()
 		if expr == "" {
 			continue
 		}
@@ -52,28 +41,28 @@ func CompileCELRules(eng *celenv.Engine, rules []customrules.Rule) ([]CompiledCE
 		if err != nil {
 			return nil, fmt.Errorf("custom rule %s: compile %q: %w", rule.RuleID, expr, err)
 		}
-		rule.RuleID = guard(rule.RuleID)
+		rule.RuleID = scanners.GuardRuleID(rule.RuleID)
 		out = append(out, CompiledCELRule{rule: rule, prg: prg})
 	}
 	return out, nil
 }
 
 // ScanCELRules evaluates custom detector rules over a message view.
-func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule) ([]Finding, error) {
+func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule) ([]scanners.Finding, error) {
 	msg := celMessage(view)
-	findings := []Finding{}
+	findings := []scanners.Finding{}
 	for _, r := range rules {
 		spans, matched, err := eng.EvalDetection(r.prg, msg)
 		if err != nil {
-			return []Finding{}, fmt.Errorf("custom rule %s: eval: %w", r.rule.RuleID, err)
+			return []scanners.Finding{}, fmt.Errorf("custom rule %s: eval: %w", r.rule.RuleID, err)
 		}
 		if !matched {
 			continue
 		}
 		for _, s := range spans {
-			findings = append(findings, Finding{
+			findings = append(findings, scanners.Finding{
 				RuleID:              r.rule.RuleID,
-				Description:         celRuleDescription(r.rule),
+				Description:         r.rule.DisplayDescription(),
 				Match:               s.Value,
 				StartPos:            s.Start,
 				EndPos:              s.End,
@@ -81,24 +70,14 @@ func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule)
 				Source:              SourceCustom,
 				Confidence:          1.0,
 				DeadLetterReason:    "",
-				mcpLookupToolCallID: "",
-				spanGroupKey:        s.ToolCallID,
-				field:               s.Target,
-				path:                s.Path,
+				McpLookupToolCallID: "",
+				SpanGroupKey:        s.ToolCallID,
+				Field:               s.Target,
+				Path:                s.Path,
 			})
 		}
 	}
 	return findings, nil
-}
-
-func celRuleDescription(rule customrules.Rule) string {
-	if strings.TrimSpace(rule.Description) != "" {
-		return rule.Description
-	}
-	if strings.TrimSpace(rule.Title) != "" {
-		return rule.Title
-	}
-	return rule.RuleID
 }
 
 // CompiledScope is a policy's compiled scope predicates.
@@ -112,14 +91,22 @@ type CompiledScope struct {
 func CompileScope(eng *celenv.Engine, includeCEL, exemptCEL string) (CompiledScope, error) {
 	var s CompiledScope
 	s.eng = eng
-	if expr := strings.TrimSpace(includeCEL); expr != "" {
+	includeCEL = strings.TrimSpace(includeCEL)
+	exemptCEL = strings.TrimSpace(exemptCEL)
+	if eng == nil {
+		if includeCEL != "" || exemptCEL != "" {
+			return CompiledScope{}, fmt.Errorf("cel engine unavailable")
+		}
+		return s, nil
+	}
+	if expr := includeCEL; expr != "" {
 		prg, err := eng.Compile(expr)
 		if err != nil {
 			return CompiledScope{}, fmt.Errorf("compile scope_include %q: %w", expr, err)
 		}
 		s.include = prg
 	}
-	if expr := strings.TrimSpace(exemptCEL); expr != "" {
+	if expr := exemptCEL; expr != "" {
 		prg, err := eng.Compile(expr)
 		if err != nil {
 			return CompiledScope{}, fmt.Errorf("compile scope_exempt %q: %w", expr, err)
@@ -131,6 +118,30 @@ func CompileScope(eng *celenv.Engine, includeCEL, exemptCEL string) (CompiledSco
 
 // Active reports whether the scope has any predicate to evaluate.
 func (s CompiledScope) Active() bool { return s.include != nil || s.exempt != nil }
+
+// InScope reports whether a message passes include and does not match exempt.
+func (s CompiledScope) InScope(view MessageView) (bool, error) {
+	msg := celMessage(view)
+	if s.include != nil {
+		in, err := s.eng.EvalScope(s.include, msg)
+		if err != nil {
+			return false, fmt.Errorf("eval scope_include: %w", err)
+		}
+		if !in {
+			return false, nil
+		}
+	}
+	if s.exempt != nil {
+		ex, err := s.eng.EvalScope(s.exempt, msg)
+		if err != nil {
+			return false, fmt.Errorf("eval scope_exempt: %w", err)
+		}
+		if ex {
+			return false, nil
+		}
+	}
+	return true, nil
+}
 
 // Includes reports whether a message is in scope.
 func (s CompiledScope) Includes(view MessageView) bool {

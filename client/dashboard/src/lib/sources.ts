@@ -5,14 +5,25 @@
  * The only non-trivial mapping is "openapi" ↔ "http".
  */
 
-export type SourceType = "openapi" | "function" | "externalmcp" | "remotemcp";
-export type UrnKind = "http" | "function" | "externalmcp" | "remotemcp";
+export type SourceType =
+  | "openapi"
+  | "function"
+  | "externalmcp"
+  | "remotemcp"
+  | "tunneledmcp";
+export type UrnKind =
+  | "http"
+  | "function"
+  | "externalmcp"
+  | "remotemcp"
+  | "tunneledmcp";
 
 const sourceTypeToUrn: Record<SourceType, UrnKind> = {
   openapi: "http",
   function: "function",
   externalmcp: "externalmcp",
   remotemcp: "remotemcp",
+  tunneledmcp: "tunneledmcp",
 };
 
 const urnToSourceType: Record<UrnKind, SourceType> = {
@@ -20,6 +31,7 @@ const urnToSourceType: Record<UrnKind, SourceType> = {
   function: "function",
   externalmcp: "externalmcp",
   remotemcp: "remotemcp",
+  tunneledmcp: "tunneledmcp",
 };
 
 export function sourceTypeToUrnKind(type: SourceType): UrnKind {
@@ -51,6 +63,12 @@ export function formatRemoteMcpDisplay(server: {
     return trimmedName;
   }
   return formatRemoteMcpUrlForDisplay(server.url);
+}
+
+export function formatTunneledMcpDisplay(server: {
+  name?: string | null | undefined;
+}): string {
+  return server.name?.trim() || "Tunneled MCP server";
 }
 
 // formatRemoteSessionIssuerDisplay picks the render-time primary label for a
@@ -92,6 +110,10 @@ export function remoteMcpRouteParam(server: {
   return server.slug?.trim() || server.id;
 }
 
+export function tunneledMcpRouteParam(server: { id: string }): string {
+  return server.id;
+}
+
 // mcpServerRouteParam returns the value to embed in dashboard URLs for an
 // mcp_server row. Mirrors remoteMcpRouteParam: prefers the slug for
 // human-friendly URLs and falls back to the ID. The server's getMcpServer
@@ -123,6 +145,10 @@ export function getRemoteMcpServerArgs(idOrSlug: string): {
     return { id: idOrSlug };
   }
   return { slug: idOrSlug };
+}
+
+export function getTunneledMcpServerArgs(id: string): { id: string } {
+  return { id };
 }
 
 // getMcpServerArgs maps a route-param string into the request shape that

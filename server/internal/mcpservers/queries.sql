@@ -7,6 +7,7 @@ INSERT INTO mcp_servers (
     environment_id,
     user_session_issuer_id,
     remote_mcp_server_id,
+    tunneled_mcp_server_id,
     toolset_id,
     tool_variations_group_id,
     visibility
@@ -19,6 +20,7 @@ VALUES (
     @environment_id,
     @user_session_issuer_id,
     @remote_mcp_server_id,
+    @tunneled_mcp_server_id,
     @toolset_id,
     @tool_variations_group_id,
     @visibility
@@ -52,6 +54,7 @@ FROM mcp_servers
 WHERE project_id = @project_id
   AND deleted IS FALSE
   AND (sqlc.narg('remote_mcp_server_id')::uuid IS NULL OR remote_mcp_server_id = sqlc.narg('remote_mcp_server_id')::uuid)
+  AND (sqlc.narg('tunneled_mcp_server_id')::uuid IS NULL OR tunneled_mcp_server_id = sqlc.narg('tunneled_mcp_server_id')::uuid)
   AND (sqlc.narg('toolset_id')::uuid IS NULL OR toolset_id = sqlc.narg('toolset_id')::uuid)
 ORDER BY created_at DESC;
 
@@ -63,6 +66,7 @@ SET
     environment_id = @environment_id,
     user_session_issuer_id = @user_session_issuer_id,
     remote_mcp_server_id = @remote_mcp_server_id,
+    tunneled_mcp_server_id = @tunneled_mcp_server_id,
     toolset_id = @toolset_id,
     tool_variations_group_id = @tool_variations_group_id,
     visibility = @visibility,

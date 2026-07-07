@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{{if .FirstParty}}Connect {{.MCPSlug}}{{else}}Authorize {{.ClientName}}{{end}}</title>
+    <title>
+      {{if .FirstParty}}Connect {{.MCPSlug}}{{else}}Authorize
+      {{.ClientName}}{{end}}
+    </title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -81,7 +84,7 @@
         }
       }
 
-      .consent-container {
+      .auth-consent-container {
         background: var(--bg-surface-primary-default);
         border: solid 1px var(--border-neutral-softest);
         border-radius: 0.5rem;
@@ -324,7 +327,7 @@
   </head>
   <body>
     <main class="main">
-      <div class="consent-container">
+      <div class="auth-consent-container">
         <div class="header">
           {{if .FirstParty}}
           <h1>Connect {{.MCPSlug}}</h1>
@@ -335,7 +338,8 @@
           <h1>Authorize {{.ClientName}}</h1>
           <p>
             <strong>{{.ClientName}}</strong> is requesting access to the MCP
-            server <strong>{{.MCPSlug}}</strong>
+            server
+            <strong>{{.MCPSlug}}</strong>
           </p>
           {{end}}
         </div>
@@ -373,9 +377,7 @@
           </div>
           {{end}}
         </div>
-        {{end}}
-
-        {{if .FirstParty}}
+        {{end}} {{if .FirstParty}}
         <p class="info">
           When you've connected the services above, you can close this tab.
         </p>

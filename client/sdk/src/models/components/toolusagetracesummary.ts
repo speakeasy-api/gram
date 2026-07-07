@@ -49,6 +49,7 @@ export type ToolUsageTraceSummaryTargetKind = ClosedEnum<
  */
 export const ToolUsageTraceSummaryTargetType = {
   HostedMcpServer: "hosted_mcp_server",
+  TunneledMcpServer: "tunneled_mcp_server",
   ShadowMcpServer: "shadow_mcp_server",
   LocalTool: "local_tool",
   Skill: "skill",
@@ -80,6 +81,10 @@ export type ToolUsageTraceSummaryUserKind = ClosedEnum<
  * A single target-aware tool usage trace row
  */
 export type ToolUsageTraceSummary = {
+  /**
+   * AI account classification ('team' or 'personal'); empty/absent when unclassified
+   */
+  accountType?: string | undefined;
   /**
    * Hook block reason when hook_status is blocked
    */
@@ -184,6 +189,7 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    account_type: z.optional(z.string()),
     block_reason: z.optional(z.string()),
     event_source: z.string(),
     gram_urn: z.string(),
@@ -206,6 +212,7 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "account_type": "accountType",
       "block_reason": "blockReason",
       "event_source": "eventSource",
       "gram_urn": "gramUrn",

@@ -1,6 +1,7 @@
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
 import { useListChats } from "@gram/client/react-query";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
 import { cn, isMacPlatform } from "@/lib/utils";
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
@@ -17,6 +18,7 @@ import {
   useThreadId,
 } from "@gram-ai/elements";
 import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
+import { useSession } from "@/contexts/Auth";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
   INSIGHTS_DOCK_VT_CLASS,
@@ -731,6 +733,59 @@ export function InsightsProvider({
     recentChat !== undefined &&
     Date.now() - recentChat.lastMessageTimestamp.getTime() < CONTINUE_WINDOW_MS;
 
+  // Resolves a chat's creator to a name/email/avatar for Elements' history
+  // list, from the org member list the dashboard already has cached — no
+  // extra request, and avoids the cross-origin auth mismatch a direct fetch
+  // from inside Elements would hit (its request headers are scoped to the
+  // chat API, not `access.listMembers`).
+  const { data: membersData } = useMembers();
+  const resolveCreator = useCallback(
+    ({
+      userId,
+      externalUserId,
+    }: {
+      userId?: string;
+      externalUserId?: string;
+    }) => {
+      if (!userId && !externalUserId) return undefined;
+      // Chats started from the dashboard itself have no `userId` at capture
+      // time and stash the caller's email in `externalUserId` instead — fall
+      // back to an email match so those still resolve to a member.
+      const member = membersData?.members.find(
+        (m) =>
+          m.id === userId || (!!externalUserId && m.email === externalUserId),
+      );
+      return (
+        member && {
+          name: member.name,
+          email: member.email,
+          photoUrl: member.photoUrl,
+        }
+      );
+    },
+    [membersData],
+  );
+
+  // The backend only lets a chat's creator send into it (see
+  // CheckDashboardChatOwnership) — admins can still open others' chats via
+  // their chat:read grant, so hide the composer for those rather than let a
+  // send 404. Chats started from the dashboard stash the caller's email in
+  // externalUserId instead of userId (see resolveCreator above).
+  const { user } = useSession();
+  const isOwnChat = useCallback(
+    ({
+      userId,
+      externalUserId,
+    }: {
+      userId?: string;
+      externalUserId?: string;
+    }) => {
+      if (!userId && !externalUserId) return true;
+      return userId === user.id || externalUserId === user.email;
+    },
+    [user.id, user.email],
+  );
+
   // Mount the shared runtime only where it's actually used: a chat route (the
   // page owns the chat) or the open dock — and only where the dock is shown.
   // Pages with their own chat runtime (Playground, Elements, assistant
@@ -825,14 +880,21 @@ export function InsightsProvider({
       // History, the conversation list, and titles come from the chat service
       // via Elements' thread-list adapter, scoped to this assistant's chats. The
       // assistant mints chat ids server-side, so defer client-side id minting.
+      // Exclude source_kind=setup so client-driven onboarding threads for this
+      // (managed) assistant never surface in the runtime AI Insights history.
       history: {
         enabled: true,
-        threadListFilters: { assistant_id: managedAssistantId },
+        threadListFilters: {
+          assistant_id: managedAssistantId,
+          exclude_source_kind: "setup",
+        },
         deferThreadIdMinting: true,
         // The runtime persists each turn with a backend `<message-context>`
         // framing block (needed for replay, noise for display). Strip it — and
         // drop framing-only turns — before Elements renders the transcript.
         transformChatMessage: stripMessageContextFraming,
+        resolveCreator,
+        isOwnChat,
       },
       api: {
         ...mcpConfig.api,
@@ -870,6 +932,8 @@ export function InsightsProvider({
       theme,
       wrappedTransport,
       managedAssistantId,
+      resolveCreator,
+      isOwnChat,
     ],
   );
 

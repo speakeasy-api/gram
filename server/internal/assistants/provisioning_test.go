@@ -179,7 +179,7 @@ func TestEnableManagedAssistantFailsWhenNameTaken(t *testing.T) {
 
 	// A user creates an assistant that happens to occupy the managed name.
 	_, err = core.CreateAssistant(ctx, "org-test", projectID, "user-1",
-		managedAssistantName("managed-taken"), managedAssistantModel, "hi", nil,
+		managedAssistantName("managed-taken"), managedAssistantModel, "hi", nil, nil,
 		int(managedAssistantWarmTTLSeconds), int(managedAssistantMaxConcurrency), StatusActive)
 	require.NoError(t, err)
 

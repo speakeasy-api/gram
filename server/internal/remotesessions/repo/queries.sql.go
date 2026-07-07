@@ -741,6 +741,48 @@ func (q *Queries) GetGlobalRemoteSessionIssuerByID(ctx context.Context, id uuid.
 	return i, err
 }
 
+const getGlobalRemoteSessionIssuerByIDForUpdate = `-- name: GetGlobalRemoteSessionIssuerByIDForUpdate :one
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE id = $1
+  AND project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+// Locks the issuer row so DeleteGlobalIssuer's count-then-delete and
+// CreateGlobalClient's exists-then-insert serialize instead of racing.
+func (q *Queries) GetGlobalRemoteSessionIssuerByIDForUpdate(ctx context.Context, id uuid.UUID) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getGlobalRemoteSessionIssuerByIDForUpdate, id)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getOAuthProxyProviderForClone = `-- name: GetOAuthProxyProviderForClone :one
 
 SELECT id, project_id, provider_type, secrets, oauth_proxy_server_id

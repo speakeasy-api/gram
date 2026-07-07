@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -52,43 +53,74 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		return nil
 	}
 
-	s.writeClaudeOTELLogsToClickHouse(ctx, payload, orgID, projectID)
-
 	sessions := extractSessionMetadata(payload)
-	if len(sessions) == 0 {
-		logger.WarnContext(ctx, "claude OTEL logs payload contained no session ID",
-			attr.SlogEvent("claude_logs_no_session"),
-		)
-		return nil
-	}
 
-	// Resolve each distinct user once per payload. A re-batching collector can
-	// repeat the same identity across sessions, so memoize on the normalized
-	// email (the same key resolveUserByEmail queries with) to issue the minimal
-	// set of database lookups.
+	// Resolve and attribute each session before writing the raw OTEL log rows so
+	// those rows can be stamped with the account attribution (provider,
+	// external_org_id, account_type, device_id). Build a per-session lookup the
+	// ClickHouse writer consumes. Resolve each distinct user once per payload: a
+	// re-batching collector can repeat the same identity across sessions, so
+	// memoize on the normalized email (the same key resolveUserByEmail queries
+	// with) to issue the minimal set of database lookups.
+	attributionBySession := make(map[string]SessionMetadata, len(sessions))
 	userIDByEmail := make(map[string]string)
 	for i := range sessions {
 		session := sessions[i]
 
+		// Attribution — email resolution, classification, and the user_accounts /
+		// device_owners upserts — only needs to run once per session, not on every
+		// OTEL export batch (Claude exports every few seconds, which would re-issue
+		// the identical writes for the session's whole lifetime). If an earlier
+		// batch already attributed this session, reuse the cached result: the hot
+		// ingest path then does no Postgres work and only the cheap per-row
+		// ClickHouse stamping below runs each batch.
+		//
+		// Exception: re-attribute when this batch carries an identity field the
+		// cached attribution lacks. A collector can split a session's records so a
+		// later batch is the first to carry the work email or provider org id;
+		// short-circuiting there would freeze a session first seen without an email
+		// as personal and never persist the late-arriving email / external_org_id
+		// or teach the device bridge (DNO-360).
+		var cached SessionMetadata
+		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil &&
+			cached.UserAccountID != "" && !sessionEnrichesAttribution(session, cached) {
+			attributionBySession[session.SessionID] = cached
+			continue
+		}
+
+		// Merge this batch's identity over anything an earlier (incomplete) batch
+		// cached, so a session split across batches attributes on the union of its
+		// identity rather than only the fields this single batch happened to carry.
+		userEmail := conv.Default(session.UserEmail, cached.UserEmail)
 		userID := ""
-		if session.UserEmail != "" {
-			lookup := conv.NormalizeEmail(session.UserEmail)
+		if userEmail != "" {
+			lookup := conv.NormalizeEmail(userEmail)
 			id, ok := userIDByEmail[lookup]
 			if !ok {
-				id = s.resolveUserByEmail(ctx, session.UserEmail, orgID)
+				id = s.resolveUserByEmail(ctx, userEmail, orgID)
 				userIDByEmail[lookup] = id
 			}
 			userID = id
 		}
 
 		completeMetadata := SessionMetadata{
-			SessionID:   session.SessionID,
-			ServiceName: session.ServiceName,
-			UserEmail:   session.UserEmail,
-			UserID:      userID,
-			ClaudeOrgID: session.ClaudeOrgID,
-			GramOrgID:   orgID,
-			ProjectID:   projectID,
+			SessionID:           session.SessionID,
+			ServiceName:         conv.Default(session.ServiceName, cached.ServiceName),
+			UserEmail:           userEmail,
+			UserID:              userID,
+			Provider:            providerAnthropic,
+			ExternalOrgID:       conv.Default(session.ExternalOrgID, cached.ExternalOrgID),
+			ExternalAccountUUID: conv.Default(session.ExternalAccountUUID, cached.ExternalAccountUUID),
+			ExternalAccountID:   conv.Default(session.ExternalAccountID, cached.ExternalAccountID),
+			DeviceID:            conv.Default(session.DeviceID, cached.DeviceID),
+			AccountType:         "",
+			BillingMode:         "",
+			UserAccountID:       "",
+			// On this path user.email is the account's own report, so it doubles
+			// as the observed email consumers keep separate from actor identity.
+			ObservedUserEmail: userEmail,
+			GramOrgID:         orgID,
+			ProjectID:         projectID,
 		}
 
 		sessionLogger := logger.With(
@@ -97,13 +129,54 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			attr.SlogAuthUserEmail(session.UserEmail),
 		)
 
-		// Process each session independently so a single cache failure does not
-		// abort flushing the remaining sessions in the batch.
-		if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
-			sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
-				attr.SlogEvent("claude_logs_cache_set_failed"),
+		// Attribute the account: classify team vs personal, link it to the
+		// owning employee (directly for team accounts, via the device bridge for
+		// personal ones), and persist the account entity. Failures are
+		// non-fatal — session capture/enforcement must continue regardless.
+		if err := s.attributeSession(ctx, &completeMetadata); err != nil {
+			sessionLogger.WarnContext(ctx, "failed to attribute AI account for session",
+				attr.SlogEvent("account_attribution_failed"),
 				attr.SlogError(err),
 			)
+		}
+
+		attributionBySession[completeMetadata.SessionID] = completeMetadata
+
+		// A session's chat row is created once, on its first persisted message.
+		// When that message beat this attribution (hooks and OTEL race at session
+		// start), the chat exists without its account link and no later hook
+		// revisits it — so backfill the link here. Fill-once in SQL; a no-op when
+		// the chat does not exist yet or is already linked. At most one write per
+		// attributed session, since only the attribution path runs this.
+		linkFailed := false
+		if completeMetadata.UserAccountID != "" {
+			if _, err := s.repo.LinkChatUserAccount(ctx, repo.LinkChatUserAccountParams{
+				UserAccountID: conv.StringToNullUUID(completeMetadata.UserAccountID),
+				ID:            sessionIDToUUID(completeMetadata.SessionID),
+				ProjectID:     *authCtx.ProjectID,
+			}); err != nil {
+				linkFailed = true
+				sessionLogger.ErrorContext(ctx, "failed to backfill chat account link",
+					attr.SlogEvent("chat_account_link_backfill_failed"),
+					attr.SlogError(err),
+				)
+			}
+		}
+
+		// Cache only after the backfill: the once-per-session fast path above
+		// keys on the cached UserAccountID, so caching an attribution whose
+		// backfill just failed would freeze the chat unlinked forever. Skipping
+		// the write keeps this batch's row stamping (attributionBySession) and
+		// lets the next batch re-attribute and retry the link. Process each
+		// session independently so a single cache failure does not abort
+		// flushing the remaining sessions in the batch.
+		if !linkFailed {
+			if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
+				sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
+					attr.SlogEvent("claude_logs_cache_set_failed"),
+					attr.SlogError(err),
+				)
+			}
 		}
 
 		s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
@@ -113,14 +186,44 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		)
 	}
 
+	s.writeClaudeOTELLogsToClickHouse(ctx, payload, orgID, projectID, attributionBySession)
+
+	if len(sessions) == 0 {
+		logger.WarnContext(ctx, "claude OTEL logs payload contained no session ID",
+			attr.SlogEvent("claude_logs_no_session"),
+		)
+	}
+
 	return nil
 }
 
+// sessionEnrichesAttribution reports whether this OTEL batch carries an identity
+// field the cached attribution is missing. Claude normally emits every identity
+// attribute on a session's first batch, but an OpenTelemetry Collector can
+// re-batch records so a later batch is the first to carry e.g. the work email or
+// provider org id. When that happens the once-per-session fast path must yield so
+// re-running attribution can reclassify a session first seen as personal into
+// team, persist the late-arriving email / external_org_id, and teach the device
+// bridge. In the common case the batch only repeats identity already captured and
+// this returns false, preserving the fast path. Note this keys on raw field
+// presence, not email resolution: a batch that merely repeats an already-seen
+// email whose membership changed does not re-trigger (that heals on the next
+// session, by design).
+func sessionEnrichesAttribution(incoming claudeLogMetadata, cached SessionMetadata) bool {
+	return (incoming.UserEmail != "" && cached.UserEmail == "") ||
+		(incoming.ExternalOrgID != "" && cached.ExternalOrgID == "") ||
+		(incoming.ExternalAccountID != "" && cached.ExternalAccountID == "") ||
+		(incoming.DeviceID != "" && cached.DeviceID == "")
+}
+
 type claudeLogMetadata struct {
-	SessionID   string
-	ServiceName string
-	UserEmail   string
-	ClaudeOrgID string
+	SessionID           string
+	ServiceName         string
+	UserEmail           string
+	ExternalOrgID       string
+	ExternalAccountUUID string
+	ExternalAccountID   string
+	DeviceID            string
 }
 
 // extractSessionMetadata partitions an OTLP logs payload into one metadata
@@ -162,10 +265,13 @@ func extractSessionMetadata(payload *gen.LogsPayload) []claudeLogMetadata {
 				idx, ok := indexBySession[data.SessionID]
 				if !ok {
 					ordered = append(ordered, claudeLogMetadata{
-						SessionID:   data.SessionID,
-						ServiceName: serviceName,
-						UserEmail:   "",
-						ClaudeOrgID: "",
+						SessionID:           data.SessionID,
+						ServiceName:         serviceName,
+						UserEmail:           "",
+						ExternalOrgID:       "",
+						ExternalAccountUUID: "",
+						ExternalAccountID:   "",
+						DeviceID:            "",
 					})
 					indexBySession[data.SessionID] = len(ordered) - 1
 					idx = len(ordered) - 1
@@ -183,8 +289,17 @@ func extractSessionMetadata(payload *gen.LogsPayload) []claudeLogMetadata {
 				if data.UserEmail != "" {
 					meta.UserEmail = data.UserEmail
 				}
-				if data.ClaudeOrgID != "" {
-					meta.ClaudeOrgID = data.ClaudeOrgID
+				if data.ExternalOrgID != "" {
+					meta.ExternalOrgID = data.ExternalOrgID
+				}
+				if data.ExternalAccountUUID != "" {
+					meta.ExternalAccountUUID = data.ExternalAccountUUID
+				}
+				if data.ExternalAccountID != "" {
+					meta.ExternalAccountID = data.ExternalAccountID
+				}
+				if data.DeviceID != "" {
+					meta.DeviceID = data.DeviceID
 				}
 				if meta.ServiceName == "" && serviceName != "" {
 					meta.ServiceName = serviceName
@@ -196,7 +311,7 @@ func extractSessionMetadata(payload *gen.LogsPayload) []claudeLogMetadata {
 	return ordered
 }
 
-func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *gen.LogsPayload, orgID string, projectID string) {
+func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *gen.LogsPayload, orgID string, projectID string, attributionBySession map[string]SessionMetadata) {
 	if s.telemetryLogger == nil || payload == nil {
 		return
 	}
@@ -234,8 +349,11 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				logAttrs[attr.OrganizationIDKey] = orgID
 				logAttrs[attr.ResourceURNKey] = claudeOTELLogsURN
 				logAttrs[attr.HookSourceKey] = "claude-code"
+				sessionID := stringAttr(logAttrs, attribute.Key("session.id"))
+				sessionMeta := attributionBySession[sessionID]
+				stampAccountAttribution(logAttrs, sessionMeta)
 				if shouldTriggerClaudePromptCorrelation(logAttrs) {
-					correlationSessionIDs[stringAttr(logAttrs, attribute.Key("session.id"))] = struct{}{}
+					correlationSessionIDs[sessionID] = struct{}{}
 				}
 
 				if body := otelLogBody(logRecord); body != "" {
@@ -262,11 +380,21 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 					logAttrs[attr.SpanIDKey] = spanID
 				}
 
+				// Attribute usage to the owning employee. For a team session the
+				// resolved Gram user id and the email agree; for a personal
+				// session the email won't resolve but the device bridge may have
+				// supplied the owner's user id, so personal usage rolls up under
+				// the employee while account_type=personal preserves the split.
+				userInfo := telemetry.UserInfoByEmail(stringAttr(logAttrs, attr.UserEmailKey))
+				if sessionMeta.UserID != "" {
+					userInfo = telemetry.UserInfoByIDAndEmail(sessionMeta.UserID, sessionMeta.UserEmail)
+				}
+
 				timestamp, observedTimestamp := otelLogTimestamps(logRecord)
 				params = append(params, telemetry.WithOTELMetadata(telemetry.LogParams{
 					Timestamp:  timestamp,
 					ToolInfo:   claudeOTELLogToolInfo(orgID, parsedProjectID.String()),
-					UserInfo:   telemetry.UserInfoByEmail(stringAttr(logAttrs, attr.UserEmailKey)),
+					UserInfo:   userInfo,
 					Attributes: logAttrs,
 				}, observedTimestamp, resourceAttrs))
 			}
@@ -334,9 +462,12 @@ func normalizeClaudeLogAttributes(attrs map[attr.Key]any) {
 
 // OTELLogData contains extracted data from an OTEL log record
 type OTELLogData struct {
-	SessionID   string
-	UserEmail   string
-	ClaudeOrgID string
+	SessionID           string
+	UserEmail           string
+	ExternalOrgID       string
+	ExternalAccountUUID string
+	ExternalAccountID   string
+	DeviceID            string
 }
 
 // extractResourceAttribute extracts a specific attribute from OTEL resource
@@ -358,9 +489,12 @@ func extractResourceAttribute(resource *gen.OTELResource, key string) string {
 // extractLogData extracts session data from an OTEL log record
 func extractLogData(logRecord *gen.OTELLogRecord) OTELLogData {
 	data := OTELLogData{
-		SessionID:   "",
-		UserEmail:   "",
-		ClaudeOrgID: "",
+		SessionID:           "",
+		UserEmail:           "",
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
 	}
 
 	if logRecord == nil || logRecord.Attributes == nil {
@@ -383,7 +517,13 @@ func extractLogData(logRecord *gen.OTELLogRecord) OTELLogData {
 		case "user.email":
 			data.UserEmail = value
 		case "organization.id":
-			data.ClaudeOrgID = value
+			data.ExternalOrgID = value
+		case "user.account_uuid":
+			data.ExternalAccountUUID = value
+		case "user.account_id":
+			data.ExternalAccountID = value
+		case "user.id":
+			data.DeviceID = value
 		}
 	}
 

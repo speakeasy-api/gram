@@ -500,6 +500,19 @@ WHERE our.organization_id = @organization_id
   AND our.deleted IS FALSE
 ORDER BY users.email, users.id;
 
+-- name: ListAccessNotificationUsers :many
+SELECT
+  users.id,
+  users.email
+FROM organization_user_relationships AS our
+JOIN users
+  ON users.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
+  AND users.email <> ''
+ORDER BY users.email, users.id;
+
 -- name: ListMemberRolePrincipalsByWorkosUser :many
 SELECT
   COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,

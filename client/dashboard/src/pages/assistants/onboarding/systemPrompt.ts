@@ -37,6 +37,7 @@ Pass section bodies WITHOUT a leading heading — the tool adds it. Inside a sec
 - Warm TTL — runtime keep-alive secs after last request. Default 60. 0 disables. \`update_assistant(warm_ttl_seconds)\`.
 - System instructions — runtime prompt. \`# Personality\` (\`set_personality\`), \`# Behavior\` (auto), \`# Tasks\` (\`set_tasks\`). See "System prompt sections".
 - Toolset — bundle of tools. \`list_toolsets\` / \`create_toolset\` / \`attach_toolset\` / \`detach_toolset\` / \`add_tools_to_toolset\`. When attached, toolsets bind to the assistant's shared env by default. Toolset mutations recompute \`# Behavior\`.
+- MCP server — a remote (external-SaaS) MCP server registered in this project, with no backing toolset. \`list_mcp_servers\` / \`attach_mcp_server\` / \`detach_mcp_server\`. This is how you add "an MCP server" the user gives you (e.g. an external SaaS integration) that isn't a toolset — attach it by its slug, not \`attach_toolset\`. Tunnelled or disabled servers can't be attached; the attach call rejects them. Most remote servers carry their own connection auth, so omit \`environment_slug\`.
 - Tool — URN \`tools:http:<source>:<op>\` / \`tools:function:<source>:<op>\`. \`<source>\` is project-specific, not the integration brand. Discover via \`list_available_tools\`; never guess.
 - Environment — the single credential bag owned by this assistant. Auto-created the first time \`update_assistant\` sets a name; auto-renamed when the assistant is renamed; auto-recreated if it gets deleted out of band. Every toolset and trigger on this assistant binds to it by default. Extend it with \`add_environment_keys\` (declare required vars, empty allowed). Populate it with \`request_environment_secrets\` (never accept secrets in chat). Tool responses include a \`notes\` field when the env was implicitly created, adopted, or recreated — read those and relay to the user if toolsets/triggers need re-attach. Fallback tools (\`create_environment\`, explicit \`environment_slug\`/\`environment_id\` args) exist for escape hatches only; don't reach for them unless the shared-env path has failed.
 - Trigger — kinds: \`cron\` (schedule), \`slack\` (Slack events, delivered via webhook). \`create_trigger\`; \`update_trigger\` for pause/resume/reconfig. Bound to the assistant's env by default.
@@ -111,6 +112,7 @@ export type AssistantSnapshot = {
   status: string;
   instructions: string;
   toolsets: { slug: string; environmentSlug?: string | null }[];
+  mcpServers: { slug: string; environmentSlug?: string | null }[];
 };
 
 export function buildSystemPrompt(args: {
@@ -132,7 +134,7 @@ Never restate or re-paste the Assistant spec — the user can see the live Draft
 
   const stateBlock = isEdit
     ? `\n\n# Current Assistant state (page-load snapshot)
-This is a snapshot taken when the user opened this chat — it bootstraps the edit flow so you don't need to call read tools just to know who you are. During the session, prefer the most recent tool results in this conversation over this snapshot; if you need authoritative live state, call \`list_toolsets\` / \`list_triggers\` / \`list_environments\`.
+This is a snapshot taken when the user opened this chat — it bootstraps the edit flow so you don't need to call read tools just to know who you are. During the session, prefer the most recent tool results in this conversation over this snapshot; if you need authoritative live state, call \`list_toolsets\` / \`list_mcp_servers\` / \`list_triggers\` / \`list_environments\`.
 
 - Name: ${snapshot.name}
 - Model: \`${snapshot.model}\`
@@ -144,6 +146,16 @@ This is a snapshot taken when the user opened this chat — it bootstraps the ed
               .map(
                 (t) =>
                   `\`${t.slug}\`${t.environmentSlug ? ` (env: \`${t.environmentSlug}\`)` : ""}`,
+              )
+              .join(", ")
+      }
+- MCP servers (directly attached): ${
+        snapshot.mcpServers.length === 0
+          ? "none attached"
+          : snapshot.mcpServers
+              .map(
+                (m) =>
+                  `\`${m.slug}\`${m.environmentSlug ? ` (env: \`${m.environmentSlug}\`)` : ""}`,
               )
               .join(", ")
       }

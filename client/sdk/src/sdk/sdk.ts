@@ -14,6 +14,7 @@ import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
+import { CliAuth } from "./cliauth.js";
 import { Collections } from "./collections.js";
 import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
@@ -46,6 +47,7 @@ import { Templates } from "./templates.js";
 import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 import { Triggers } from "./triggers.js";
+import { TunneledMcp } from "./tunneledmcp.js";
 import { Usage } from "./usage.js";
 import { UserSessionClients } from "./usersessionclients.js";
 import { UserSessionConsents } from "./usersessionconsents.js";
@@ -109,6 +111,11 @@ export class Gram extends ClientSDK {
   private _chatSessions?: ChatSessions;
   get chatSessions(): ChatSessions {
     return (this._chatSessions ??= new ChatSessions(this._options));
+  }
+
+  private _cliAuth?: CliAuth;
+  get cliAuth(): CliAuth {
+    return (this._cliAuth ??= new CliAuth(this._options));
   }
 
   private _collections?: Collections;
@@ -274,6 +281,11 @@ export class Gram extends ClientSDK {
   private _triggers?: Triggers;
   get triggers(): Triggers {
     return (this._triggers ??= new Triggers(this._options));
+  }
+
+  private _tunneledMcp?: TunneledMcp;
+  get tunneledMcp(): TunneledMcp {
+    return (this._tunneledMcp ??= new TunneledMcp(this._options));
   }
 
   private _usage?: Usage;

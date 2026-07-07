@@ -7,10 +7,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
-func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, contents []string) [][]Finding {
-	out := make([][]Finding, len(messages))
+func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, contents []string) [][]scanners.Finding {
+	out := make([][]scanners.Finding, len(messages))
 	l1Enabled := a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptInjectionUseClassifier)
 	var judgeMessages []JudgeMessage
 	if l1Enabled {
@@ -20,7 +21,7 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 		}
 	}
 
-	results, err := a.piScanner.ScanBatch(ctx, contents, args.OrganizationID, args.ProjectID.String(), judgeMessages, l1Enabled)
+	results, err := a.promptInjectionScanner.ScanBatch(ctx, contents, args.OrganizationID, args.ProjectID.String(), judgeMessages, l1Enabled)
 	if err != nil {
 		a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
 		return out
