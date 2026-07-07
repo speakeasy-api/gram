@@ -26,6 +26,7 @@ import { useUpdatePluginMutation } from "@gram/client/react-query/updatePlugin";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import {
@@ -85,18 +86,27 @@ export default function PluginDetail(): JSX.Element | null {
   );
 
   // Remote MCP-backed mcp_servers for this project. Only remote-backed,
-  // non-disabled servers are publishable today.
+  // non-disabled servers with at least one endpoint are publishable —
+  // mirroring the backend's AddPluginServer check, so the picker never
+  // offers a server the API would reject.
   const { data: mcpServersData, isLoading: isLoadingMcpServers } =
     useMcpServers({});
-  const mcpServers = useMemo(
-    () =>
-      (mcpServersData?.mcpServers ?? []).filter(
-        (s) => !!s.remoteMcpServerId && s.visibility !== "disabled",
-      ),
-    [mcpServersData],
-  );
+  const { data: mcpEndpointsData, isLoading: isLoadingMcpEndpoints } =
+    useMcpEndpoints({});
+  const mcpServers = useMemo(() => {
+    const serverIdsWithEndpoint = new Set(
+      (mcpEndpointsData?.mcpEndpoints ?? []).map((e) => e.mcpServerId),
+    );
+    return (mcpServersData?.mcpServers ?? []).filter(
+      (s) =>
+        !!s.remoteMcpServerId &&
+        s.visibility !== "disabled" &&
+        serverIdsWithEndpoint.has(s.id),
+    );
+  }, [mcpServersData, mcpEndpointsData]);
 
-  const isLoadingServers = isLoadingToolsets || isLoadingMcpServers;
+  const isLoadingServers =
+    isLoadingToolsets || isLoadingMcpServers || isLoadingMcpEndpoints;
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.

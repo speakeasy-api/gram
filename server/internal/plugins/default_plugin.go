@@ -10,7 +10,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // EnsureDefaultPluginResult reports whether the Default plugin already
@@ -96,6 +99,24 @@ func AttachToDefaultPlugin(ctx context.Context, q *repo.Queries, params AttachTo
 		return nil, fmt.Errorf("ensure default plugin: %w", err)
 	}
 
+	// Check for an existing attachment before inserting rather than relying
+	// on unique-violation classification alone: a duplicate insert of an
+	// attached server trips the (plugin_id, display_name) index (created
+	// before the backend ones, so Postgres reports it first) and the failed
+	// statement aborts the caller's surrounding transaction either way.
+	_, err = q.GetPluginServerByBackend(ctx, repo.GetPluginServerByBackendParams{
+		PluginID:    ensured.Plugin.ID,
+		ToolsetID:   params.ToolsetID,
+		McpServerID: params.McpServerID,
+	})
+	switch {
+	case err == nil:
+		// Already attached — expected no-op, not an error.
+		return nil, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return nil, fmt.Errorf("check existing default plugin server: %w", err)
+	}
+
 	server, err := q.AddPluginServer(ctx, repo.AddPluginServerParams{
 		PluginID:    ensured.Plugin.ID,
 		ToolsetID:   params.ToolsetID,
@@ -109,7 +130,11 @@ func AttachToDefaultPlugin(ctx context.Context, q *repo.Queries, params AttachTo
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			switch pgErr.ConstraintName {
 			case "plugin_servers_plugin_id_toolset_id_key", "plugin_servers_plugin_id_mcp_server_id_key":
-				// Already attached — expected no-op, not an error.
+				// Concurrent attach race lost after the existence check —
+				// already attached, an expected no-op. Note the failed insert
+				// has aborted the surrounding transaction, so the caller's
+				// commit will still fail; a retry then hits the existence
+				// check and no-ops cleanly.
 				return nil, nil
 			default:
 				// display_name collision with a different, already-attached
@@ -128,4 +153,73 @@ func AttachToDefaultPlugin(ctx context.Context, q *repo.Queries, params AttachTo
 		PluginCreated: ensured.Created,
 		Server:        server,
 	}, nil
+}
+
+// AttachToDefaultPluginAudited runs AttachToDefaultPlugin and records the
+// same audit trail a manual "add server to plugin" produces: a plugin
+// creation event when the Default plugin was lazily provisioned, and a
+// plugin-server add event for the attached server. Callers (toolsets on
+// MCP-enable, mcpendpoints on first endpoint, mcpservers on visibility
+// enable) run this inside the same transaction as the triggering write.
+// Returns pluginCreated=true when this call created the Default plugin
+// (project predates the feature) — callers should enqueue an initial
+// marketplace publish for it, but only after their own transaction commits,
+// since this runs pre-commit and the DB writes could still roll back.
+func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams) (bool, error) {
+	attached, err := AttachToDefaultPlugin(ctx, repo.New(dbtx), params)
+	if err != nil {
+		return false, fmt.Errorf("attach server to default plugin: %w", err)
+	}
+	if attached == nil {
+		return false, nil
+	}
+
+	if attached.PluginCreated {
+		if err := auditLogger.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			PluginID:         attached.PluginID,
+			PluginName:       attached.PluginName,
+			PluginSlug:       attached.PluginSlug,
+		}); err != nil {
+			return false, fmt.Errorf("audit log default plugin create: %w", err)
+		}
+	}
+
+	// Exactly one of the URNs is set, mirroring params' toolset_id XOR
+	// mcp_server_id contract.
+	var toolsetURN *urn.Toolset
+	var mcpServerURN *urn.McpServer
+	if params.ToolsetID.Valid {
+		u := urn.NewToolset(params.ToolsetID.UUID)
+		toolsetURN = &u
+	}
+	if params.McpServerID.Valid {
+		u := urn.NewMcpServer(params.McpServerID.UUID)
+		mcpServerURN = &u
+	}
+
+	if err := auditLogger.LogPluginServerAdd(ctx, dbtx, audit.LogPluginServerAddEvent{
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         *authCtx.ProjectID,
+		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:  authCtx.Email,
+		ActorSlug:         nil,
+		PluginID:          attached.PluginID,
+		PluginName:        attached.PluginName,
+		PluginSlug:        attached.PluginSlug,
+		ServerID:          attached.Server.ID,
+		ServerDisplayName: attached.Server.DisplayName,
+		ServerPolicy:      attached.Server.Policy,
+		ServerSortOrder:   attached.Server.SortOrder,
+		ToolsetURN:        toolsetURN,
+		McpServerURN:      mcpServerURN,
+	}); err != nil {
+		return false, fmt.Errorf("audit log default plugin server add: %w", err)
+	}
+
+	return attached.PluginCreated, nil
 }
