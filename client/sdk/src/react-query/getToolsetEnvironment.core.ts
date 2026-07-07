@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { environmentsGetByToolset } from "../funcs/environmentsGetByToolset.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { Environment } from "../models/components/environment.js";
+import {
+  GetToolsetEnvironmentRequest,
+  GetToolsetEnvironmentSecurity,
+} from "../models/operations/gettoolsetenvironment.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetToolsetEnvironmentQueryData = components.Environment;
+export type GetToolsetEnvironmentQueryData = Environment;
 
 export function prefetchGetToolsetEnvironment(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetToolsetEnvironmentRequest,
-  security?: operations.GetToolsetEnvironmentSecurity | undefined,
+  request: GetToolsetEnvironmentRequest,
+  security?: GetToolsetEnvironmentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGetToolsetEnvironment(
 
 export function buildGetToolsetEnvironmentQuery(
   client$: GramCore,
-  request: operations.GetToolsetEnvironmentRequest,
-  security?: operations.GetToolsetEnvironmentSecurity | undefined,
+  request: GetToolsetEnvironmentRequest,
+  security?: GetToolsetEnvironmentSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

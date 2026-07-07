@@ -7,7 +7,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { cn, getServerURL } from "@/lib/utils";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import type { ExternalMCPRemote } from "@gram/client/models/components";
+import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import { Button, Dialog, Input, Stack } from "@speakeasy-api/moonshine";
 import {
   AlertCircle,

@@ -1,6 +1,6 @@
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
-import { useListChats } from "@gram/client/react-query";
+import { useListChats } from "@gram/client/react-query/listChats.js";
 import { useMemo } from "react";
 
 const WINDOW_DAYS = 14;

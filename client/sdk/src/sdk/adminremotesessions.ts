@@ -13,8 +13,50 @@ import { adminRemoteSessionsListGlobalIssuers } from "../funcs/adminRemoteSessio
 import { adminRemoteSessionsUpdateGlobalClient } from "../funcs/adminRemoteSessionsUpdateGlobalClient.js";
 import { adminRemoteSessionsUpdateGlobalIssuer } from "../funcs/adminRemoteSessionsUpdateGlobalIssuer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
+import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
+import {
+  CreateGlobalRemoteSessionClientRequest,
+  CreateGlobalRemoteSessionClientSecurity,
+} from "../models/operations/createglobalremotesessionclient.js";
+import {
+  CreateGlobalRemoteSessionIssuerRequest,
+  CreateGlobalRemoteSessionIssuerSecurity,
+} from "../models/operations/createglobalremotesessionissuer.js";
+import {
+  DeleteGlobalRemoteSessionClientRequest,
+  DeleteGlobalRemoteSessionClientSecurity,
+} from "../models/operations/deleteglobalremotesessionclient.js";
+import {
+  DeleteGlobalRemoteSessionIssuerRequest,
+  DeleteGlobalRemoteSessionIssuerSecurity,
+} from "../models/operations/deleteglobalremotesessionissuer.js";
+import {
+  GetGlobalRemoteSessionClientRequest,
+  GetGlobalRemoteSessionClientSecurity,
+} from "../models/operations/getglobalremotesessionclient.js";
+import {
+  GetGlobalRemoteSessionIssuerRequest,
+  GetGlobalRemoteSessionIssuerSecurity,
+} from "../models/operations/getglobalremotesessionissuer.js";
+import {
+  ListGlobalRemoteSessionClientsRequest,
+  ListGlobalRemoteSessionClientsResponse,
+  ListGlobalRemoteSessionClientsSecurity,
+} from "../models/operations/listglobalremotesessionclients.js";
+import {
+  ListGlobalRemoteSessionIssuersRequest,
+  ListGlobalRemoteSessionIssuersResponse,
+  ListGlobalRemoteSessionIssuersSecurity,
+} from "../models/operations/listglobalremotesessionissuers.js";
+import {
+  UpdateGlobalRemoteSessionClientRequest,
+  UpdateGlobalRemoteSessionClientSecurity,
+} from "../models/operations/updateglobalremotesessionclient.js";
+import {
+  UpdateGlobalRemoteSessionIssuerRequest,
+  UpdateGlobalRemoteSessionIssuerSecurity,
+} from "../models/operations/updateglobalremotesessionissuer.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -26,10 +68,10 @@ export class AdminRemoteSessions extends ClientSDK {
    * Register a global remote_session_client under an existing global remote_session_issuer. Caller supplies client_id and optional client_secret obtained out-of-band from the upstream issuer. Requires platform admin.
    */
   async createGlobalClient(
-    request: operations.CreateGlobalRemoteSessionClientRequest,
-    security?: operations.CreateGlobalRemoteSessionClientSecurity | undefined,
+    request: CreateGlobalRemoteSessionClientRequest,
+    security?: CreateGlobalRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionClient> {
+  ): Promise<RemoteSessionClient> {
     return unwrapAsync(adminRemoteSessionsCreateGlobalClient(
       this,
       request,
@@ -45,10 +87,10 @@ export class AdminRemoteSessions extends ClientSDK {
    * Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.
    */
   async createGlobalIssuer(
-    request: operations.CreateGlobalRemoteSessionIssuerRequest,
-    security?: operations.CreateGlobalRemoteSessionIssuerSecurity | undefined,
+    request: CreateGlobalRemoteSessionIssuerRequest,
+    security?: CreateGlobalRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionIssuer> {
+  ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(adminRemoteSessionsCreateGlobalIssuer(
       this,
       request,
@@ -64,8 +106,8 @@ export class AdminRemoteSessions extends ClientSDK {
    * Soft-delete a global remote_session_client. Cascades to the remote_sessions minted against it. Requires platform admin.
    */
   async deleteGlobalClient(
-    request: operations.DeleteGlobalRemoteSessionClientRequest,
-    security?: operations.DeleteGlobalRemoteSessionClientSecurity | undefined,
+    request: DeleteGlobalRemoteSessionClientRequest,
+    security?: DeleteGlobalRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(adminRemoteSessionsDeleteGlobalClient(
@@ -83,8 +125,8 @@ export class AdminRemoteSessions extends ClientSDK {
    * Soft-delete a global remote_session_issuer. Blocked when any global remote_session_clients still reference it. Requires platform admin.
    */
   async deleteGlobalIssuer(
-    request: operations.DeleteGlobalRemoteSessionIssuerRequest,
-    security?: operations.DeleteGlobalRemoteSessionIssuerSecurity | undefined,
+    request: DeleteGlobalRemoteSessionIssuerRequest,
+    security?: DeleteGlobalRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(adminRemoteSessionsDeleteGlobalIssuer(
@@ -102,10 +144,10 @@ export class AdminRemoteSessions extends ClientSDK {
    * Get a global remote_session_client by id. Requires platform admin.
    */
   async getGlobalClient(
-    request: operations.GetGlobalRemoteSessionClientRequest,
-    security?: operations.GetGlobalRemoteSessionClientSecurity | undefined,
+    request: GetGlobalRemoteSessionClientRequest,
+    security?: GetGlobalRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionClient> {
+  ): Promise<RemoteSessionClient> {
     return unwrapAsync(adminRemoteSessionsGetGlobalClient(
       this,
       request,
@@ -121,10 +163,10 @@ export class AdminRemoteSessions extends ClientSDK {
    * Get a global remote_session_issuer by id. Requires platform admin.
    */
   async getGlobalIssuer(
-    request: operations.GetGlobalRemoteSessionIssuerRequest,
-    security?: operations.GetGlobalRemoteSessionIssuerSecurity | undefined,
+    request: GetGlobalRemoteSessionIssuerRequest,
+    security?: GetGlobalRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionIssuer> {
+  ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(adminRemoteSessionsGetGlobalIssuer(
       this,
       request,
@@ -140,14 +182,11 @@ export class AdminRemoteSessions extends ClientSDK {
    * List the global remote_session_clients registered with a global remote_session_issuer. Requires platform admin.
    */
   async listGlobalClients(
-    request: operations.ListGlobalRemoteSessionClientsRequest,
-    security?: operations.ListGlobalRemoteSessionClientsSecurity | undefined,
+    request: ListGlobalRemoteSessionClientsRequest,
+    security?: ListGlobalRemoteSessionClientsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<
-    PageIterator<
-      operations.ListGlobalRemoteSessionClientsResponse,
-      { cursor: string }
-    >
+    PageIterator<ListGlobalRemoteSessionClientsResponse, { cursor: string }>
   > {
     return unwrapResultIterator(adminRemoteSessionsListGlobalClients(
       this,
@@ -164,14 +203,11 @@ export class AdminRemoteSessions extends ClientSDK {
    * List global remote_session_issuers. Requires platform admin.
    */
   async listGlobalIssuers(
-    request?: operations.ListGlobalRemoteSessionIssuersRequest | undefined,
-    security?: operations.ListGlobalRemoteSessionIssuersSecurity | undefined,
+    request?: ListGlobalRemoteSessionIssuersRequest | undefined,
+    security?: ListGlobalRemoteSessionIssuersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<
-    PageIterator<
-      operations.ListGlobalRemoteSessionIssuersResponse,
-      { cursor: string }
-    >
+    PageIterator<ListGlobalRemoteSessionIssuersResponse, { cursor: string }>
   > {
     return unwrapResultIterator(adminRemoteSessionsListGlobalIssuers(
       this,
@@ -188,10 +224,10 @@ export class AdminRemoteSessions extends ClientSDK {
    * Rotate the client_secret or change non-issuer settings on a global remote_session_client. Requires platform admin.
    */
   async updateGlobalClient(
-    request: operations.UpdateGlobalRemoteSessionClientRequest,
-    security?: operations.UpdateGlobalRemoteSessionClientSecurity | undefined,
+    request: UpdateGlobalRemoteSessionClientRequest,
+    security?: UpdateGlobalRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionClient> {
+  ): Promise<RemoteSessionClient> {
     return unwrapAsync(adminRemoteSessionsUpdateGlobalClient(
       this,
       request,
@@ -207,10 +243,10 @@ export class AdminRemoteSessions extends ClientSDK {
    * Update a global remote_session_issuer. Requires platform admin.
    */
   async updateGlobalIssuer(
-    request: operations.UpdateGlobalRemoteSessionIssuerRequest,
-    security?: operations.UpdateGlobalRemoteSessionIssuerSecurity | undefined,
+    request: UpdateGlobalRemoteSessionIssuerRequest,
+    security?: UpdateGlobalRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionIssuer> {
+  ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(adminRemoteSessionsUpdateGlobalIssuer(
       this,
       request,

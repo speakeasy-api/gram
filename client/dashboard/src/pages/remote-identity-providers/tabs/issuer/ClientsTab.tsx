@@ -3,11 +3,9 @@ import { DotRow } from "@/components/ui/dot-row";
 import { DotTable } from "@/components/ui/dot-table";
 import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
-import type {
-  OrganizationRemoteSessionClient,
-  RemoteSessionIssuer,
-} from "@gram/client/models/components";
-import { useOrganizationRemoteSessionClients } from "@gram/client/react-query/index.js";
+import type { OrganizationRemoteSessionClient } from "@gram/client/models/components/organizationremotesessionclient.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { useOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
 import {
   Button,
   DropdownMenu,

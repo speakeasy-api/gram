@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { otelForwardingGetConfig } from "../funcs/otelForwardingGetConfig.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { OtelForwardingConfig } from "../models/components/otelforwardingconfig.js";
+import {
+  GetOtelForwardingConfigRequest,
+  GetOtelForwardingConfigSecurity,
+} from "../models/operations/getotelforwardingconfig.js";
 import { unwrapAsync } from "../types/fp.js";
-export type OtelForwardingConfigQueryData = components.OtelForwardingConfig;
+export type OtelForwardingConfigQueryData = OtelForwardingConfig;
 
 export function prefetchOtelForwardingConfig(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetOtelForwardingConfigRequest | undefined,
-  security?: operations.GetOtelForwardingConfigSecurity | undefined,
+  request?: GetOtelForwardingConfigRequest | undefined,
+  security?: GetOtelForwardingConfigSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchOtelForwardingConfig(
 
 export function buildOtelForwardingConfigQuery(
   client$: GramCore,
-  request?: operations.GetOtelForwardingConfigRequest | undefined,
-  security?: operations.GetOtelForwardingConfigSecurity | undefined,
+  request?: GetOtelForwardingConfigRequest | undefined,
+  security?: GetOtelForwardingConfigSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

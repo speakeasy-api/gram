@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { externalCredentialsListAwsIam } from "../funcs/externalCredentialsListAwsIam.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListExternalCredentialsResult } from "../models/components/listexternalcredentialsresult.js";
+import {
+  ListAwsIamCredentialsRequest,
+  ListAwsIamCredentialsSecurity,
+} from "../models/operations/listawsiamcredentials.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListAwsIamCredentialsQueryData =
-  components.ListExternalCredentialsResult;
+export type ListAwsIamCredentialsQueryData = ListExternalCredentialsResult;
 
 export function prefetchListAwsIamCredentials(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListAwsIamCredentialsRequest | undefined,
-  security?: operations.ListAwsIamCredentialsSecurity | undefined,
+  request?: ListAwsIamCredentialsRequest | undefined,
+  security?: ListAwsIamCredentialsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchListAwsIamCredentials(
 
 export function buildListAwsIamCredentialsQuery(
   client$: GramCore,
-  request?: operations.ListAwsIamCredentialsRequest | undefined,
-  security?: operations.ListAwsIamCredentialsSecurity | undefined,
+  request?: ListAwsIamCredentialsRequest | undefined,
+  security?: ListAwsIamCredentialsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

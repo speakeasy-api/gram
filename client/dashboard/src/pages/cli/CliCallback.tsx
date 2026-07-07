@@ -1,4 +1,4 @@
-import { CodeChallengeMethod } from "@gram/client/models/components";
+import { CodeChallengeMethod } from "@gram/client/models/components/authorizerequestbody.js";
 import { useCliAuthAuthorizeMutation } from "@gram/client/react-query/cliAuthAuthorize";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useEffect, useState, useRef } from "react";

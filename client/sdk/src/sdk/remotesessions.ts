@@ -5,7 +5,15 @@
 import { remoteSessionsList } from "../funcs/remoteSessionsList.js";
 import { remoteSessionsRevoke } from "../funcs/remoteSessionsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ListRemoteSessionsRequest,
+  ListRemoteSessionsResponse,
+  ListRemoteSessionsSecurity,
+} from "../models/operations/listremotesessions.js";
+import {
+  RevokeRemoteSessionRequest,
+  RevokeRemoteSessionSecurity,
+} from "../models/operations/revokeremotesession.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -17,12 +25,10 @@ export class RemoteSessions extends ClientSDK {
    * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
    */
   async list(
-    request?: operations.ListRemoteSessionsRequest | undefined,
-    security?: operations.ListRemoteSessionsSecurity | undefined,
+    request?: ListRemoteSessionsRequest | undefined,
+    security?: ListRemoteSessionsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<
-    PageIterator<operations.ListRemoteSessionsResponse, { cursor: string }>
-  > {
+  ): Promise<PageIterator<ListRemoteSessionsResponse, { cursor: string }>> {
     return unwrapResultIterator(remoteSessionsList(
       this,
       request,
@@ -38,8 +44,8 @@ export class RemoteSessions extends ClientSDK {
    * Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.
    */
   async revoke(
-    request: operations.RevokeRemoteSessionRequest,
-    security?: operations.RevokeRemoteSessionSecurity | undefined,
+    request: RevokeRemoteSessionRequest,
+    security?: RevokeRemoteSessionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(remoteSessionsRevoke(

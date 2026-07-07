@@ -11,27 +11,31 @@ import { GramCore } from "../core.js";
 import { remoteSessionsList } from "../funcs/remoteSessionsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ListRemoteSessionsRequest,
+  ListRemoteSessionsResponse,
+  ListRemoteSessionsSecurity,
+} from "../models/operations/listremotesessions.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 import { pageIteratorToJSON } from "./_types.js";
-export type RemoteSessionsQueryData = operations.ListRemoteSessionsResponse;
+export type RemoteSessionsQueryData = ListRemoteSessionsResponse;
 
 export type RemoteSessionsInfiniteQueryData = PageIterator<
-  operations.ListRemoteSessionsResponse,
+  ListRemoteSessionsResponse,
   { cursor: string }
 >;
 
 export type RemoteSessionsPageParams = PageIterator<
-  operations.ListRemoteSessionsResponse,
+  ListRemoteSessionsResponse,
   { cursor: string }
 >["~next"];
 
 export function prefetchRemoteSessions(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListRemoteSessionsRequest | undefined,
-  security?: operations.ListRemoteSessionsSecurity | undefined,
+  request?: ListRemoteSessionsRequest | undefined,
+  security?: ListRemoteSessionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -47,8 +51,8 @@ export function prefetchRemoteSessions(
 export function prefetchRemoteSessionsInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListRemoteSessionsRequest | undefined,
-  security?: operations.ListRemoteSessionsSecurity | undefined,
+  request?: ListRemoteSessionsRequest | undefined,
+  security?: ListRemoteSessionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -66,8 +70,8 @@ export function prefetchRemoteSessionsInfinite(
 
 export function buildRemoteSessionsQuery(
   client$: GramCore,
-  request?: operations.ListRemoteSessionsRequest | undefined,
-  security?: operations.ListRemoteSessionsSecurity | undefined,
+  request?: ListRemoteSessionsRequest | undefined,
+  security?: ListRemoteSessionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -109,8 +113,8 @@ export function buildRemoteSessionsQuery(
 
 export function buildRemoteSessionsInfiniteQuery(
   client$: GramCore,
-  request?: operations.ListRemoteSessionsRequest | undefined,
-  security?: operations.ListRemoteSessionsSecurity | undefined,
+  request?: ListRemoteSessionsRequest | undefined,
+  security?: ListRemoteSessionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

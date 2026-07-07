@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SetBillingMetadataRequestBody,
+  SetBillingMetadataRequestBody$Outbound,
+  SetBillingMetadataRequestBody$outboundSchema,
+} from "../components/setbillingmetadatarequestbody.js";
 
 export type SetBillingMetadataSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,7 +19,7 @@ export type SetBillingMetadataRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  setBillingMetadataRequestBody: components.SetBillingMetadataRequestBody;
+  setBillingMetadataRequestBody: SetBillingMetadataRequestBody;
 };
 
 /** @internal */
@@ -49,8 +53,7 @@ export function setBillingMetadataSecurityToJSON(
 /** @internal */
 export type SetBillingMetadataRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  SetBillingMetadataRequestBody:
-    components.SetBillingMetadataRequestBody$Outbound;
+  SetBillingMetadataRequestBody: SetBillingMetadataRequestBody$Outbound;
 };
 
 /** @internal */
@@ -60,8 +63,7 @@ export const SetBillingMetadataRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    setBillingMetadataRequestBody:
-      components.SetBillingMetadataRequestBody$outboundSchema,
+    setBillingMetadataRequestBody: SetBillingMetadataRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

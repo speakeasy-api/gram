@@ -7,8 +7,25 @@ import { mcpRegistriesGetServerDetails } from "../funcs/mcpRegistriesGetServerDe
 import { mcpRegistriesListCatalog } from "../funcs/mcpRegistriesListCatalog.js";
 import { mcpRegistriesListRegistries } from "../funcs/mcpRegistriesListRegistries.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ExternalMCPServer } from "../models/components/externalmcpserver.js";
+import { ListCatalogResponseBody } from "../models/components/listcatalogresponsebody.js";
+import { ListRegistriesResponseBody } from "../models/components/listregistriesresponsebody.js";
+import {
+  ClearMCPRegistryCacheRequest,
+  ClearMCPRegistryCacheSecurity,
+} from "../models/operations/clearmcpregistrycache.js";
+import {
+  GetMCPServerDetailsRequest,
+  GetMCPServerDetailsSecurity,
+} from "../models/operations/getmcpserverdetails.js";
+import {
+  ListMCPCatalogRequest,
+  ListMCPCatalogSecurity,
+} from "../models/operations/listmcpcatalog.js";
+import {
+  ListMCPRegistriesRequest,
+  ListMCPRegistriesSecurity,
+} from "../models/operations/listmcpregistries.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class McpRegistries extends ClientSDK {
@@ -19,8 +36,8 @@ export class McpRegistries extends ClientSDK {
    * Clear the registry cache for a specific registry (admin only)
    */
   async clearCache(
-    request: operations.ClearMCPRegistryCacheRequest,
-    security?: operations.ClearMCPRegistryCacheSecurity | undefined,
+    request: ClearMCPRegistryCacheRequest,
+    security?: ClearMCPRegistryCacheSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(mcpRegistriesClearCache(
@@ -38,10 +55,10 @@ export class McpRegistries extends ClientSDK {
    * Get detailed information about an MCP server including remotes
    */
   async getServerDetails(
-    request: operations.GetMCPServerDetailsRequest,
-    security?: operations.GetMCPServerDetailsSecurity | undefined,
+    request: GetMCPServerDetailsRequest,
+    security?: GetMCPServerDetailsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ExternalMCPServer> {
+  ): Promise<ExternalMCPServer> {
     return unwrapAsync(mcpRegistriesGetServerDetails(
       this,
       request,
@@ -57,10 +74,10 @@ export class McpRegistries extends ClientSDK {
    * List available MCP servers from configured registries
    */
   async listCatalog(
-    request?: operations.ListMCPCatalogRequest | undefined,
-    security?: operations.ListMCPCatalogSecurity | undefined,
+    request?: ListMCPCatalogRequest | undefined,
+    security?: ListMCPCatalogSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListCatalogResponseBody> {
+  ): Promise<ListCatalogResponseBody> {
     return unwrapAsync(mcpRegistriesListCatalog(
       this,
       request,
@@ -76,10 +93,10 @@ export class McpRegistries extends ClientSDK {
    * List all MCP registries (admin only)
    */
   async listRegistries(
-    request?: operations.ListMCPRegistriesRequest | undefined,
-    security?: operations.ListMCPRegistriesSecurity | undefined,
+    request?: ListMCPRegistriesRequest | undefined,
+    security?: ListMCPRegistriesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListRegistriesResponseBody> {
+  ): Promise<ListRegistriesResponseBody> {
     return unwrapAsync(mcpRegistriesListRegistries(
       this,
       request,

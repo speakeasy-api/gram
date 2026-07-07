@@ -11,18 +11,21 @@ import { GramCore } from "../core.js";
 import { hooksServerNamesListServerNameOverrides } from "../funcs/hooksServerNamesListServerNameOverrides.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ServerNameOverride } from "../models/components/servernameoverride.js";
+import {
+  ListServerNameOverridesRequest,
+  ListServerNameOverridesSecurity,
+} from "../models/operations/listservernameoverrides.js";
 import { unwrapAsync } from "../types/fp.js";
 export type HooksServerNamesListServerNameOverridesQueryData = Array<
-  components.ServerNameOverride
+  ServerNameOverride
 >;
 
 export function prefetchHooksServerNamesListServerNameOverrides(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListServerNameOverridesRequest | undefined,
-  security?: operations.ListServerNameOverridesSecurity | undefined,
+  request?: ListServerNameOverridesRequest | undefined,
+  security?: ListServerNameOverridesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -37,8 +40,8 @@ export function prefetchHooksServerNamesListServerNameOverrides(
 
 export function buildHooksServerNamesListServerNameOverridesQuery(
   client$: GramCore,
-  request?: operations.ListServerNameOverridesRequest | undefined,
-  security?: operations.ListServerNameOverridesSecurity | undefined,
+  request?: ListServerNameOverridesRequest | undefined,
+  security?: ListServerNameOverridesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -10,8 +10,38 @@ import { remoteMcpListServers } from "../funcs/remoteMcpListServers.js";
 import { remoteMcpUpdateServer } from "../funcs/remoteMcpUpdateServer.js";
 import { remoteMcpVerifyURL } from "../funcs/remoteMcpVerifyURL.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListServersResult } from "../models/components/listserversresult.js";
+import { ProtectedResourceMetadataDiscovery } from "../models/components/protectedresourcemetadatadiscovery.js";
+import { RemoteMcpServer } from "../models/components/remotemcpserver.js";
+import { VerifyURLResult } from "../models/components/verifyurlresult.js";
+import {
+  CreateRemoteMcpServerRequest,
+  CreateRemoteMcpServerSecurity,
+} from "../models/operations/createremotemcpserver.js";
+import {
+  DeleteRemoteMcpServerRequest,
+  DeleteRemoteMcpServerSecurity,
+} from "../models/operations/deleteremotemcpserver.js";
+import {
+  DiscoverRemoteMcpProtectedResourceMetadataRequest,
+  DiscoverRemoteMcpProtectedResourceMetadataSecurity,
+} from "../models/operations/discoverremotemcpprotectedresourcemetadata.js";
+import {
+  GetRemoteMcpServerRequest,
+  GetRemoteMcpServerSecurity,
+} from "../models/operations/getremotemcpserver.js";
+import {
+  ListRemoteMcpServersRequest,
+  ListRemoteMcpServersSecurity,
+} from "../models/operations/listremotemcpservers.js";
+import {
+  UpdateRemoteMcpServerRequest,
+  UpdateRemoteMcpServerSecurity,
+} from "../models/operations/updateremotemcpserver.js";
+import {
+  VerifyRemoteMcpURLRequest,
+  VerifyRemoteMcpURLSecurity,
+} from "../models/operations/verifyremotemcpurl.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class RemoteMcp extends ClientSDK {
@@ -22,10 +52,10 @@ export class RemoteMcp extends ClientSDK {
    * Create a new remote MCP server
    */
   async createServer(
-    request: operations.CreateRemoteMcpServerRequest,
-    security?: operations.CreateRemoteMcpServerSecurity | undefined,
+    request: CreateRemoteMcpServerRequest,
+    security?: CreateRemoteMcpServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteMcpServer> {
+  ): Promise<RemoteMcpServer> {
     return unwrapAsync(remoteMcpCreateServer(
       this,
       request,
@@ -41,8 +71,8 @@ export class RemoteMcp extends ClientSDK {
    * Delete a remote MCP server
    */
   async deleteServer(
-    request: operations.DeleteRemoteMcpServerRequest,
-    security?: operations.DeleteRemoteMcpServerSecurity | undefined,
+    request: DeleteRemoteMcpServerRequest,
+    security?: DeleteRemoteMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(remoteMcpDeleteServer(
@@ -60,12 +90,10 @@ export class RemoteMcp extends ClientSDK {
    * Probe the remote MCP server's origin for an RFC 9728 .well-known/oauth-protected-resource document and return either the parsed metadata or a typed unavailability reason. Runs server-side under guardian.Policy so production resource servers without CORS can still be inspected.
    */
   async discoverProtectedResourceMetadata(
-    request: operations.DiscoverRemoteMcpProtectedResourceMetadataRequest,
-    security?:
-      | operations.DiscoverRemoteMcpProtectedResourceMetadataSecurity
-      | undefined,
+    request: DiscoverRemoteMcpProtectedResourceMetadataRequest,
+    security?: DiscoverRemoteMcpProtectedResourceMetadataSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ProtectedResourceMetadataDiscovery> {
+  ): Promise<ProtectedResourceMetadataDiscovery> {
     return unwrapAsync(remoteMcpDiscoverProtectedResourceMetadata(
       this,
       request,
@@ -81,10 +109,10 @@ export class RemoteMcp extends ClientSDK {
    * Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
    */
   async getServer(
-    request?: operations.GetRemoteMcpServerRequest | undefined,
-    security?: operations.GetRemoteMcpServerSecurity | undefined,
+    request?: GetRemoteMcpServerRequest | undefined,
+    security?: GetRemoteMcpServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteMcpServer> {
+  ): Promise<RemoteMcpServer> {
     return unwrapAsync(remoteMcpGetServer(
       this,
       request,
@@ -100,10 +128,10 @@ export class RemoteMcp extends ClientSDK {
    * List all remote MCP servers for a project
    */
   async listServers(
-    request?: operations.ListRemoteMcpServersRequest | undefined,
-    security?: operations.ListRemoteMcpServersSecurity | undefined,
+    request?: ListRemoteMcpServersRequest | undefined,
+    security?: ListRemoteMcpServersSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListServersResult> {
+  ): Promise<ListServersResult> {
     return unwrapAsync(remoteMcpListServers(
       this,
       request,
@@ -119,10 +147,10 @@ export class RemoteMcp extends ClientSDK {
    * Update a remote MCP server
    */
   async updateServer(
-    request: operations.UpdateRemoteMcpServerRequest,
-    security?: operations.UpdateRemoteMcpServerSecurity | undefined,
+    request: UpdateRemoteMcpServerRequest,
+    security?: UpdateRemoteMcpServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteMcpServer> {
+  ): Promise<RemoteMcpServer> {
     return unwrapAsync(remoteMcpUpdateServer(
       this,
       request,
@@ -138,10 +166,10 @@ export class RemoteMcp extends ClientSDK {
    * Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.
    */
   async verifyURL(
-    request: operations.VerifyRemoteMcpURLRequest,
-    security?: operations.VerifyRemoteMcpURLSecurity | undefined,
+    request: VerifyRemoteMcpURLRequest,
+    security?: VerifyRemoteMcpURLSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.VerifyURLResult> {
+  ): Promise<VerifyURLResult> {
     return unwrapAsync(remoteMcpVerifyURL(
       this,
       request,

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetProjectOverviewRequest,
+  GetProjectOverviewSecurity,
+} from "../models/operations/getprojectoverview.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetProjectOverviewQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetProjectOverviewQueryError =
  * Get project-level overview including total chats, tool calls, active servers/users, and top lists
  */
 export function useGetProjectOverview(
-  request: operations.GetProjectOverviewRequest,
-  security?: operations.GetProjectOverviewSecurity | undefined,
+  request: GetProjectOverviewRequest,
+  security?: GetProjectOverviewSecurity | undefined,
   options?: QueryHookOptions<
     GetProjectOverviewQueryData,
     GetProjectOverviewQueryError
@@ -85,8 +88,8 @@ export function useGetProjectOverview(
  * Get project-level overview including total chats, tool calls, active servers/users, and top lists
  */
 export function useGetProjectOverviewSuspense(
-  request: operations.GetProjectOverviewRequest,
-  security?: operations.GetProjectOverviewSecurity | undefined,
+  request: GetProjectOverviewRequest,
+  security?: GetProjectOverviewSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetProjectOverviewQueryData,
     GetProjectOverviewQueryError

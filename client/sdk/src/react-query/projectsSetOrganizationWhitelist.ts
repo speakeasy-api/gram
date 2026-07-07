@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  SetOrganizationWhitelistRequest,
+  SetOrganizationWhitelistSecurity,
+} from "../models/operations/setorganizationwhitelist.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type ProjectsSetOrganizationWhitelistMutationVariables = {
-  request: operations.SetOrganizationWhitelistRequest;
-  security?: operations.SetOrganizationWhitelistSecurity | undefined;
+  request: SetOrganizationWhitelistRequest;
+  security?: SetOrganizationWhitelistSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type ProjectsSetOrganizationWhitelistMutationData = void;
 
 export type ProjectsSetOrganizationWhitelistMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

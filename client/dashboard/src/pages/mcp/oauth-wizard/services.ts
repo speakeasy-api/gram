@@ -1,10 +1,8 @@
-import {
-  buildAddExternalOAuthServerMutation,
-  buildAddOAuthProxyServerMutation,
-  buildCreateEnvironmentMutation,
-  buildDeleteEnvironmentMutation,
-  buildListEnvironmentsQuery,
-} from "@gram/client/react-query";
+import { buildAddExternalOAuthServerMutation } from "@gram/client/react-query/addExternalOAuthServer.js";
+import { buildAddOAuthProxyServerMutation } from "@gram/client/react-query/addOAuthProxyServer.js";
+import { buildCreateEnvironmentMutation } from "@gram/client/react-query/createEnvironment.js";
+import { buildDeleteEnvironmentMutation } from "@gram/client/react-query/deleteEnvironment.js";
+import { buildListEnvironmentsQuery } from "@gram/client/react-query/listEnvironments.js";
 import type { Gram } from "@gram/client";
 import type { QueryClient } from "@tanstack/react-query";
 import { fromPromise } from "xstate";

@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { triggersGet } from "../funcs/triggersGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { TriggerInstance } from "../models/components/triggerinstance.js";
+import {
+  GetTriggerInstanceRequest,
+  GetTriggerInstanceSecurity,
+} from "../models/operations/gettriggerinstance.js";
 import { unwrapAsync } from "../types/fp.js";
-export type TriggerQueryData = components.TriggerInstance;
+export type TriggerQueryData = TriggerInstance;
 
 export function prefetchTrigger(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetTriggerInstanceRequest,
-  security?: operations.GetTriggerInstanceSecurity | undefined,
+  request: GetTriggerInstanceRequest,
+  security?: GetTriggerInstanceSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchTrigger(
 
 export function buildTriggerQuery(
   client$: GramCore,
-  request: operations.GetTriggerInstanceRequest,
-  security?: operations.GetTriggerInstanceSecurity | undefined,
+  request: GetTriggerInstanceRequest,
+  security?: GetTriggerInstanceSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

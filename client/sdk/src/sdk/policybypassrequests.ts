@@ -8,8 +8,28 @@ import { riskPolicyBypassRequestsDeny } from "../funcs/riskPolicyBypassRequestsD
 import { riskPolicyBypassRequestsList } from "../funcs/riskPolicyBypassRequestsList.js";
 import { riskPolicyBypassRequestsRevoke } from "../funcs/riskPolicyBypassRequestsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListRiskPolicyBypassRequestsResult } from "../models/components/listriskpolicybypassrequestsresult.js";
+import { RiskPolicyBypassRequest } from "../models/components/riskpolicybypassrequest.js";
+import {
+  ApproveRiskPolicyBypassRequestRequest,
+  ApproveRiskPolicyBypassRequestSecurity,
+} from "../models/operations/approveriskpolicybypassrequest.js";
+import {
+  CreateRiskPolicyBypassRequestRequest,
+  CreateRiskPolicyBypassRequestSecurity,
+} from "../models/operations/createriskpolicybypassrequest.js";
+import {
+  DenyRiskPolicyBypassRequestRequest,
+  DenyRiskPolicyBypassRequestSecurity,
+} from "../models/operations/denyriskpolicybypassrequest.js";
+import {
+  ListRiskPolicyBypassRequestsRequest,
+  ListRiskPolicyBypassRequestsSecurity,
+} from "../models/operations/listriskpolicybypassrequests.js";
+import {
+  RevokeRiskPolicyBypassRequestRequest,
+  RevokeRiskPolicyBypassRequestSecurity,
+} from "../models/operations/revokeriskpolicybypassrequest.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class PolicyBypassRequests extends ClientSDK {
@@ -20,10 +40,10 @@ export class PolicyBypassRequests extends ClientSDK {
    * Approve a risk policy bypass request for the requested policy target.
    */
   async approve(
-    request: operations.ApproveRiskPolicyBypassRequestRequest,
-    security?: operations.ApproveRiskPolicyBypassRequestSecurity | undefined,
+    request: ApproveRiskPolicyBypassRequestRequest,
+    security?: ApproveRiskPolicyBypassRequestSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskPolicyBypassRequest> {
+  ): Promise<RiskPolicyBypassRequest> {
     return unwrapAsync(riskPolicyBypassRequestsApprove(
       this,
       request,
@@ -39,10 +59,10 @@ export class PolicyBypassRequests extends ClientSDK {
    * Create or refresh a risk policy bypass request from a signed request URL token.
    */
   async create(
-    request: operations.CreateRiskPolicyBypassRequestRequest,
-    security?: operations.CreateRiskPolicyBypassRequestSecurity | undefined,
+    request: CreateRiskPolicyBypassRequestRequest,
+    security?: CreateRiskPolicyBypassRequestSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskPolicyBypassRequest> {
+  ): Promise<RiskPolicyBypassRequest> {
     return unwrapAsync(riskPolicyBypassRequestsCreate(
       this,
       request,
@@ -58,10 +78,10 @@ export class PolicyBypassRequests extends ClientSDK {
    * Deny a risk policy bypass request, updating workflow state.
    */
   async deny(
-    request: operations.DenyRiskPolicyBypassRequestRequest,
-    security?: operations.DenyRiskPolicyBypassRequestSecurity | undefined,
+    request: DenyRiskPolicyBypassRequestRequest,
+    security?: DenyRiskPolicyBypassRequestSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskPolicyBypassRequest> {
+  ): Promise<RiskPolicyBypassRequest> {
     return unwrapAsync(riskPolicyBypassRequestsDeny(
       this,
       request,
@@ -77,10 +97,10 @@ export class PolicyBypassRequests extends ClientSDK {
    * List current risk policy bypass request workflow records.
    */
   async list(
-    request?: operations.ListRiskPolicyBypassRequestsRequest | undefined,
-    security?: operations.ListRiskPolicyBypassRequestsSecurity | undefined,
+    request?: ListRiskPolicyBypassRequestsRequest | undefined,
+    security?: ListRiskPolicyBypassRequestsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListRiskPolicyBypassRequestsResult> {
+  ): Promise<ListRiskPolicyBypassRequestsResult> {
     return unwrapAsync(riskPolicyBypassRequestsList(
       this,
       request,
@@ -96,10 +116,10 @@ export class PolicyBypassRequests extends ClientSDK {
    * Revoke a previously approved risk policy bypass request.
    */
   async revoke(
-    request: operations.RevokeRiskPolicyBypassRequestRequest,
-    security?: operations.RevokeRiskPolicyBypassRequestSecurity | undefined,
+    request: RevokeRiskPolicyBypassRequestRequest,
+    security?: RevokeRiskPolicyBypassRequestSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskPolicyBypassRequest> {
+  ): Promise<RiskPolicyBypassRequest> {
     return unwrapAsync(riskPolicyBypassRequestsRevoke(
       this,
       request,

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SetPinnedRequestBody,
+  SetPinnedRequestBody$Outbound,
+  SetPinnedRequestBody$outboundSchema,
+} from "../components/setpinnedrequestbody.js";
 
 export type SetChatPinnedSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -20,7 +24,7 @@ export type SetChatPinnedRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  setPinnedRequestBody: components.SetPinnedRequestBody;
+  setPinnedRequestBody: SetPinnedRequestBody;
 };
 
 /** @internal */
@@ -58,7 +62,7 @@ export function setChatPinnedSecurityToJSON(
 export type SetChatPinnedRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  SetPinnedRequestBody: components.SetPinnedRequestBody$Outbound;
+  SetPinnedRequestBody: SetPinnedRequestBody$Outbound;
 };
 
 /** @internal */
@@ -69,7 +73,7 @@ export const SetChatPinnedRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    setPinnedRequestBody: components.SetPinnedRequestBody$outboundSchema,
+    setPinnedRequestBody: SetPinnedRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -1,7 +1,7 @@
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { TelemetryLogRecord } from "@gram/client/models/components";
+import { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import { Operator } from "@gram/client/models/components/logfilter";
 import {
   DropdownMenu,

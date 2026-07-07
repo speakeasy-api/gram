@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetCustomDetectionRuleRequest,
+  GetCustomDetectionRuleSecurity,
+} from "../models/operations/getcustomdetectionrule.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskGetCustomDetectionRuleQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskGetCustomDetectionRuleQueryError =
  * Get a custom detection rule by ID.
  */
 export function useRiskGetCustomDetectionRule(
-  request: operations.GetCustomDetectionRuleRequest,
-  security?: operations.GetCustomDetectionRuleSecurity | undefined,
+  request: GetCustomDetectionRuleRequest,
+  security?: GetCustomDetectionRuleSecurity | undefined,
   options?: QueryHookOptions<
     RiskGetCustomDetectionRuleQueryData,
     RiskGetCustomDetectionRuleQueryError
@@ -88,8 +91,8 @@ export function useRiskGetCustomDetectionRule(
  * Get a custom detection rule by ID.
  */
 export function useRiskGetCustomDetectionRuleSuspense(
-  request: operations.GetCustomDetectionRuleRequest,
-  security?: operations.GetCustomDetectionRuleSecurity | undefined,
+  request: GetCustomDetectionRuleRequest,
+  security?: GetCustomDetectionRuleSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskGetCustomDetectionRuleQueryData,
     RiskGetCustomDetectionRuleQueryError

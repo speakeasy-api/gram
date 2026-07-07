@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListRiskCategoriesRequest,
+  ListRiskCategoriesSecurity,
+} from "../models/operations/listriskcategories.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskCategoriesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskCategoriesQueryError =
  * Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.
  */
 export function useRiskCategories(
-  request?: operations.ListRiskCategoriesRequest | undefined,
-  security?: operations.ListRiskCategoriesSecurity | undefined,
+  request?: ListRiskCategoriesRequest | undefined,
+  security?: ListRiskCategoriesSecurity | undefined,
   options?: QueryHookOptions<RiskCategoriesQueryData, RiskCategoriesQueryError>,
 ): UseQueryResult<RiskCategoriesQueryData, RiskCategoriesQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useRiskCategories(
  * Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.
  */
 export function useRiskCategoriesSuspense(
-  request?: operations.ListRiskCategoriesRequest | undefined,
-  security?: operations.ListRiskCategoriesSecurity | undefined,
+  request?: ListRiskCategoriesRequest | undefined,
+  security?: ListRiskCategoriesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskCategoriesQueryData,
     RiskCategoriesQueryError

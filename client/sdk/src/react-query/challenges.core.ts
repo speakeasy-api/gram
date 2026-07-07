@@ -11,16 +11,20 @@ import { GramCore } from "../core.js";
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListChallengesResult } from "../models/components/listchallengesresult.js";
+import {
+  ListChallengesRequest,
+  ListChallengesSecurity,
+  QueryParamOutcome,
+} from "../models/operations/listchallenges.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ChallengesQueryData = components.ListChallengesResult;
+export type ChallengesQueryData = ListChallengesResult;
 
 export function prefetchChallenges(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListChallengesRequest | undefined,
-  security?: operations.ListChallengesSecurity | undefined,
+  request?: ListChallengesRequest | undefined,
+  security?: ListChallengesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +39,8 @@ export function prefetchChallenges(
 
 export function buildChallengesQuery(
   client$: GramCore,
-  request?: operations.ListChallengesRequest | undefined,
-  security?: operations.ListChallengesSecurity | undefined,
+  request?: ListChallengesRequest | undefined,
+  security?: ListChallengesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -81,7 +85,7 @@ export function buildChallengesQuery(
 
 export function queryKeyChallenges(
   parameters: {
-    outcome?: operations.QueryParamOutcome | undefined;
+    outcome?: QueryParamOutcome | undefined;
     principalUrn?: string | undefined;
     scope?: string | undefined;
     projectId?: string | undefined;

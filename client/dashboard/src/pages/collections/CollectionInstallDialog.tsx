@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import type { ProjectEntry } from "@gram/client/models/components";
+import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 import { Button, Icon, Input } from "@speakeasy-api/moonshine";
 import {
   ArrowRight,

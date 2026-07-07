@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetRiskPolicyStatusRequest,
+  GetRiskPolicyStatusSecurity,
+} from "../models/operations/getriskpolicystatus.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskPoliciesStatusQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskPoliciesStatusQueryError =
  * Get the analysis status of a risk policy including progress and workflow state.
  */
 export function useRiskPoliciesStatus(
-  request: operations.GetRiskPolicyStatusRequest,
-  security?: operations.GetRiskPolicyStatusSecurity | undefined,
+  request: GetRiskPolicyStatusRequest,
+  security?: GetRiskPolicyStatusSecurity | undefined,
   options?: QueryHookOptions<
     RiskPoliciesStatusQueryData,
     RiskPoliciesStatusQueryError
@@ -85,8 +88,8 @@ export function useRiskPoliciesStatus(
  * Get the analysis status of a risk policy including progress and workflow state.
  */
 export function useRiskPoliciesStatusSuspense(
-  request: operations.GetRiskPolicyStatusRequest,
-  security?: operations.GetRiskPolicyStatusSecurity | undefined,
+  request: GetRiskPolicyStatusRequest,
+  security?: GetRiskPolicyStatusSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskPoliciesStatusQueryData,
     RiskPoliciesStatusQueryError

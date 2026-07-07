@@ -5,8 +5,15 @@
 import { featuresGet } from "../funcs/featuresGet.js";
 import { featuresSet } from "../funcs/featuresSet.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetProductFeaturesResponseBody } from "../models/components/getproductfeaturesresponsebody.js";
+import {
+  GetProductFeaturesRequest,
+  GetProductFeaturesSecurity,
+} from "../models/operations/getproductfeatures.js";
+import {
+  SetProductFeatureRequest,
+  SetProductFeatureSecurity,
+} from "../models/operations/setproductfeature.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Features extends ClientSDK {
@@ -17,10 +24,10 @@ export class Features extends ClientSDK {
    * Get the current state of all product feature flags.
    */
   async get(
-    request?: operations.GetProductFeaturesRequest | undefined,
-    security?: operations.GetProductFeaturesSecurity | undefined,
+    request?: GetProductFeaturesRequest | undefined,
+    security?: GetProductFeaturesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetProductFeaturesResponseBody> {
+  ): Promise<GetProductFeaturesResponseBody> {
     return unwrapAsync(featuresGet(
       this,
       request,
@@ -36,8 +43,8 @@ export class Features extends ClientSDK {
    * Enable or disable an organization feature flag.
    */
   async set(
-    request: operations.SetProductFeatureRequest,
-    security?: operations.SetProductFeatureSecurity | undefined,
+    request: SetProductFeatureRequest,
+    security?: SetProductFeatureSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(featuresSet(

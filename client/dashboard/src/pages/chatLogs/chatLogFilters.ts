@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import type { TelemetryLogRecord } from "@gram/client/models/components";
+import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 
 const CLAUDE_OTEL_LOG_URN = "claude-code:otel:logs";
 

@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { riskEvalsEvaluate } from "../funcs/riskEvalsEvaluate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { PromptGuardrailEvalResult } from "../models/components/promptguardrailevalresult.js";
+import {
+  EvaluatePromptGuardrailRequest,
+  EvaluatePromptGuardrailSecurity,
+} from "../models/operations/evaluatepromptguardrail.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskEvaluatePromptGuardrailQueryData =
-  components.PromptGuardrailEvalResult;
+export type RiskEvaluatePromptGuardrailQueryData = PromptGuardrailEvalResult;
 
 export function prefetchRiskEvaluatePromptGuardrail(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.EvaluatePromptGuardrailRequest,
-  security?: operations.EvaluatePromptGuardrailSecurity | undefined,
+  request: EvaluatePromptGuardrailRequest,
+  security?: EvaluatePromptGuardrailSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchRiskEvaluatePromptGuardrail(
 
 export function buildRiskEvaluatePromptGuardrailQuery(
   client$: GramCore,
-  request: operations.EvaluatePromptGuardrailRequest,
-  security?: operations.EvaluatePromptGuardrailSecurity | undefined,
+  request: EvaluatePromptGuardrailRequest,
+  security?: EvaluatePromptGuardrailSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

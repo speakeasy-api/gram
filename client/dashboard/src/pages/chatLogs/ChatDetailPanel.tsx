@@ -30,8 +30,9 @@ import {
   DropdownMenuTrigger,
   Icon,
 } from "@speakeasy-api/moonshine";
-import type { ChatOverview, RiskResult } from "@gram/client/models/components";
-import { useSearchLogsMutation } from "@gram/client/react-query";
+import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";

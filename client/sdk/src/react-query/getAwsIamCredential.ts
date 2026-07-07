@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetAwsIamCredentialRequest,
+  GetAwsIamCredentialSecurity,
+} from "../models/operations/getawsiamcredential.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetAwsIamCredentialQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetAwsIamCredentialQueryError =
  * Get an AWS IAM external credential by ID. Requires org:read.
  */
 export function useGetAwsIamCredential(
-  request: operations.GetAwsIamCredentialRequest,
-  security?: operations.GetAwsIamCredentialSecurity | undefined,
+  request: GetAwsIamCredentialRequest,
+  security?: GetAwsIamCredentialSecurity | undefined,
   options?: QueryHookOptions<
     GetAwsIamCredentialQueryData,
     GetAwsIamCredentialQueryError
@@ -85,8 +88,8 @@ export function useGetAwsIamCredential(
  * Get an AWS IAM external credential by ID. Requires org:read.
  */
 export function useGetAwsIamCredentialSuspense(
-  request: operations.GetAwsIamCredentialRequest,
-  security?: operations.GetAwsIamCredentialSecurity | undefined,
+  request: GetAwsIamCredentialRequest,
+  security?: GetAwsIamCredentialSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetAwsIamCredentialQueryData,
     GetAwsIamCredentialQueryError

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetGcpIamCredentialRequest,
+  GetGcpIamCredentialSecurity,
+} from "../models/operations/getgcpiamcredential.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetGcpIamCredentialQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetGcpIamCredentialQueryError =
  * Get a GCP IAM external credential by ID. Requires org:read.
  */
 export function useGetGcpIamCredential(
-  request: operations.GetGcpIamCredentialRequest,
-  security?: operations.GetGcpIamCredentialSecurity | undefined,
+  request: GetGcpIamCredentialRequest,
+  security?: GetGcpIamCredentialSecurity | undefined,
   options?: QueryHookOptions<
     GetGcpIamCredentialQueryData,
     GetGcpIamCredentialQueryError
@@ -85,8 +88,8 @@ export function useGetGcpIamCredential(
  * Get a GCP IAM external credential by ID. Requires org:read.
  */
 export function useGetGcpIamCredentialSuspense(
-  request: operations.GetGcpIamCredentialRequest,
-  security?: operations.GetGcpIamCredentialSecurity | undefined,
+  request: GetGcpIamCredentialRequest,
+  security?: GetGcpIamCredentialSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetGcpIamCredentialQueryData,
     GetGcpIamCredentialQueryError

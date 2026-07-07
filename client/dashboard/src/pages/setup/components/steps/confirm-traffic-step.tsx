@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Activity, Loader2, PartyPopper } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useVerifyOnboardingHooksSetup } from "@gram/client/react-query";
-import type { OnboardingHookEvent } from "@gram/client/models/components";
+import { useVerifyOnboardingHooksSetup } from "@gram/client/react-query/verifyOnboardingHooksSetup.js";
+import type { OnboardingHookEvent } from "@gram/client/models/components/onboardinghookevent.js";
 import { StepContainer } from "../step-container";
 
 interface ConfirmTrafficStepProps {

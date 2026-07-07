@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
-import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/index.js";
+import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { ScopeBadge } from "./ScopeBadge";
 import { issuerDisplayName } from "./issuerDisplay";

@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DeleteShadowMCPAccessRuleRequest,
+  DeleteShadowMCPAccessRuleSecurity,
+} from "../models/operations/deleteshadowmcpaccessrule.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type DeleteShadowMCPAccessRuleMutationVariables = {
-  request: operations.DeleteShadowMCPAccessRuleRequest;
-  security?: operations.DeleteShadowMCPAccessRuleSecurity | undefined;
+  request: DeleteShadowMCPAccessRuleRequest;
+  security?: DeleteShadowMCPAccessRuleSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type DeleteShadowMCPAccessRuleMutationData = void;
 
 export type DeleteShadowMCPAccessRuleMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

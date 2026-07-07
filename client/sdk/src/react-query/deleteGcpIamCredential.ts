@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DeleteGcpIamCredentialRequest,
+  DeleteGcpIamCredentialSecurity,
+} from "../models/operations/deletegcpiamcredential.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type DeleteGcpIamCredentialMutationVariables = {
-  request: operations.DeleteGcpIamCredentialRequest;
-  security?: operations.DeleteGcpIamCredentialSecurity | undefined;
+  request: DeleteGcpIamCredentialRequest;
+  security?: DeleteGcpIamCredentialSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type DeleteGcpIamCredentialMutationData = void;
 
 export type DeleteGcpIamCredentialMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

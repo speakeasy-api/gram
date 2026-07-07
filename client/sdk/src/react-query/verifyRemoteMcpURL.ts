@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { remoteMcpVerifyURL } from "../funcs/remoteMcpVerifyURL.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { VerifyURLResult } from "../models/components/verifyurlresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  VerifyRemoteMcpURLRequest,
+  VerifyRemoteMcpURLSecurity,
+} from "../models/operations/verifyremotemcpurl.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type VerifyRemoteMcpURLMutationVariables = {
-  request: operations.VerifyRemoteMcpURLRequest;
-  security?: operations.VerifyRemoteMcpURLSecurity | undefined;
+  request: VerifyRemoteMcpURLRequest;
+  security?: VerifyRemoteMcpURLSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type VerifyRemoteMcpURLMutationData = components.VerifyURLResult;
+export type VerifyRemoteMcpURLMutationData = VerifyURLResult;
 
 export type VerifyRemoteMcpURLMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

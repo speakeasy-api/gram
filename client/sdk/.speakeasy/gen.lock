@@ -165,7 +165,7 @@ trackedFiles:
   docs/models/components/customdomain.md: {}
   docs/models/components/customdomainmcpendpoint.md: {}
   docs/models/components/decision.md: {}
-  docs/models/components/deleteaiintegrationconfigrequest.md: {}
+  docs/models/components/deleteconfigrequestbody.md: {}
   docs/models/components/deleteglobaltoolvariationresult.md: {}
   docs/models/components/deleterequestbody.md: {}
   docs/models/components/denyshadowmcpapprovalrequestform.md: {}
@@ -738,11 +738,11 @@ trackedFiles:
   docs/models/components/uploadfunctionsresult.md: {}
   docs/models/components/uploadimageresult.md: {}
   docs/models/components/uploadopenapiv3result.md: {}
-  docs/models/components/upsertaiintegrationconfigrequest.md: {}
   docs/models/components/upsertallowedoriginform.md: {}
   docs/models/components/upsertallowedoriginformstatus.md: {}
   docs/models/components/upsertallowedoriginresult.md: {}
   docs/models/components/upsertconfigrequestbody.md: {}
+  docs/models/components/upsertconfigrequestbody2.md: {}
   docs/models/components/upsertglobaltoolvariationform.md: {}
   docs/models/components/upsertglobaltoolvariationresult.md: {}
   docs/models/components/upsertrequestbody.md: {}
@@ -2361,7 +2361,6 @@ trackedFiles:
   src/funcs/variationsListGroups.ts: {}
   src/funcs/variationsUpsertGlobal.ts: {}
   src/hooks/hooks.ts: {}
-  src/hooks/index.ts: {}
   src/hooks/types.ts: {}
   src/index.ts: {}
   src/lib/base64.ts: {}
@@ -2475,7 +2474,7 @@ trackedFiles:
   src/models/components/cursorhookresult.ts: {}
   src/models/components/customdomain.ts: {}
   src/models/components/customdomainmcpendpoint.ts: {}
-  src/models/components/deleteaiintegrationconfigrequest.ts: {}
+  src/models/components/deleteconfigrequestbody.ts: {}
   src/models/components/deleteglobaltoolvariationresult.ts: {}
   src/models/components/deleterequestbody.ts: {}
   src/models/components/denyshadowmcpapprovalrequestform.ts: {}
@@ -2565,9 +2564,6 @@ trackedFiles:
   src/models/components/hooktracesummary.ts: {}
   src/models/components/hookusagedata.ts: {}
   src/models/components/httptooldefinition.ts: {}
-  src/models/components/index.ts:
-    id: 0aa842dce54d
-    pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts: {}
   src/models/components/ingesthookresult.ts: {}
   src/models/components/ingestrequestbody.ts: {}
@@ -2926,10 +2922,10 @@ trackedFiles:
   src/models/components/uploadfunctionsresult.ts: {}
   src/models/components/uploadimageresult.ts: {}
   src/models/components/uploadopenapiv3result.ts: {}
-  src/models/components/upsertaiintegrationconfigrequest.ts: {}
   src/models/components/upsertallowedoriginform.ts: {}
   src/models/components/upsertallowedoriginresult.ts: {}
   src/models/components/upsertconfigrequestbody.ts: {}
+  src/models/components/upsertconfigrequestbody2.ts: {}
   src/models/components/upsertglobaltoolvariationform.ts: {}
   src/models/components/upsertglobaltoolvariationresult.ts: {}
   src/models/components/upsertrequestbody.ts: {}
@@ -2953,7 +2949,6 @@ trackedFiles:
   src/models/errors/apierror.ts: {}
   src/models/errors/gramerror.ts: {}
   src/models/errors/httpclienterrors.ts: {}
-  src/models/errors/index.ts: {}
   src/models/errors/responsevalidationerror.ts: {}
   src/models/errors/sdkvalidationerror.ts: {}
   src/models/errors/serviceerror.ts: {}
@@ -3138,9 +3133,6 @@ trackedFiles:
   src/models/operations/hooksnumbercursor.ts: {}
   src/models/operations/hooksnumberlogs.ts: {}
   src/models/operations/hooksnumbermetrics.ts: {}
-  src/models/operations/index.ts:
-    id: 0d9ffaf774d2
-    pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/ingesthookevent.ts: {}
   src/models/operations/integrationsnumberget.ts: {}
   src/models/operations/listallowedorigins.ts: {}
@@ -3900,7 +3892,6 @@ trackedFiles:
   src/sdk/features.ts: {}
   src/sdk/hooks.ts: {}
   src/sdk/hooksservernames.ts: {}
-  src/sdk/index.ts: {}
   src/sdk/instances.ts: {}
   src/sdk/integrations.ts: {}
   src/sdk/keys.ts: {}
@@ -3943,7 +3934,6 @@ trackedFiles:
   src/types/constdatetime.ts: {}
   src/types/enums.ts: {}
   src/types/fp.ts: {}
-  src/types/index.ts: {}
   src/types/operations.ts: {}
   src/types/rfcdate.ts: {}
   src/types/streams.ts: {}

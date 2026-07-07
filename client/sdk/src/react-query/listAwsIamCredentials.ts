@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListAwsIamCredentialsRequest,
+  ListAwsIamCredentialsSecurity,
+} from "../models/operations/listawsiamcredentials.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListAwsIamCredentialsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListAwsIamCredentialsQueryError =
  * List the organization's AWS IAM external credentials. Requires org:read.
  */
 export function useListAwsIamCredentials(
-  request?: operations.ListAwsIamCredentialsRequest | undefined,
-  security?: operations.ListAwsIamCredentialsSecurity | undefined,
+  request?: ListAwsIamCredentialsRequest | undefined,
+  security?: ListAwsIamCredentialsSecurity | undefined,
   options?: QueryHookOptions<
     ListAwsIamCredentialsQueryData,
     ListAwsIamCredentialsQueryError
@@ -88,8 +91,8 @@ export function useListAwsIamCredentials(
  * List the organization's AWS IAM external credentials. Requires org:read.
  */
 export function useListAwsIamCredentialsSuspense(
-  request?: operations.ListAwsIamCredentialsRequest | undefined,
-  security?: operations.ListAwsIamCredentialsSecurity | undefined,
+  request?: ListAwsIamCredentialsRequest | undefined,
+  security?: ListAwsIamCredentialsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListAwsIamCredentialsQueryData,
     ListAwsIamCredentialsQueryError

@@ -1646,7 +1646,8 @@ run();
 ### Example
 ```typescript
 import { Gram } from "@gram/client";
-import * as errors from "@gram/client/models/errors";
+import { GramError } from "@gram/client/models/errors/gramerror.js.js";
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 
 const gram = new Gram();
 
@@ -1665,14 +1666,14 @@ async function run() {
     console.log(result);
   } catch (error) {
     // The base class for HTTP error responses
-    if (error instanceof errors.GramError) {
+    if (error instanceof GramError) {
       console.log(error.message);
       console.log(error.statusCode);
       console.log(error.body);
       console.log(error.headers);
 
       // Depending on the method different errors may be thrown
-      if (error instanceof errors.ServiceError) {
+      if (error instanceof ServiceError) {
         console.log(error.data$.fault); // boolean
         console.log(error.data$.id); // string
         console.log(error.data$.message); // string

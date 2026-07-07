@@ -1,4 +1,5 @@
-import type { McpEndpoint, McpServer } from "@gram/client/models/components";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useEffect } from "react";
 import { useLocation } from "react-router";
 import {

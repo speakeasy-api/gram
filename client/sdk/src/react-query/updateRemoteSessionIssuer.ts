@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { remoteSessionIssuersUpdate } from "../funcs/remoteSessionIssuersUpdate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,25 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  UpdateRemoteSessionIssuerRequest,
+  UpdateRemoteSessionIssuerSecurity,
+} from "../models/operations/updateremotesessionissuer.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UpdateRemoteSessionIssuerMutationVariables = {
-  request: operations.UpdateRemoteSessionIssuerRequest;
-  security?: operations.UpdateRemoteSessionIssuerSecurity | undefined;
+  request: UpdateRemoteSessionIssuerRequest;
+  security?: UpdateRemoteSessionIssuerSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpdateRemoteSessionIssuerMutationData =
-  components.RemoteSessionIssuer;
+export type UpdateRemoteSessionIssuerMutationData = RemoteSessionIssuer;
 
 export type UpdateRemoteSessionIssuerMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

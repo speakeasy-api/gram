@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  DiscoverRemoteSessionIssuerRequestBody,
+  DiscoverRemoteSessionIssuerRequestBody$Outbound,
+  DiscoverRemoteSessionIssuerRequestBody$outboundSchema,
+} from "../components/discoverremotesessionissuerrequestbody.js";
 
 export type DiscoverRemoteSessionIssuerSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -35,7 +39,7 @@ export type DiscoverRemoteSessionIssuerRequest = {
    */
   gramProject?: string | undefined;
   discoverRemoteSessionIssuerRequestBody:
-    components.DiscoverRemoteSessionIssuerRequestBody;
+    DiscoverRemoteSessionIssuerRequestBody;
 };
 
 /** @internal */
@@ -151,7 +155,7 @@ export type DiscoverRemoteSessionIssuerRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   DiscoverRemoteSessionIssuerRequestBody:
-    components.DiscoverRemoteSessionIssuerRequestBody$Outbound;
+    DiscoverRemoteSessionIssuerRequestBody$Outbound;
 };
 
 /** @internal */
@@ -164,7 +168,7 @@ export const DiscoverRemoteSessionIssuerRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     discoverRemoteSessionIssuerRequestBody:
-      components.DiscoverRemoteSessionIssuerRequestBody$outboundSchema,
+      DiscoverRemoteSessionIssuerRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

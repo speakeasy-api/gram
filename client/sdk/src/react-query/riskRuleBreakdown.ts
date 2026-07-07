@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetRiskRuleBreakdownRequest,
+  GetRiskRuleBreakdownSecurity,
+} from "../models/operations/getriskrulebreakdown.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskRuleBreakdownQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskRuleBreakdownQueryError =
  * Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.
  */
 export function useRiskRuleBreakdown(
-  request: operations.GetRiskRuleBreakdownRequest,
-  security?: operations.GetRiskRuleBreakdownSecurity | undefined,
+  request: GetRiskRuleBreakdownRequest,
+  security?: GetRiskRuleBreakdownSecurity | undefined,
   options?: QueryHookOptions<
     RiskRuleBreakdownQueryData,
     RiskRuleBreakdownQueryError
@@ -85,8 +88,8 @@ export function useRiskRuleBreakdown(
  * Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.
  */
 export function useRiskRuleBreakdownSuspense(
-  request: operations.GetRiskRuleBreakdownRequest,
-  security?: operations.GetRiskRuleBreakdownSecurity | undefined,
+  request: GetRiskRuleBreakdownRequest,
+  security?: GetRiskRuleBreakdownSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskRuleBreakdownQueryData,
     RiskRuleBreakdownQueryError

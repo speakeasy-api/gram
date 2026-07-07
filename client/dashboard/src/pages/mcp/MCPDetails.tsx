@@ -58,20 +58,20 @@ import {
 } from "@/pages/mcp/MCPToolFilterScopesPanel";
 import { useRoutes } from "@/routes";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { useAddOAuthProxyServerMutation } from "@gram/client/react-query/addOAuthProxyServer.js";
+import { useExportMcpMetadataMutation } from "@gram/client/react-query/exportMcpMetadata.js";
+import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
+import { invalidateAllGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import {
-  invalidateAllGetPeriodUsage,
-  invalidateAllListToolsets,
-  invalidateAllToolset,
-  useAddOAuthProxyServerMutation,
-  useExportMcpMetadataMutation,
   invalidateListToolsetToolFilters,
-  useGetMcpMetadata,
-  useLatestDeployment,
-  useListEnvironments,
   useListToolsetToolFilters,
-  useRemoveOAuthServerMutation,
-  useUpdateToolsetMutation,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/listToolsetToolFilters.js";
+import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { useRemoveOAuthServerMutation } from "@gram/client/react-query/removeOAuthServer.js";
+import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
+import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
 import {
   Badge,
   Button,

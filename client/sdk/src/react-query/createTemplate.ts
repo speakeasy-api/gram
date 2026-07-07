@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { templatesCreate } from "../funcs/templatesCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { CreatePromptTemplateResult } from "../models/components/createprompttemplateresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CreateTemplateRequest,
+  CreateTemplateSecurity,
+} from "../models/operations/createtemplate.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateTemplateMutationVariables = {
-  request: operations.CreateTemplateRequest;
-  security?: operations.CreateTemplateSecurity | undefined;
+  request: CreateTemplateRequest;
+  security?: CreateTemplateSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type CreateTemplateMutationData = components.CreatePromptTemplateResult;
+export type CreateTemplateMutationData = CreatePromptTemplateResult;
 
 export type CreateTemplateMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

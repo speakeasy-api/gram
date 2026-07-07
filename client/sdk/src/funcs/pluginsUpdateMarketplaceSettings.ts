@@ -12,7 +12,10 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import * as components from "../models/components/index.js";
+import {
+  UpdateMarketplaceSettingsResult,
+  UpdateMarketplaceSettingsResult$inboundSchema,
+} from "../models/components/updatemarketplacesettingsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -21,10 +24,17 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ServiceError,
+  ServiceError$inboundSchema,
+} from "../models/errors/serviceerror.js";
+import {
+  UpdateMarketplaceSettingsRequest,
+  UpdateMarketplaceSettingsRequest$outboundSchema,
+  UpdateMarketplaceSettingsSecurity,
+} from "../models/operations/updatemarketplacesettings.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -36,13 +46,13 @@ import { Result } from "../types/fp.js";
  */
 export function pluginsUpdateMarketplaceSettings(
   client: GramCore,
-  request: operations.UpdateMarketplaceSettingsRequest,
-  security?: operations.UpdateMarketplaceSettingsSecurity | undefined,
+  request: UpdateMarketplaceSettingsRequest,
+  security?: UpdateMarketplaceSettingsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.UpdateMarketplaceSettingsResult,
-    | errors.ServiceError
+    UpdateMarketplaceSettingsResult,
+    | ServiceError
     | GramError
     | ResponseValidationError
     | ConnectionError
@@ -63,14 +73,14 @@ export function pluginsUpdateMarketplaceSettings(
 
 async function $do(
   client: GramCore,
-  request: operations.UpdateMarketplaceSettingsRequest,
-  security?: operations.UpdateMarketplaceSettingsSecurity | undefined,
+  request: UpdateMarketplaceSettingsRequest,
+  security?: UpdateMarketplaceSettingsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.UpdateMarketplaceSettingsResult,
-      | errors.ServiceError
+      UpdateMarketplaceSettingsResult,
+      | ServiceError
       | GramError
       | ResponseValidationError
       | ConnectionError
@@ -85,11 +95,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(
-        operations.UpdateMarketplaceSettingsRequest$outboundSchema,
-        value,
-      ),
+    (value) => z.parse(UpdateMarketplaceSettingsRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -179,8 +185,8 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.UpdateMarketplaceSettingsResult,
-    | errors.ServiceError
+    UpdateMarketplaceSettingsResult,
+    | ServiceError
     | GramError
     | ResponseValidationError
     | ConnectionError
@@ -190,12 +196,9 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.UpdateMarketplaceSettingsResult$inboundSchema),
-    M.jsonErr(
-      [400, 401, 403, 404, 409, 415, 422],
-      errors.ServiceError$inboundSchema,
-    ),
-    M.jsonErr([500, 502], errors.ServiceError$inboundSchema),
+    M.json(200, UpdateMarketplaceSettingsResult$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetManagedAssistantRequest,
+  GetManagedAssistantSecurity,
+} from "../models/operations/getmanagedassistant.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type AssistantsGetManagedQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type AssistantsGetManagedQueryError =
  * Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.
  */
 export function useAssistantsGetManaged(
-  request?: operations.GetManagedAssistantRequest | undefined,
-  security?: operations.GetManagedAssistantSecurity | undefined,
+  request?: GetManagedAssistantRequest | undefined,
+  security?: GetManagedAssistantSecurity | undefined,
   options?: QueryHookOptions<
     AssistantsGetManagedQueryData,
     AssistantsGetManagedQueryError
@@ -88,8 +91,8 @@ export function useAssistantsGetManaged(
  * Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.
  */
 export function useAssistantsGetManagedSuspense(
-  request?: operations.GetManagedAssistantRequest | undefined,
-  security?: operations.GetManagedAssistantSecurity | undefined,
+  request?: GetManagedAssistantRequest | undefined,
+  security?: GetManagedAssistantSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     AssistantsGetManagedQueryData,
     AssistantsGetManagedQueryError

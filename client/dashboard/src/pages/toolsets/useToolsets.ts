@@ -1,5 +1,5 @@
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
-import { useListToolsets } from "@gram/client/react-query/index.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 
 export function useToolsets(): NonNullable<
   ReturnType<typeof useListToolsets>["data"]

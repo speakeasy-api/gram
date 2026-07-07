@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DeleteCollectionRequest,
+  DeleteCollectionSecurity,
+} from "../models/operations/deletecollection.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CollectionsDeleteMutationVariables = {
-  request: operations.DeleteCollectionRequest;
-  security?: operations.DeleteCollectionSecurity | undefined;
+  request: DeleteCollectionRequest;
+  security?: DeleteCollectionSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type CollectionsDeleteMutationData = void;
 
 export type CollectionsDeleteMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

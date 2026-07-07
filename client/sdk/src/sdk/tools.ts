@@ -4,8 +4,11 @@
 
 import { toolsList } from "../funcs/toolsList.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListToolsResult } from "../models/components/listtoolsresult.js";
+import {
+  ListToolsRequest,
+  ListToolsSecurity,
+} from "../models/operations/listtools.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Tools extends ClientSDK {
@@ -16,10 +19,10 @@ export class Tools extends ClientSDK {
    * List all tools for a project
    */
   async list(
-    request?: operations.ListToolsRequest | undefined,
-    security?: operations.ListToolsSecurity | undefined,
+    request?: ListToolsRequest | undefined,
+    security?: ListToolsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListToolsResult> {
+  ): Promise<ListToolsResult> {
     return unwrapAsync(toolsList(
       this,
       request,

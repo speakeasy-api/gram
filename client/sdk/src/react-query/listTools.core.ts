@@ -11,16 +11,20 @@ import { GramCore } from "../core.js";
 import { toolsList } from "../funcs/toolsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListToolsResult } from "../models/components/listtoolsresult.js";
+import {
+  ListToolsRequest,
+  ListToolsSecurity,
+  ToolTypes,
+} from "../models/operations/listtools.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListToolsQueryData = components.ListToolsResult;
+export type ListToolsQueryData = ListToolsResult;
 
 export function prefetchListTools(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListToolsRequest | undefined,
-  security?: operations.ListToolsSecurity | undefined,
+  request?: ListToolsRequest | undefined,
+  security?: ListToolsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +39,8 @@ export function prefetchListTools(
 
 export function buildListToolsQuery(
   client$: GramCore,
-  request?: operations.ListToolsRequest | undefined,
-  security?: operations.ListToolsSecurity | undefined,
+  request?: ListToolsRequest | undefined,
+  security?: ListToolsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -80,7 +84,7 @@ export function queryKeyListTools(
     limit?: number | undefined;
     deploymentId?: string | undefined;
     urnPrefix?: string | undefined;
-    toolTypes?: Array<operations.ToolTypes> | undefined;
+    toolTypes?: Array<ToolTypes> | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

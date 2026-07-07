@@ -11,17 +11,20 @@ import { GramCore } from "../core.js";
 import { telemetryGetToolUsageFilterOptions } from "../funcs/telemetryGetToolUsageFilterOptions.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetToolUsageFilterOptionsResult } from "../models/components/gettoolusagefilteroptionsresult.js";
+import {
+  GetToolUsageFilterOptionsRequest,
+  GetToolUsageFilterOptionsSecurity,
+} from "../models/operations/gettoolusagefilteroptions.js";
 import { unwrapAsync } from "../types/fp.js";
 export type GetToolUsageFilterOptionsQueryData =
-  components.GetToolUsageFilterOptionsResult;
+  GetToolUsageFilterOptionsResult;
 
 export function prefetchGetToolUsageFilterOptions(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetToolUsageFilterOptionsRequest,
-  security?: operations.GetToolUsageFilterOptionsSecurity | undefined,
+  request: GetToolUsageFilterOptionsRequest,
+  security?: GetToolUsageFilterOptionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +39,8 @@ export function prefetchGetToolUsageFilterOptions(
 
 export function buildGetToolUsageFilterOptionsQuery(
   client$: GramCore,
-  request: operations.GetToolUsageFilterOptionsRequest,
-  security?: operations.GetToolUsageFilterOptionsSecurity | undefined,
+  request: GetToolUsageFilterOptionsRequest,
+  security?: GetToolUsageFilterOptionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

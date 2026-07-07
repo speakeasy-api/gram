@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { telemetryListFilterOptions } from "../funcs/telemetryListFilterOptions.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListFilterOptionsResult } from "../models/components/listfilteroptionsresult.js";
+import {
+  ListFilterOptionsRequest,
+  ListFilterOptionsSecurity,
+} from "../models/operations/listfilteroptions.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListFilterOptionsQueryData = components.ListFilterOptionsResult;
+export type ListFilterOptionsQueryData = ListFilterOptionsResult;
 
 export function prefetchListFilterOptions(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListFilterOptionsRequest,
-  security?: operations.ListFilterOptionsSecurity | undefined,
+  request: ListFilterOptionsRequest,
+  security?: ListFilterOptionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListFilterOptions(
 
 export function buildListFilterOptionsQuery(
   client$: GramCore,
-  request: operations.ListFilterOptionsRequest,
-  security?: operations.ListFilterOptionsSecurity | undefined,
+  request: ListFilterOptionsRequest,
+  security?: ListFilterOptionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

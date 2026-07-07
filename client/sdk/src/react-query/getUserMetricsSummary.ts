@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetUserMetricsSummaryRequest,
+  GetUserMetricsSummarySecurity,
+} from "../models/operations/getusermetricssummary.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetUserMetricsSummaryQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetUserMetricsSummaryQueryError =
  * Get aggregated metrics summary grouped by user
  */
 export function useGetUserMetricsSummary(
-  request: operations.GetUserMetricsSummaryRequest,
-  security?: operations.GetUserMetricsSummarySecurity | undefined,
+  request: GetUserMetricsSummaryRequest,
+  security?: GetUserMetricsSummarySecurity | undefined,
   options?: QueryHookOptions<
     GetUserMetricsSummaryQueryData,
     GetUserMetricsSummaryQueryError
@@ -88,8 +91,8 @@ export function useGetUserMetricsSummary(
  * Get aggregated metrics summary grouped by user
  */
 export function useGetUserMetricsSummarySuspense(
-  request: operations.GetUserMetricsSummaryRequest,
-  security?: operations.GetUserMetricsSummarySecurity | undefined,
+  request: GetUserMetricsSummaryRequest,
+  security?: GetUserMetricsSummarySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetUserMetricsSummaryQueryData,
     GetUserMetricsSummaryQueryError

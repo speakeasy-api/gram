@@ -6,8 +6,20 @@ import { assistantMemoriesDelete } from "../funcs/assistantMemoriesDelete.js";
 import { assistantMemoriesGet } from "../funcs/assistantMemoriesGet.js";
 import { assistantMemoriesList } from "../funcs/assistantMemoriesList.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { AssistantMemory } from "../models/components/assistantmemory.js";
+import {
+  DeleteAssistantMemoryRequest,
+  DeleteAssistantMemorySecurity,
+} from "../models/operations/deleteassistantmemory.js";
+import {
+  GetAssistantMemoryRequest,
+  GetAssistantMemorySecurity,
+} from "../models/operations/getassistantmemory.js";
+import {
+  ListAssistantMemoriesRequest,
+  ListAssistantMemoriesResponse,
+  ListAssistantMemoriesSecurity,
+} from "../models/operations/listassistantmemories.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -19,8 +31,8 @@ export class AssistantMemories extends ClientSDK {
    * Delete an assistant memory by ID.
    */
   async delete(
-    request: operations.DeleteAssistantMemoryRequest,
-    security?: operations.DeleteAssistantMemorySecurity | undefined,
+    request: DeleteAssistantMemoryRequest,
+    security?: DeleteAssistantMemorySecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(assistantMemoriesDelete(
@@ -38,10 +50,10 @@ export class AssistantMemories extends ClientSDK {
    * Get an assistant memory by ID.
    */
   async get(
-    request: operations.GetAssistantMemoryRequest,
-    security?: operations.GetAssistantMemorySecurity | undefined,
+    request: GetAssistantMemoryRequest,
+    security?: GetAssistantMemorySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.AssistantMemory> {
+  ): Promise<AssistantMemory> {
     return unwrapAsync(assistantMemoriesGet(
       this,
       request,
@@ -57,12 +69,10 @@ export class AssistantMemories extends ClientSDK {
    * List assistant memories for an assistant.
    */
   async list(
-    request: operations.ListAssistantMemoriesRequest,
-    security?: operations.ListAssistantMemoriesSecurity | undefined,
+    request: ListAssistantMemoriesRequest,
+    security?: ListAssistantMemoriesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<
-    PageIterator<operations.ListAssistantMemoriesResponse, { cursor: string }>
-  > {
+  ): Promise<PageIterator<ListAssistantMemoriesResponse, { cursor: string }>> {
     return unwrapResultIterator(assistantMemoriesList(
       this,
       request,

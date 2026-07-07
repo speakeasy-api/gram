@@ -10,8 +10,39 @@ import { templatesRender } from "../funcs/templatesRender.js";
 import { templatesRenderByID } from "../funcs/templatesRenderByID.js";
 import { templatesUpdate } from "../funcs/templatesUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { CreatePromptTemplateResult } from "../models/components/createprompttemplateresult.js";
+import { GetPromptTemplateResult } from "../models/components/getprompttemplateresult.js";
+import { ListPromptTemplatesResult } from "../models/components/listprompttemplatesresult.js";
+import { RenderTemplateResult } from "../models/components/rendertemplateresult.js";
+import { UpdatePromptTemplateResult } from "../models/components/updateprompttemplateresult.js";
+import {
+  CreateTemplateRequest,
+  CreateTemplateSecurity,
+} from "../models/operations/createtemplate.js";
+import {
+  DeleteTemplateRequest,
+  DeleteTemplateSecurity,
+} from "../models/operations/deletetemplate.js";
+import {
+  GetTemplateRequest,
+  GetTemplateSecurity,
+} from "../models/operations/gettemplate.js";
+import {
+  ListTemplatesRequest,
+  ListTemplatesSecurity,
+} from "../models/operations/listtemplates.js";
+import {
+  RenderTemplateRequest,
+  RenderTemplateSecurity,
+} from "../models/operations/rendertemplate.js";
+import {
+  RenderTemplateByIDRequest,
+  RenderTemplateByIDSecurity,
+} from "../models/operations/rendertemplatebyid.js";
+import {
+  UpdateTemplateRequest,
+  UpdateTemplateSecurity,
+} from "../models/operations/updatetemplate.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Templates extends ClientSDK {
@@ -22,10 +53,10 @@ export class Templates extends ClientSDK {
    * Create a new prompt template.
    */
   async create(
-    request: operations.CreateTemplateRequest,
-    security?: operations.CreateTemplateSecurity | undefined,
+    request: CreateTemplateRequest,
+    security?: CreateTemplateSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.CreatePromptTemplateResult> {
+  ): Promise<CreatePromptTemplateResult> {
     return unwrapAsync(templatesCreate(
       this,
       request,
@@ -41,8 +72,8 @@ export class Templates extends ClientSDK {
    * Delete prompt template by its ID or name.
    */
   async delete(
-    request?: operations.DeleteTemplateRequest | undefined,
-    security?: operations.DeleteTemplateSecurity | undefined,
+    request?: DeleteTemplateRequest | undefined,
+    security?: DeleteTemplateSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(templatesDelete(
@@ -60,10 +91,10 @@ export class Templates extends ClientSDK {
    * Get prompt template by its ID or name.
    */
   async get(
-    request?: operations.GetTemplateRequest | undefined,
-    security?: operations.GetTemplateSecurity | undefined,
+    request?: GetTemplateRequest | undefined,
+    security?: GetTemplateSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetPromptTemplateResult> {
+  ): Promise<GetPromptTemplateResult> {
     return unwrapAsync(templatesGet(
       this,
       request,
@@ -79,10 +110,10 @@ export class Templates extends ClientSDK {
    * List available prompt template.
    */
   async list(
-    request?: operations.ListTemplatesRequest | undefined,
-    security?: operations.ListTemplatesSecurity | undefined,
+    request?: ListTemplatesRequest | undefined,
+    security?: ListTemplatesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListPromptTemplatesResult> {
+  ): Promise<ListPromptTemplatesResult> {
     return unwrapAsync(templatesList(
       this,
       request,
@@ -98,10 +129,10 @@ export class Templates extends ClientSDK {
    * Render a prompt template by ID with provided input data.
    */
   async renderByID(
-    request: operations.RenderTemplateByIDRequest,
-    security?: operations.RenderTemplateByIDSecurity | undefined,
+    request: RenderTemplateByIDRequest,
+    security?: RenderTemplateByIDSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RenderTemplateResult> {
+  ): Promise<RenderTemplateResult> {
     return unwrapAsync(templatesRenderByID(
       this,
       request,
@@ -117,10 +148,10 @@ export class Templates extends ClientSDK {
    * Render a prompt template directly with all template fields provided.
    */
   async render(
-    request: operations.RenderTemplateRequest,
-    security?: operations.RenderTemplateSecurity | undefined,
+    request: RenderTemplateRequest,
+    security?: RenderTemplateSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RenderTemplateResult> {
+  ): Promise<RenderTemplateResult> {
     return unwrapAsync(templatesRender(
       this,
       request,
@@ -136,10 +167,10 @@ export class Templates extends ClientSDK {
    * Update a prompt template.
    */
   async update(
-    request: operations.UpdateTemplateRequest,
-    security?: operations.UpdateTemplateSecurity | undefined,
+    request: UpdateTemplateRequest,
+    security?: UpdateTemplateSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.UpdatePromptTemplateResult> {
+  ): Promise<UpdatePromptTemplateResult> {
     return unwrapAsync(templatesUpdate(
       this,
       request,

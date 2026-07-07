@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListGcpIamCredentialsRequest,
+  ListGcpIamCredentialsSecurity,
+} from "../models/operations/listgcpiamcredentials.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListGcpIamCredentialsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListGcpIamCredentialsQueryError =
  * List the organization's GCP IAM external credentials. Requires org:read.
  */
 export function useListGcpIamCredentials(
-  request?: operations.ListGcpIamCredentialsRequest | undefined,
-  security?: operations.ListGcpIamCredentialsSecurity | undefined,
+  request?: ListGcpIamCredentialsRequest | undefined,
+  security?: ListGcpIamCredentialsSecurity | undefined,
   options?: QueryHookOptions<
     ListGcpIamCredentialsQueryData,
     ListGcpIamCredentialsQueryError
@@ -88,8 +91,8 @@ export function useListGcpIamCredentials(
  * List the organization's GCP IAM external credentials. Requires org:read.
  */
 export function useListGcpIamCredentialsSuspense(
-  request?: operations.ListGcpIamCredentialsRequest | undefined,
-  security?: operations.ListGcpIamCredentialsSecurity | undefined,
+  request?: ListGcpIamCredentialsRequest | undefined,
+  security?: ListGcpIamCredentialsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListGcpIamCredentialsQueryData,
     ListGcpIamCredentialsQueryError

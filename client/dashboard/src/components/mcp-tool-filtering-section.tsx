@@ -10,17 +10,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
-import type { McpServer } from "@gram/client/models/components";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { useCreateGlobalToolVariationGroupMutation } from "@gram/client/react-query/createGlobalToolVariationGroup.js";
+import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { useSetToolsetToolVariationsGroupMutation } from "@gram/client/react-query/setToolsetToolVariationsGroup.js";
 import {
-  invalidateAllGetMcpServer,
-  invalidateAllMcpServers,
-  invalidateAllToolset,
   invalidateAllToolVariationGroups,
-  useCreateGlobalToolVariationGroupMutation,
-  useSetToolsetToolVariationsGroupMutation,
   useToolVariationGroups,
-  useUpdateMcpServerMutation,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/toolVariationGroups.js";
+import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
+import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";

@@ -11,15 +11,19 @@ import { GramCore } from "../core.js";
 import { authInfo } from "../funcs/authInfo.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  SessionInfoRequest,
+  SessionInfoResponse,
+  SessionInfoSecurity,
+} from "../models/operations/sessioninfo.js";
 import { unwrapAsync } from "../types/fp.js";
-export type SessionInfoQueryData = operations.SessionInfoResponse;
+export type SessionInfoQueryData = SessionInfoResponse;
 
 export function prefetchSessionInfo(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.SessionInfoRequest | undefined,
-  security?: operations.SessionInfoSecurity | undefined,
+  request?: SessionInfoRequest | undefined,
+  security?: SessionInfoSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -34,8 +38,8 @@ export function prefetchSessionInfo(
 
 export function buildSessionInfoQuery(
   client$: GramCore,
-  request?: operations.SessionInfoRequest | undefined,
-  security?: operations.SessionInfoSecurity | undefined,
+  request?: SessionInfoRequest | undefined,
+  security?: SessionInfoSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

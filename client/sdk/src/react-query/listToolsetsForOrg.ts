@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListToolsetsForOrgRequest,
+  ListToolsetsForOrgSecurity,
+} from "../models/operations/listtoolsetsfororg.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListToolsetsForOrgQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListToolsetsForOrgQueryError =
  * List all toolsets across the organization (summary view)
  */
 export function useListToolsetsForOrg(
-  request?: operations.ListToolsetsForOrgRequest | undefined,
-  security?: operations.ListToolsetsForOrgSecurity | undefined,
+  request?: ListToolsetsForOrgRequest | undefined,
+  security?: ListToolsetsForOrgSecurity | undefined,
   options?: QueryHookOptions<
     ListToolsetsForOrgQueryData,
     ListToolsetsForOrgQueryError
@@ -85,8 +88,8 @@ export function useListToolsetsForOrg(
  * List all toolsets across the organization (summary view)
  */
 export function useListToolsetsForOrgSuspense(
-  request?: operations.ListToolsetsForOrgRequest | undefined,
-  security?: operations.ListToolsetsForOrgSecurity | undefined,
+  request?: ListToolsetsForOrgRequest | undefined,
+  security?: ListToolsetsForOrgSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListToolsetsForOrgQueryData,
     ListToolsetsForOrgQueryError

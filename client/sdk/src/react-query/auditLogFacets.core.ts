@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { auditlogsListFacets } from "../funcs/auditlogsListFacets.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListAuditLogFacetsResult } from "../models/components/listauditlogfacetsresult.js";
+import {
+  ListAuditLogFacetsRequest,
+  ListAuditLogFacetsSecurity,
+} from "../models/operations/listauditlogfacets.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AuditLogFacetsQueryData = components.ListAuditLogFacetsResult;
+export type AuditLogFacetsQueryData = ListAuditLogFacetsResult;
 
 export function prefetchAuditLogFacets(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListAuditLogFacetsRequest | undefined,
-  security?: operations.ListAuditLogFacetsSecurity | undefined,
+  request?: ListAuditLogFacetsRequest | undefined,
+  security?: ListAuditLogFacetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchAuditLogFacets(
 
 export function buildAuditLogFacetsQuery(
   client$: GramCore,
-  request?: operations.ListAuditLogFacetsRequest | undefined,
-  security?: operations.ListAuditLogFacetsSecurity | undefined,
+  request?: ListAuditLogFacetsRequest | undefined,
+  security?: ListAuditLogFacetsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

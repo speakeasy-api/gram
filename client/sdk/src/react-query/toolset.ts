@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetToolsetRequest,
+  GetToolsetSecurity,
+} from "../models/operations/gettoolset.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ToolsetQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ToolsetQueryError =
  * Get detailed information about a toolset including full HTTP tool definitions
  */
 export function useToolset(
-  request: operations.GetToolsetRequest,
-  security?: operations.GetToolsetSecurity | undefined,
+  request: GetToolsetRequest,
+  security?: GetToolsetSecurity | undefined,
   options?: QueryHookOptions<ToolsetQueryData, ToolsetQueryError>,
 ): UseQueryResult<ToolsetQueryData, ToolsetQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useToolset(
  * Get detailed information about a toolset including full HTTP tool definitions
  */
 export function useToolsetSuspense(
-  request: operations.GetToolsetRequest,
-  security?: operations.GetToolsetSecurity | undefined,
+  request: GetToolsetRequest,
+  security?: GetToolsetSecurity | undefined,
   options?: SuspenseQueryHookOptions<ToolsetQueryData, ToolsetQueryError>,
 ): UseSuspenseQueryResult<ToolsetQueryData, ToolsetQueryError> {
   const client = useGramContext();

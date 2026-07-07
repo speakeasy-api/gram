@@ -3,11 +3,11 @@ import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRoutes } from "@/routes";
+import { useChatDeleteMutation } from "@gram/client/react-query/chatDelete.js";
 import {
   invalidateAllListChats,
-  useChatDeleteMutation,
   useListChats,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/listChats.js";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";

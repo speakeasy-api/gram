@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { templatesRender } from "../funcs/templatesRender.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RenderTemplateResult } from "../models/components/rendertemplateresult.js";
+import {
+  RenderTemplateRequest,
+  RenderTemplateSecurity,
+} from "../models/operations/rendertemplate.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RenderTemplateQueryData = components.RenderTemplateResult;
+export type RenderTemplateQueryData = RenderTemplateResult;
 
 export function prefetchRenderTemplate(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.RenderTemplateRequest,
-  security?: operations.RenderTemplateSecurity | undefined,
+  request: RenderTemplateRequest,
+  security?: RenderTemplateSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchRenderTemplate(
 
 export function buildRenderTemplateQuery(
   client$: GramCore,
-  request: operations.RenderTemplateRequest,
-  security?: operations.RenderTemplateSecurity | undefined,
+  request: RenderTemplateRequest,
+  security?: RenderTemplateSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -11,15 +11,18 @@ import { GramCore } from "../core.js";
 import { toolsetsCheckMCPSlugAvailability } from "../funcs/toolsetsCheckMCPSlugAvailability.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  CheckMCPSlugAvailabilityRequest,
+  CheckMCPSlugAvailabilitySecurity,
+} from "../models/operations/checkmcpslugavailability.js";
 import { unwrapAsync } from "../types/fp.js";
 export type CheckMCPSlugAvailabilityQueryData = boolean;
 
 export function prefetchCheckMCPSlugAvailability(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.CheckMCPSlugAvailabilityRequest,
-  security?: operations.CheckMCPSlugAvailabilitySecurity | undefined,
+  request: CheckMCPSlugAvailabilityRequest,
+  security?: CheckMCPSlugAvailabilitySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -34,8 +37,8 @@ export function prefetchCheckMCPSlugAvailability(
 
 export function buildCheckMCPSlugAvailabilityQuery(
   client$: GramCore,
-  request: operations.CheckMCPSlugAvailabilityRequest,
-  security?: operations.CheckMCPSlugAvailabilitySecurity | undefined,
+  request: CheckMCPSlugAvailabilityRequest,
+  security?: CheckMCPSlugAvailabilitySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

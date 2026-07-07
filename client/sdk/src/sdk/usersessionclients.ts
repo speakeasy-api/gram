@@ -6,8 +6,20 @@ import { userSessionClientsGet } from "../funcs/userSessionClientsGet.js";
 import { userSessionClientsList } from "../funcs/userSessionClientsList.js";
 import { userSessionClientsRevoke } from "../funcs/userSessionClientsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { UserSessionClient } from "../models/components/usersessionclient.js";
+import {
+  GetUserSessionClientRequest,
+  GetUserSessionClientSecurity,
+} from "../models/operations/getusersessionclient.js";
+import {
+  ListUserSessionClientsRequest,
+  ListUserSessionClientsResponse,
+  ListUserSessionClientsSecurity,
+} from "../models/operations/listusersessionclients.js";
+import {
+  RevokeUserSessionClientRequest,
+  RevokeUserSessionClientSecurity,
+} from "../models/operations/revokeusersessionclient.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -19,10 +31,10 @@ export class UserSessionClients extends ClientSDK {
    * Get a user_session_client by id.
    */
   async get(
-    request: operations.GetUserSessionClientRequest,
-    security?: operations.GetUserSessionClientSecurity | undefined,
+    request: GetUserSessionClientRequest,
+    security?: GetUserSessionClientSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.UserSessionClient> {
+  ): Promise<UserSessionClient> {
     return unwrapAsync(userSessionClientsGet(
       this,
       request,
@@ -38,12 +50,10 @@ export class UserSessionClients extends ClientSDK {
    * List user_session_clients in the caller's project.
    */
   async list(
-    request?: operations.ListUserSessionClientsRequest | undefined,
-    security?: operations.ListUserSessionClientsSecurity | undefined,
+    request?: ListUserSessionClientsRequest | undefined,
+    security?: ListUserSessionClientsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<
-    PageIterator<operations.ListUserSessionClientsResponse, { cursor: string }>
-  > {
+  ): Promise<PageIterator<ListUserSessionClientsResponse, { cursor: string }>> {
     return unwrapResultIterator(userSessionClientsList(
       this,
       request,
@@ -59,8 +69,8 @@ export class UserSessionClients extends ClientSDK {
    * Soft-delete a user_session_client. Future tokens minted for this client_id are rejected; existing live user_sessions keep working until they hit expires_at.
    */
   async revoke(
-    request: operations.RevokeUserSessionClientRequest,
-    security?: operations.RevokeUserSessionClientSecurity | undefined,
+    request: RevokeUserSessionClientRequest,
+    security?: RevokeUserSessionClientSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(userSessionClientsRevoke(

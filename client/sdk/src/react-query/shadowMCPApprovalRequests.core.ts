@@ -11,17 +11,21 @@ import { GramCore } from "../core.js";
 import { accessListShadowMCPApprovalRequests } from "../funcs/accessListShadowMCPApprovalRequests.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListShadowMCPApprovalRequestsResult } from "../models/components/listshadowmcpapprovalrequestsresult.js";
+import {
+  ListShadowMCPApprovalRequestsRequest,
+  ListShadowMCPApprovalRequestsSecurity,
+  Status,
+} from "../models/operations/listshadowmcpapprovalrequests.js";
 import { unwrapAsync } from "../types/fp.js";
 export type ShadowMCPApprovalRequestsQueryData =
-  components.ListShadowMCPApprovalRequestsResult;
+  ListShadowMCPApprovalRequestsResult;
 
 export function prefetchShadowMCPApprovalRequests(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListShadowMCPApprovalRequestsRequest | undefined,
-  security?: operations.ListShadowMCPApprovalRequestsSecurity | undefined,
+  request?: ListShadowMCPApprovalRequestsRequest | undefined,
+  security?: ListShadowMCPApprovalRequestsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +40,8 @@ export function prefetchShadowMCPApprovalRequests(
 
 export function buildShadowMCPApprovalRequestsQuery(
   client$: GramCore,
-  request?: operations.ListShadowMCPApprovalRequestsRequest | undefined,
-  security?: operations.ListShadowMCPApprovalRequestsSecurity | undefined,
+  request?: ListShadowMCPApprovalRequestsRequest | undefined,
+  security?: ListShadowMCPApprovalRequestsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -79,7 +83,7 @@ export function buildShadowMCPApprovalRequestsQuery(
 
 export function queryKeyShadowMCPApprovalRequests(
   parameters: {
-    status?: operations.Status | undefined;
+    status?: Status | undefined;
     projectId?: string | undefined;
     limit?: number | undefined;
     cursor?: string | undefined;

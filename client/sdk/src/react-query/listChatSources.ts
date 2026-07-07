@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListChatSourcesRequest,
+  ListChatSourcesSecurity,
+} from "../models/operations/listchatsources.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListChatSourcesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListChatSourcesQueryError =
  * List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.
  */
 export function useListChatSources(
-  request?: operations.ListChatSourcesRequest | undefined,
-  security?: operations.ListChatSourcesSecurity | undefined,
+  request?: ListChatSourcesRequest | undefined,
+  security?: ListChatSourcesSecurity | undefined,
   options?: QueryHookOptions<
     ListChatSourcesQueryData,
     ListChatSourcesQueryError
@@ -85,8 +88,8 @@ export function useListChatSources(
  * List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.
  */
 export function useListChatSourcesSuspense(
-  request?: operations.ListChatSourcesRequest | undefined,
-  security?: operations.ListChatSourcesSecurity | undefined,
+  request?: ListChatSourcesRequest | undefined,
+  security?: ListChatSourcesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListChatSourcesQueryData,
     ListChatSourcesQueryError

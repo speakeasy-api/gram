@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  GetToolUsageSummaryPayload,
+  GetToolUsageSummaryPayload$Outbound,
+  GetToolUsageSummaryPayload$outboundSchema,
+} from "../components/gettoolusagesummarypayload.js";
 
 export type GetToolUsageSummarySecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type GetToolUsageSummaryRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  getToolUsageSummaryPayload: components.GetToolUsageSummaryPayload;
+  getToolUsageSummaryPayload: GetToolUsageSummaryPayload;
 };
 
 /** @internal */
@@ -145,7 +149,7 @@ export type GetToolUsageSummaryRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  GetToolUsageSummaryPayload: components.GetToolUsageSummaryPayload$Outbound;
+  GetToolUsageSummaryPayload: GetToolUsageSummaryPayload$Outbound;
 };
 
 /** @internal */
@@ -157,8 +161,7 @@ export const GetToolUsageSummaryRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    getToolUsageSummaryPayload:
-      components.GetToolUsageSummaryPayload$outboundSchema,
+    getToolUsageSummaryPayload: GetToolUsageSummaryPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

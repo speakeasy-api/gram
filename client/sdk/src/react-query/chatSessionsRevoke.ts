@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  RevokeChatSessionRequest,
+  RevokeChatSessionSecurity,
+} from "../models/operations/revokechatsession.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type ChatSessionsRevokeMutationVariables = {
-  request: operations.RevokeChatSessionRequest;
-  security?: operations.RevokeChatSessionSecurity | undefined;
+  request: RevokeChatSessionRequest;
+  security?: RevokeChatSessionSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type ChatSessionsRevokeMutationData = void;
 
 export type ChatSessionsRevokeMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

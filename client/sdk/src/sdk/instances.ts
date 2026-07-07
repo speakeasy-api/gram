@@ -4,8 +4,11 @@
 
 import { instancesGetBySlug } from "../funcs/instancesGetBySlug.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetInstanceResult } from "../models/components/getinstanceresult.js";
+import {
+  GetInstanceRequest,
+  GetInstanceSecurity,
+} from "../models/operations/getinstance.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Instances extends ClientSDK {
@@ -16,10 +19,10 @@ export class Instances extends ClientSDK {
    * Load all relevant data for an instance of a toolset and environment
    */
   async getBySlug(
-    request: operations.GetInstanceRequest,
-    security?: operations.GetInstanceSecurity | undefined,
+    request: GetInstanceRequest,
+    security?: GetInstanceSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetInstanceResult> {
+  ): Promise<GetInstanceResult> {
     return unwrapAsync(instancesGetBySlug(
       this,
       request,

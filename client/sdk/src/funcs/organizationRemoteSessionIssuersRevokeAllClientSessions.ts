@@ -12,7 +12,10 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import * as components from "../models/components/index.js";
+import {
+  RevokeAllRemoteSessionsResult,
+  RevokeAllRemoteSessionsResult$inboundSchema,
+} from "../models/components/revokeallremotesessionsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -21,10 +24,17 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ServiceError,
+  ServiceError$inboundSchema,
+} from "../models/errors/serviceerror.js";
+import {
+  RevokeAllOrganizationRemoteSessionClientSessionsRequest,
+  RevokeAllOrganizationRemoteSessionClientSessionsRequest$outboundSchema,
+  RevokeAllOrganizationRemoteSessionClientSessionsSecurity,
+} from "../models/operations/revokeallorganizationremotesessionclientsessions.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -36,15 +46,15 @@ import { Result } from "../types/fp.js";
  */
 export function organizationRemoteSessionIssuersRevokeAllClientSessions(
   client: GramCore,
-  request: operations.RevokeAllOrganizationRemoteSessionClientSessionsRequest,
+  request: RevokeAllOrganizationRemoteSessionClientSessionsRequest,
   security?:
-    | operations.RevokeAllOrganizationRemoteSessionClientSessionsSecurity
+    | RevokeAllOrganizationRemoteSessionClientSessionsSecurity
     | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.RevokeAllRemoteSessionsResult,
-    | errors.ServiceError
+    RevokeAllRemoteSessionsResult,
+    | ServiceError
     | GramError
     | ResponseValidationError
     | ConnectionError
@@ -65,16 +75,16 @@ export function organizationRemoteSessionIssuersRevokeAllClientSessions(
 
 async function $do(
   client: GramCore,
-  request: operations.RevokeAllOrganizationRemoteSessionClientSessionsRequest,
+  request: RevokeAllOrganizationRemoteSessionClientSessionsRequest,
   security?:
-    | operations.RevokeAllOrganizationRemoteSessionClientSessionsSecurity
+    | RevokeAllOrganizationRemoteSessionClientSessionsSecurity
     | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.RevokeAllRemoteSessionsResult,
-      | errors.ServiceError
+      RevokeAllRemoteSessionsResult,
+      | ServiceError
       | GramError
       | ResponseValidationError
       | ConnectionError
@@ -91,8 +101,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        operations
-          .RevokeAllOrganizationRemoteSessionClientSessionsRequest$outboundSchema,
+        RevokeAllOrganizationRemoteSessionClientSessionsRequest$outboundSchema,
         value,
       ),
     "Input validation failed",
@@ -186,8 +195,8 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.RevokeAllRemoteSessionsResult,
-    | errors.ServiceError
+    RevokeAllRemoteSessionsResult,
+    | ServiceError
     | GramError
     | ResponseValidationError
     | ConnectionError
@@ -197,12 +206,9 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.RevokeAllRemoteSessionsResult$inboundSchema),
-    M.jsonErr(
-      [400, 401, 403, 404, 409, 415, 422],
-      errors.ServiceError$inboundSchema,
-    ),
-    M.jsonErr([500, 502], errors.ServiceError$inboundSchema),
+    M.json(200, RevokeAllRemoteSessionsResult$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

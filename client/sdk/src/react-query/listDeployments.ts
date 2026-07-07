@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListDeploymentsRequest,
+  ListDeploymentsSecurity,
+} from "../models/operations/listdeployments.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListDeploymentsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListDeploymentsQueryError =
  * List all deployments in descending order of creation.
  */
 export function useListDeployments(
-  request?: operations.ListDeploymentsRequest | undefined,
-  security?: operations.ListDeploymentsSecurity | undefined,
+  request?: ListDeploymentsRequest | undefined,
+  security?: ListDeploymentsSecurity | undefined,
   options?: QueryHookOptions<
     ListDeploymentsQueryData,
     ListDeploymentsQueryError
@@ -85,8 +88,8 @@ export function useListDeployments(
  * List all deployments in descending order of creation.
  */
 export function useListDeploymentsSuspense(
-  request?: operations.ListDeploymentsRequest | undefined,
-  security?: operations.ListDeploymentsSecurity | undefined,
+  request?: ListDeploymentsRequest | undefined,
+  security?: ListDeploymentsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListDeploymentsQueryData,
     ListDeploymentsQueryError

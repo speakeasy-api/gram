@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  Chat,
-  ChatMessage,
-  RiskSegment,
-} from "@gram/client/models/components";
+import type { Chat } from "@gram/client/models/components/chat.js";
+import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
+import type { RiskSegment } from "@gram/client/models/components/risksegment.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
-import { useLoadChat } from "@gram/client/react-query";
+import { useLoadChat } from "@gram/client/react-query/loadChat.js";
 import { useSdkClient } from "@/contexts/Sdk";
 import { TRANSCRIPT_PAGE_SIZE } from "./useChatTranscript";
 

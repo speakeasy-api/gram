@@ -27,7 +27,7 @@ import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginSe
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
-import type { PublishStatusResult } from "@gram/client/models/components";
+import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import {
   Button,
   DropdownMenu,
@@ -42,11 +42,9 @@ import { formatDistanceToNow } from "date-fns";
 import { Network, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
-import type {
-  McpServer,
-  PluginServer,
-  ToolsetEntry,
-} from "@gram/client/models/components";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
+import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useSdkClient } from "@/contexts/Sdk";
 import { toast } from "sonner";
 import { InstallInstructionsButton } from "./InstallInstructionsDialog";

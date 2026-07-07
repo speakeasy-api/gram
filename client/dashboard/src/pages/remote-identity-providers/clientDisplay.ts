@@ -1,4 +1,4 @@
-import type { RemoteSessionClient } from "@gram/client/models/components";
+import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 
 // remoteSessionClientDisplayName is the short label for a remote_session_client
 // in breadcrumbs, lists, and selectors. A CIMD client's client_id is the hosted
