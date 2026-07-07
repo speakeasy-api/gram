@@ -4,14 +4,15 @@
 // flags sessions authenticated with a non-corporate AI account and converts
 // each match into the shared scanners.Finding domain type.
 //
-// The scanner is pure and stateless: given a session's account type and email,
-// Scan returns the session-scoped findings against the policy's approved
-// corporate domain list (fixed at construction). The batch activity owns the
-// surrounding DB reads, per-rule dedupe, and in-place match enrichment; this
-// package owns only the detection rules and their canonical descriptions.
+// The scanner is pure and stateless: given a session's account type and email
+// plus the policy's approved corporate domain list, Scan returns the
+// session-scoped findings. The batch activity owns the surrounding DB reads,
+// per-rule dedupe, and in-place match enrichment; this package owns only the
+// detection rules and their canonical descriptions.
 package accountidentity
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -50,39 +51,40 @@ func DescribeUnapprovedDomain(email string) (string, string) {
 	return scanners.GuardRuleID(RuleUnapprovedDomain), fmt.Sprintf("Session authenticated with the AI account %q, whose email domain is not on the approved corporate domain list.", email)
 }
 
-// Scanner evaluates a chat session's account attribution against the account
-// identity rules. It is stateless and safe for concurrent use; the approved
-// corporate domain list is normalized once at construction.
-type Scanner struct {
-	approvedDomains map[string]struct{}
+// ScanRequest is one chat session's account attribution to evaluate.
+// AccountType and Email are the session's resolved account fields (either may
+// be empty when the account is unclassified or its email is not yet known);
+// ApprovedDomains is the policy's approved corporate email domain list.
+type ScanRequest struct {
+	ApprovedDomains []string
+	AccountType     string
+	Email           string
 }
 
-// NewScanner returns a Scanner that evaluates sessions against approvedDomains,
-// the policy's approved corporate email domain list. An empty list leaves the
-// unapproved_domain rule inert.
-func NewScanner(approvedDomains []string) *Scanner {
-	return &Scanner{approvedDomains: normalizeApprovedDomains(approvedDomains)}
-}
+// Scanner evaluates a chat session's account attribution against the account
+// identity rules. It is stateless and safe for concurrent use.
+type Scanner struct{}
+
+// NewScanner returns a ready-to-use Scanner.
+func NewScanner() *Scanner { return &Scanner{} }
 
 // Scan returns the session-scoped findings for one chat's account attribution.
-// accountType and email are the session's resolved account fields; either may
-// be empty when the account is unclassified or its email is not yet known.
 //
 // A personal account always flags. An email whose domain is not on the approved
 // list flags only when a domain list is configured — matching is exact, so
 // subdomains must be listed explicitly. Findings carry the email as their Match
 // (empty when unknown), so an early match-less finding can be enriched later.
-func (s *Scanner) Scan(accountType string, email string) []scanners.Finding {
+func (s *Scanner) Scan(_ context.Context, req ScanRequest) []scanners.Finding {
 	var findings []scanners.Finding
-	if accountType == "personal" {
-		ruleID, description := DescribePersonalAccount(email)
-		findings = append(findings, finding(ruleID, description, email))
+	if req.AccountType == "personal" {
+		ruleID, description := DescribePersonalAccount(req.Email)
+		findings = append(findings, finding(ruleID, description, req.Email))
 	}
-	if len(s.approvedDomains) > 0 && email != "" {
-		if domain := emailDomain(email); domain != "" {
-			if _, ok := s.approvedDomains[domain]; !ok {
-				ruleID, description := DescribeUnapprovedDomain(email)
-				findings = append(findings, finding(ruleID, description, email))
+	if approved := normalizeApprovedDomains(req.ApprovedDomains); len(approved) > 0 && req.Email != "" {
+		if domain := emailDomain(req.Email); domain != "" {
+			if _, ok := approved[domain]; !ok {
+				ruleID, description := DescribeUnapprovedDomain(req.Email)
+				findings = append(findings, finding(ruleID, description, req.Email))
 			}
 		}
 	}

@@ -49,7 +49,7 @@ func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatc
 		return nil, fmt.Errorf("get batch chat identities: %w", err)
 	}
 
-	scanner := accountidentity.NewScanner(args.ApprovedEmailDomains)
+	scanner := accountidentity.NewScanner()
 	var out []sessionFinding
 	for _, row := range rows {
 		accountType := conv.FromPGTextOrEmpty[string](row.AccountType)
@@ -78,7 +78,11 @@ func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatc
 			}
 		}
 
-		findings := scanner.Scan(accountType, email)
+		findings := scanner.Scan(ctx, accountidentity.ScanRequest{
+			ApprovedDomains: args.ApprovedEmailDomains,
+			AccountType:     accountType,
+			Email:           email,
+		})
 		findings = slices.DeleteFunc(findings, func(f scanners.Finding) bool {
 			return slices.Contains(row.FlaggedRuleIds, f.RuleID)
 		})

@@ -21,7 +21,11 @@ func rules(findings []scanners.Finding) []string {
 func TestScanner_PersonalAccountAlwaysFlags(t *testing.T) {
 	t.Parallel()
 
-	findings := accountidentity.NewScanner(nil).Scan("personal", "jane@gmail.com")
+	findings := accountidentity.NewScanner().Scan(t.Context(), accountidentity.ScanRequest{
+		ApprovedDomains: nil,
+		AccountType:     "personal",
+		Email:           "jane@gmail.com",
+	})
 	require.Len(t, findings, 1)
 	assert.Equal(t, accountidentity.RulePersonalAccount, findings[0].RuleID)
 	assert.Equal(t, accountidentity.Source, findings[0].Source)
@@ -32,7 +36,11 @@ func TestScanner_PersonalAccountAlwaysFlags(t *testing.T) {
 func TestScanner_PersonalAccountWithoutEmailIsGeneric(t *testing.T) {
 	t.Parallel()
 
-	findings := accountidentity.NewScanner(nil).Scan("personal", "")
+	findings := accountidentity.NewScanner().Scan(t.Context(), accountidentity.ScanRequest{
+		ApprovedDomains: nil,
+		AccountType:     "personal",
+		Email:           "",
+	})
 	require.Len(t, findings, 1)
 	assert.Empty(t, findings[0].Match)
 	assert.Equal(t, "Session authenticated with a personal AI account.", findings[0].Description)
@@ -41,15 +49,18 @@ func TestScanner_PersonalAccountWithoutEmailIsGeneric(t *testing.T) {
 func TestScanner_TeamAccountWithoutDomainListInert(t *testing.T) {
 	t.Parallel()
 
-	findings := accountidentity.NewScanner(nil).Scan("team", "bob@other.com")
+	findings := accountidentity.NewScanner().Scan(t.Context(), accountidentity.ScanRequest{
+		ApprovedDomains: nil,
+		AccountType:     "team",
+		Email:           "bob@other.com",
+	})
 	require.Empty(t, findings)
 }
 
 func TestScanner_UnapprovedDomainMatrix(t *testing.T) {
 	t.Parallel()
 
-	// Domain matching is exact and case-insensitive; a leading "@" is stripped.
-	scanner := accountidentity.NewScanner([]string{"@Acme.com"})
+	scanner := accountidentity.NewScanner()
 
 	cases := []struct {
 		accountType string
@@ -66,7 +77,12 @@ func TestScanner_UnapprovedDomainMatrix(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		findings := scanner.Scan(tc.accountType, tc.email)
+		// Domain matching is exact and case-insensitive; a leading "@" is stripped.
+		findings := scanner.Scan(t.Context(), accountidentity.ScanRequest{
+			ApprovedDomains: []string{"@Acme.com"},
+			AccountType:     tc.accountType,
+			Email:           tc.email,
+		})
 		assert.ElementsMatch(t, tc.wantRules, rules(findings), "email %s", tc.email)
 	}
 }
@@ -74,10 +90,18 @@ func TestScanner_UnapprovedDomainMatrix(t *testing.T) {
 func TestScanner_UnapprovedDomainNeedsEmailDomain(t *testing.T) {
 	t.Parallel()
 
-	scanner := accountidentity.NewScanner([]string{"acme.com"})
+	scanner := accountidentity.NewScanner()
 
 	// A malformed email with no usable domain part cannot be classified against
 	// the domain list, so the unapproved_domain rule stays inert.
-	require.Empty(t, scanner.Scan("team", "no-at-sign"))
-	require.Empty(t, scanner.Scan("team", "trailing@"))
+	require.Empty(t, scanner.Scan(t.Context(), accountidentity.ScanRequest{
+		ApprovedDomains: []string{"acme.com"},
+		AccountType:     "team",
+		Email:           "no-at-sign",
+	}))
+	require.Empty(t, scanner.Scan(t.Context(), accountidentity.ScanRequest{
+		ApprovedDomains: []string{"acme.com"},
+		AccountType:     "team",
+		Email:           "trailing@",
+	}))
 }
