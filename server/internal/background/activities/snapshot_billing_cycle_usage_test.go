@@ -194,6 +194,31 @@ func TestSnapshotBillingCycleUsage_FinalizedRowsImmutable(t *testing.T) {
 	require.Equal(t, int64(111), rows[len(rows)-1].TumTokens)
 }
 
+func TestSnapshotBillingCycleUsage_RejectsNegativeTokens(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	act, queries, _, orgID, _ := setupSnapshotBillingCycleUsageTest(t, "snapshot_billing_negative")
+
+	require.NoError(t, act.Do(ctx, []string{orgID}))
+
+	rows, err := queries.ListBillingCycleUsage(ctx, orgID)
+	require.NoError(t, err)
+	require.Len(t, rows, 12)
+
+	// Token counts derive from client-supplied OTEL attributes; the permanent
+	// billing record must refuse a negative sum outright.
+	active := rows[len(rows)-1]
+	err = queries.UpsertBillingCycleUsage(ctx, usagerepo.UpsertBillingCycleUsageParams{
+		OrganizationID: orgID,
+		CycleStart:     active.CycleStart,
+		CycleEnd:       active.CycleEnd,
+		TumTokens:      -1,
+		FinalizedAt:    pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
+	})
+	require.ErrorContains(t, err, "billing_cycle_usage_tum_tokens_check")
+}
+
 func TestSnapshotBillingCycleUsage_NoProjects(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
