@@ -1468,32 +1468,29 @@ function EvalTuner({
   });
   const evalByChatId = useMemo(() => {
     const m = new Map<string, PromptGuardrailEvalResult>();
-    for (const chatId of evalChatIds) {
-      const state = queryClient.getQueryState<PromptGuardrailEvalResult>(
-        evalQueryKey(judgeGuardrail, chatId),
-      );
+    for (const [index, chatId] of evalChatIds.entries()) {
+      const query = evalQueries[index];
       if (
-        state?.status === "success" &&
-        state.fetchStatus !== "fetching" &&
-        state.data?.chatId === chatId &&
-        !isFailOpenCleanEval(state.data)
+        query?.status === "success" &&
+        query.fetchStatus !== "fetching" &&
+        query.data?.chatId === chatId &&
+        !isFailOpenCleanEval(query.data)
       ) {
-        m.set(chatId, state.data);
+        m.set(chatId, query.data);
       }
     }
     return m;
-  }, [evalChatIds, evalQueries, judgeGuardrail, queryClient]);
+  }, [evalChatIds, evalQueries]);
   useEffect(() => {
     const now = Date.now();
-    for (const chatId of evalChatIds) {
+    for (const [index, chatId] of evalChatIds.entries()) {
+      const query = evalQueries[index];
       const queryKey = evalQueryKey(judgeGuardrail, chatId);
-      const state =
-        queryClient.getQueryState<PromptGuardrailEvalResult>(queryKey);
       if (
-        state?.status === "success" &&
-        state.fetchStatus !== "fetching" &&
-        state.data?.chatId === chatId &&
-        isFailOpenCleanEval(state.data)
+        query?.status === "success" &&
+        query.fetchStatus !== "fetching" &&
+        query.data?.chatId === chatId &&
+        isFailOpenCleanEval(query.data)
       ) {
         const retryKey = `${judgeGuardrailKey}:${chatId}`;
         const retryAfter = poisonRetryAfterRef.current.get(retryKey) ?? 0;
