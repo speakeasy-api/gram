@@ -99,8 +99,14 @@ type SessionMetadata struct {
 	// UserAccountID is the user_accounts row id for this session's account, set
 	// once the account entity has been upserted.
 	UserAccountID string
-	GramOrgID     string
-	ProjectID     string
+	// ObservedUserEmail is the email the AI account itself reported (Claude
+	// OTEL user.email) — the value persisted on user_accounts.email. Kept
+	// separate from UserEmail, the authenticated actor, so adopting cached
+	// attribution never rewrites the canonical user identity; telemetry
+	// carries it as the gram.account_email attribute.
+	ObservedUserEmail string
+	GramOrgID         string
+	ProjectID         string
 }
 
 // HookSpecificOutput is the structure for hook-specific output in responses

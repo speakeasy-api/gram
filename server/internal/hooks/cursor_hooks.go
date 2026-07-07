@@ -286,6 +286,7 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
+		ObservedUserEmail:   "",
 		GramOrgID:           orgID,
 		ProjectID:           projectID,
 	}
