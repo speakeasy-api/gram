@@ -23,19 +23,21 @@ export const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   "shadow_mcp",
   "destructive_tool",
   "cli_destructive",
+  "account_identity",
   "prompt_injection",
   "custom",
 ]);
 
-/** All rule categories in display order */
+/** All rule categories in display order. off_policy renders via the
+ * PRESIDIO_CATEGORIES spread — don't also list it explicitly. */
 export const ALL_CATEGORIES: RuleCategory[] = [
   "secrets",
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
   "cli_destructive",
+  "account_identity",
   "prompt_injection",
-  "off_policy",
 ];
 
 /** Categories whose source the server rejects with action=block; the form
@@ -44,6 +46,7 @@ export const ALL_CATEGORIES: RuleCategory[] = [
 export const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
   "destructive_tool",
   "cli_destructive",
+  "account_identity",
 ]);
 
 /** Built-in detectors that run at the category level and have no individual
@@ -81,6 +84,7 @@ export function policyToCategories(
   if (sources.includes("shadow_mcp")) cats.add("shadow_mcp");
   if (sources.includes("destructive_tool")) cats.add("destructive_tool");
   if (sources.includes("cli_destructive")) cats.add("cli_destructive");
+  if (sources.includes("account_identity")) cats.add("account_identity");
   if (sources.includes("prompt_injection")) cats.add("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
     const wireEntities = DETECTION_RULES[cat].map((r) =>
@@ -121,6 +125,7 @@ export function categoriesToPayload(
   if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
   if (cats.has("destructive_tool")) sources.push("destructive_tool");
   if (cats.has("cli_destructive")) sources.push("cli_destructive");
+  if (cats.has("account_identity")) sources.push("account_identity");
   if (cats.has("prompt_injection")) sources.push("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
@@ -154,6 +159,16 @@ export function categoriesToPayload(
     promptInjectionRules,
     disabledRules: persistedDisabled,
   };
+}
+
+/** Parse the comma-separated approved-domains input into the array the API
+ *  expects. Splits on commas and whitespace; the server normalizes each entry
+ *  (lowercase, strips a leading '@') and rejects implausible domains. */
+export function parseApprovedEmailDomains(raw: string): string[] {
+  return raw
+    .split(/[,\s]+/)
+    .map((domain) => domain.trim())
+    .filter((domain) => domain.length > 0);
 }
 
 /** Canonical ids of hidden rules an existing policy already pins via its

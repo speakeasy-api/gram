@@ -90,6 +90,7 @@ import {
   SCOPE_EXEMPT_CEL_EXAMPLES,
   SCOPE_INCLUDE_CEL_EXAMPLES,
   categoriesToPayload,
+  parseApprovedEmailDomains,
   pinnedHiddenRuleIds,
   policyMessageTypesForForm,
   policyMessageTypesForPayload,
@@ -2733,6 +2734,7 @@ function StandardPolicyEditor({
       disabledRules: new Set(policy.disabledRules ?? []),
       customRuleIds: new Set(policy.customRuleIds ?? []),
       categories: cats,
+      approvedDomains: (policy.approvedEmailDomains ?? []).join(", "),
       audienceType:
         policy.audienceType === "targeted"
           ? ("targeted" as const)
@@ -2776,6 +2778,11 @@ function StandardPolicyEditor({
     policy?.audienceType === "targeted"
       ? new Set(policy.audiencePrincipalUrns ?? [])
       : new Set<string>(),
+  );
+  // Approved email domains for the Non-Corporate Accounts category, held as
+  // the raw comma-separated input. Only sent when the category is selected.
+  const [approvedDomains, setApprovedDomains] = useState(() =>
+    (policy?.approvedEmailDomains ?? []).join(", "),
   );
   const [customizeCategory, setCustomizeCategory] =
     useState<RuleCategory | null>(null);
@@ -2825,6 +2832,7 @@ function StandardPolicyEditor({
       !sameSet(disabledRules, orig.disabledRules) ||
       !sameSet(selectedCustomRuleIds, orig.customRuleIds) ||
       !sameSet(selectedCategories, orig.categories) ||
+      approvedDomains !== orig.approvedDomains ||
       !sameSet(audiencePrincipalUrns, orig.audiencePrincipalUrns));
 
   const updateMutation = useRiskPoliciesUpdateMutation({
@@ -2881,14 +2889,22 @@ function StandardPolicyEditor({
         : policyMessageTypesForPayload(selectedMessageTypes);
     const includeCel = scopeMode === "cel" ? scopeInclude.trim() : "";
     const exemptCel = scopeExempt.trim();
-    // Destructive-tool sources reject action=block server-side; force flag.
+    // Flag-only sources (destructive_tool, cli_destructive, account_identity)
+    // are rejected by the server with action=block, so force flag as a safety
+    // net in case the form state drifted.
+    const flagOnlyActive = sources.some((s) =>
+      FLAG_ONLY_CATEGORIES.has(s as RuleCategory),
+    );
     const resolvedAction =
-      sources.includes("destructive_tool") && action === "block"
-        ? "flag"
-        : action;
+      flagOnlyActive && action === "block" ? "flag" : action;
     const principals =
       audienceType === "targeted" ? [...audiencePrincipalUrns] : [];
     const autoName = name.trim() === "";
+    // Only send approved domains while the Non-Corporate Accounts category is
+    // selected (an empty array clears them); omit otherwise so the server
+    // preserves whatever is stored.
+    const identityActive = selectedCategories.has("account_identity");
+    const approvedEmailDomains = parseApprovedEmailDomains(approvedDomains);
 
     if (policy) {
       updateMutation.mutate({
@@ -2910,6 +2926,7 @@ function StandardPolicyEditor({
             audiencePrincipalUrns: principals,
             autoName,
             userMessage,
+            ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
       });
@@ -2932,6 +2949,7 @@ function StandardPolicyEditor({
             audiencePrincipalUrns: principals,
             autoName,
             ...(userMessage.trim() ? { userMessage } : {}),
+            ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
       });
@@ -3070,6 +3088,8 @@ function StandardPolicyEditor({
           setSelectedCategories={setSelectedCategories}
           disabledRules={disabledRules}
           setDisabledRules={setDisabledRules}
+          approvedDomains={approvedDomains}
+          setApprovedDomains={setApprovedDomains}
           onClose={() => setCustomizeCategory(null)}
         />
       )}
