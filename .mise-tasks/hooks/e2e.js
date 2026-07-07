@@ -279,10 +279,14 @@ async function runProcess(command, args, opts = {}) {
     child.stdin.end();
   });
 }
+// session_capture gates hook ingest; logs gates telemetry_logs writes — the
+// evidence checks read both, so provision both.
 async function enableSessionCapture(organizationId) {
   const sql = `
     INSERT INTO organization_features (organization_id, feature_name)
-    VALUES ('${sqlString(organizationId)}', 'session_capture')
+    VALUES
+      ('${sqlString(organizationId)}', 'session_capture'),
+      ('${sqlString(organizationId)}', 'logs')
     ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
   `;
   const res = await runProcess("psql", psqlArgs(sql));
@@ -1617,7 +1621,7 @@ function featureChecks(provider, evidence, chats, opts = {}) {
         ? "provider rows load in one chat generation"
         : `chat rows split across generations: ${splitGenerationChats.join("; ")}`,
   });
-  if (provider === "claude") {
+  if (provider === "claude" || provider === "codex") {
     const skillName = opts.skillName;
     const skillActivated = evidence.some(
       (r) =>
@@ -1631,11 +1635,13 @@ function featureChecks(provider, evidence, chats, opts = {}) {
       feature: "skill.activated",
       status: skillActivated ? "PASS" : skillName ? "FAIL" : "SKIP",
       detail: skillActivated
-        ? `observed Claude activation of ${skillName ?? "a skill"}`
+        ? `observed ${provider} activation of ${skillName ?? "a skill"}`
         : skillName
           ? `no skill.activated telemetry for ${skillName}; events=${[...events].join(", ") || "(none)"}`
           : "not triggered by the current real-driver scenarios",
     });
+  }
+  if (provider === "claude") {
     checks.push({
       provider,
       feature: "notification.reported",
@@ -1846,9 +1852,9 @@ function shadowMCPChecks(provider, phase, res, evidence, blocks, extra = {}) {
   });
   return checks;
 }
-async function prepareSkillFixture(workdir, runId) {
+async function prepareSkillFixture(skillsRoot, runId, provider) {
   const skillName = `gram-hooks-e2e-skill-${runId.split("-").pop()}`;
-  const skillDir = path.join(workdir, ".claude", "skills", skillName);
+  const skillDir = path.join(skillsRoot, skillName);
   await fs.mkdir(skillDir, { recursive: true });
   await fs.writeFile(
     path.join(skillDir, "SKILL.md"),
@@ -1860,21 +1866,54 @@ async function prepareSkillFixture(workdir, runId) {
       "",
       "# Gram hooks E2E skill probe",
       "",
-      `Once activated, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} claude skill`,
+      `Once activated, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} ${provider} skill`,
       "",
     ].join("\n"),
   );
-  return { skillName };
+  return { skillName, skillDir };
 }
-function skillPrompt(runId, skillName) {
+// Codex has no Skill tool: the sender infers activation from a $name prompt
+// mention (validated against the skill roots on disk) or from a reader tool
+// touching .../skills/<name>/SKILL.md. The prompt covers both arms.
+function skillPrompt(runId, skillName, provider, skillDir) {
+  if (provider === "codex") {
+    return [
+      `Gram hooks E2E skill run ${runId} for codex.`,
+      `Use the $${skillName} skill: read ${path.join(skillDir, "SKILL.md")} and follow its instructions.`,
+      `Then reply with exactly: GRAM_HOOKS_E2E_OK ${runId} codex skill`,
+    ].join(" ");
+  }
   return [
     `Gram hooks E2E skill run ${runId} for claude.`,
     `Run the Gram hooks E2E skill probe by invoking the Skill tool with skill "${skillName}".`,
     `After the ${skillName} skill is activated, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} claude skill`,
   ].join(" ");
 }
-async function runClaudeSkillScenario(args) {
-  const prompt = skillPrompt(args.runId, args.skillName);
+async function runSkillScenario(args) {
+  const prompt = skillPrompt(
+    args.runId,
+    args.skillName,
+    args.provider,
+    args.skillDir,
+  );
+  if (args.provider === "codex") {
+    const res = await runProcess(
+      "codex",
+      [
+        "exec",
+        "--json",
+        "--cd",
+        args.workdir,
+        "--skip-git-repo-check",
+        "--dangerously-bypass-hook-trust",
+        "--dangerously-bypass-approvals-and-sandbox",
+        prompt,
+      ],
+      { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
+    );
+    res.provider = "codex";
+    return res;
+  }
   const sessionId = crypto.randomUUID();
   const res = await runProcess(
     "claude",
@@ -1966,7 +2005,7 @@ async function runRatchetSuite(args) {
 
 async function runCaptureSuite(args) {
   const commandResults = [];
-  let claudeSkillName = null;
+  const skillNamesByProvider = new Map();
   for (const provider of args.providers) {
     for (const scenario of ["success", "failure"]) {
       log.info(`${provider}: running capture ${scenario} scenario`);
@@ -1995,30 +2034,40 @@ async function runCaptureSuite(args) {
         fail(`${provider} ${scenario} scenario timed out`);
       }
     }
-    if (provider === "claude") {
-      const skill = await prepareSkillFixture(args.workdir, args.runId);
-      claudeSkillName = skill.skillName;
-      log.info("claude: running capture skill-activation scenario");
-      const skillRes = await runClaudeSkillScenario({
-        pluginDir: args.pluginDirs.get("claude"),
+    if (provider === "claude" || provider === "codex") {
+      // Codex validates $name mentions against the skill roots on disk;
+      // CODEX_HOME/skills is the only root the isolated env controls
+      // regardless of the hook process cwd.
+      const skillsRoot =
+        provider === "codex"
+          ? path.join(args.codexEnv.CODEX_HOME, "skills")
+          : path.join(args.workdir, ".claude", "skills");
+      const skill = await prepareSkillFixture(skillsRoot, args.runId, provider);
+      skillNamesByProvider.set(provider, skill.skillName);
+      log.info(`${provider}: running capture skill-activation scenario`);
+      const skillRes = await runSkillScenario({
+        provider,
+        pluginDir: args.pluginDirs.get(provider),
         workdir: args.workdir,
         runId: args.runId,
         skillName: skill.skillName,
+        skillDir: skill.skillDir,
+        env: provider === "codex" ? args.codexEnv : undefined,
         timeoutMs: args.timeoutSeconds * 1000,
       });
       commandResults.push(skillRes);
       await writeCommandArtifacts(
         args.artifactsDir,
-        "claude",
+        provider,
         "capture-skill",
         skillRes,
       );
       if (skillRes.timedOut) {
-        fail("claude skill-activation scenario timed out");
+        fail(`${provider} skill-activation scenario timed out`);
       }
       if (skillRes.exitCode !== 0) {
         fail(
-          `claude skill-activation scenario failed:\n${skillRes.stderr || skillRes.stdout}`,
+          `${provider} skill-activation scenario failed:\n${skillRes.stderr || skillRes.stdout}`,
         );
       }
     }
@@ -2032,7 +2081,7 @@ async function runCaptureSuite(args) {
   });
   const checks = [];
   for (const provider of args.providers) {
-    const skillName = provider === "claude" ? claudeSkillName : null;
+    const skillName = skillNamesByProvider.get(provider) ?? null;
     // Cursor Agent headless does not reliably emit afterAgentResponse
     // (featureChecks marks it SKIP), so don't burn the whole poll window
     // waiting for it.

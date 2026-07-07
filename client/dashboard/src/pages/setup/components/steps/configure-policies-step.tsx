@@ -141,6 +141,11 @@ const DEFAULTS: Record<RuleCategory, CategoryConfig> = {
     action: "flag",
     messageTypes: new Set(["tool_request"]),
   },
+  account_identity: {
+    enabled: false,
+    action: "flag",
+    messageTypes: new Set(["user_message"]),
+  },
   custom: {
     enabled: false,
     action: "flag",

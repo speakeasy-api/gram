@@ -23,6 +23,16 @@ import (
 
 const hookIngestSchemaV1 = "hook.ingest.v1"
 
+// eventTypeSkillActivated is the canonical event type senders use when a
+// provider reports a skill activation directly (Claude's Skill tool). Inferred
+// activations (Codex heuristics) arrive as ordinary events carrying data.skill
+// instead, and are distinguished by isExplicitSkillActivation.
+const eventTypeSkillActivated = "skill.activated"
+
+func isExplicitSkillActivation(payload *gen.IngestPayload) bool {
+	return strings.TrimSpace(payload.Event.Type) == eventTypeSkillActivated
+}
+
 // Ingest is the authenticated, feature-first hook endpoint. Legacy
 // provider-specific endpoints keep their compatibility behavior; this path only
 // accepts the canonical Gram contract and attributes every event to the token
@@ -319,34 +329,13 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 		return
 	}
 
-	projectID := authCtx.ProjectID.String()
-	source := strings.TrimSpace(payload.Source.Adapter)
 	hookEventName := telemetryHookEventName(payload)
-	sessionID := canonicalSessionID(payload)
 	toolName := canonicalTelemetryToolName(payload)
 	if toolName == "" {
 		toolName = hookEventName
 	}
 
-	attrs := map[attr.Key]any{
-		attr.EventSourceKey:    string(telemetry.EventSourceHook),
-		attr.HookEventKey:      hookEventName,
-		attr.HookSourceKey:     source,
-		attr.ProjectIDKey:      projectID,
-		attr.OrganizationIDKey: authCtx.ActiveOrganizationID,
-		attr.SpanIDKey:         generateSpanID(),
-		attr.TraceIDKey:        canonicalTraceID(payload),
-		attr.LogBodyKey:        "Hook: " + hookEventName,
-	}
-	if sessionID != "" {
-		attrs[attr.GenAIConversationIDKey] = sessionID
-	}
-	if hostname := strings.TrimSpace(conv.PtrValOr(payload.Source.Hostname, "")); hostname != "" {
-		attrs[attr.HookHostnameKey] = hostname
-	}
-	if model := canonicalModel(payload); model != "" {
-		attrs[attr.GenAIResponseModelKey] = model
-	}
+	attrs := hookTelemetryBaseAttrs(payload, authCtx, hookEventName)
 	if blockReason != "" {
 		attrs[attr.HookBlockReasonKey] = blockReason
 	}
@@ -401,18 +390,67 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 			attrs[attr.MCPMatchKey] = command
 		}
 	}
-	if skill := canonicalSkillName(payload); skill != "" {
-		attrs[attr.ToolNameKey] = "Skill"
+	skill := canonicalSkillName(payload)
+	if skill != "" && isExplicitSkillActivation(payload) {
 		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})
-		toolName = "Skill"
 	}
 
+	s.logHookTelemetry(ctx, authCtx, timestamp, toolName, attrs)
+
+	// A skill name on an ordinary tool/prompt event is an inferred activation
+	// (Codex has no dedicated Skill tool): the underlying event was recorded
+	// truthfully above, and the activation gets its own derived row so skill
+	// dashboards see the same skill.activated vocabulary as Claude senders.
+	// A policy-blocked event never ran, so it is not an activation.
+	if skill != "" && !isExplicitSkillActivation(payload) && blockReason == "" {
+		attrs = hookTelemetryBaseAttrs(payload, authCtx, eventTypeSkillActivated)
+		// Skill counts aggregate at trace level (trace_summaries), and its MV
+		// resolves tool_name/skill_name with any(): sharing a trace with the
+		// underlying tool or prompt rows lets a non-Skill sibling win the
+		// summary and drop the activation from skill analytics — and the
+		// session-hash fallback would additionally collapse every
+		// prompt-mention activation in a session into one summary row. Every
+		// derived row gets its own trace.
+		attrs[attr.TraceIDKey] = generateTraceID()
+		attrs[attr.ToolNameKey] = "Skill"
+		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})
+		s.logHookTelemetry(ctx, authCtx, timestamp, "Skill", attrs)
+	}
+}
+
+// hookTelemetryBaseAttrs builds the attributes shared by every telemetry row
+// derived from one ingested hook event. Each row gets its own span id; the
+// trace id is payload-derived so sibling rows stay on one trace.
+func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, hookEventName string) map[attr.Key]any {
+	attrs := map[attr.Key]any{
+		attr.EventSourceKey:    string(telemetry.EventSourceHook),
+		attr.HookEventKey:      hookEventName,
+		attr.HookSourceKey:     strings.TrimSpace(payload.Source.Adapter),
+		attr.ProjectIDKey:      authCtx.ProjectID.String(),
+		attr.OrganizationIDKey: authCtx.ActiveOrganizationID,
+		attr.SpanIDKey:         generateSpanID(),
+		attr.TraceIDKey:        canonicalTraceID(payload),
+		attr.LogBodyKey:        "Hook: " + hookEventName,
+	}
+	if sessionID := canonicalSessionID(payload); sessionID != "" {
+		attrs[attr.GenAIConversationIDKey] = sessionID
+	}
+	if hostname := strings.TrimSpace(conv.PtrValOr(payload.Source.Hostname, "")); hostname != "" {
+		attrs[attr.HookHostnameKey] = hostname
+	}
+	if model := canonicalModel(payload); model != "" {
+		attrs[attr.GenAIResponseModelKey] = model
+	}
+	return attrs
+}
+
+func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp: timestamp,
 		ToolInfo: telemetry.ToolInfo{
 			Name:           toolName,
 			OrganizationID: authCtx.ActiveOrganizationID,
-			ProjectID:      projectID,
+			ProjectID:      authCtx.ProjectID.String(),
 			ID:             "",
 			URN:            "",
 			DeploymentID:   "",
@@ -434,8 +472,8 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 func telemetryHookEventName(payload *gen.IngestPayload) string {
 	// Skill activations are a Gram-specific classification layered onto an
 	// ordinary provider tool event; resolving via the raw name would erase it.
-	if strings.TrimSpace(payload.Event.Type) == "skill.activated" {
-		return "skill.activated"
+	if isExplicitSkillActivation(payload) {
+		return eventTypeSkillActivated
 	}
 	raw := strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, ""))
 	if raw != "" {
@@ -678,7 +716,10 @@ func canonicalToolName(payload *gen.IngestPayload) string {
 }
 
 func canonicalTelemetryToolName(payload *gen.IngestPayload) string {
-	if skill := canonicalSkillName(payload); skill != "" {
+	// Only explicit skill.activated events are relabeled: an inferred skill on
+	// an ordinary tool/prompt event keeps the event's own tool identity and
+	// gets a separate derived skill row instead.
+	if skill := canonicalSkillName(payload); skill != "" && isExplicitSkillActivation(payload) {
 		return "Skill"
 	}
 	return canonicalToolName(payload)

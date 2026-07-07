@@ -122,7 +122,7 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 // for generator changes that alter behaviour in ways the placeholder
 // fingerprint pass can't observe. The Plugin Generate Check CI workflow
 // requires this to change whenever generate.go does.
-const pluginGeneratorVersion = "8"
+const pluginGeneratorVersion = "9"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -526,8 +526,42 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 	}
 	files[path.Join(subdir, ".codex-plugin/plugin.json")] = pluginJSON
 
-	mcpServers := make(map[string]codexMCPServer)
-	for _, s := range p.Servers {
+	// Assign every server its Codex key before building entries. Already-valid
+	// display names reserve their exact key first, so an invalid name that
+	// sanitizes into the same key can never steal it — "Team Slack" must not
+	// displace a server literally named "Team_Slack".
+	keys := make([]string, len(p.Servers))
+	taken := make(map[string]bool, len(p.Servers))
+	for i, s := range p.Servers {
+		if name := codexMCPServerName(s.DisplayName); name == s.DisplayName && !taken[name] {
+			keys[i] = name
+			taken[name] = true
+		}
+	}
+	for i, s := range p.Servers {
+		if keys[i] != "" {
+			continue
+		}
+		base := codexMCPServerName(s.DisplayName)
+		key := base
+		for n := 2; taken[key] && n <= maxCodexServerRenameSuffix; n++ {
+			key = fmt.Sprintf("%s_%d", base, n)
+		}
+		if taken[key] {
+			// Rename attempts exhausted; drop the server rather than
+			// overwrite another entry.
+			continue
+		}
+		keys[i] = key
+		taken[key] = true
+	}
+
+	mcpServers := make(map[string]codexMCPServer, len(p.Servers))
+	for i, s := range p.Servers {
+		if keys[i] == "" {
+			continue
+		}
+
 		entry := codexMCPServer{
 			URL:               s.MCPURL,
 			BearerTokenEnvVar: "",
@@ -550,7 +584,7 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 			entry.BearerTokenEnvVar = "GRAM_API_KEY"
 		}
 
-		mcpServers[s.DisplayName] = entry
+		mcpServers[keys[i]] = entry
 	}
 	mcpJSON, err := marshalJSON(codexMCPConfig{MCPServers: mcpServers})
 	if err != nil {
@@ -559,6 +593,39 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 	files[path.Join(subdir, ".mcp.json")] = mcpJSON
 
 	return nil
+}
+
+// maxCodexServerRenameSuffix bounds the collision-rename attempts for
+// sanitized Codex server keys: a colliding name tries _2 through _6 before
+// the server is dropped from the config.
+const maxCodexServerRenameSuffix = 6
+
+// codexMCPServerName converts a human display name (e.g. "Team Slack") into a
+// Codex-safe MCP server key. Codex validates the keys of .mcp.json against
+// ^[a-zA-Z0-9_-]+$ at MCP client startup and refuses to start clients whose
+// names contain spaces, parentheses, or other punctuation. Each run of
+// disallowed characters collapses into a single underscore; leading and
+// trailing runs are dropped.
+func codexMCPServerName(displayName string) string {
+	var b strings.Builder
+	b.Grow(len(displayName))
+	pendingSep := false
+	for _, r := range displayName {
+		valid := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-'
+		if !valid {
+			pendingSep = true
+			continue
+		}
+		if pendingSep && b.Len() > 0 {
+			b.WriteByte('_')
+		}
+		pendingSep = false
+		b.WriteRune(r)
+	}
+	if b.Len() == 0 {
+		return "mcp-server"
+	}
+	return b.String()
 }
 
 // ClaudeObservabilitySlug / CursorObservabilitySlug derive the observability
@@ -1125,12 +1192,25 @@ gram_hooks_write_auth() {
   umask "$old_umask"
   mv "$tmp" "$path" || return 1
   gram_hooks_mark_auth_established
+  gram_hooks_clear_reauth_needed
 }
 
 gram_hooks_forget_auth() {
   local path
   path="$(gram_hooks_auth_file)"
   rm -f "$path"
+}
+
+gram_hooks_mark_reauth_needed() {
+  : >"$(gram_hooks_auth_file).reauth-needed" 2>/dev/null || true
+}
+
+gram_hooks_reauth_needed() {
+  [ -e "$(gram_hooks_auth_file).reauth-needed" ]
+}
+
+gram_hooks_clear_reauth_needed() {
+  rm -f "$(gram_hooks_auth_file).reauth-needed" 2>/dev/null || true
 }
 
 # gram_hooks_auth_established reports whether this machine has EVER cached
@@ -1145,6 +1225,20 @@ gram_hooks_auth_established() {
 
 gram_hooks_mark_auth_established() {
   : >"$(gram_hooks_auth_file).established" 2>/dev/null || true
+}
+
+gram_hooks_env_key_source() {
+  if [ -n "${GRAM_HOOKS_API_KEY:-}" ]; then
+    printf 'GRAM_HOOKS_API_KEY'
+    return 0
+  fi
+  return 1
+}
+
+gram_hooks_env_key_rejected_message() {
+  local source
+  source="$(gram_hooks_env_key_source)" || return 1
+  printf 'Speakeasy hooks rejected the API key configured in %s. Update or unset %s, then run hooks/login.sh to reconnect hooks.' "$source" "$source"
 }
 
 gram_hooks_manual_auth_instructions() {
@@ -1600,8 +1694,8 @@ gram_hooks_prepare_auth() {
   project=""
   email=""
   if [ "$force" != "force" ]; then
-    api_key="${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}"
-    project="${GRAM_HOOKS_PROJECT_SLUG:-${GRAM_PROJECT_SLUG:-}}"
+    api_key="${GRAM_HOOKS_API_KEY:-}"
+    project="${GRAM_HOOKS_PROJECT_SLUG:-}"
   fi
 
   if [ -z "$api_key" ]; then
@@ -1613,6 +1707,11 @@ gram_hooks_prepare_auth() {
     fi
     if [ -z "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
       if ! gram_hooks_login "$server_url" "$project_hint"; then
+        if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ] && gram_hooks_reauth_needed; then
+          GRAM_HTTP_CODE=""
+          GRAM_HTTP_BODY='{"message":"Speakeasy hooks need to reconnect. Run hooks/login.sh to reconnect hooks."}'
+          return 79
+        fi
         if gram_hooks_auth_established; then
           echo "Speakeasy hooks could not authenticate with Gram. Run the plugin's hooks/login.sh to reconnect, or set GRAM_HOOKS_API_KEY." >&2
           exit "$failure_exit"
@@ -1657,11 +1756,19 @@ gram_hooks_post_authenticated() {
   shift 5
 
   # Return 78 when this machine has never authenticated (ratchet fail-open):
-  # callers emit a pass-through response instead of blocking. Once auth has
-  # been established, prepare_auth fails closed by exiting from within.
-  if ! gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit"; then
+  # callers emit a pass-through response instead of blocking. Return 79 when a
+  # rejected cached key was cleared and the caller should surface reconnect.
+  # Other established-auth failures still fail closed by exiting from within.
+  gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit"
+  local prepare_status=$?
+  if [ "$prepare_status" -ne 0 ]; then
     GRAM_HTTP_CODE=""
-    GRAM_HTTP_BODY=""
+    if [ "$prepare_status" -ne 79 ]; then
+      GRAM_HTTP_BODY=""
+    fi
+    if [ "$prepare_status" -eq 79 ]; then
+      return 79
+    fi
     return 78
   fi
   gram_http_post "${server_url}/rpc/hooks.ingest" "$payload" "$max_time" \
@@ -1669,15 +1776,20 @@ gram_hooks_post_authenticated() {
     ${auth_config_arg[@]+"${auth_config_arg[@]}"}
   local first_status="$GRAM_HTTP_CODE"
   # Retry through the browser-login cache only when the rejected credentials
-  # came from it. Explicit GRAM_HOOKS_API_KEY/GRAM_API_KEY values take
+  # came from it. Explicit GRAM_HOOKS_API_KEY values take
   # precedence over the cache on every send, so a re-login can never replace
   # them: a rejected configured key must fall through to the caller's non-2xx
   # handling (fail closed) rather than wipe the cache and downgrade to the
   # never-authenticated pass-through.
   if { [ "$first_status" = "401" ] || [ "$first_status" = "403" ]; } \
-    && [ -z "${GRAM_HOOKS_API_KEY:-${GRAM_API_KEY:-}}" ] \
+    && [ -z "${GRAM_HOOKS_API_KEY:-}" ] \
     && [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" != "1" ]; then
     gram_hooks_forget_auth
+    gram_hooks_mark_reauth_needed
+    if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ]; then
+      GRAM_HTTP_CODE="$first_status"
+      return 79
+    fi
     if ! gram_hooks_prepare_auth "$server_url" "$project_hint" "$failure_exit" force; then
       GRAM_HTTP_CODE="$first_status"
       return 78
@@ -2023,6 +2135,11 @@ fi
 http_code="$GRAM_HTTP_CODE"
 body="$GRAM_HTTP_BODY"
 
+if [ "$post_status" -eq 79 ] && [ "%s" = "claude" ] && [ "$native_event" = "UserPromptSubmit" ]; then
+  gram_hooks_emit_login_nudge "$provider_payload" "$script_dir"
+  exit 0
+fi
+
 # curl returns 000 on connection failure — treat as block so an unreachable
 # Speakeasy server cannot silently bypass blocking policies.
 if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
@@ -2037,13 +2154,22 @@ if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null;
 fi
 
 reason="$(gram_hooks_json_string_value "$body" "message")"
+if { [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; } &&
+  type gram_hooks_env_key_rejected_message >/dev/null 2>&1 &&
+  env_reason="$(gram_hooks_env_key_rejected_message)"; then
+  if [ -n "$reason" ]; then
+    reason="${env_reason} Server response: ${reason}"
+  else
+    reason="$env_reason"
+  fi
+fi
 echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
 if [ -n "$gram_hooks_nonblocking" ]; then
   gram_hooks_provider_response "%s" "$native_event" '{}'
   exit 0
 fi
 exit 2
-`, cfg.ServerURL, projectSlug, cfg.OrgID, nonblocking, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform, platform)
+`, cfg.ServerURL, projectSlug, cfg.OrgID, nonblocking, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform, platform, platform)
 }
 
 func renderClaudeMCPEnrichmentSnippet() string {
@@ -2563,13 +2689,28 @@ def strip_root_dotted_key(text, key):
     root = re.sub(r'(?m)^' + re.escape(key) + r'\s*=.*\n?', '', root)
     return root + rest
 
+def table_body_bounds(text, table_header):
+    m = re.search(r'(?m)^' + re.escape(table_header) + r'(?:\s*(?:#.*)?)?(?:\n|$)', text)
+    if not m:
+        return None
+    start = m.end()
+    m2 = re.search(r'(?m)^\[', text[start:])
+    end = start + m2.start() if m2 else len(text)
+    return start, end
+
 def ensure_table_entry(text, table_header, key, value):
-    if re.search(r'(?m)^' + re.escape(table_header) + r'\s*\n(?:[^\[]*\n)*' + re.escape(key) + r'\s*=', text):
-        return text
-    if table_header not in text:
+    bounds = table_body_bounds(text, table_header)
+    if bounds is None:
         return text.rstrip('\n') + '\n\n' + table_header + '\n' + key + ' = ' + value + '\n'
-    idx = text.index(table_header) + len(table_header)
-    return text[:idx] + '\n' + key + ' = ' + value + text[idx:]
+    if re.search(r'(?m)^' + re.escape(key) + r'\s*=', text[bounds[0]:bounds[1]]):
+        return text
+    prefix = text[:bounds[0]]
+    if not prefix.endswith('\n'):
+        prefix += '\n'
+    return prefix + key + ' = ' + value + '\n' + text[bounds[0]:]
+
+def has_table_header(text, header):
+    return table_body_bounds(text, header) is not None
 
 `)
 
@@ -2582,7 +2723,8 @@ content = strip_root_dotted_key(content, "features.plugin_hooks")
 content = ensure_table_entry(content, "[features]", "hooks", "true")
 content = ensure_table_entry(content, "[features]", "plugin_hooks", "true")
 
-if not re.search(r'(?m)^\[hooks\.state\]', content):
+# Qualified [hooks.state."…"] sections do not require a bare parent header.
+if not has_table_header(content, "[hooks.state]") and not re.search(r'(?m)^\[hooks\.state\.', content):
     content = content.rstrip('\n') + '\n\n[hooks.state]\n'
 
 for state_key, trusted_hash in [
@@ -2594,7 +2736,7 @@ for state_key, trusted_hash in [
 
 	b.WriteString(`]:
     section = f'[hooks.state."{state_key}"]'
-    if section not in content:
+    if not has_table_header(content, section):
         entry = f'\n{section}\nenabled = true\ntrusted_hash = "{trusted_hash}"\n'
         content = content.rstrip('\n') + '\n' + entry
     else:

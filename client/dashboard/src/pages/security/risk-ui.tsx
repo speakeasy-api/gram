@@ -17,7 +17,8 @@ import {
   useRevealAll,
   type RevealAllContextValue,
 } from "./reveal-all-context";
-import { useRBAC, type Scope } from "@/hooks/useRBAC";
+import { useRBAC } from "@/hooks/useRBAC";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 
 // Revealing a flagged secret exposes the raw value captured from agent/chat
 // traffic, so it is gated behind the same `chat:read` scope that grants access

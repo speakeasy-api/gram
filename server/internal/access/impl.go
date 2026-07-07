@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -60,6 +62,8 @@ type Service struct {
 	audit           *audit.Logger
 	jwtSecret       string
 	accessStore     accesscontrol.Store
+	emailSvc        *email.Service
+	siteURL         url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -77,6 +81,8 @@ func NewService(
 	auditLogger *audit.Logger,
 	jwtSecret string,
 	accessStore accesscontrol.Store,
+	emailSvc *email.Service,
+	siteURL url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
@@ -92,6 +98,8 @@ func NewService(
 		audit:           auditLogger,
 		jwtSecret:       jwtSecret,
 		accessStore:     accessStore,
+		emailSvc:        emailSvc,
+		siteURL:         siteURL,
 	}
 }
 

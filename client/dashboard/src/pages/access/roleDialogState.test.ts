@@ -10,7 +10,9 @@ import {
   computeRuleTooltip,
   type SaveButtonInput,
 } from "./roleDialogState";
-import type { RoleGrant, Scope, Selector } from "./types";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Selector } from "@gram/client/models/components/selector.js";
+import type { RoleGrant } from "./types";
 
 // --- Helpers ---
 

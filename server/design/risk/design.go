@@ -34,6 +34,7 @@ var _ = Service("risk", func() {
 				Example(0.75)
 			})
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
+			Attribute("approved_email_domains", ArrayOf(String), "For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty/omitted leaves the domain rule inert.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
@@ -144,6 +145,7 @@ var _ = Service("risk", func() {
 				Example(0.75)
 			})
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
+			Attribute("approved_email_domains", ArrayOf(String), "For the account_identity source: corporate email domains considered approved. Omit to preserve the current list; send an empty array to clear it.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
@@ -1259,6 +1261,184 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "test")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskTestDetectionRule", "type": "mutation"}`)
 	})
+
+	Method("evaluatePromptGuardrail", func() {
+		Description("Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation; message-type scoping and CEL scope predicates are both applied.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("chat_id", String, "The chat session to replay the guardrail against.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("prompt", String, "The guardrail prompt the LLM judge evaluates each in-scope message against.", func() {
+				MinLength(1)
+				MaxLength(10000)
+			})
+			Attribute("model_config", shared.RiskPolicyModelConfig, "Optional per-policy LLM-judge model configuration. Omit for the default judge model.")
+			Attribute("message_types", ArrayOf(String), "Message types to judge (user_message, assistant_message, tool_request, tool_response), matching a policy's message_types. When empty or omitted, judges all supported types.")
+			Attribute("scope_include", String, "CEL scope predicate: the replay judges a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.")
+			Attribute("scope_exempt", String, "CEL exemption predicate: the replay skips a message when this boolean expression is true. Omit/empty means no inline exemption.")
+			Required("chat_id", "prompt")
+		})
+
+		Result(PromptGuardrailEvalResult)
+
+		HTTP(func() {
+			POST("/rpc/riskEvals.evaluate")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "evaluatePromptGuardrail")
+		Meta("openapi:extension:x-speakeasy-group", "risk.evals")
+		Meta("openapi:extension:x-speakeasy-name-override", "evaluate")
+		// A query hook (not a mutation): the replay is idempotent and read-only,
+		// so react-query caches each (guardrail, chat) result by request — the
+		// per-guardrail-hash badge/transcript cache the workbench relies on.
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskEvaluatePromptGuardrail", "type": "query"}`)
+	})
+
+	Method("saveRiskEvalReview", func() {
+		Description("Record (or replace) the current reviewer's ground-truth verdict for one chat session under a prompt-based policy. This is the durable regression set the eval workbench scores the live guardrail against. Upserts: a reviewer has at most one verdict per session per policy.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "The prompt-based policy the verdict belongs to.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("chat_id", String, "The chat session being judged.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("verdict", String, "The reviewer's ground-truth verdict for this session.", func() {
+				shared.RiskPolicyEvalVerdictEnum()
+			})
+			Required("policy_id", "chat_id", "verdict")
+		})
+
+		Result(shared.RiskPolicyEvalReview)
+
+		HTTP(func() {
+			POST("/rpc/riskEvals.saveReview")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "saveRiskEvalReview")
+		Meta("openapi:extension:x-speakeasy-group", "risk.evals")
+		Meta("openapi:extension:x-speakeasy-name-override", "saveReview")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSaveEvalReview", "type": "mutation"}`)
+	})
+
+	Method("listRiskEvalReviews", func() {
+		Description("List the active regression set for a prompt-based policy: every reviewer's current ground-truth verdicts.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "The policy whose review set to list.", func() {
+				Format(FormatUUID)
+			})
+			Required("policy_id")
+		})
+
+		Result(ListRiskEvalReviewsResult)
+
+		HTTP(func() {
+			GET("/rpc/riskEvals.listReviews")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("policy_id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskEvalReviews")
+		Meta("openapi:extension:x-speakeasy-group", "risk.evals")
+		Meta("openapi:extension:x-speakeasy-name-override", "listReviews")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListEvalReviews", "type": "query"}`)
+	})
+
+	Method("deleteRiskEvalReview", func() {
+		Description("Remove the current reviewer's verdict for one session (the toggle-off path). A reviewer can only clear their own verdict.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "The policy the verdict belongs to.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("chat_id", String, "The chat session whose verdict to clear.", func() {
+				Format(FormatUUID)
+			})
+			Required("policy_id", "chat_id")
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/riskEvals.deleteReview")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("policy_id")
+			Param("chat_id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deleteRiskEvalReview")
+		Meta("openapi:extension:x-speakeasy-group", "risk.evals")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteReview")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskDeleteEvalReview", "type": "mutation"}`)
+	})
+})
+
+var ListRiskEvalReviewsResult = Type("ListRiskEvalReviewsResult", func() {
+	Attribute("reviews", ArrayOf(shared.RiskPolicyEvalReview), "The active review set for the policy.")
+	Required("reviews")
+})
+
+var PromptGuardrailMessageVerdict = Type("PromptGuardrailMessageVerdict", func() {
+	Description("The LLM judge's verdict for one in-scope message in the replayed session.")
+
+	Attribute("message_id", String, "The chat message ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("seq", Int64, "Message sequence within the chat generation, ascending.")
+	Attribute("message_type", String, "The judged message type (user_message, assistant_message, tool_request, tool_response).")
+	Attribute("tool_name", String, "Tool name for a single-call tool_request message; empty otherwise.")
+	Attribute("matched", Boolean, "True when the guardrail flagged this message.")
+	Attribute("confidence", Float64, "Judge confidence in [0,1]; 0 when not matched.")
+	Attribute("rationale", String, "One-sentence judge rationale; empty when not matched.")
+	Attribute("latency_ms", Int64, "Wall-clock latency for judging this message, in milliseconds.")
+	Attribute("cost_usd", Float64, "OpenRouter cost for judging this message, in USD. Zero when cost was not returned.")
+	Attribute("prompt_tokens", Int, "Prompt tokens billed for this judge call.")
+	Attribute("completion_tokens", Int, "Completion tokens billed for this judge call.")
+	Attribute("total_tokens", Int, "Total tokens billed for this judge call.")
+
+	Required("message_id", "seq", "message_type", "matched", "confidence", "rationale", "latency_ms", "cost_usd", "prompt_tokens", "completion_tokens", "total_tokens")
+})
+
+var PromptGuardrailEvalResult = Type("PromptGuardrailEvalResult", func() {
+	Description("The result of replaying a prompt guardrail against one chat session. Read-only: no findings are persisted.")
+
+	Attribute("chat_id", String, "The chat session that was replayed.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("flagged", Boolean, "True when the guardrail flagged at least one in-scope message.")
+	Attribute("judged_count", Int, "Number of in-scope messages the judge evaluated.")
+	Attribute("total_cost_usd", Float64, "Total OpenRouter cost across in-scope judge calls, in USD.")
+	Attribute("total_latency_ms", Int64, "Aggregate judge latency overhead across in-scope messages, computed as the sum of per-message judge latencies.")
+	Attribute("verdicts", ArrayOf(PromptGuardrailMessageVerdict), "Per-message verdicts for in-scope messages, ordered by seq.")
+
+	Required("chat_id", "flagged", "judged_count", "total_cost_usd", "total_latency_ms", "verdicts")
 })
 
 var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", func() {

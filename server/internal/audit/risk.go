@@ -22,6 +22,8 @@ const (
 	ActionRiskPolicyCreate               Action = "risk_policy:create"
 	ActionRiskPolicyUpdate               Action = "risk_policy:update"
 	ActionRiskPolicyDelete               Action = "risk_policy:delete"
+	ActionRiskPolicyEvalReviewDelete     Action = "risk_policy:eval_review_delete"
+	ActionRiskPolicyEvalReviewSave       Action = "risk_policy:eval_review_save"
 	ActionRiskPolicyTrigger              Action = "risk_policy:trigger"
 )
 
@@ -52,6 +54,13 @@ type RiskPolicyBypassRequestSnapshot struct {
 	DecidedAt            *string           `json:"decided_at,omitempty"`
 	CreatedAt            string            `json:"created_at"`
 	UpdatedAt            string            `json:"updated_at"`
+}
+
+type RiskPolicyEvalReviewMetadata struct {
+	ReviewID   string `json:"review_id,omitempty"`
+	ChatID     string `json:"chat_id"`
+	Verdict    string `json:"verdict,omitempty"`
+	ReviewedBy string `json:"reviewed_by"`
 }
 
 type LogRiskPolicyCreateEvent struct {
@@ -215,6 +224,57 @@ func (l *Logger) LogRiskPolicyTrigger(ctx context.Context, dbtx repo.DBTX, event
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RiskPolicyV1})
+}
+
+type LogRiskPolicyEvalReviewEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyName string
+	Metadata       *RiskPolicyEvalReviewMetadata
+}
+
+func (l *Logger) LogRiskPolicyEvalReviewSave(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyEvalReviewEvent) error {
+	return l.logRiskPolicyEvalReview(ctx, dbtx, ActionRiskPolicyEvalReviewSave, event)
+}
+
+func (l *Logger) LogRiskPolicyEvalReviewDelete(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyEvalReviewEvent) error {
+	return l.logRiskPolicyEvalReview(ctx, dbtx, ActionRiskPolicyEvalReviewDelete, event)
+}
+
+func (l *Logger) logRiskPolicyEvalReview(ctx context.Context, dbtx repo.DBTX, action Action, event LogRiskPolicyEvalReviewEvent) error {
+	metadata, err := marshalAuditPayload(event.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.RiskPolicyID.String(),
+		SubjectType:        string(subjectTypeRiskPolicy),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.RiskPolicyName),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RiskPolicyV1})

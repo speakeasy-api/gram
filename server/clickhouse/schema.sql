@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
-TTL fromUnixTimestamp64Nano(time_unix_nano) + INTERVAL 30 DAY
+TTL fromUnixTimestamp64Nano(time_unix_nano) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Unified OTel-compatible telemetry logs from all Gram sources (HTTP requests, function logs, etc.)';
 
@@ -175,7 +175,7 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     provider SimpleAggregateFunction(max, String)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
-TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
+TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated trace summaries for fast trace-level queries without needing to scan all logs';
 
@@ -278,7 +278,7 @@ CREATE TABLE IF NOT EXISTS metrics_summaries (
     tool_failure_counts AggregateFunction(sumMapIf, Map(String, UInt64), UInt8)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, time_bucket)
-TTL time_bucket + INTERVAL 30 DAY
+TTL time_bucket + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated metrics summaries for fast dashboard reads without scanning all telemetry logs';
 
@@ -429,7 +429,7 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
 -- primary key is not supported").
 PRIMARY KEY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups)
 ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name)
-TTL time_bucket + INTERVAL 30 DAY
+TTL time_bucket + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated cost/token/usage metrics broken down by user-identity and request dimensions, powering the generic telemetry.query analytics endpoint.';
 
@@ -595,7 +595,7 @@ CREATE TABLE IF NOT EXISTS attribute_keys (
     last_seen_unix_nano SimpleAggregateFunction(max, Int64)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, attribute_key)
-TTL fromUnixTimestamp64Nano(last_seen_unix_nano) + INTERVAL 30 DAY
+TTL fromUnixTimestamp64Nano(last_seen_unix_nano) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated attribute keys per project for fast key listing without scanning telemetry_logs JSON';
 

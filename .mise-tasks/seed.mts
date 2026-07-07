@@ -339,6 +339,13 @@ async function seed() {
       projectId: firstProject.id,
       organizationId: activeOrgID,
     });
+    // Non-corporate account risk policy + findings over the personal-account
+    // chats seeded just above. Runs last so seedRiskFindings' blanket
+    // risk_results reset can't wipe these events.
+    await seedNonCorporateAccountFindings({
+      projectId: firstProject.id,
+      organizationId: activeOrgID,
+    });
   }
 
   // Give the local dev user the "see all org sessions" admin view that the
@@ -1536,6 +1543,9 @@ function generateChatUUID(chatNumber: number): string {
 // can't collide on a global primary key and silently skip policy creation.
 const SEED_RISK_POLICY_NAME = "Seeded Detection Policy";
 
+// Same reset-by-name convention for the seeded account_identity policy.
+const SEED_NONCORP_POLICY_NAME = "Seeded Non-Corporate Account Policy";
+
 // Risk-finding catalog spanning every detection source the dashboard knows
 // about. The raw `source` (gitleaks/presidio/...) is what the insights
 // assistant groups by, while `rule_id` drives the customer-facing category
@@ -1813,6 +1823,121 @@ async function seedRiskFindings(init: {
   }
 }
 
+// Inserts an account_identity ("Non-Corporate Accounts") policy plus the risk
+// events it would produce over the personal-account chats seeded by
+// seedPersonalAccounts. Mirrors the scanner's real semantics: findings are
+// session-scoped (one per chat per rule, attached to the chat's first
+// message), the match column carries the account email verbatim (the
+// account_identity redaction carve-out), and the unapproved-domain rule fires
+// only for emails outside the policy's approved_email_domains list. Must run
+// AFTER seedRiskFindings (whose idempotent reset blanket-deletes the
+// project's risk_results) and AFTER seedPersonalAccounts (which creates the
+// account-linked chats these findings attach to).
+async function seedNonCorporateAccountFindings(init: {
+  projectId: string;
+  organizationId: string;
+}): Promise<void> {
+  const { projectId, organizationId } = init;
+
+  // The org's corporate domain. Every seeded team account is @speakeasy.com,
+  // so exactly the personal (gmail/outlook) accounts trip the domain rule.
+  const APPROVED_DOMAIN = "speakeasy.com";
+
+  const pgSQL = `
+    BEGIN;
+    -- Idempotent reset scoped to this policy only: the blanket risk_results
+    -- wipe already happened in seedRiskFindings earlier in the run, but a
+    -- targeted delete keeps this function safe to re-run on its own.
+    DELETE FROM risk_results
+    WHERE project_id = '${projectId}'
+      AND risk_policy_id IN (
+        SELECT id FROM risk_policies
+        WHERE project_id = '${projectId}' AND name = '${SEED_NONCORP_POLICY_NAME}'
+      );
+    DELETE FROM risk_policies
+    WHERE project_id = '${projectId}' AND name = '${SEED_NONCORP_POLICY_NAME}';
+
+    WITH pol AS (
+      INSERT INTO risk_policies (
+        project_id, organization_id, name, policy_type, sources,
+        analyzer_config, enabled, action, version
+      ) VALUES (
+        '${projectId}', '${organizationId}', '${SEED_NONCORP_POLICY_NAME}', 'standard',
+        ARRAY['account_identity'],
+        '{"account_identity":{"approved_email_domains":["${APPROVED_DOMAIN}"]}}'::jsonb,
+        TRUE, 'flag', 1
+      )
+      RETURNING id
+    ),
+    -- One row per personal-account chat: the account email plus the chat's
+    -- first message, which is where the scanner attaches its session-scoped
+    -- finding.
+    personal_chats AS (
+      SELECT
+        ua.email,
+        ROW_NUMBER() OVER (ORDER BY c.created_at, c.id) AS rn,
+        (
+          SELECT cm.id FROM chat_messages cm
+          WHERE cm.chat_id = c.id
+          ORDER BY cm.created_at ASC, cm.id ASC
+          LIMIT 1
+        ) AS first_message_id
+      FROM chats c
+      JOIN user_accounts ua ON ua.id = c.user_account_id
+      WHERE c.project_id = '${projectId}'
+        AND ua.account_type = 'personal'
+        AND c.deleted IS FALSE
+        AND ua.deleted IS FALSE
+    )
+    INSERT INTO risk_results (
+      project_id, organization_id, risk_policy_id, risk_policy_version,
+      chat_message_id, source, found, rule_id, description, match, confidence, created_at
+    )
+    SELECT
+      '${projectId}', '${organizationId}', pol.id, 1,
+      pc.first_message_id, 'account_identity', TRUE, r.rule_id,
+      CASE r.rule_id
+        WHEN 'identity.personal_account'
+          THEN 'Session authenticated with the personal AI account "' || pc.email || '".'
+        ELSE 'Session authenticated with the AI account "' || pc.email || '", whose email domain is not on the approved corporate domain list.'
+      END,
+      pc.email, 1.0,
+      -- Spread across the last 6 days so Risk Overview trends and the default
+      -- Risk Events window both have data.
+      now() - ((pc.rn % 6) || ' days')::interval - ((pc.rn % 23) || ' hours')::interval
+    FROM personal_chats pc
+    CROSS JOIN pol
+    CROSS JOIN (VALUES ('identity.personal_account'), ('identity.unapproved_domain')) AS r(rule_id)
+    WHERE pc.first_message_id IS NOT NULL
+      AND (
+        r.rule_id = 'identity.personal_account'
+        OR split_part(pc.email, '@', 2) <> '${APPROVED_DOMAIN}'
+      );
+    COMMIT;
+  `;
+
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    const tmpFile = path.join(process.cwd(), ".seed-noncorp-risk.sql");
+    await fs.writeFile(tmpFile, pgSQL, "utf-8");
+    try {
+      await $`docker compose cp ${tmpFile} gram-db:/tmp/seed-noncorp-risk.sql`.quiet();
+      await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f /tmp/seed-noncorp-risk.sql`.quiet();
+      log.info(
+        `Seeded the "${SEED_NONCORP_POLICY_NAME}" (account_identity) policy with per-session findings over the personal-account chats`,
+      );
+    } finally {
+      await fs.unlink(tmpFile).catch(() => {});
+    }
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    log.warn(
+      `Failed to seed non-corporate account findings: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
+}
+
 // enableRBACForDevUser turns on RBAC for the org and grants the local dev user
 // the admin scope set plus chat:read. The Agent Sessions page only shows every
 // member's sessions to a caller holding an unrestricted chat:read grant under
@@ -1830,15 +1955,28 @@ async function enableRBACForDevUser(init: {
   const { sessionId, organizationId, userId, gram } = init;
   log.info("Enabling RBAC + granting dev user full session visibility...");
 
+  // EnableRBAC is gated by requirePlatformAdmin (access/impl.go): the caller
+  // must have a @speakeasy.com/@speakeasyapi.dev email OR the users.admin flag.
+  // Locally the dev user's email is neither (e.g. a personal gmail address) and
+  // admin defaults to false, so the call 403s. Promote the dev user to admin in
+  // the DB first so the platform-admin check passes. Idempotent.
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -c ${`UPDATE users SET admin = TRUE WHERE id = '${userId.replace(/'/g, "''")}';`}`.quiet();
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    abort(
+      `Failed to promote dev user to admin: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
+
   // EnableRBAC seeds the built-in system roles and flips the org feature flag.
-  // The dev user is a Speakeasy super-admin (email-gated), so this is allowed
-  // even before any grants exist.
   const res = await accessEnableRBAC(gram, undefined, {
     sessionHeaderGramSession: sessionId,
   });
   if (!res.ok) {
-    log.warn(`Failed to enable RBAC: ${JSON.stringify(res.error)}`);
-    return;
+    abort("Failed to enable RBAC", res.error);
   }
 
   // The admin system role intentionally omits chat:read, and the dev user has
@@ -1887,7 +2025,7 @@ async function enableRBACForDevUser(init: {
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
-    log.warn(
+    abort(
       `Failed to grant dev user RBAC scopes: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
     );
   }

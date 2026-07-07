@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -581,6 +583,132 @@ func TestGenerateCodexMCPConfigUsesEnvHTTPHeadersForPublicServers(t *testing.T) 
 	require.Empty(t, server.HTTPHeaders, "public servers should not bake Authorization")
 }
 
+// Codex validates .mcp.json server names against ^[a-zA-Z0-9_-]+$ at MCP
+// client startup, so human display names must be sanitized into valid keys.
+func TestGenerateCodexMCPServerNamesSanitized(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "Team Slack", MCPURL: "https://app.getgram.ai/mcp/team-slack"},
+				{DisplayName: "Slack (Remote)", MCPURL: "https://app.getgram.ai/mcp/slack-remote"},
+				{DisplayName: "already_valid-1", MCPURL: "https://app.getgram.ai/mcp/valid"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+	require.Len(t, mcpConfig.MCPServers, 3)
+
+	codexNamePattern := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+	for name := range mcpConfig.MCPServers {
+		require.Regexp(t, codexNamePattern, name, "Codex rejects MCP server names outside its allowed pattern")
+	}
+
+	require.Equal(t, "https://app.getgram.ai/mcp/team-slack", mcpConfig.MCPServers["Team_Slack"].URL)
+	require.Equal(t, "https://app.getgram.ai/mcp/slack-remote", mcpConfig.MCPServers["Slack_Remote"].URL)
+	require.Equal(t, "https://app.getgram.ai/mcp/valid", mcpConfig.MCPServers["already_valid-1"].URL, "already-valid names must pass through unchanged")
+}
+
+// Display names that differ only in punctuation sanitize to the same key;
+// later servers must get a numeric suffix instead of overwriting earlier ones.
+func TestGenerateCodexMCPServerNameCollisionsDeduped(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "Notes App", MCPURL: "https://app.getgram.ai/mcp/notes-one"},
+				{DisplayName: "Notes (App)", MCPURL: "https://app.getgram.ai/mcp/notes-two"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+	require.Len(t, mcpConfig.MCPServers, 2, "colliding names must not overwrite each other")
+
+	require.Equal(t, "https://app.getgram.ai/mcp/notes-one", mcpConfig.MCPServers["Notes_App"].URL)
+	require.Equal(t, "https://app.getgram.ai/mcp/notes-two", mcpConfig.MCPServers["Notes_App_2"].URL)
+}
+
+// An already-valid display name must keep its exact key even when an
+// earlier-sorted invalid name sanitizes to the same key — the invalid name
+// takes the suffix, not the valid one.
+func TestGenerateCodexMCPServerValidNamesReservedOverSanitized(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "Team Slack", MCPURL: "https://app.getgram.ai/mcp/spaced"},
+				{DisplayName: "Team_Slack", MCPURL: "https://app.getgram.ai/mcp/literal"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+	require.Len(t, mcpConfig.MCPServers, 2)
+
+	require.Equal(t, "https://app.getgram.ai/mcp/literal", mcpConfig.MCPServers["Team_Slack"].URL, "valid name must keep its exact key")
+	require.Equal(t, "https://app.getgram.ai/mcp/spaced", mcpConfig.MCPServers["Team_Slack_2"].URL, "sanitized name takes the suffix")
+}
+
+// Collision renames are bounded (_2 through _6); servers beyond that are
+// dropped instead of overwriting an earlier entry.
+func TestGenerateCodexMCPServerRenameAttemptsBounded(t *testing.T) {
+	t.Parallel()
+	servers := make([]PluginServerInfo, 8)
+	for i := range servers {
+		servers[i] = PluginServerInfo{
+			DisplayName: "Dup Server",
+			MCPURL:      fmt.Sprintf("https://app.getgram.ai/mcp/dup-%d", i),
+		}
+	}
+	plugins := []PluginInfo{{Name: "Test", Slug: "test", Servers: servers}}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	require.Len(t, mcpConfig.MCPServers, 6, "base key plus renames _2.._6, remaining collisions dropped")
+	require.Equal(t, "https://app.getgram.ai/mcp/dup-0", mcpConfig.MCPServers["Dup_Server"].URL)
+	require.Equal(t, "https://app.getgram.ai/mcp/dup-5", mcpConfig.MCPServers["Dup_Server_6"].URL)
+}
+
 // TestCodexJSONKeysMatchPinnedSchema asserts the literal JSON key casing in
 // Codex output against the openai/codex source pinned in generate.go. Keys
 // are inspected on the raw JSON bytes (not a round-trip through our own
@@ -1045,7 +1173,9 @@ printf '{}\n401'
 	var exitErr *exec.ExitError
 	require.ErrorAs(t, err, &exitErr, "rejected env credentials must block even before first browser login")
 	require.Equal(t, 2, exitErr.ExitCode(), freshErr.String())
-	require.Contains(t, freshErr.String(), "401")
+	require.Contains(t, freshErr.String(), "GRAM_HOOKS_API_KEY")
+	require.Contains(t, freshErr.String(), "Update or unset GRAM_HOOKS_API_KEY")
+	require.Contains(t, freshErr.String(), "hooks/login.sh")
 	posts := strings.Count(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
 	require.Equal(t, 1, posts, "rejected env credentials must not trigger the cache-relogin retry")
 
@@ -1060,7 +1190,221 @@ printf '{}\n401'
 	err = cached.Run()
 	require.ErrorAs(t, err, &exitErr, cachedErr.String())
 	require.Equal(t, 2, exitErr.ExitCode(), cachedErr.String())
+	require.Contains(t, cachedErr.String(), "GRAM_HOOKS_API_KEY")
 	require.FileExists(t, authFile, "env credential rejection must not wipe the cached browser login")
+}
+
+func TestRenderHookScriptClaudeIgnoresGenericGramAPIKeyForHooksAuth(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "requests.txt")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_REQUESTS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
+printf '{}\n200'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_cached_hooks_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+		"GRAM_API_KEY=gram_unrelated_mcp_key",
+		"GRAM_PROJECT_SLUG=wrong-project",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-generic-key","tool_name":"Bash"}`)
+	cmd.Env = env
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), stderr.String())
+	requests := string(requireFileBytes(t, capturePath))
+	require.Contains(t, requests, "Gram-Key: gram_cached_hooks_key")
+	require.Contains(t, requests, "Gram-Project: acme-prod")
+	require.NotContains(t, requests, "gram_unrelated_mcp_key")
+	require.NotContains(t, requests, "wrong-project")
+}
+
+// TestRenderHookScriptClaudeRejectedCachedKeyClearsAuthAndNudgesLogin covers
+// the stale browser-login cache path: if Gram rejects the cached hooks key, the
+// hook clears that key and falls back to the unauthenticated login nudge instead
+// of repeatedly blocking UserPromptSubmit with the stale token.
+func TestRenderHookScriptClaudeRejectedCachedKeyClearsAuthAndNudgesLogin(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "requests.txt")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_REQUESTS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
+printf '{"message":"unauthorized: api_key not found"}\n401'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_stale_cached_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+		"GRAM_API_KEY=gram_unrelated_mcp_key",
+		"GRAM_PROJECT_SLUG=wrong-project",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-stale-cache","prompt":"hi"}`)
+	cmd.Env = env
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), "stale cached key should fail open with login nudge: %s", stderr.String())
+	require.Contains(t, stdout.String(), `"additionalContext"`)
+	require.Contains(t, stdout.String(), "login.sh")
+	require.NoFileExists(t, authFile, "rejected cached key must be cleared")
+	require.FileExists(t, authFile+".established", "clearing a rejected key must preserve the fail-closed ratchet marker")
+	require.FileExists(t, authFile+".reauth-needed", "clearing a rejected key must remember that prompt submits should keep nudging reconnect")
+	requests := string(requireFileBytes(t, capturePath))
+	require.Contains(t, requests, "Gram-Key: gram_stale_cached_key")
+	require.Contains(t, requests, "/rpc/hooks.ingest")
+	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"), "noninteractive stale-cache recovery should not retry with the same rejected key")
+
+	repeat := exec.Command("bash", hookPath)
+	repeat.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-stale-cache-repeat","prompt":"again"}`)
+	repeat.Env = env
+	var repeatOut, repeatErr bytes.Buffer
+	repeat.Stdout = &repeatOut
+	repeat.Stderr = &repeatErr
+	require.NoError(t, repeat.Run(), "reauth-needed prompt submits should keep nudging login after the stale cache is gone: %s", repeatErr.String())
+	require.Contains(t, repeatOut.String(), `"additionalContext"`)
+	require.Contains(t, repeatOut.String(), "login.sh")
+	requests = string(requireFileBytes(t, capturePath))
+	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"), "reauth-needed prompt submit must not send an unauthenticated request")
+}
+
+// TestRenderHookScriptClaudeRejectedCachedKeyStillBlocksToolUse verifies that
+// stale-cache recovery is not a general bypass: after clearing the rejected
+// cached token, blocking non-prompt events still fail closed.
+func TestRenderHookScriptClaudeRejectedCachedKeyStillBlocksToolUse(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "requests.txt")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_REQUESTS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
+printf '{"message":"unauthorized: api_key not found"}\n401'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_stale_cached_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+		"GRAM_API_KEY=gram_unrelated_mcp_key",
+		"GRAM_PROJECT_SLUG=wrong-project",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-stale-cache-tool","tool_name":"Bash"}`)
+	cmd.Env = env
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "stale cached key should still block tool-use events")
+	require.Equal(t, 2, exitErr.ExitCode(), stderr.String())
+	require.Contains(t, stderr.String(), "unauthorized: api_key not found")
+	require.NoFileExists(t, authFile, "rejected cached key must be cleared")
+	require.FileExists(t, authFile+".reauth-needed", "clearing a rejected key must remember that reconnect is required")
+	requests := string(requireFileBytes(t, capturePath))
+	require.Contains(t, requests, "Gram-Key: gram_stale_cached_key")
+	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"), "noninteractive stale-cache recovery should not retry with the same rejected key")
+
+	repeat := exec.Command("bash", hookPath)
+	repeat.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-stale-cache-tool-repeat","tool_name":"Bash"}`)
+	repeat.Env = env
+	stderr.Reset()
+	repeat.Stderr = &stderr
+	err = repeat.Run()
+	require.ErrorAs(t, err, &exitErr, "reauth-needed tool-use events must still fail closed")
+	require.Equal(t, 2, exitErr.ExitCode(), stderr.String())
+	require.Contains(t, stderr.String(), "need to reconnect")
+	requests = string(requireFileBytes(t, capturePath))
+	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"), "reauth-needed tool-use event must not send an unauthenticated request")
 }
 
 // TestRenderHookScriptClaudeInsecureServerURLRatchet verifies that a
@@ -2388,6 +2732,159 @@ gram_hooks_build_canonical_payload "$res" "test-host"
 	require.Equal(t, reqBID, resBID, "second completion must pop the second request's id")
 }
 
+// TestRenderHookPayloadNormalizationCodexSkillHeuristic covers the best-effort
+// Codex skill detection. Codex has no Skill tool: implicit activations surface
+// as a reader tool opening skills/<name>/SKILL.md, and explicit $skill-name
+// prompt mentions are expanded internally without any tool call. Both must
+// attach data.skill while keeping the event's true type on the wire — a
+// reclassified event would skip the server's tool/prompt policy scan.
+func TestRenderHookPayloadNormalizationCodexSkillHeuristic(t *testing.T) {
+	t.Parallel()
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to run generated hook snippets")
+
+	dir := t.TempDir()
+	homeDir := filepath.Join(dir, "home")
+	repoDir := filepath.Join(dir, "repo")
+	cwd := filepath.Join(repoDir, "nested", "sub")
+	codexHome := filepath.Join(dir, "codex-home")
+	require.NoError(t, os.MkdirAll(filepath.Join(homeDir, ".agents", "skills", "home-skill"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(repoDir, ".agents", "skills", "repo-skill"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(codexHome, "skills", ".system", "sys-skill"), 0o755))
+	require.NoError(t, os.MkdirAll(cwd, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(homeDir, ".agents", "skills", "home-skill", "SKILL.md"), []byte("# home"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, ".agents", "skills", "repo-skill", "SKILL.md"), []byte("# repo"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(codexHome, "skills", ".system", "sys-skill", "SKILL.md"), []byte("# sys"), 0o644))
+
+	scriptPath := filepath.Join(dir, "normalize.sh")
+	script := renderHookPayloadNormalizationSnippet("codex") + fmt.Sprintf(`
+read_req='{"hook_event_name":"PreToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"sed -n 1,240p %[1]s/.agents/skills/repo-skill/SKILL.md"},"tool_use_id":"call_1"}'
+read_res='{"hook_event_name":"PostToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"sed -n 1,240p %[1]s/.agents/skills/repo-skill/SKILL.md"},"tool_response":{"output":"ok"},"tool_use_id":"call_1"}'
+perm_req='{"hook_event_name":"PermissionRequest","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"cat %[1]s/.agents/skills/repo-skill/SKILL.md"},"permission_type":"exec"}'
+patch_req='{"hook_event_name":"PreToolUse","session_id":"sess-skill","tool_name":"apply_patch","tool_input":{"changes":"%[1]s/.agents/skills/repo-skill/SKILL.md"},"tool_use_id":"call_2"}'
+prompt_hit='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"Check $HOME then use $home-skill please","cwd":"%[2]s"}'
+prompt_walk='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $repo-skill","cwd":"%[2]s"}'
+prompt_miss='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"pay $50 to $unknown-skill","cwd":"%[2]s"}'
+prompt_punct='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"please use $home-skill.","cwd":"%[2]s"}'
+prompt_relcwd='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $repo-skill","cwd":"nested/sub"}'
+prompt_system='{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $sys-skill","cwd":"%[2]s"}'
+read_system='{"hook_event_name":"PreToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"cat /opt/codex/skills/.system/imagegen/SKILL.md"},"tool_use_id":"call_3"}'
+gram_hooks_build_canonical_payload "$read_req" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$read_res" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$perm_req" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$patch_req" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$prompt_hit" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$prompt_walk" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$prompt_miss" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$prompt_punct" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$prompt_relcwd" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$prompt_system" "test-host"
+printf '\n---GRAM---\n'
+gram_hooks_build_canonical_payload "$read_system" "test-host"
+`, repoDir, cwd)
+	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
+
+	cmd := exec.Command(bashPath, scriptPath)
+	cmd.Env = append(os.Environ(), "HOME="+homeDir, "CODEX_HOME="+codexHome, "XDG_STATE_HOME="+filepath.Join(dir, "state"))
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	chunks := strings.Split(string(output), "\n---GRAM---\n")
+	require.Len(t, chunks, 11)
+
+	parse := func(raw string) (eventType string, skillName string) {
+		var parsed map[string]any
+		require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(raw)), &parsed))
+		eventType, _ = requireMapValue(t, parsed, "event")["type"].(string)
+		data, _ := parsed["data"].(map[string]any)
+		if skill, ok := data["skill"].(map[string]any); ok {
+			skillName, _ = skill["name"].(string)
+		}
+		return eventType, skillName
+	}
+
+	eventType, skill := parse(chunks[0])
+	require.Equal(t, "tool.requested", eventType, "a detected skill read must keep its true event type")
+	require.Equal(t, "repo-skill", skill, "SKILL.md path in a reader tool input must resolve the skill name")
+
+	eventType, skill = parse(chunks[1])
+	require.Equal(t, "tool.completed", eventType)
+	require.Empty(t, skill, "completions must not re-report the activation")
+
+	eventType, skill = parse(chunks[2])
+	require.Equal(t, "tool.requested", eventType)
+	require.Empty(t, skill, "permission previews may be denied and must not count as activations")
+
+	eventType, skill = parse(chunks[3])
+	require.Equal(t, "tool.requested", eventType)
+	require.Empty(t, skill, "editing a SKILL.md is not an activation")
+
+	eventType, skill = parse(chunks[4])
+	require.Equal(t, "prompt.submitted", eventType, "a skill mention must keep the prompt event type")
+	require.Equal(t, "home-skill", skill, "$name mentions must resolve against $HOME/.agents/skills")
+
+	eventType, skill = parse(chunks[5])
+	require.Equal(t, "prompt.submitted", eventType)
+	require.Equal(t, "repo-skill", skill, "$name mentions must resolve by walking up from the session cwd")
+
+	eventType, skill = parse(chunks[6])
+	require.Equal(t, "prompt.submitted", eventType)
+	require.Empty(t, skill, "$ tokens that resolve to no skill directory must be ignored")
+
+	eventType, skill = parse(chunks[7])
+	require.Equal(t, "prompt.submitted", eventType)
+	require.Equal(t, "home-skill", skill, "sentence-final punctuation must not defeat a mention")
+
+	eventType, skill = parse(chunks[8])
+	require.Equal(t, "prompt.submitted", eventType)
+	require.Empty(t, skill, "a relative cwd must terminate the walk without matching")
+
+	eventType, skill = parse(chunks[9])
+	require.Equal(t, "prompt.submitted", eventType)
+	require.Equal(t, "sys-skill", skill, "bundled skills under a .system subdirectory must resolve by bare name")
+
+	eventType, skill = parse(chunks[10])
+	require.Equal(t, "tool.requested", eventType)
+	require.Equal(t, "imagegen", skill, "reads of .system skill paths must infer the bare skill name")
+}
+
+// TestRenderHookPayloadNormalizationClaudeSkillStillReclassifies pins the
+// Claude behavior the codex guard must not disturb: the dedicated Skill tool
+// is a benign meta-tool, so its events keep being reclassified to
+// skill.activated on the wire.
+func TestRenderHookPayloadNormalizationClaudeSkillStillReclassifies(t *testing.T) {
+	t.Parallel()
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to run generated hook snippets")
+
+	scriptPath := filepath.Join(t.TempDir(), "normalize.sh")
+	script := renderHookPayloadNormalizationSnippet("claude") + `
+payload='{"hook_event_name":"PreToolUse","session_id":"sess-claude-skill","tool_name":"Skill","tool_input":{"skill":"pdf-tools"},"tool_use_id":"toolu_1"}'
+gram_hooks_build_canonical_payload "$payload" "test-host"
+`
+	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
+
+	output, err := exec.Command(bashPath, scriptPath).CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(string(output))), &parsed))
+	require.Equal(t, "skill.activated", requireMapValue(t, parsed, "event")["type"])
+	skill := requireMapValue(t, requireMapValue(t, parsed, "data"), "skill")
+	require.Equal(t, "pdf-tools", skill["name"])
+}
+
 // TestRenderHookPayloadNormalizationCodexMCPExactServerNameWins pins the codex
 // MCP config lookup semantics when server names collide after sanitizing: an
 // exact name match must win, and without one a sanitized match only resolves
@@ -3215,11 +3712,6 @@ func TestComputeCodexHookApprovalsIncludesSessionStartPreflight(t *testing.T) {
 func runCodexInstallScript(t *testing.T, script []byte, existingConfig string) (home string, callLog string) {
 	t.Helper()
 
-	bashPath, err := exec.LookPath("bash")
-	require.NoError(t, err, "bash is required to run the generated install script")
-	pythonPath, err := exec.LookPath("python3")
-	require.NoError(t, err, "python3 is required by the generated install script")
-
 	home = t.TempDir()
 	callLog = filepath.Join(home, "codex-calls.log")
 	stub := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"" + callLog + "\"\n"
@@ -3231,6 +3723,19 @@ func runCodexInstallScript(t *testing.T, script []byte, existingConfig string) (
 		require.NoError(t, os.WriteFile(filepath.Join(home, ".codex", "config.toml"), []byte(existingConfig), 0o644))
 	}
 
+	execCodexInstallScript(t, script, home)
+
+	return home, callLog
+}
+
+func execCodexInstallScript(t *testing.T, script []byte, home string) {
+	t.Helper()
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to run the generated install script")
+	pythonPath, err := exec.LookPath("python3")
+	require.NoError(t, err, "python3 is required by the generated install script")
+
 	scriptPath := filepath.Join(t.TempDir(), "install.sh")
 	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
 
@@ -3241,8 +3746,47 @@ func runCodexInstallScript(t *testing.T, script []byte, existingConfig string) (
 	}
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "install script failed: %s", out)
+}
 
-	return home, callLog
+func seededCodexInstallConfig(plugin, marketplace string, approvals []codexHookApproval) string {
+	var b strings.Builder
+	b.WriteString("[features]\nhooks = true\nplugin_hooks = true\njs_repl = true\n\n")
+	b.WriteString("[hooks.state]\n\n")
+	for _, approval := range approvals {
+		fmt.Fprintf(&b, "[hooks.state.%q]\nenabled = true\ntrusted_hash = %q\n\n", approval.StateKey, approval.TrustedHash)
+	}
+	fmt.Fprintf(&b, "[plugins.%q]\nenabled = true\n", plugin+"@"+marketplace)
+	return b.String()
+}
+
+func runCodexInstallScriptTimes(t *testing.T, script []byte, existingConfig string, times int) string {
+	t.Helper()
+	require.Positive(t, times)
+
+	home, _ := runCodexInstallScript(t, script, existingConfig)
+	for range times - 1 {
+		execCodexInstallScript(t, script, home)
+	}
+
+	return string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+}
+
+func countTableHeaderLines(config, header string) int {
+	pattern := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(header) + `(?:\s*(?:#.*)?)?\s*$`)
+	return len(pattern.FindAllStringIndex(config, -1))
+}
+
+func countTableKeyLines(config, tableHeader, key string) int {
+	bounds := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(tableHeader) + `(?:\s*(?:#.*)?)?\n`).FindStringIndex(config)
+	if bounds == nil {
+		return 0
+	}
+	body := config[bounds[1]:]
+	if next := regexp.MustCompile(`(?m)^\[`).FindStringIndex(body); next != nil {
+		body = body[:next[0]]
+	}
+	pattern := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(key) + `\s*=`)
+	return len(pattern.FindAllStringIndex(body, -1))
 }
 
 func TestGenerateCodexObservabilityPluginScriptEnrichesMCPMetadataOnDemand(t *testing.T) {
@@ -3434,6 +3978,71 @@ func TestGenerateCodexInstallScriptCreatesFeaturesTable(t *testing.T) {
 	require.Equal(t, 1, strings.Count(patched, "[features]"))
 	require.Equal(t, 1, strings.Count(patched, "\nhooks = true"))
 	require.Equal(t, 1, strings.Count(patched, "\nplugin_hooks = true"))
+}
+
+// Running install.sh twice against a config that already contains every entry
+// the script writes must not duplicate TOML keys — duplicate keys make Codex
+// refuse to load config.toml entirely.
+func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
+	plugin := CodexObservabilitySlug(cfg)
+
+	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	require.NoError(t, err)
+	require.NotEmpty(t, approvals)
+
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	seeded := seededCodexInstallConfig(plugin, marketplace, approvals)
+	patched := runCodexInstallScriptTimes(t, script, seeded, 2)
+
+	var decoded map[string]any
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err, "patched config.toml must remain valid TOML without duplicate keys")
+
+	require.Equal(t, 1, countTableHeaderLines(patched, "[features]"))
+	require.Equal(t, 1, countTableKeyLines(patched, "[features]", "hooks"))
+	require.Equal(t, 1, countTableKeyLines(patched, "[features]", "plugin_hooks"))
+	require.Equal(t, 1, countTableHeaderLines(patched, "[hooks.state]"))
+	require.Equal(t, 1, countTableHeaderLines(patched, fmt.Sprintf(`[plugins."%s@%s"]`, plugin, marketplace)))
+	require.Equal(t, 1, countTableKeyLines(patched, fmt.Sprintf(`[plugins."%s@%s"]`, plugin, marketplace), "enabled"))
+
+	for _, approval := range approvals {
+		section := fmt.Sprintf(`[hooks.state."%s"]`, approval.StateKey)
+		require.Equal(t, 1, countTableHeaderLines(patched, section), "hook approval section %q must appear exactly once", section)
+		require.Equal(t, 1, countTableKeyLines(patched, section, "enabled"))
+		require.Equal(t, 1, countTableKeyLines(patched, section, "trusted_hash"))
+		require.Contains(t, patched, approval.TrustedHash)
+	}
+
+	require.Contains(t, patched, "js_repl = true", "pre-existing table entries must be preserved")
+}
+
+// A table header sitting at EOF without a trailing newline is still an
+// existing table — the script must insert its entries under that header
+// instead of appending a duplicate one, which would make Codex refuse to
+// load config.toml entirely.
+func TestGenerateCodexInstallScriptReusesTableHeaderAtEOFWithoutNewline(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	patched := runCodexInstallScriptTimes(t, script, "js_repl = true\n\n[features]", 2)
+
+	var decoded map[string]any
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err, "patched config.toml must remain valid TOML without duplicate tables")
+
+	require.Equal(t, 1, countTableHeaderLines(patched, "[features]"))
+	require.Equal(t, 1, countTableKeyLines(patched, "[features]", "hooks"))
+	require.Equal(t, 1, countTableKeyLines(patched, "[features]", "plugin_hooks"))
+	require.Contains(t, patched, "js_repl = true", "pre-existing root-level entries must be preserved")
 }
 
 func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {

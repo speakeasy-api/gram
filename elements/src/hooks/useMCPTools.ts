@@ -108,7 +108,16 @@ export function useMCPTools({
         serverEntries.map(async ({ server, headers }) => {
           const client = await createMCPClient({
             name: "gram-elements-mcp-client",
-            transport: { type: "http", url: server.url, headers },
+            transport: {
+              type: "http",
+              url: server.url,
+              headers,
+              // @ai-sdk/mcp stores this on the transport instance and calls it
+              // as `this.fetchFn(...)`; handing it bare `window.fetch` throws
+              // "Illegal invocation" in browsers, so bind it via a wrapper.
+              fetch: (...args: Parameters<typeof fetch>) =>
+                globalThis.fetch(...args),
+            },
           });
           return { server, tools: await client.tools() };
         }),

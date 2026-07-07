@@ -17,7 +17,7 @@ import {
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { History, RefreshCw, Share2 } from "lucide-react";
+import { History, Share2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -211,30 +211,7 @@ export default function RiskEvents(): JSX.Element {
         title="Risk Events"
         stage="beta"
         description="Review policy findings across recent analyzed chats."
-        actions={
-          <div className="flex items-center gap-2">
-            <RevealAllToggle />
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                void resultsQuery.refetch();
-              }}
-              disabled={resultsQuery.isFetching}
-              aria-label="Refresh risk events"
-            >
-              <Button.LeftIcon>
-                <RefreshCw
-                  className={cn(
-                    "h-4 w-4",
-                    resultsQuery.isFetching && "animate-spin",
-                  )}
-                />
-              </Button.LeftIcon>
-              <Button.Text>Refresh</Button.Text>
-            </Button>
-          </div>
-        }
+        actions={<RevealAllToggle />}
         filters={
           <Page.Toolbar>
             <Page.Toolbar.Filters
@@ -244,6 +221,10 @@ export default function RiskEvents(): JSX.Element {
               onChange={setValue as (id: string, value: FilterValue) => void}
               onClear={clearValue as (id: string) => void}
               onClearAll={clearAll}
+            />
+            <Page.Toolbar.Refresh
+              onRefresh={() => void resultsQuery.refetch()}
+              isRefreshing={resultsQuery.isFetching}
             />
           </Page.Toolbar>
         }
@@ -313,7 +294,7 @@ function InactivePolicyNotice({
   policyName: string | undefined;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-8 py-2 text-sm text-amber-700 dark:text-amber-400">
+    <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-5 py-2 text-sm text-amber-700 dark:text-amber-400">
       <History className="size-4 shrink-0" />
       <span>
         {policyName ? (
@@ -335,7 +316,7 @@ function RiskEventsHeader() {
     <div
       className={cn(
         RISK_EVENTS_GRID,
-        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-8 py-2.5 text-xs font-medium tracking-wide uppercase",
+        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase",
       )}
     >
       <div className="min-w-0">Timestamp</div>
@@ -475,7 +456,7 @@ function RiskEventsRow({
       tabIndex={result.chatId ? 0 : undefined}
       className={cn(
         RISK_EVENTS_GRID,
-        "hover:bg-muted/30 w-full items-center border-b px-8 py-3 text-left text-sm transition-colors",
+        "hover:bg-muted/30 w-full items-center border-b px-5 py-3 text-left text-sm transition-colors",
         !result.chatId && "cursor-default",
       )}
       onClick={() => {
@@ -551,7 +532,7 @@ function RiskEventsFooter({
   onLoadMore: () => void;
 }) {
   return (
-    <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center justify-between gap-4 border-t px-8 py-3 text-sm">
+    <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center justify-between gap-4 border-t px-5 py-3 text-sm">
       <span>
         Showing {count.toLocaleString()} of {totalCount.toLocaleString()}{" "}
         {totalCount === 1 ? "finding" : "findings"}

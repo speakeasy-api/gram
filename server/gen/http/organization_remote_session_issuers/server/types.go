@@ -395,9 +395,10 @@ type ListClientsResponseBody struct {
 type GetClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level clients.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
@@ -459,9 +460,10 @@ type ListClientSessionsResponseBody struct {
 type CreateClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level clients.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
@@ -497,9 +499,10 @@ type CreateClientResponseBody struct {
 type CreateCimdClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level clients.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
@@ -535,9 +538,10 @@ type CreateCimdClientResponseBody struct {
 type UpdateClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level clients.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
@@ -4477,9 +4481,10 @@ type OrganizationRemoteSessionClientResponseBody struct {
 type RemoteSessionClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level clients.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`

@@ -156,6 +156,19 @@ run();
 * [updateRole](docs/sdks/access/README.md#updaterole) - updateRole access
 * [updateShadowMCPAccessRule](docs/sdks/access/README.md#updateshadowmcpaccessrule) - updateShadowMCPAccessRule access
 
+### [AdminRemoteSessions](docs/sdks/adminremotesessions/README.md)
+
+* [createGlobalClient](docs/sdks/adminremotesessions/README.md#createglobalclient) - createGlobalClient adminRemoteSessions
+* [createGlobalIssuer](docs/sdks/adminremotesessions/README.md#createglobalissuer) - createGlobalIssuer adminRemoteSessions
+* [deleteGlobalClient](docs/sdks/adminremotesessions/README.md#deleteglobalclient) - deleteGlobalClient adminRemoteSessions
+* [deleteGlobalIssuer](docs/sdks/adminremotesessions/README.md#deleteglobalissuer) - deleteGlobalIssuer adminRemoteSessions
+* [getGlobalClient](docs/sdks/adminremotesessions/README.md#getglobalclient) - getGlobalClient adminRemoteSessions
+* [getGlobalIssuer](docs/sdks/adminremotesessions/README.md#getglobalissuer) - getGlobalIssuer adminRemoteSessions
+* [listGlobalClients](docs/sdks/adminremotesessions/README.md#listglobalclients) - listGlobalClients adminRemoteSessions
+* [listGlobalIssuers](docs/sdks/adminremotesessions/README.md#listglobalissuers) - listGlobalIssuers adminRemoteSessions
+* [updateGlobalClient](docs/sdks/adminremotesessions/README.md#updateglobalclient) - updateGlobalClient adminRemoteSessions
+* [updateGlobalIssuer](docs/sdks/adminremotesessions/README.md#updateglobalissuer) - updateGlobalIssuer adminRemoteSessions
+
 ### [Agent](docs/sdks/agent/README.md)
 
 * [getPlugins](docs/sdks/agent/README.md#getplugins) - getPlugins agent
@@ -489,6 +502,13 @@ run();
 * [suggest](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 * [update](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
 
+### [Risk.Evals](docs/sdks/evals/README.md)
+
+* [deleteReview](docs/sdks/evals/README.md#deletereview) - deleteRiskEvalReview risk
+* [evaluate](docs/sdks/evals/README.md#evaluate) - evaluatePromptGuardrail risk
+* [listReviews](docs/sdks/evals/README.md#listreviews) - listRiskEvalReviews risk
+* [saveReview](docs/sdks/evals/README.md#savereview) - saveRiskEvalReview risk
+
 ### [Risk.Exclusions](docs/sdks/exclusions/README.md)
 
 * [create](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
@@ -692,6 +712,16 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`accessUpdateMemberRoles`](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 - [`accessUpdateRole`](docs/sdks/access/README.md#updaterole) - updateRole access
 - [`accessUpdateShadowMCPAccessRule`](docs/sdks/access/README.md#updateshadowmcpaccessrule) - updateShadowMCPAccessRule access
+- [`adminRemoteSessionsCreateGlobalClient`](docs/sdks/adminremotesessions/README.md#createglobalclient) - createGlobalClient adminRemoteSessions
+- [`adminRemoteSessionsCreateGlobalIssuer`](docs/sdks/adminremotesessions/README.md#createglobalissuer) - createGlobalIssuer adminRemoteSessions
+- [`adminRemoteSessionsDeleteGlobalClient`](docs/sdks/adminremotesessions/README.md#deleteglobalclient) - deleteGlobalClient adminRemoteSessions
+- [`adminRemoteSessionsDeleteGlobalIssuer`](docs/sdks/adminremotesessions/README.md#deleteglobalissuer) - deleteGlobalIssuer adminRemoteSessions
+- [`adminRemoteSessionsGetGlobalClient`](docs/sdks/adminremotesessions/README.md#getglobalclient) - getGlobalClient adminRemoteSessions
+- [`adminRemoteSessionsGetGlobalIssuer`](docs/sdks/adminremotesessions/README.md#getglobalissuer) - getGlobalIssuer adminRemoteSessions
+- [`adminRemoteSessionsListGlobalClients`](docs/sdks/adminremotesessions/README.md#listglobalclients) - listGlobalClients adminRemoteSessions
+- [`adminRemoteSessionsListGlobalIssuers`](docs/sdks/adminremotesessions/README.md#listglobalissuers) - listGlobalIssuers adminRemoteSessions
+- [`adminRemoteSessionsUpdateGlobalClient`](docs/sdks/adminremotesessions/README.md#updateglobalclient) - updateGlobalClient adminRemoteSessions
+- [`adminRemoteSessionsUpdateGlobalIssuer`](docs/sdks/adminremotesessions/README.md#updateglobalissuer) - updateGlobalIssuer adminRemoteSessions
 - [`agentGetPlugins`](docs/sdks/agent/README.md#getplugins) - getPlugins agent
 - [`aiIntegrationsDeleteConfig`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
 - [`aiIntegrationsGetConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getConfig aiIntegrations
@@ -908,6 +938,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskCustomRulesList`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`riskCustomRulesSuggest`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 - [`riskCustomRulesUpdate`](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
+- [`riskEvalsDeleteReview`](docs/sdks/evals/README.md#deletereview) - deleteRiskEvalReview risk
+- [`riskEvalsEvaluate`](docs/sdks/evals/README.md#evaluate) - evaluatePromptGuardrail risk
+- [`riskEvalsListReviews`](docs/sdks/evals/README.md#listreviews) - listRiskEvalReviews risk
+- [`riskEvalsSaveReview`](docs/sdks/evals/README.md#savereview) - saveRiskEvalReview risk
 - [`riskExclusionsCreate`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 - [`riskExclusionsDelete`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`riskExclusionsList`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
@@ -1084,6 +1118,8 @@ To learn about this feature and how to get started, check
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
+- [`useCreateGlobalRemoteSessionClientMutation`](docs/sdks/adminremotesessions/README.md#createglobalclient) - createGlobalClient adminRemoteSessions
+- [`useCreateGlobalRemoteSessionIssuerMutation`](docs/sdks/adminremotesessions/README.md#createglobalissuer) - createGlobalIssuer adminRemoteSessions
 - [`useCreateGlobalToolVariationGroupMutation`](docs/sdks/variations/README.md#createglobal) - createGlobal variations
 - [`useCreateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
 - [`useCreateMcpServerMutation`](docs/sdks/mcpservers/README.md#create) - createMcpServer mcpServers
@@ -1109,6 +1145,8 @@ To learn about this feature and how to get started, check
 - [`useDeleteAIIntegrationConfigMutation`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
+- [`useDeleteGlobalRemoteSessionClientMutation`](docs/sdks/adminremotesessions/README.md#deleteglobalclient) - deleteGlobalClient adminRemoteSessions
+- [`useDeleteGlobalRemoteSessionIssuerMutation`](docs/sdks/adminremotesessions/README.md#deleteglobalissuer) - deleteGlobalIssuer adminRemoteSessions
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`useDeleteMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#delete) - deleteMcpEndpoint mcpEndpoints
 - [`useDeleteMcpServerMutation`](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
@@ -1164,6 +1202,10 @@ To learn about this feature and how to get started, check
 - [`useGetToolUsageSummary`](docs/sdks/telemetry/README.md#gettoolusagesummary) - getToolUsageSummary telemetry
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
+- [`useGlobalRemoteSessionClient`](docs/sdks/adminremotesessions/README.md#getglobalclient) - getGlobalClient adminRemoteSessions
+- [`useGlobalRemoteSessionClients`](docs/sdks/adminremotesessions/README.md#listglobalclients) - listGlobalClients adminRemoteSessions
+- [`useGlobalRemoteSessionIssuer`](docs/sdks/adminremotesessions/README.md#getglobalissuer) - getGlobalIssuer adminRemoteSessions
+- [`useGlobalRemoteSessionIssuers`](docs/sdks/adminremotesessions/README.md#listglobalissuers) - listGlobalIssuers adminRemoteSessions
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`useGrants`](docs/sdks/access/README.md#listgrants) - listGrants access
 - [`useHooksHooksNumberClaudeMutation`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
@@ -1279,12 +1321,15 @@ To learn about this feature and how to get started, check
 - [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`useRiskDeclinePolicyChallengeMutation`](docs/sdks/policychallenges/README.md#decline) - declineRiskPolicyChallenge risk
 - [`useRiskDeleteCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
+- [`useRiskDeleteEvalReviewMutation`](docs/sdks/evals/README.md#deletereview) - deleteRiskEvalReview risk
 - [`useRiskDeleteExclusionMutation`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`useRiskDenyPolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
+- [`useRiskEvaluatePromptGuardrail`](docs/sdks/evals/README.md#evaluate) - evaluatePromptGuardrail risk
 - [`useRiskGetBlock`](docs/sdks/blocks/README.md#get) - getRiskBlock risk
 - [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
 - [`useRiskGetPolicyChallenge`](docs/sdks/policychallenges/README.md#get) - getRiskPolicyChallenge risk
 - [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
+- [`useRiskListEvalReviews`](docs/sdks/evals/README.md#listreviews) - listRiskEvalReviews risk
 - [`useRiskListExclusions`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
 - [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk
 - [`useRiskListPolicyBypassRequests`](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
@@ -1299,6 +1344,7 @@ To learn about this feature and how to get started, check
 - [`useRiskPoliciesUpdateMutation`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
 - [`useRiskRevokePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
 - [`useRiskRuleBreakdown`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
+- [`useRiskSaveEvalReviewMutation`](docs/sdks/evals/README.md#savereview) - saveRiskEvalReview risk
 - [`useRiskSubmitBlockFeedbackMutation`](docs/sdks/blocks/README.md#submitfeedback) - submitRiskBlockFeedback risk
 - [`useRiskSuggestCustomRuleMutation`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 - [`useRiskTestDetectionRuleMutation`](docs/sdks/rules/README.md#test) - testDetectionRule risk
@@ -1342,6 +1388,8 @@ To learn about this feature and how to get started, check
 - [`useTriggers`](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers
 - [`useUpdateDomainMutation`](docs/sdks/domains/README.md#updatedomain) - updateDomain domains
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`useUpdateGlobalRemoteSessionClientMutation`](docs/sdks/adminremotesessions/README.md#updateglobalclient) - updateGlobalClient adminRemoteSessions
+- [`useUpdateGlobalRemoteSessionIssuerMutation`](docs/sdks/adminremotesessions/README.md#updateglobalissuer) - updateGlobalIssuer adminRemoteSessions
 - [`useUpdateInviteRoleMutation`](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
 - [`useUpdateMarketplaceSettingsMutation`](docs/sdks/plugins/README.md#updatemarketplacesettings) - updateMarketplaceSettings plugins
 - [`useUpdateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#update) - updateMcpEndpoint mcpEndpoints
@@ -1402,8 +1450,8 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.assistantMemories.list({
-    assistantId: "56bcc863-cc81-4d15-92ee-28eb89e8930f",
+  const result = await gram.adminRemoteSessions.listGlobalClients({
+    remoteSessionIssuerId: "7c1fa209-8b42-46d5-9dae-1898e2a1e3bf",
   });
 
   for await (const page of result) {

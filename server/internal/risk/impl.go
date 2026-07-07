@@ -18,6 +18,7 @@ import (
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -37,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -104,6 +106,11 @@ type Service struct {
 	// celEng is the shared CEL env, injected at construction; used to compile
 	// and validate scope/detection expressions. nil in the lightweight observer.
 	celEng *celenv.Engine
+	// promptJudge replays an inline guardrail against a chat session for the
+	// policy-eval workbench (EvaluatePromptGuardrail). It is the same LLM judge
+	// the realtime scanner uses. Optional: when nil the eval endpoint returns
+	// un-matched verdicts (judge unavailable).
+	promptJudge ra.PromptJudge
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -138,6 +145,7 @@ func NewObserver(
 		piScanner:        nil,
 		flags:            nil,
 		celEng:           nil,
+		promptJudge:      nil,
 	}
 }
 
@@ -159,6 +167,7 @@ func NewService(
 	piScanner *ra.PromptInjectionScanner,
 	flags feature.Provider,
 	celEng *celenv.Engine,
+	promptJudge ra.PromptJudge,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -181,6 +190,7 @@ func NewService(
 		piScanner:        piScanner,
 		flags:            flags,
 		celEng:           celEng,
+		promptJudge:      promptJudge,
 	}
 }
 
@@ -355,6 +365,16 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
 	}
+	if len(payload.ApprovedEmailDomains) > 0 {
+		domains, err := validateApprovedEmailDomains(payload.ApprovedEmailDomains)
+		if err != nil {
+			return nil, err
+		}
+		analyzerConfig, err = ra.WithApprovedEmailDomains(analyzerConfig, domains)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
+		}
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -528,6 +548,18 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	analyzerConfig := current.AnalyzerConfig
 	if payload.PresidioScoreThreshold != nil {
 		updated, err := ra.WithPresidioScoreThreshold(current.AnalyzerConfig, payload.PresidioScoreThreshold)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
+		}
+		analyzerConfig = updated
+	}
+	// Omit to preserve; send (possibly empty, to clear) to replace.
+	if payload.ApprovedEmailDomains != nil {
+		domains, err := validateApprovedEmailDomains(payload.ApprovedEmailDomains)
+		if err != nil {
+			return nil, err
+		}
+		updated, err := ra.WithApprovedEmailDomains(analyzerConfig, domains)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
 		}
@@ -936,7 +968,8 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 
 // redactResultMatchInPlace clears a result's raw match/spans and populates
 // match_redacted in their place, reusing the same fingerprint format (and
-// shadow_mcp passthrough carve-out) as redactMatch/redactRiskResult below.
+// shadow_mcp/account_identity passthrough carve-out) as
+// redactMatch/redactRiskResult below.
 // Spans aren't given a redacted counterpart here because nothing on this
 // (non-agent) redacted path renders them.
 func redactResultMatchInPlace(r *types.RiskResult, orgID string) {
@@ -1168,10 +1201,12 @@ func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedact
 	}
 }
 
-// redactMatch encodes a match value as `<redacted len=N sha=XXXXXXXX>` for
-// non-shadow_mcp sources, or passes it through verbatim for shadow_mcp.
-// A nil/empty match collapses to `<redacted len=0>` without a sha component
-// so the absence of a finding payload is distinguishable from a real hash.
+// redactMatch encodes a match value as `<redacted len=N sha=XXXXXXXX>`,
+// except for shadow_mcp and account_identity findings whose match passes
+// through verbatim: an MCP server URL or an account email IS the report, not
+// a secret. A nil/empty match collapses to `<redacted len=0>` without a sha
+// component so the absence of a finding payload is distinguishable from a
+// real hash.
 //
 // The hash is salted by orgID with a NUL separator so two different orgs
 // holding the same secret produce different fingerprints — defense in depth
@@ -1181,7 +1216,7 @@ func redactMatch(source string, match *string, orgID string) string {
 	if match == nil || *match == "" {
 		return "<redacted len=0>"
 	}
-	if source == shadowmcp.SourceShadowMCP {
+	if source == shadowmcp.SourceShadowMCP || source == ra.SourceAccountIdentity {
 		return *match
 	}
 	var buf []byte
@@ -2312,6 +2347,346 @@ func (s *Service) TestDetectionRule(ctx context.Context, payload *gen.TestDetect
 	}
 }
 
+// EvaluatePromptGuardrail replays an inline guardrail without persisting findings.
+func (s *Service) EvaluatePromptGuardrail(ctx context.Context, payload *gen.EvaluatePromptGuardrailPayload) (*gen.PromptGuardrailEvalResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	prompt := strings.TrimSpace(payload.Prompt)
+	if prompt == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "prompt is required")
+	}
+	chatID, err := uuid.Parse(payload.ChatID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat_id")
+	}
+	projectID := *authCtx.ProjectID
+
+	modelConfig, err := marshalModelConfig(payload.ModelConfig)
+	if err != nil {
+		return nil, err
+	}
+	cfg := ra.ParseJudgeConfig(modelConfig)
+
+	return s.evaluateGuardrailForChat(
+		ctx,
+		projectID,
+		authCtx.ActiveOrganizationID,
+		chatID,
+		prompt,
+		cfg,
+		payload.MessageTypes,
+		conv.PtrValOr(payload.ScopeInclude, ""),
+		conv.PtrValOr(payload.ScopeExempt, ""),
+	)
+}
+
+func (s *Service) evaluateGuardrailForChat(
+	ctx context.Context,
+	projectID uuid.UUID,
+	orgID string,
+	chatID uuid.UUID,
+	prompt string,
+	cfg ra.JudgeConfig,
+	messageTypes []string,
+	includeCEL string,
+	exemptCEL string,
+) (*gen.PromptGuardrailEvalResult, error) {
+	// GetChat filters soft-deleted chats.
+	chatRepo := chatrepo.New(s.db)
+	chatRow, err := chatRepo.GetChat(ctx, chatID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "chat not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat").LogError(ctx, s.logger)
+	case chatRow.ProjectID != projectID:
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	rows, err := chatRepo.ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat messages").LogError(ctx, s.logger)
+	}
+
+	messages := make([]ra.EvalMessage, len(rows))
+	for i, row := range rows {
+		messages[i] = ra.EvalMessage{
+			ID:        row.ID,
+			Role:      row.Role,
+			Content:   row.Content,
+			ToolCalls: row.ToolCalls,
+		}
+	}
+
+	verdicts, err := ra.EvalPromptGuardrail(
+		ctx,
+		s.logger,
+		s.promptJudge,
+		s.celEng,
+		orgID,
+		projectID.String(),
+		prompt,
+		cfg,
+		messages,
+		messageTypes,
+		includeCEL,
+		exemptCEL,
+	)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid scope expression")
+	}
+
+	out := make([]*gen.PromptGuardrailMessageVerdict, 0, len(verdicts))
+	flagged := false
+	totalCostUSD := 0.0
+	var totalLatencyMs int64
+	for _, v := range verdicts {
+		row := rows[v.Index]
+		if v.Matched {
+			flagged = true
+		}
+		totalCostUSD += v.CostUSD
+		totalLatencyMs += v.LatencyMs
+		out = append(out, &gen.PromptGuardrailMessageVerdict{
+			MessageID:        row.ID.String(),
+			Seq:              row.Seq,
+			MessageType:      v.Type,
+			ToolName:         conv.PtrEmpty(v.ToolName),
+			Matched:          v.Matched,
+			Confidence:       v.Confidence,
+			Rationale:        v.Rationale,
+			LatencyMs:        v.LatencyMs,
+			CostUsd:          v.CostUSD,
+			PromptTokens:     v.PromptTokens,
+			CompletionTokens: v.CompletionTokens,
+			TotalTokens:      v.TotalTokens,
+		})
+	}
+
+	return &gen.PromptGuardrailEvalResult{
+		ChatID:         chatID.String(),
+		Flagged:        flagged,
+		JudgedCount:    len(out),
+		TotalCostUsd:   totalCostUSD,
+		TotalLatencyMs: totalLatencyMs,
+		Verdicts:       out,
+	}, nil
+}
+
+// SaveRiskEvalReview records one review verdict in the policy regression set.
+func (s *Service) SaveRiskEvalReview(ctx context.Context, payload *gen.SaveRiskEvalReviewPayload) (*types.RiskPolicyEvalReview, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	policyID, err := uuid.Parse(payload.PolicyID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy_id")
+	}
+	chatID, err := uuid.Parse(payload.ChatID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat_id")
+	}
+	projectID := *authCtx.ProjectID
+
+	policy, err := s.requirePromptPolicy(ctx, policyID, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	chatBelongs, err := s.repo.RiskEvalChatBelongsToProject(ctx, repo.RiskEvalChatBelongsToProjectParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "validate eval review chat").LogError(ctx, s.logger)
+	}
+	if !chatBelongs {
+		return nil, oops.E(oops.CodeNotFound, nil, "chat not found")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin eval review save").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	q := repo.New(dbtx)
+
+	row, err := q.UpsertRiskPolicyEvalReview(ctx, repo.UpsertRiskPolicyEvalReviewParams{
+		ProjectID:         projectID,
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		RiskPolicyID:      policyID,
+		RiskPolicyVersion: policy.Version,
+		ChatID:            chatID,
+		Verdict:           payload.Verdict,
+		ReviewedBy:        authCtx.UserID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "save eval review").LogError(ctx, s.logger)
+	}
+
+	if err := s.audit.LogRiskPolicyEvalReviewSave(ctx, dbtx, audit.LogRiskPolicyEvalReviewEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		RiskPolicyID:     policy.ID,
+		RiskPolicyName:   policy.Name,
+		Metadata: &audit.RiskPolicyEvalReviewMetadata{
+			ReviewID:   row.ID.String(),
+			ChatID:     chatID.String(),
+			Verdict:    row.Verdict,
+			ReviewedBy: row.ReviewedBy,
+		},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log eval review save").LogError(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit eval review save").LogError(ctx, s.logger)
+	}
+	return evalReviewToType(row), nil
+}
+
+// ListRiskEvalReviews returns the active regression set for a policy: every
+// reviewer's current verdicts.
+func (s *Service) ListRiskEvalReviews(ctx context.Context, payload *gen.ListRiskEvalReviewsPayload) (*gen.ListRiskEvalReviewsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	policyID, err := uuid.Parse(payload.PolicyID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy_id")
+	}
+
+	rows, err := s.repo.ListRiskPolicyEvalReviews(ctx, repo.ListRiskPolicyEvalReviewsParams{
+		ProjectID:    *authCtx.ProjectID,
+		RiskPolicyID: policyID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list eval reviews").LogError(ctx, s.logger)
+	}
+
+	reviews := make([]*types.RiskPolicyEvalReview, 0, len(rows))
+	for _, row := range rows {
+		reviews = append(reviews, evalReviewToType(row))
+	}
+	return &gen.ListRiskEvalReviewsResult{Reviews: reviews}, nil
+}
+
+// DeleteRiskEvalReview clears the current reviewer's verdict.
+func (s *Service) DeleteRiskEvalReview(ctx context.Context, payload *gen.DeleteRiskEvalReviewPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return err
+	}
+
+	policyID, err := uuid.Parse(payload.PolicyID)
+	if err != nil {
+		return oops.E(oops.CodeInvalid, err, "invalid policy_id")
+	}
+	chatID, err := uuid.Parse(payload.ChatID)
+	if err != nil {
+		return oops.E(oops.CodeInvalid, err, "invalid chat_id")
+	}
+	projectID := *authCtx.ProjectID
+
+	policy, err := s.requirePromptPolicy(ctx, policyID, projectID)
+	if err != nil {
+		return err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin eval review delete").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	q := repo.New(dbtx)
+
+	row, err := q.SoftDeleteRiskPolicyEvalReview(ctx, repo.SoftDeleteRiskPolicyEvalReviewParams{
+		ProjectID:    projectID,
+		RiskPolicyID: policyID,
+		ChatID:       chatID,
+		ReviewedBy:   authCtx.UserID,
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, err, "delete eval review").LogError(ctx, s.logger)
+	}
+	if err == nil {
+		if err := s.audit.LogRiskPolicyEvalReviewDelete(ctx, dbtx, audit.LogRiskPolicyEvalReviewEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        projectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			RiskPolicyID:     policy.ID,
+			RiskPolicyName:   policy.Name,
+			Metadata: &audit.RiskPolicyEvalReviewMetadata{
+				ReviewID:   row.ID.String(),
+				ChatID:     chatID.String(),
+				Verdict:    row.Verdict,
+				ReviewedBy: row.ReviewedBy,
+			},
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log eval review delete").LogError(ctx, s.logger)
+		}
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit eval review delete").LogError(ctx, s.logger)
+	}
+	return nil
+}
+
+// requirePromptPolicy loads a policy scoped to the project and verifies it is
+// prompt_based (the only kind evals apply to). Returns not-found when missing.
+func (s *Service) requirePromptPolicy(ctx context.Context, policyID, projectID uuid.UUID) (repo.RiskPolicy, error) {
+	policy, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{ID: policyID, ProjectID: projectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return repo.RiskPolicy{}, oops.E(oops.CodeNotFound, err, "policy not found")
+	case err != nil:
+		return repo.RiskPolicy{}, oops.E(oops.CodeUnexpected, err, "load policy").LogError(ctx, s.logger)
+	case policy.PolicyType != ra.PolicyTypePromptBased:
+		return repo.RiskPolicy{}, oops.E(oops.CodeInvalid, nil, "evals apply only to prompt_based policies")
+	}
+	return policy, nil
+}
+
+func evalReviewToType(row repo.RiskPolicyEvalReview) *types.RiskPolicyEvalReview {
+	return &types.RiskPolicyEvalReview{
+		ID:            row.ID.String(),
+		PolicyID:      row.RiskPolicyID.String(),
+		PolicyVersion: row.RiskPolicyVersion,
+		ChatID:        row.ChatID.String(),
+		Verdict:       row.Verdict,
+		ReviewedBy:    row.ReviewedBy,
+		CreatedAt:     row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:     row.UpdatedAt.Time.Format(time.RFC3339),
+	}
+}
+
 func (s *Service) testGitleaksRule(ctx context.Context, ruleID, text string) (*gen.TestDetectionRuleResult, error) {
 	findings, err := ra.ScanWithGitleaks(text)
 	if err != nil {
@@ -2477,6 +2852,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		Sources:                row.Sources,
 		PresidioEntities:       row.PresidioEntities,
 		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
+		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
 		PromptInjectionRules:   row.PromptInjectionRules,
 		DisabledRules:          row.DisabledRules,
 		CustomRuleIds:          row.CustomRuleIds,
@@ -2511,6 +2887,7 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		Sources:                row.Sources,
 		PresidioEntities:       row.PresidioEntities,
 		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
+		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
 		PromptInjectionRules:   row.PromptInjectionRules,
 		DisabledRules:          row.DisabledRules,
 		CustomRuleIds:          row.CustomRuleIds,
@@ -2667,6 +3044,8 @@ func sourcesToCategoryLabels(sources []string) []string {
 			out = append(out, "Destructive CLI Command")
 		case ra.SourcePromptInjection:
 			out = append(out, "Prompt Injection")
+		case ra.SourceAccountIdentity:
+			out = append(out, "Non-Corporate Account")
 		}
 	}
 	return out
@@ -2773,7 +3152,7 @@ func validateAction(action string) error {
 func validateSources(sources []string) error {
 	for _, src := range sources {
 		switch src {
-		case ra.SourceGitleaks, ra.SourcePresidio, shadowmcp.SourceShadowMCP, shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourcePromptInjection:
+		case ra.SourceGitleaks, ra.SourcePresidio, shadowmcp.SourceShadowMCP, shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourcePromptInjection, ra.SourceAccountIdentity:
 		default:
 			return oops.E(oops.CodeInvalid, nil, "source %q is not a recognized policy source", src)
 		}
@@ -2787,12 +3166,39 @@ func validateSourceAction(sources []string, action string) error {
 	if action == "flag" {
 		return nil
 	}
-	for _, src := range []string{shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive} {
+	for _, src := range []string{shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourceAccountIdentity} {
 		if slices.Contains(sources, src) {
 			return oops.E(oops.CodeInvalid, nil, "source %q supports flagging only", src)
 		}
 	}
 	return nil
+}
+
+// approvedDomainFormat matches a plausible DNS domain: LDH (letters, digits,
+// hyphen) labels joined by dots, at least two labels.
+var approvedDomainFormat = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`)
+
+// validateApprovedEmailDomains normalizes the account_identity domain
+// allowlist (lowercase, trimmed, optional leading "@" stripped, deduped) and
+// rejects entries that are not plausible domains.
+func validateApprovedEmailDomains(domains []string) ([]string, error) {
+	out := make([]string, 0, len(domains))
+	seen := make(map[string]struct{}, len(domains))
+	for _, raw := range domains {
+		domain := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(raw)), "@")
+		if domain == "" {
+			continue
+		}
+		if !approvedDomainFormat.MatchString(domain) {
+			return nil, oops.E(oops.CodeInvalid, nil, "approved email domain %q is not a valid domain", raw)
+		}
+		if _, ok := seen[domain]; ok {
+			continue
+		}
+		seen[domain] = struct{}{}
+		out = append(out, domain)
+	}
+	return out, nil
 }
 
 func validatePolicyName(name string) error {
@@ -2820,7 +3226,8 @@ func payloadHasPromptPolicyDetectionConfig(payload *gen.UpdateRiskPolicyPayload)
 		len(payload.PresidioEntities) > 0 ||
 		len(payload.PromptInjectionRules) > 0 ||
 		len(payload.DisabledRules) > 0 ||
-		len(payload.CustomRuleIds) > 0
+		len(payload.CustomRuleIds) > 0 ||
+		len(payload.ApprovedEmailDomains) > 0
 }
 
 func payloadHasCreatePromptPolicyDetectionConfig(payload *gen.CreateRiskPolicyPayload) bool {
@@ -2828,7 +3235,8 @@ func payloadHasCreatePromptPolicyDetectionConfig(payload *gen.CreateRiskPolicyPa
 		len(payload.PresidioEntities) > 0 ||
 		len(payload.PromptInjectionRules) > 0 ||
 		len(payload.DisabledRules) > 0 ||
-		len(payload.CustomRuleIds) > 0
+		len(payload.CustomRuleIds) > 0 ||
+		len(payload.ApprovedEmailDomains) > 0
 }
 
 func createPolicyDetectionField(policyType string, values []string) []string {

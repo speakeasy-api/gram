@@ -46,6 +46,10 @@ export type UpdateRiskPolicyRequestBody = {
    */
   action?: UpdateRiskPolicyRequestBodyAction | undefined;
   /**
+   * For the account_identity source: corporate email domains considered approved. Omit to preserve the current list; send an empty array to clear it.
+   */
+  approvedEmailDomains?: Array<string> | undefined;
+  /**
    * Principal URNs this policy applies to. Omit to preserve the current target principals.
    */
   audiencePrincipalUrns?: Array<string> | undefined;
@@ -130,6 +134,7 @@ export const UpdateRiskPolicyRequestBodyAudienceType$outboundSchema:
 /** @internal */
 export type UpdateRiskPolicyRequestBody$Outbound = {
   action?: string | undefined;
+  approved_email_domains?: Array<string> | undefined;
   audience_principal_urns?: Array<string> | undefined;
   audience_type?: string | undefined;
   auto_name?: boolean | undefined;
@@ -157,6 +162,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     action: z.optional(UpdateRiskPolicyRequestBodyAction$outboundSchema),
+    approvedEmailDomains: z.optional(z.array(z.string())),
     audiencePrincipalUrns: z.optional(z.array(z.string())),
     audienceType: z.optional(
       UpdateRiskPolicyRequestBodyAudienceType$outboundSchema,
@@ -180,6 +186,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      approvedEmailDomains: "approved_email_domains",
       audiencePrincipalUrns: "audience_principal_urns",
       audienceType: "audience_type",
       autoName: "auto_name",
