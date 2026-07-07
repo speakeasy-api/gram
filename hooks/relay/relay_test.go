@@ -624,6 +624,10 @@ func TestRedactCommandMasksSeparatedHeaderValue(t *testing.T) {
 	require.Contains(t, got, "svc.example.com", "a keyword-bearing URL scheme is not a header")
 	require.Contains(t, got, "tail9")
 
+	got = redactCommand("curl -H X-Auth-Token:https://token.example/secret-path tail10")
+	require.NotContains(t, got, "token.example", "a no-space header value that is a URL is still the header's secret")
+	require.Contains(t, got, "tail10")
+
 	got = redactCommand(`curl -H'X-API-Key: abc124' tail7`)
 	require.NotContains(t, got, "abc124", "curl's attached short-option header form is still a secret header")
 	require.Contains(t, got, "tail7")

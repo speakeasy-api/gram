@@ -119,7 +119,10 @@ func redactCommand(raw string) string {
 		case secretFlagRE.MatchString(f):
 			out = append(out, f)
 			maskNext = true
-		case secretHeaderRE.MatchString(f) || (!strings.Contains(f, "://") && genericSecretHeaderRE.MatchString(f)):
+		// A token is URL-shaped only when its first colon opens "://"; a
+		// keyword-bearing scheme (oauth://) must not read as a header, and a
+		// no-space header whose value is a URL must not read as one.
+		case secretHeaderRE.MatchString(f) || (strings.Index(f, "://") != strings.IndexByte(f, ':') && genericSecretHeaderRE.MatchString(f)):
 			// `--header "X-API-Key: abc"` tokenizes the value into the next
 			// field after quote stripping; a header with nothing after its
 			// colon — or with only an auth scheme, as in
