@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersUpdateIssuer } from "../funcs/organizationRemoteSessionIssuersUpdateIssuer.js";
+import { organizationRemoteSessionIssuersUpdate } from "../funcs/organizationRemoteSessionIssuersUpdate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
@@ -76,7 +76,7 @@ export function useUpdateOrganizationRemoteSessionIssuerMutation(
 }
 
 export function mutationKeyUpdateOrganizationRemoteSessionIssuer(): MutationKey {
-  return ["@gram/client", "organizationRemoteSessionIssuers", "updateIssuer"];
+  return ["@gram/client", "organizationRemoteSessionIssuers", "update"];
 }
 
 export function buildUpdateOrganizationRemoteSessionIssuerMutation(
@@ -107,7 +107,7 @@ export function buildUpdateOrganizationRemoteSessionIssuerMutation(
           ),
         },
       };
-      return unwrapAsync(organizationRemoteSessionIssuersUpdateIssuer(
+      return unwrapAsync(organizationRemoteSessionIssuersUpdate(
         client$,
         request,
         security,

@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersCreateCimdClient } from "../funcs/organizationRemoteSessionIssuersCreateCimdClient.js";
+import { organizationRemoteSessionClientsCreateCimd } from "../funcs/organizationRemoteSessionClientsCreateCimd.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
@@ -52,7 +52,7 @@ export type CreateCimdOrganizationRemoteSessionClientMutationError =
   | SDKValidationError;
 
 /**
- * createCimdClient organizationRemoteSessionIssuers
+ * createCimdClient organizationRemoteSessionClients
  *
  * @remarks
  * Register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.
@@ -76,11 +76,7 @@ export function useCreateCimdOrganizationRemoteSessionClientMutation(
 }
 
 export function mutationKeyCreateCimdOrganizationRemoteSessionClient(): MutationKey {
-  return [
-    "@gram/client",
-    "organizationRemoteSessionIssuers",
-    "createCimdClient",
-  ];
+  return ["@gram/client", "organizationRemoteSessionClients", "createCimd"];
 }
 
 export function buildCreateCimdOrganizationRemoteSessionClientMutation(
@@ -111,7 +107,7 @@ export function buildCreateCimdOrganizationRemoteSessionClientMutation(
           ),
         },
       };
-      return unwrapAsync(organizationRemoteSessionIssuersCreateCimdClient(
+      return unwrapAsync(organizationRemoteSessionClientsCreateCimd(
         client$,
         request,
         security,

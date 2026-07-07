@@ -8,7 +8,7 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersGetIssuerDeletePreflight } from "../funcs/organizationRemoteSessionIssuersGetIssuerDeletePreflight.js";
+import { organizationRemoteSessionIssuersGetDeletePreflight } from "../funcs/organizationRemoteSessionIssuersGetDeletePreflight.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { OrganizationIssuerDeletePreflight } from "../models/components/organizationissuerdeletepreflight.js";
@@ -73,14 +73,12 @@ export function buildOrganizationRemoteSessionIssuerDeletePreflightQuery(
           signal: sig,
         };
 
-        return unwrapAsync(
-          organizationRemoteSessionIssuersGetIssuerDeletePreflight(
-            client$,
-            request,
-            security,
-            mergedOptions,
-          ),
-        );
+        return unwrapAsync(organizationRemoteSessionIssuersGetDeletePreflight(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ));
       },
   };
 }
@@ -95,7 +93,7 @@ export function queryKeyOrganizationRemoteSessionIssuerDeletePreflight(
   return [
     "@gram/client",
     "organizationRemoteSessionIssuers",
-    "getIssuerDeletePreflight",
+    "getDeletePreflight",
     parameters,
   ];
 }

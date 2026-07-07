@@ -56,7 +56,7 @@ export type OrganizationRemoteSessionClientQueryError =
   | SDKValidationError;
 
 /**
- * getClient organizationRemoteSessionIssuers
+ * getClient organizationRemoteSessionClients
  *
  * @remarks
  * Get a remote_session_client in the caller's organization by id. Requires org:read.
@@ -85,7 +85,7 @@ export function useOrganizationRemoteSessionClient(
 }
 
 /**
- * getClient organizationRemoteSessionIssuers
+ * getClient organizationRemoteSessionClients
  *
  * @remarks
  * Get a remote_session_client in the caller's organization by id. Requires org:read.
@@ -147,8 +147,8 @@ export function invalidateOrganizationRemoteSessionClient(
     ...filters,
     queryKey: [
       "@gram/client",
-      "organizationRemoteSessionIssuers",
-      "getClient",
+      "organizationRemoteSessionClients",
+      "get",
       ...queryKeyBase,
     ],
   });
@@ -160,6 +160,6 @@ export function invalidateAllOrganizationRemoteSessionClient(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "organizationRemoteSessionIssuers", "getClient"],
+    queryKey: ["@gram/client", "organizationRemoteSessionClients", "get"],
   });
 }

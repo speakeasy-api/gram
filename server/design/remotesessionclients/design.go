@@ -288,6 +288,259 @@ var _ = Service("remoteSessionClients", func() {
 	})
 })
 
+// organizationRemoteSessionClients manages remote_session_clients from the
+// organization-administrator surface (AIS-119). Unlike the project-scoped
+// remoteSessionClients service above, these methods span both organizational
+// (project_id NULL) and project-specific clients in the caller's organization,
+// scoped exclusively by organization_id. Security is organization-scoped (no
+// ProjectSlug); RBAC gates writes on org:admin and reads on org:read.
+var _ = Service("organizationRemoteSessionClients", func() {
+	Description("Manage remote_session_client records from the organization-administrator surface — clients across every project in the caller's organization. client_secret_encrypted is never returned.")
+	Security(security.Session)
+	Security(security.ByKey, func() {
+		Scope("producer")
+	})
+	shared.DeclareErrorResponses()
+
+	Method("listClients", func() {
+		Description("List the remote_session_clients registered with a given issuer in the caller's organization, each with its MCP server attachment count. Requires org:read.")
+
+		Payload(func() {
+			Attribute("issuer_id", String, "The remote_session_issuer id to list clients for.", func() {
+				Format(FormatUUID)
+			})
+			Required("issuer_id")
+			Attribute("cursor", String, "Pagination cursor.")
+			Attribute("limit", Int, "Page size (default 50, max 100).")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(ListOrganizationRemoteSessionClientsResult)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionClients.list")
+			Param("issuer_id")
+			Param("cursor")
+			Param("limit")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		shared.CursorPagination()
+		Meta("openapi:operationId", "listOrganizationRemoteSessionClients")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClients"}`)
+	})
+
+	Method("getClient", func() {
+		Description("Get a remote_session_client in the caller's organization by id. Requires org:read.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(RemoteSessionClient)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionClients.get")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganizationRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClient"}`)
+	})
+
+	Method("getClientDeletePreflight", func() {
+		Description("Authoritative impact summary for deleting a remote_session_client: associated session count and affected MCP server names. Requires org:read.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(OrganizationClientDeletePreflight)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionClients.getDeletePreflight")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganizationRemoteSessionClientDeletePreflight")
+		Meta("openapi:extension:x-speakeasy-name-override", "getDeletePreflight")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClientDeletePreflight"}`)
+	})
+
+	Method("listClientMcpServers", func() {
+		Description("List the MCP servers a remote_session_client is attached to (resolved through user_session_issuers) in the caller's organization. Requires org:read.")
+
+		Payload(func() {
+			Attribute("client_id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Required("client_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(ListOrganizationMcpServersResult)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionClients.listMcpServers")
+			Param("client_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listOrganizationRemoteSessionClientMcpServers")
+		Meta("openapi:extension:x-speakeasy-name-override", "listMcpServers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClientMcpServers"}`)
+	})
+
+	Method("createClient", func() {
+		Description("Register a standalone remote_session_client under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.")
+
+		Payload(func() {
+			Extend(CreateOrganizationRemoteSessionClientForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(RemoteSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionClients.create")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createOrganizationRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateOrganizationRemoteSessionClient"}`)
+	})
+
+	Method("createCimdClient", func() {
+		Description("Register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.")
+
+		Payload(func() {
+			Extend(CreateCimdOrganizationRemoteSessionClientForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(RemoteSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionClients.createCimd")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createCimdOrganizationRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "createCimd")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateCimdOrganizationRemoteSessionClient"}`)
+	})
+
+	Method("updateClient", func() {
+		Description("Update a remote_session_client's non-secret fields in the caller's organization. Requires org:admin.")
+
+		// Reuses the project-scoped UpdateRemoteSessionClientForm: the org-admin
+		// update takes the same id + non-secret fields, and the two forms are
+		// structurally identical (Speakeasy collapses them to one SDK component),
+		// so a separate org form would only fork the generated request-body name.
+		Payload(func() {
+			Extend(UpdateRemoteSessionClientForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(RemoteSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionClients.update")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateOrganizationRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "update")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateOrganizationRemoteSessionClient"}`)
+	})
+
+	Method("deleteClient", func() {
+		Description("Soft-delete a remote_session_client in the caller's organization. Cascades to the remote_sessions minted against it. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/organizationRemoteSessionClients.delete")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deleteOrganizationRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "delete")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteOrganizationRemoteSessionClient"}`)
+	})
+
+	Method("removeClientFromMcpServer", func() {
+		Description("Detach a remote_session_client from an MCP server (clears the MCP server's user_session_issuer link) in the caller's organization. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("client_id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("mcp_server_id", String, "The mcp_server id to detach from.", func() {
+				Format(FormatUUID)
+			})
+			Required("client_id", "mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionClients.removeFromMcpServer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "removeOrganizationRemoteSessionClientFromMcpServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "removeFromMcpServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveOrganizationRemoteSessionClientFromMcpServer"}`)
+	})
+})
+
 var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func() {
 	Description("Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.")
 
