@@ -232,13 +232,22 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins").LogError(ctx, s.logger)
 	}
 
+	pluginIDs := make([]uuid.UUID, len(rows))
+	for i, r := range rows {
+		pluginIDs[i] = r.ID
+	}
+	allServers, err := s.repo.ListPluginServersByPluginIDs(ctx, pluginIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").LogError(ctx, s.logger)
+	}
+	serversByPlugin := make(map[uuid.UUID][]repo.PluginServer, len(rows))
+	for _, srv := range allServers {
+		serversByPlugin[srv.PluginID] = append(serversByPlugin[srv.PluginID], srv)
+	}
+
 	plugins := make([]*gen.Plugin, 0, len(rows))
 	for _, r := range rows {
-		servers, err := s.repo.ListPluginServers(ctx, r.ID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").LogError(ctx, s.logger)
-		}
-
+		servers := serversByPlugin[r.ID]
 		genServers := make([]*gen.PluginServer, 0, len(servers))
 		for _, srv := range servers {
 			genServers = append(genServers, pluginServerToGen(srv))

@@ -49,7 +49,7 @@ export function TopUsersTable({
 }): React.JSX.Element {
   const client = useGramContext();
 
-  const { data, isLoading, isLogsDisabled } = useLogsEnabledErrorCheck(
+  const { data, isLoading, error, isLogsDisabled } = useLogsEnabledErrorCheck(
     useQuery({
       queryKey: [
         "mcp-detail-top-users",
@@ -79,27 +79,43 @@ export function TopUsersTable({
     [data],
   );
 
+  let content: React.JSX.Element;
+  if (isLogsDisabled) {
+    content = (
+      <Type muted small>
+        Observability is not enabled for this organization.
+      </Type>
+    );
+  } else if (isLoading) {
+    content = <SkeletonTable />;
+  } else if (error) {
+    // A real failure (not the expected "logs disabled" 404) — surface it
+    // instead of rendering the empty-results state, which would otherwise
+    // read as "no usage" rather than "couldn't load usage".
+    content = (
+      <Type muted small className="text-destructive">
+        Failed to load top users.
+      </Type>
+    );
+  } else {
+    content = (
+      <Table
+        columns={columns}
+        data={users}
+        rowKey={(row) => row.userKey}
+        noResultsMessage={
+          <Type muted className="block px-4 py-6">
+            No usage yet.
+          </Type>
+        }
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <Heading variant="h5">Top users</Heading>
-      {isLogsDisabled ? (
-        <Type muted small>
-          Observability is not enabled for this organization.
-        </Type>
-      ) : isLoading ? (
-        <SkeletonTable />
-      ) : (
-        <Table
-          columns={columns}
-          data={users}
-          rowKey={(row) => row.userKey}
-          noResultsMessage={
-            <Type muted className="block px-4 py-6">
-              No usage yet.
-            </Type>
-          }
-        />
-      )}
+      {content}
     </div>
   );
 }

@@ -136,15 +136,22 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       </div>
 
       <div className="border-border flex items-stretch border-t pt-3">
-        <a
-          href={installPageUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-muted-foreground hover:text-foreground flex flex-1 items-center justify-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
-        >
-          Installation page
-          <ExternalLink className="h-3 w-3" />
-        </a>
+        {installPageUrl ? (
+          <a
+            href={installPageUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-muted-foreground hover:text-foreground flex flex-1 items-center justify-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
+          >
+            Installation page
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        ) : (
+          <span className="text-muted-foreground/50 flex flex-1 cursor-not-allowed items-center justify-center gap-1 text-xs font-semibold">
+            Installation page
+            <ExternalLink className="h-3 w-3" />
+          </span>
+        )}
         <div className="bg-border w-px self-stretch" />
         <routes.playground.Link className="flex flex-1 items-center justify-center hover:no-underline">
           <span className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors">

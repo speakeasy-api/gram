@@ -114,6 +114,15 @@ WHERE plugin_id = @plugin_id
   AND deleted IS FALSE
 ORDER BY sort_order ASC, created_at ASC;
 
+-- name: ListPluginServersByPluginIDs :many
+-- Batch variant of ListPluginServers for callers that need every server for
+-- a set of plugins (e.g. ListPlugins) without one round-trip per plugin.
+SELECT *
+FROM plugin_servers
+WHERE plugin_id = ANY(@plugin_ids::uuid[])
+  AND deleted IS FALSE
+ORDER BY plugin_id, sort_order ASC, created_at ASC;
+
 -- name: UpdatePluginServer :one
 UPDATE plugin_servers
 SET display_name = @display_name,

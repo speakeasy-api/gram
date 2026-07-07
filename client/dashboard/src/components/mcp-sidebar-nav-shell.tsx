@@ -2,11 +2,6 @@ import { NavButton, NavGroupProvider } from "@/components/nav-menu";
 import { SidebarFooterAction } from "@/components/sidebar-footer-action";
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
 import { useSidebar } from "@/components/ui/sidebar-context";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
@@ -106,37 +101,21 @@ export function McpSidebarNavShell({
 
         <SidebarEyebrow align="items">Configuration</SidebarEyebrow>
 
-        {items.map((item) => {
-          const navButton = (
+        {items.map((item) => (
+          <SidebarMenuItem
+            key={item.key}
+            className="pl-2 group-data-[collapsible=icon]:pl-0"
+          >
             <NavButton
               title={item.title}
               titleNode={item.titleNode}
               href={item.href}
               active={item.active}
               Icon={item.Icon}
+              tooltip={isCollapsed ? item.title : undefined}
             />
-          );
-
-          return (
-            <SidebarMenuItem
-              key={item.key}
-              className="pl-2 group-data-[collapsible=icon]:pl-0"
-            >
-              {isCollapsed ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="mx-auto w-fit">{navButton}</div>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" sideOffset={4}>
-                    {item.title}
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                navButton
-              )}
-            </SidebarMenuItem>
-          );
-        })}
+          </SidebarMenuItem>
+        ))}
       </SidebarMenu>
     </NavGroupProvider>
   );

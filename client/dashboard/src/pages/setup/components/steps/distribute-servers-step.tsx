@@ -43,6 +43,8 @@ import { cn } from "@/lib/utils";
 
 /** Display name of the shared plugin bundle catalog servers are added to. */
 const DEFAULT_PLUGIN_NAME = "Default";
+/** Server always provisions the Default plugin with this exact slug. */
+const DEFAULT_PLUGIN_SLUG = "default";
 /** Max catalog servers shown before the user expands the list. */
 const INITIAL_VISIBLE = 10;
 
@@ -618,16 +620,12 @@ export function DistributeServersStep({
                       repoOwner={publishStatus.repoOwner}
                       repoName={publishStatus.repoName}
                       marketplaceUrl={publishStatus.marketplaceUrl}
-                      candidatePlugins={
-                        distributedPluginSlug
-                          ? [
-                              {
-                                name: DEFAULT_PLUGIN_NAME,
-                                slug: distributedPluginSlug,
-                              },
-                            ]
-                          : undefined
-                      }
+                      candidatePlugins={[
+                        {
+                          name: DEFAULT_PLUGIN_NAME,
+                          slug: distributedPluginSlug ?? DEFAULT_PLUGIN_SLUG,
+                        },
+                      ]}
                     />
                   </div>
                 )}

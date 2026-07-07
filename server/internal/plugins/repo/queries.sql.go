@@ -584,6 +584,48 @@ func (q *Queries) ListPluginServers(ctx context.Context, pluginID uuid.UUID) ([]
 	return items, nil
 }
 
+const listPluginServersByPluginIDs = `-- name: ListPluginServersByPluginIDs :many
+SELECT id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+FROM plugin_servers
+WHERE plugin_id = ANY($1::uuid[])
+  AND deleted IS FALSE
+ORDER BY plugin_id, sort_order ASC, created_at ASC
+`
+
+// Batch variant of ListPluginServers for callers that need every server for
+// a set of plugins (e.g. ListPlugins) without one round-trip per plugin.
+func (q *Queries) ListPluginServersByPluginIDs(ctx context.Context, pluginIds []uuid.UUID) ([]PluginServer, error) {
+	rows, err := q.db.Query(ctx, listPluginServersByPluginIDs, pluginIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PluginServer
+	for rows.Next() {
+		var i PluginServer
+		if err := rows.Scan(
+			&i.ID,
+			&i.PluginID,
+			&i.ToolsetID,
+			&i.McpServerID,
+			&i.DisplayName,
+			&i.Policy,
+			&i.SortOrder,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlugins = `-- name: ListPlugins :many
 SELECT
   p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.created_at, p.updated_at, p.deleted_at, p.deleted,
