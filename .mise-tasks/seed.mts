@@ -1966,10 +1966,9 @@ async function enableRBACForDevUser(init: {
     await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -c ${`UPDATE users SET admin = TRUE WHERE id = '${userId.replace(/'/g, "''")}';`}`.quiet();
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
-    log.warn(
+    abort(
       `Failed to promote dev user to admin: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
     );
-    return;
   }
 
   // EnableRBAC seeds the built-in system roles and flips the org feature flag.
@@ -1977,8 +1976,7 @@ async function enableRBACForDevUser(init: {
     sessionHeaderGramSession: sessionId,
   });
   if (!res.ok) {
-    log.warn(`Failed to enable RBAC: ${JSON.stringify(res.error)}`);
-    return;
+    abort("Failed to enable RBAC", res.error);
   }
 
   // The admin system role intentionally omits chat:read, and the dev user has
@@ -2027,7 +2025,7 @@ async function enableRBACForDevUser(init: {
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
-    log.warn(
+    abort(
       `Failed to grant dev user RBAC scopes: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
     );
   }
