@@ -133,3 +133,43 @@ const threadId = searchParams.get('threadId')
   },
 }}>
 ```
+
+***
+
+### resolveCreator?
+
+> `optional` **resolveCreator?**: (`chat`) => \{ `name?`: `string`; `email`: `string`; `photoUrl?`: `string`; \} \| `undefined`
+
+Resolve a chat's creator to a displayable identity, shown as an avatar on
+each thread-list row. Called for every chat returned by the thread list
+with that chat's `userId`/`externalUserId`; return the creator's info to
+show it, or `undefined` to fall back to the default row icon.
+
+Elements has no notion of who a `userId` refers to — resolve it however
+the consumer's own identity system works (e.g. looking it up in an
+already-fetched member list) and return the result synchronously.
+
+#### Parameters
+
+##### chat
+
+###### userId?
+
+`string`
+
+###### externalUserId?
+
+`string`
+
+#### Returns
+
+\{ `name?`: `string`; `email`: `string`; `photoUrl?`: `string`; \} \| `undefined`
+
+#### Example
+
+```ts
+resolveCreator: ({ userId }) => {
+  const member = members.find((m) => m.id === userId);
+  return member && { name: member.name, email: member.email, photoUrl: member.photoUrl };
+}
+```
