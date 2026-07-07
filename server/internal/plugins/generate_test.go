@@ -64,7 +64,6 @@ func TestSharedAuthScriptMatchesCheckedIn(t *testing.T) {
 // authLoginHarness is a running gram_hooks_login invocation whose localhost
 // listener is ready to receive callback requests.
 type authLoginHarness struct {
-	ctx      context.Context
 	cmd      *exec.Cmd
 	output   *bytes.Buffer
 	authFile string
@@ -134,7 +133,6 @@ if [ -f "$1" ]; then cat "$1" > "$GRAM_TEST_URL_FILE"; else printf '%s' "$1" > "
 	require.NoError(t, cmd.Start())
 
 	h := &authLoginHarness{
-		ctx:      ctx,
 		cmd:      cmd,
 		output:   output,
 		authFile: authFile,
@@ -174,7 +172,7 @@ func TestSharedAuthScriptBrowserLoginRoundtrip(t *testing.T) {
 	// waiting for the real redirect.
 	forged := "http://127.0.0.1:" + h.port + "/callback?api_key=attacker-key&project=evil"
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, err := http.NewRequestWithContext(h.ctx, http.MethodGet, forged, nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, forged, nil)
 		if !assert.NoError(c, err) {
 			return
 		}
@@ -188,7 +186,7 @@ func TestSharedAuthScriptBrowserLoginRoundtrip(t *testing.T) {
 
 	callback := "http://127.0.0.1:" + h.port + "/callback?state=" + h.state + "&api_key=test-key-123&project=default&email=a%40b.c"
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, err := http.NewRequestWithContext(h.ctx, http.MethodGet, callback, nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, callback, nil)
 		if !assert.NoError(c, err) {
 			return
 		}
@@ -231,7 +229,7 @@ func TestSharedAuthScriptBrowserLoginFormPost(t *testing.T) {
 	// the listener keeps waiting for the dashboard's real submission.
 	forged := "http://127.0.0.1:" + h.port + "/callback?state=wrong"
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, err := http.NewRequestWithContext(h.ctx, http.MethodPost, forged,
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, forged,
 			strings.NewReader("api_key=attacker-key&project=evil"))
 		if !assert.NoError(c, err) {
 			return
@@ -247,7 +245,7 @@ func TestSharedAuthScriptBrowserLoginFormPost(t *testing.T) {
 
 	callback := "http://127.0.0.1:" + h.port + "/callback?state=" + h.state
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, err := http.NewRequestWithContext(h.ctx, http.MethodPost, callback,
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, callback,
 			strings.NewReader("api_key=test-key-456&project=default&email=a%40b.c&organization_id=org-123"))
 		if !assert.NoError(c, err) {
 			return

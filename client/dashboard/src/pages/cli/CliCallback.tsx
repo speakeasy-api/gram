@@ -258,11 +258,11 @@ function selectCallbackProjectSlug(
   return null;
 }
 
-async function transmitKey(
+function transmitKey(
   callbackUrl: string,
   callbackMethod: "get" | "post",
   fields: Record<string, string>,
-): Promise<void> {
+): void {
   if (callbackMethod === "post") {
     // A form navigation (not fetch) so the localhost listener does not need
     // CORS or private-network-access preflight handling. The callback URL's
