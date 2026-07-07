@@ -7,7 +7,12 @@ import {
   within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { ShadowMCPInventoryTable } from "./ShadowMCPInventoryTable";
@@ -48,18 +53,26 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       children,
       disabled,
       onClick,
+      ...props
     }: {
       children: ReactNode;
       disabled?: boolean;
       onClick?: () => void;
+      [key: string]: unknown;
     }) => (
-      <button disabled={disabled} onClick={onClick}>
+      <button disabled={disabled} onClick={onClick} {...props}>
         {children}
       </button>
     ),
     {
+      LeftIcon: ({ children }: { children: ReactNode }) => (
+        <span>{children}</span>
+      ),
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
+  ),
+  Icon: ({ className }: { className?: string; name: string }) => (
+    <span className={className} />
   ),
   Table: Object.assign(
     ({ children }: { children: ReactNode }) => <table>{children}</table>,
@@ -156,6 +169,28 @@ vi.mock("@speakeasy-api/moonshine", () => ({
           : String(av).localeCompare(String(bv));
       return sort.direction === "asc" ? comparison : -comparison;
     });
+  },
+}));
+
+vi.mock("@/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: ReactNode }) => (
+    <span>{children}</span>
+  ),
+  TooltipTrigger: ({
+    asChild,
+    children,
+  }: {
+    asChild?: boolean;
+    children: ReactNode;
+  }) => {
+    if (asChild && isValidElement(children)) {
+      return cloneElement(children as ReactElement<Record<string, unknown>>, {
+        "data-tooltip-trigger": "true",
+      });
+    }
+
+    return <>{children}</>;
   },
 }));
 
@@ -317,8 +352,8 @@ describe("ShadowMCPInventoryTable", () => {
     }
 
     let rows = screen.getAllByRole("row").slice(1);
-    expect(within(rows[0]!).getByText("Beta MCP")).toBeTruthy();
-    expect(within(rows[1]!).getByText("Alpha MCP")).toBeTruthy();
+    expect(within(rows[0]!).getByText("Alpha MCP")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Beta MCP")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Usage" }));
 
@@ -369,12 +404,7 @@ describe("ShadowMCPInventoryTable", () => {
       throw new Error("Inventory rows not found");
     }
 
-    fireEvent.click(
-      within(pendingRow).getByRole("button", { name: "Add Allow Rule" }),
-    );
-    fireEvent.click(
-      within(allowedRow).getByRole("button", { name: "Remove Allow Rule" }),
-    );
+    fireEvent.click(within(pendingRow).getByRole("button", { name: "Allow" }));
 
     await waitFor(() => {
       expect(allowServer).toHaveBeenCalledWith({
@@ -386,6 +416,20 @@ describe("ShadowMCPInventoryTable", () => {
           },
         },
       });
+    });
+    await waitFor(() => {
+      expect(
+        (
+          within(pendingRow).getByRole("button", {
+            name: "Allow",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false);
+    });
+
+    fireEvent.click(within(allowedRow).getByRole("button", { name: "Clear" }));
+
+    await waitFor(() => {
       expect(clearServer).toHaveBeenCalledWith({
         request: {
           clearShadowMCPInventoryServerAccessRequestBody: {
@@ -396,6 +440,124 @@ describe("ShadowMCPInventoryTable", () => {
       });
     });
     expect(mocks.invalidateShadowMCPInventory).toHaveBeenCalled();
+  });
+
+  it("clears denied Shadow MCP inventory URL rules", async () => {
+    const allowServer = vi.fn().mockResolvedValue({});
+    const clearServer = vi.fn().mockResolvedValue({});
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "denied",
+          canonicalServerUrl: "https://denied.example.com/mcp",
+          serverName: "Denied MCP",
+        }),
+      ],
+    });
+    mocks.allowInventoryServerMutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: allowServer,
+    });
+    mocks.clearInventoryServerMutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: clearServer,
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("Denied MCP")).toBeTruthy();
+    });
+
+    expect(screen.getByText("Blocked by URL rule")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+
+    await waitFor(() => {
+      expect(clearServer).toHaveBeenCalledWith({
+        request: {
+          clearShadowMCPInventoryServerAccessRequestBody: {
+            projectId: "project-id-1",
+            serverUrl: "https://denied.example.com/mcp",
+          },
+        },
+      });
+    });
+    expect(allowServer).not.toHaveBeenCalled();
+  });
+
+  it("uses the action button as the tooltip trigger", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "none",
+          canonicalServerUrl: "https://pending.example.com/mcp",
+          serverName: "Pending MCP",
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("Pending MCP")).toBeTruthy();
+    });
+
+    expect(
+      screen
+        .getByRole("button", { name: "Allow" })
+        .getAttribute("data-tooltip-trigger"),
+    ).toBe("true");
+  });
+
+  it("shows a loading indicator on the clicked action", async () => {
+    let resolveAllow: (value: unknown) => void = () => {};
+    const allowPromise = new Promise((resolve) => {
+      resolveAllow = resolve;
+    });
+    const allowServer = vi.fn().mockReturnValue(allowPromise);
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "none",
+          canonicalServerUrl: "https://pending.example.com/mcp",
+          serverName: "Pending MCP",
+        }),
+      ],
+    });
+    mocks.allowInventoryServerMutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: allowServer,
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("Pending MCP")).toBeTruthy();
+    });
+
+    const pendingRow = screen.getByText("Pending MCP").closest("tr");
+    if (!pendingRow) {
+      throw new Error("Inventory row not found");
+    }
+
+    fireEvent.click(within(pendingRow).getByRole("button", { name: "Allow" }));
+
+    await waitFor(() => {
+      expect(
+        (
+          within(pendingRow).getByRole("button", {
+            name: "Allow",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
+      expect(pendingRow.querySelector(".animate-spin")).toBeTruthy();
+    });
+
+    resolveAllow({});
+
+    await waitFor(() => {
+      expect(pendingRow.querySelector(".animate-spin")).toBeFalsy();
+    });
   });
 
   it("renders observed status when blocking is inactive", async () => {

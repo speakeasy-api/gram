@@ -11,18 +11,22 @@ import {
   Badge,
   Button,
   type Column,
+  Icon,
   type SortDescriptor,
   Table,
   sortTableData,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
-  shadowMCPInventoryActionLabel,
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusBadgeVariant,
   shadowMCPInventoryStatusDescription,
@@ -78,7 +82,7 @@ function InventoryEmptyState() {
   return (
     <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16 text-center">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <ShieldCheck className="text-muted-foreground h-6 w-6" />
+        <Icon name="shield-check" className="text-muted-foreground h-6 w-6" />
       </div>
       <Type variant="subheading" className="mb-1">
         No Shadow MCP servers
@@ -111,16 +115,20 @@ export function ShadowMCPInventoryTable({
   const allowServer = useAllowShadowMCPInventoryServerMutation();
   const clearServer = useClearShadowMCPInventoryServerAccessMutation();
   const [sort, setSort] = useState<SortDescriptor | null>({
-    id: "lastSeen",
+    id: "lastCalled",
     direction: "desc",
   });
+  const [pendingServerURL, setPendingServerURL] = useState<string | null>(null);
   const isMutating = allowServer.isPending || clearServer.isPending;
+  const isActionPending = isMutating || pendingServerURL !== null;
 
   const refreshInventory = async () => {
     await invalidateAllShadowMCPInventory(queryClient);
   };
 
   const allowInventoryServer = async (server: ShadowMCPInventoryServer) => {
+    setPendingServerURL(server.canonicalServerUrl);
+    const label = server.serverName ?? server.canonicalServerUrl;
     try {
       await allowServer.mutateAsync({
         request: {
@@ -132,13 +140,17 @@ export function ShadowMCPInventoryTable({
         },
       });
       await refreshInventory();
-      toast.success("Server allowed");
+      toast.success(`Allow rule added for: ${label}`);
     } catch {
-      toast.error("Server allow failed");
+      toast.error(`Unable to add allow rule for: ${label}`);
+    } finally {
+      setPendingServerURL(null);
     }
   };
 
   const clearInventoryServer = async (server: ShadowMCPInventoryServer) => {
+    setPendingServerURL(server.canonicalServerUrl);
+    const label = server.serverName ?? server.canonicalServerUrl;
     try {
       await clearServer.mutateAsync({
         request: {
@@ -149,10 +161,53 @@ export function ShadowMCPInventoryTable({
         },
       });
       await refreshInventory();
-      toast.success("Server access cleared");
+      toast.success(`Removed allow rule for: ${label}`);
     } catch {
-      toast.error("Server access clear failed");
+      toast.error(`Unable to remove allow rule for: ${label}`);
+    } finally {
+      setPendingServerURL(null);
     }
+  };
+
+  const renderRuleActionCell = (server: ShadowMCPInventoryServer) => {
+    const isServerPending = pendingServerURL === server.canonicalServerUrl;
+    const label = server.serverName || server.urlHost;
+    const hasAccessRule =
+      server.access === "allowed" || server.access === "denied";
+    const buttonLabel = hasAccessRule ? "Clear" : "Allow";
+    const iconName = hasAccessRule ? "minus" : "plus";
+    const tooltip = hasAccessRule
+      ? `Clear Access Rule for ${label}`
+      : `Add Access Rule for ${label}`;
+
+    return (
+      <Tooltip delayDuration={300}>
+        <TooltipTrigger asChild>
+          <Button
+            size="xs"
+            variant="secondary"
+            disabled={isActionPending}
+            onClick={() => {
+              if (hasAccessRule) {
+                void clearInventoryServer(server);
+              } else {
+                void allowInventoryServer(server);
+              }
+            }}
+          >
+            <Button.LeftIcon>
+              {isServerPending ? (
+                <Icon name="loader-circle" className="animate-spin" />
+              ) : (
+                <Icon name={iconName} />
+              )}
+            </Button.LeftIcon>
+            <Button.Text>{buttonLabel}</Button.Text>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+    );
   };
 
   const columns: Column<ShadowMCPInventoryServer>[] = [
@@ -218,36 +273,10 @@ export function ShadowMCPInventoryTable({
       ),
     },
     {
-      key: "actions",
-      header: "",
-      width: "1fr",
-      render: (server) => (
-        <div className="flex justify-end gap-2">
-          {server.access === "allowed" ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={isMutating}
-              onClick={() => {
-                void clearInventoryServer(server);
-              }}
-            >
-              <Button.Text>{shadowMCPInventoryActionLabel(server)}</Button.Text>
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={isMutating}
-              onClick={() => {
-                void allowInventoryServer(server);
-              }}
-            >
-              <Button.Text>{shadowMCPInventoryActionLabel(server)}</Button.Text>
-            </Button>
-          )}
-        </div>
-      ),
+      key: "accessRule",
+      header: "Access Rule",
+      width: "0.5fr",
+      render: renderRuleActionCell,
     },
   ];
 

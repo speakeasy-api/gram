@@ -30,19 +30,6 @@ export function shadowMCPPolicyState(
   return "none";
 }
 
-export function shadowMCPPolicyLabel(state: ShadowMCPPolicyState): string {
-  switch (state) {
-    case "blocking":
-      return "Blocking enabled";
-    case "flagging":
-      return "Flagging enabled";
-    case "none":
-      return "No policy";
-    case "unavailable":
-      return "Policy unavailable";
-  }
-}
-
 export function shadowMCPPolicyBadgeVariant(
   state: ShadowMCPPolicyState,
 ): BadgeProps["variant"] {
@@ -101,10 +88,4 @@ export function shadowMCPInventoryStatusDescription(
   if (server.access === "denied") return "Blocked by URL rule";
   if (policyState === "blocking") return "Blocked by policy";
   return "Not blocking";
-}
-
-export function shadowMCPInventoryActionLabel(
-  server: ShadowMCPInventoryServer,
-): "Add Allow Rule" | "Remove Allow Rule" {
-  return server.access === "allowed" ? "Remove Allow Rule" : "Add Allow Rule";
 }

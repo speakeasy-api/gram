@@ -1,18 +1,29 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ShadowMCPInventoryTable } from "@/components/shadow-mcp/ShadowMCPInventoryTable";
-import {
-  shadowMCPPolicyBadgeVariant,
-  shadowMCPPolicyLabel,
-  shadowMCPPolicyState,
-} from "@/components/shadow-mcp/shadowMCPInventoryStatus";
+import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicyStatus";
+import { shadowMCPPolicyState } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
+import { SkeletonTable } from "@/components/ui/skeleton";
 import { useProject } from "@/contexts/Auth";
-import { useRiskListPolicies } from "@gram/client/react-query/index.js";
-import { Badge } from "@speakeasy-api/moonshine";
+import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+
+function ShadowMCPLoadingState(): JSX.Element {
+  return (
+    <div
+      aria-label="Loading Shadow MCP policies"
+      className="flex flex-col gap-4 pb-8"
+      role="status"
+    >
+      <SkeletonTable />
+    </div>
+  );
+}
 
 export default function ShadowMCP(): JSX.Element {
+  const pageTitle = "Shadow MCP";
   const project = useProject();
   const policiesQuery = useRiskListPolicies();
+  const policyDataReady = policiesQuery.isError || !!policiesQuery.data;
   const policyState = policiesQuery.isError
     ? "unavailable"
     : shadowMCPPolicyState(policiesQuery.data?.policies);
@@ -20,26 +31,30 @@ export default function ShadowMCP(): JSX.Element {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Breadcrumbs
+          substitutions={{ ["shadow-mcp"]: pageTitle }}
+        />
       </Page.Header>
-      <Page.Body fullHeight overflowHidden className="pb-8">
+      <Page.Body fullHeight className="pb-8">
         <RequireScope scope="org:admin" level="page">
           <Page.Section>
-            <Page.Section.Title stage="beta">Shadow MCP</Page.Section.Title>
+            <Page.Section.Title stage="beta">{pageTitle}</Page.Section.Title>
             <Page.Section.Description>
-              Manage project-scoped Shadow MCP server inventory and URL access
-              rules.
+              Manage the Shadow MCP server inventory, access rules, and
+              requests.
             </Page.Section.Description>
-            <Page.Section.CTA>
-              <Badge variant={shadowMCPPolicyBadgeVariant(policyState)}>
-                <Badge.Text>{shadowMCPPolicyLabel(policyState)}</Badge.Text>
-              </Badge>
-            </Page.Section.CTA>
             <Page.Section.Body>
-              <ShadowMCPInventoryTable
-                policyState={policyState}
-                projectID={project.id}
-              />
+              {policyDataReady ? (
+                <div className="flex flex-col gap-4 pb-8">
+                  <ShadowMCPPolicyStatus policyState={policyState} />
+                  <ShadowMCPInventoryTable
+                    policyState={policyState}
+                    projectID={project.id}
+                  />
+                </div>
+              ) : (
+                <ShadowMCPLoadingState />
+              )}
             </Page.Section.Body>
           </Page.Section>
         </RequireScope>

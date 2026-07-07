@@ -2,10 +2,8 @@ import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { describe, expect, it } from "vitest";
 import {
-  shadowMCPInventoryActionLabel,
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusDescription,
-  shadowMCPPolicyLabel,
   shadowMCPPolicyState,
 } from "./shadowMCPInventoryStatus";
 
@@ -69,13 +67,6 @@ describe("shadowMCPPolicyState", () => {
       ]),
     ).toBe("none");
   });
-
-  it("maps policy labels", () => {
-    expect(shadowMCPPolicyLabel("blocking")).toBe("Blocking enabled");
-    expect(shadowMCPPolicyLabel("flagging")).toBe("Flagging enabled");
-    expect(shadowMCPPolicyLabel("none")).toBe("No policy");
-    expect(shadowMCPPolicyLabel("unavailable")).toBe("Policy unavailable");
-  });
 });
 
 describe("shadowMCPInventoryStatus", () => {
@@ -125,17 +116,5 @@ describe("shadowMCPInventoryStatus", () => {
     expect(
       shadowMCPInventoryStatusDescription(server({ access: "none" }), "none"),
     ).toBe("Not blocking");
-  });
-
-  it("uses allow-rule action labels", () => {
-    expect(shadowMCPInventoryActionLabel(server({ access: "allowed" }))).toBe(
-      "Remove Allow Rule",
-    );
-    expect(shadowMCPInventoryActionLabel(server({ access: "none" }))).toBe(
-      "Add Allow Rule",
-    );
-    expect(shadowMCPInventoryActionLabel(server({ access: "denied" }))).toBe(
-      "Add Allow Rule",
-    );
   });
 });

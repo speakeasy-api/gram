@@ -67,17 +67,12 @@ vi.mock("@/components/page-layout", () => {
   };
 });
 
-vi.mock("@gram/client/react-query/index.js", () => ({
+vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
   useRiskListPolicies: mocks.useRiskListPolicies,
 }));
 
-vi.mock("@speakeasy-api/moonshine", () => ({
-  Badge: Object.assign(
-    ({ children }: { children: ReactNode }) => <span>{children}</span>,
-    {
-      Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-    },
-  ),
+vi.mock("@/components/ui/skeleton", () => ({
+  SkeletonTable: () => <div>Loading table</div>,
 }));
 
 vi.mock("@/components/shadow-mcp/ShadowMCPInventoryTable", () => ({
@@ -144,16 +139,38 @@ describe("ShadowMCP", () => {
     expect(screen.getByRole("heading", { name: "Shadow MCP" })).toBeTruthy();
     expect(
       screen.getByText(
-        "Manage project-scoped Shadow MCP server inventory and URL access rules.",
+        "Manage the Shadow MCP server inventory, access rules, and requests.",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("No policy")).toBeTruthy();
+    expect(screen.getByText("No Policy")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "No policy is enabled. All Shadow MCP servers are allowed.",
+      ),
+    ).toBeTruthy();
     expect(
       screen.getByText("Shadow MCP inventory for project-1 with policy none"),
     ).toBeTruthy();
   });
 
-  it("renders blocking policy status in the page action slot", () => {
+  it("blocks inventory rendering until policy data loads", () => {
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: undefined,
+      isError: false,
+      isLoading: true,
+    });
+
+    render(<ShadowMCP />);
+
+    expect(screen.getByRole("status").getAttribute("aria-label")).toBe(
+      "Loading Shadow MCP policies",
+    );
+    expect(screen.getByText("Loading table")).toBeTruthy();
+    expect(screen.queryByText("No Policy")).toBeNull();
+    expect(screen.queryByText(/Shadow MCP inventory for/)).toBeNull();
+  });
+
+  it("renders blocking policy status above the inventory table", () => {
     mocks.useRiskListPolicies.mockReturnValue({
       data: {
         policies: [
@@ -167,7 +184,12 @@ describe("ShadowMCP", () => {
 
     render(<ShadowMCP />);
 
-    expect(screen.getByText("Blocking enabled")).toBeTruthy();
+    expect(screen.getByText("Blocking")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Block policy is enabled. Servers without allow rules are not allowed.",
+      ),
+    ).toBeTruthy();
     expect(
       screen.getByText(
         "Shadow MCP inventory for project-1 with policy blocking",
@@ -184,7 +206,12 @@ describe("ShadowMCP", () => {
 
     render(<ShadowMCP />);
 
-    expect(screen.getByText("Flagging enabled")).toBeTruthy();
+    expect(screen.getByText("Flagging")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Flagging policy is enabled. Servers without allow rules are only flagged.",
+      ),
+    ).toBeTruthy();
     expect(
       screen.getByText(
         "Shadow MCP inventory for project-1 with policy flagging",
@@ -206,7 +233,7 @@ describe("ShadowMCP", () => {
 
     render(<ShadowMCP />);
 
-    expect(screen.getByText("No policy")).toBeTruthy();
+    expect(screen.getByText("No Policy")).toBeTruthy();
     expect(
       screen.getByText("Shadow MCP inventory for project-1 with policy none"),
     ).toBeTruthy();
