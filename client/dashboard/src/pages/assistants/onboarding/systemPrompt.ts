@@ -112,6 +112,7 @@ export type AssistantSnapshot = {
   status: string;
   instructions: string;
   toolsets: { slug: string; environmentSlug?: string | null }[];
+  mcpServers: { slug: string; environmentSlug?: string | null }[];
 };
 
 export function buildSystemPrompt(args: {
@@ -145,6 +146,16 @@ This is a snapshot taken when the user opened this chat — it bootstraps the ed
               .map(
                 (t) =>
                   `\`${t.slug}\`${t.environmentSlug ? ` (env: \`${t.environmentSlug}\`)` : ""}`,
+              )
+              .join(", ")
+      }
+- MCP servers (directly attached): ${
+        snapshot.mcpServers.length === 0
+          ? "none attached"
+          : snapshot.mcpServers
+              .map(
+                (m) =>
+                  `\`${m.slug}\`${m.environmentSlug ? ` (env: \`${m.environmentSlug}\`)` : ""}`,
               )
               .join(", ")
       }

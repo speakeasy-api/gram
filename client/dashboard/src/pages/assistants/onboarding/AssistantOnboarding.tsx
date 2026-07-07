@@ -219,6 +219,10 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
         slug: t.toolsetSlug,
         environmentSlug: t.environmentSlug ?? null,
       })),
+      mcpServers: (draft.assistant.mcpServers ?? []).map((m) => ({
+        slug: m.mcpServerSlug,
+        environmentSlug: m.environmentSlug ?? null,
+      })),
     };
   }
   const snapshot = snapshotRef.current;
