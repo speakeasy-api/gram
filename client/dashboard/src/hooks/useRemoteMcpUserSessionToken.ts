@@ -24,9 +24,18 @@ export interface UseRemoteMcpUserSessionTokenResult {
 export function useRemoteMcpUserSessionToken({
   mcpServerId,
   isIssuerGated,
+  userSessionIssuerId,
 }: {
   mcpServerId: string | undefined;
   isIssuerGated: boolean;
+  /**
+   * The server's explicit user_session_issuer_id, or undefined when it is
+   * implicitly gated by the project-default issuer. Part of the query key:
+   * a minted JWT's audience is bound to the issuer, so switching a server
+   * between issuers (attach/detach) must drop the cached token instead of
+   * replaying one with a stale audience.
+   */
+  userSessionIssuerId: string | undefined;
 }): UseRemoteMcpUserSessionTokenResult {
   const session = useSession();
   const project = useProject();
@@ -40,6 +49,7 @@ export function useRemoteMcpUserSessionToken({
       project.id,
       mcpServerId,
       session.user.id,
+      userSessionIssuerId ?? "implicit",
     ],
     queryFn: async () => {
       if (!mcpServerId) return null;

@@ -43,6 +43,13 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 	if payload.Slug == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "slug is required").LogError(ctx, logger)
 	}
+	if payload.Slug == DefaultIssuerSlug {
+		// Reserved for the implicit project-default issuer (see
+		// GetOrCreateDefaultIssuer) — implicit resolution is by slug, so a
+		// user-created issuer under this name would silently become the
+		// default for every implicitly gated server in the project.
+		return nil, oops.E(oops.CodeBadRequest, nil, "slug %q is reserved for the project-default issuer", DefaultIssuerSlug).LogError(ctx, logger)
+	}
 	if payload.SessionDurationHours <= 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").LogError(ctx, logger)
 	}
@@ -127,6 +134,12 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
+	}
+
+	// Mirror the create-side reservation: renaming another issuer onto the
+	// implicit project-default slug would hijack implicit resolution.
+	if payload.Slug != nil && *payload.Slug == DefaultIssuerSlug && existing.Slug != DefaultIssuerSlug {
+		return nil, oops.E(oops.CodeBadRequest, nil, "slug %q is reserved for the project-default issuer", DefaultIssuerSlug).LogError(ctx, logger)
 	}
 
 	beforeView := userSessionIssuerView(existing)

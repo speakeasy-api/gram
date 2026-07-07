@@ -35,6 +35,7 @@ export function ToolsTab({
         isResolvingUrl={loading}
         mcpServerId={mcpServer.id}
         isIssuerGated={!!mcpServer.userSessionIssuerId || implicitlyGated}
+        userSessionIssuerId={mcpServer.userSessionIssuerId}
       />
     </div>
   );
