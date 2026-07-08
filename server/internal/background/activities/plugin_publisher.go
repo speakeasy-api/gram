@@ -98,7 +98,15 @@ func (p *PluginPublisher) PublishProject(ctx context.Context, input plugins.Publ
 	result, err := p.publisher.PublishProject(ctx, input)
 	if err != nil {
 		if errors.Is(err, plugins.ErrGitHubRepoConflict) {
-			return nil, temporal.NewNonRetryableApplicationError(err.Error(), ErrTypeGitHubRepoConflict, err)
+			// err.Error() on an *oops.ShareableError only returns the static
+			// public message ("persist plugin api keys") — String() carries
+			// the cause chain with the actual repo/owner that conflicted,
+			// which is what an operator needs to act on this.
+			detail := err.Error()
+			if se, ok := err.(interface{ String() string }); ok {
+				detail = se.String()
+			}
+			return nil, temporal.NewNonRetryableApplicationError(detail, ErrTypeGitHubRepoConflict, err)
 		}
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}

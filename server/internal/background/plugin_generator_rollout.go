@@ -49,7 +49,13 @@ type PluginGeneratorRolloutResult struct {
 	Scanned   int
 	Published int
 	Skipped   int
-	Failed    int
+	// Conflicted counts candidates that hit a permanent, non-retryable
+	// github-repo conflict (see ErrTypeGitHubRepoConflict) — kept separate
+	// from Skipped so a project stuck on this doesn't blend into ordinary
+	// unchanged-fingerprint skips and go unnoticed. logSummary always
+	// reports a non-zero count here.
+	Conflicted int
+	Failed     int
 }
 
 func ExecutePluginGeneratorRolloutWorkflow(ctx context.Context, env *tenv.Environment, input PluginGeneratorRolloutInput) (client.WorkflowRun, error) {
@@ -83,21 +89,26 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 
 	var a *Activities
 	result := &PluginGeneratorRolloutResult{
-		Scanned:   input.Carried.Scanned,
-		Published: input.Carried.Published,
-		Skipped:   input.Carried.Skipped,
-		Failed:    input.Carried.Failed,
+		Scanned:    input.Carried.Scanned,
+		Published:  input.Carried.Published,
+		Skipped:    input.Carried.Skipped,
+		Conflicted: input.Carried.Conflicted,
+		Failed:     input.Carried.Failed,
 	}
 
 	// At a frequent cadence most runs publish nothing (the fingerprint skips
-	// unchanged projects), so only log when real work happened — a propagation
-	// or a failure worth seeing — rather than emitting a line every tick.
+	// unchanged projects), so only log when real work happened — a propagation,
+	// a failure, or a conflict worth seeing — rather than emitting a line every
+	// tick. Conflicted must gate this log same as Failed: a conflicted candidate
+	// never becomes Published on its own (see ErrGitHubRepoConflict), so silence
+	// here would mean it's stuck forever with no signal.
 	logSummary := func() {
-		if result.Published > 0 || result.Failed > 0 {
+		if result.Published > 0 || result.Failed > 0 || result.Conflicted > 0 {
 			workflow.GetLogger(ctx).Info("plugin generator rollout complete",
 				"scanned", result.Scanned,
 				"published", result.Published,
 				"skipped", result.Skipped,
+				"conflicted", result.Conflicted,
 				"failed", result.Failed,
 			)
 		}
@@ -146,8 +157,8 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 				if err := future.Get(ctx, &publishResult); err != nil {
 					var appErr *temporal.ApplicationError
 					if errors.As(err, &appErr) && appErr.Type() == bgactivities.ErrTypeGitHubRepoConflict {
-						result.Skipped++
-						workflow.GetLogger(ctx).Warn("plugin project publish skipped: github repo conflict", "error", err)
+						result.Conflicted++
+						workflow.GetLogger(ctx).Warn("plugin project publish blocked: github repo conflict", "error", err)
 						continue
 					}
 					result.Failed++
@@ -178,7 +189,7 @@ func AddPluginGeneratorRolloutSchedule(ctx context.Context, temporalEnv *tenv.En
 	action := &client.ScheduleWorkflowAction{
 		ID:                 pluginGeneratorRolloutWorkflowID,
 		Workflow:           PluginGeneratorRolloutWorkflow,
-		Args:               []any{PluginGeneratorRolloutInput{BatchSize: 0, CommitMessage: "", AfterProjectID: nil, Carried: PluginGeneratorRolloutResult{Scanned: 0, Published: 0, Skipped: 0, Failed: 0}}},
+		Args:               []any{PluginGeneratorRolloutInput{BatchSize: 0, CommitMessage: "", AfterProjectID: nil, Carried: PluginGeneratorRolloutResult{Scanned: 0, Published: 0, Skipped: 0, Conflicted: 0, Failed: 0}}},
 		TaskQueue:          string(temporalEnv.Queue()),
 		WorkflowRunTimeout: 6 * time.Hour,
 	}
