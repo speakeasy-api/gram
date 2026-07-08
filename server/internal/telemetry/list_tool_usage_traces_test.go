@@ -465,6 +465,92 @@ func TestListToolUsageTraces_PrefersWorstStatusInGroupedTrace(t *testing.T) {
 	require.Equal(t, "policy denied", *result.Traces[0].BlockReason)
 }
 
+// A trace's status is a per-trace aggregate, but attribute filters are pushed down to
+// individual telemetry_logs rows and the survivors are then regrouped into traces. A
+// successful trace typically spans multiple rows, only some of which carry
+// http.response.status_code. Filtering "http.response.status_code != 200" must not leak
+// such a trace back in just because one of its status-less rows trivially satisfies the
+// predicate (an empty status string is unequal to "200"). See DNO-447.
+func TestListToolUsageTraces_StatusFilterExcludesSuccessfulTracesWithStatuslessRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	// Successful trace: two rows sharing one trace_id and classification. One carries a
+	// 200 status; the other carries none (like a hook row with no HTTP response).
+	successTrace := uuid.New().String()
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-6 * time.Minute),
+		traceID:        successTrace,
+		userEmail:      "alice@example.com",
+		hookSource:     "cursor",
+		toolSource:     "shadow-db",
+		toolName:       "query",
+		result:         `"ok"`,
+		conversationID: "conv-success",
+		customAttrs:    map[string]any{"http.response.status_code": 200},
+	})
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-5 * time.Minute),
+		traceID:        successTrace,
+		userEmail:      "alice@example.com",
+		hookSource:     "cursor",
+		toolSource:     "shadow-db",
+		toolName:       "query",
+		result:         `"ok"`,
+		conversationID: "conv-success",
+	})
+
+	// Failed trace: a single row that carries a 500 status and a hook error.
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-4 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "alice@example.com",
+		hookSource:     "cursor",
+		toolSource:     "shadow-db",
+		toolName:       "query",
+		errorMsg:       "boom",
+		conversationID: "conv-failure",
+		customAttrs:    map[string]any{"http.response.status_code": 500},
+	})
+
+	// Sanity check: without a status filter both traces are present. A non-empty query
+	// (":" is in every seeded gram_urn) forces the same raw path the status filter uses.
+	rawPathQuery := ":"
+	all := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
+		Query: &rawPathQuery,
+		Limit: 10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 2
+	})
+	require.Len(t, all.Traces, 2)
+
+	filtered := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+		Filters: []*gen.LogFilter{
+			{Path: "http.response.status_code", Operator: "not_eq", Values: []string{"200"}},
+		},
+		Limit: 10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1
+	})
+	require.Len(t, filtered.Traces, 1, "only the 500 trace should match != 200")
+	require.NotNil(t, filtered.Traces[0].HookStatus)
+	require.Equal(t, "failure", *filtered.Traces[0].HookStatus)
+}
+
 func TestListToolUsageTraces_IncludesTriggerOnlyRowsForTriggerFilter(t *testing.T) {
 	t.Parallel()
 
