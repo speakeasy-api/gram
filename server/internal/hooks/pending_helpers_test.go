@@ -58,6 +58,68 @@ func TestBuildTelemetryAttributesWithMetadata_SetsMCPMatchFromCachedList(t *test
 	assert.Equal(t, "mise mcp", attrs[attr.MCPMatchKey])
 }
 
+// Cowork runs the same claude-code binary and reports the same OTEL
+// service.name, so the agent variant cached by SessionStart is the only
+// signal that distinguishes it. Tool-call telemetry must stamp hook_source
+// = "cowork" so cowork sessions stay filterable in tool logs.
+func TestBuildTelemetryAttributesWithMetadata_HookSourceFromCoworkVariant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
+		agentVariantCowork, sessionMCPListTTL))
+
+	// ServiceName is "claude-code" (what cowork reports) — the variant must
+	// still win so the row is labelled "cowork", not "claude-code".
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, agentVariantCowork, attrs[attr.HookSourceKey])
+}
+
+// A claude-code variant (or no cached variant) must not be rewritten to
+// "cowork"; hook_source keeps the ServiceName / "claude" default.
+func TestBuildTelemetryAttributesWithMetadata_HookSourceDefaultsWithoutCoworkVariant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
+		agentVariantClaudeCode, sessionMCPListTTL))
+
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, "claude-code", attrs[attr.HookSourceKey])
+}
+
 // Native (non-MCP) tools must NOT get a gram.mcp.match attribute — the
 // hook never routes them through an MCP server, and an empty value on the
 // log row would pollute the CH index.
