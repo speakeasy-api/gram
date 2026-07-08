@@ -126,6 +126,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Body: ({
         columns,
         data,
+        handleLoadMore,
+        hasMore,
+        isLoading,
         rowKey,
       }: {
         columns: Array<{
@@ -133,6 +136,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
           render?: (row: ShadowMCPInventoryServer) => ReactNode;
         }>;
         data: ShadowMCPInventoryServer[];
+        handleLoadMore?: () => void;
+        hasMore?: boolean;
+        isLoading?: boolean;
         rowKey: (row: ShadowMCPInventoryServer) => string;
       }) => (
         <tbody>
@@ -143,6 +149,15 @@ vi.mock("@speakeasy-api/moonshine", () => ({
               ))}
             </tr>
           ))}
+          {hasMore && handleLoadMore ? (
+            <tr>
+              <td colSpan={columns.length}>
+                <button onClick={handleLoadMore}>
+                  {isLoading ? "Loading" : "Load more"}
+                </button>
+              </td>
+            </tr>
+          ) : null}
         </tbody>
       ),
     },
@@ -236,17 +251,21 @@ function renderInventoryTable(
 function mockShadowMCPInventory({
   servers = [],
   isLoading = false,
+  isFetching = false,
   error = null,
   nextCursor,
 }: {
   servers?: ShadowMCPInventoryServer[];
   isLoading?: boolean;
+  isFetching?: boolean;
   error?: Error | null;
   nextCursor?: string;
 } = {}) {
   mocks.useShadowMCPInventory.mockReturnValue({
     data: { servers, nextCursor },
+    isFetching,
     isLoading,
+    refetch: vi.fn(),
     error,
   });
 }
@@ -364,6 +383,239 @@ describe("ShadowMCPInventoryTable", () => {
     expect(within(rows[1]!).getByText("Alpha MCP")).toBeTruthy();
     expect(within(rows[1]!).getByText("20 calls")).toBeTruthy();
     expect(within(rows[1]!).getByText("1 user")).toBeTruthy();
+  });
+
+  it("loads more inventory rows through the Moonshine table", async () => {
+    const firstPageServer = inventoryServer({
+      canonicalServerUrl: "https://first.example.com/mcp",
+      serverName: "First MCP",
+    });
+    const secondPageServer = inventoryServer({
+      canonicalServerUrl: "https://second.example.com/mcp",
+      serverName: "Second MCP",
+    });
+    const firstPageResponse = {
+      data: { servers: [firstPageServer], nextCursor: "next-page" },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+    };
+    const secondPageResponse = {
+      data: { servers: [secondPageServer], nextCursor: undefined },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+    };
+    mocks.useShadowMCPInventory.mockImplementation(
+      (request: { cursor?: string }) => {
+        if (request.cursor === "next-page") {
+          return secondPageResponse;
+        }
+
+        return firstPageResponse;
+      },
+    );
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("First MCP")).toBeTruthy();
+    });
+    expect(screen.queryByText("Second MCP")).toBeFalsy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Second MCP")).toBeTruthy();
+    });
+    expect(mocks.useShadowMCPInventory).toHaveBeenCalledWith(
+      { projectId: "project-id-1", limit: 50, cursor: "next-page" },
+      undefined,
+      expect.objectContaining({ enabled: true }),
+    );
+  });
+
+  it("keeps loaded inventory rows visible while loading the next page", async () => {
+    const firstPageServer = inventoryServer({
+      canonicalServerUrl: "https://first.example.com/mcp",
+      serverName: "First MCP",
+    });
+    const firstPageResponse = {
+      data: { servers: [firstPageServer], nextCursor: "next-page" },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    const loadingNextPageResponse = {
+      data: undefined,
+      error: null,
+      isFetching: true,
+      isLoading: true,
+      refetch: vi.fn(),
+    };
+    mocks.useShadowMCPInventory.mockImplementation(
+      (request: { cursor?: string }) => {
+        if (request.cursor === "next-page") {
+          return loadingNextPageResponse;
+        }
+
+        return firstPageResponse;
+      },
+    );
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("First MCP")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    expect(screen.getByText("First MCP")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Loading" })).toBeTruthy();
+    expect(screen.queryByText("Access Rules could not be loaded")).toBeFalsy();
+  });
+
+  it("keeps loaded inventory rows visible and retries after a next page error", async () => {
+    const refetchNextPage = vi.fn();
+    const firstPageServer = inventoryServer({
+      canonicalServerUrl: "https://first.example.com/mcp",
+      serverName: "First MCP",
+    });
+    const firstPageResponse = {
+      data: { servers: [firstPageServer], nextCursor: "next-page" },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    const errorNextPageResponse = {
+      data: undefined,
+      error: new Error("next page failed"),
+      isFetching: false,
+      isLoading: false,
+      refetch: refetchNextPage,
+    };
+    mocks.useShadowMCPInventory.mockImplementation(
+      (request: { cursor?: string }) => {
+        if (request.cursor === "next-page") {
+          return errorNextPageResponse;
+        }
+
+        return firstPageResponse;
+      },
+    );
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("First MCP")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    expect(screen.getByText("First MCP")).toBeTruthy();
+    expect(screen.queryByText("Access Rules could not be loaded")).toBeFalsy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    expect(refetchNextPage).toHaveBeenCalled();
+  });
+
+  it("does not render stale inventory rows when the project changes", async () => {
+    const firstProjectServer = inventoryServer({
+      canonicalServerUrl: "https://first-project.example.com/mcp",
+      serverName: "First Project MCP",
+    });
+    const firstProjectResponse = {
+      data: { servers: [firstProjectServer], nextCursor: undefined },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    const secondProjectLoadingResponse = {
+      data: undefined,
+      error: null,
+      isFetching: true,
+      isLoading: true,
+      refetch: vi.fn(),
+    };
+    mocks.useShadowMCPInventory.mockImplementation(
+      (request: { projectId: string }) => {
+        if (request.projectId === "project-id-2") {
+          return secondProjectLoadingResponse;
+        }
+
+        return firstProjectResponse;
+      },
+    );
+    const queryClient = new QueryClient();
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ShadowMCPInventoryTable
+          policyState="blocking"
+          projectID="project-id-1"
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("First Project MCP")).toBeTruthy();
+    });
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ShadowMCPInventoryTable
+          policyState="blocking"
+          projectID="project-id-2"
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByText("First Project MCP")).toBeFalsy();
+  });
+
+  it("does not render stale inventory rows when the table is disabled", async () => {
+    const inventoryServerRow = inventoryServer({
+      canonicalServerUrl: "https://enabled.example.com/mcp",
+      serverName: "Enabled MCP",
+    });
+    const enabledResponse = {
+      data: { servers: [inventoryServerRow], nextCursor: undefined },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    mocks.useShadowMCPInventory.mockReturnValue(enabledResponse);
+    const queryClient = new QueryClient();
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ShadowMCPInventoryTable
+          enabled
+          policyState="blocking"
+          projectID="project-id-1"
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Enabled MCP")).toBeTruthy();
+    });
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ShadowMCPInventoryTable
+          enabled={false}
+          policyState="blocking"
+          projectID="project-id-1"
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByText("Enabled MCP")).toBeFalsy();
   });
 
   it("adds and removes Shadow MCP inventory URL allow rules", async () => {

@@ -17,7 +17,7 @@ import {
   sortTableData,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import {
@@ -35,6 +35,15 @@ import {
 } from "./shadowMCPInventoryStatus";
 
 const INVENTORY_PAGE_LIMIT = 50;
+const FIRST_PAGE_CURSOR = "";
+
+type InventoryPage = {
+  cursor: string;
+  nextCursor?: string;
+  servers: ShadowMCPInventoryServer[];
+};
+
+const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
 
 function usageCountLabel(count: number) {
   return `${count} ${count === 1 ? "call" : "calls"}`;
@@ -107,11 +116,23 @@ export function ShadowMCPInventoryTable({
   projectID: string;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const inventoryQuery = useShadowMCPInventory(
-    { projectId: projectID, limit: INVENTORY_PAGE_LIMIT },
-    undefined,
-    { enabled: enabled && projectID.length > 0 },
-  );
+  const inventoryScope = enabled && projectID.length > 0 ? projectID : "";
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [pages, setPages] = useState<InventoryPage[]>([]);
+  const [paginationScope, setPaginationScope] = useState(inventoryScope);
+  const hasActivePagination = paginationScope === inventoryScope;
+  const activeCursor = hasActivePagination ? cursor : undefined;
+  const activePages = hasActivePagination ? pages : EMPTY_INVENTORY_PAGES;
+  const inventoryRequest = activeCursor
+    ? {
+        projectId: projectID,
+        limit: INVENTORY_PAGE_LIMIT,
+        cursor: activeCursor,
+      }
+    : { projectId: projectID, limit: INVENTORY_PAGE_LIMIT };
+  const inventoryQuery = useShadowMCPInventory(inventoryRequest, undefined, {
+    enabled: enabled && projectID.length > 0,
+  });
   const allowServer = useAllowShadowMCPInventoryServerMutation();
   const clearServer = useClearShadowMCPInventoryServerAccessMutation();
   const [sort, setSort] = useState<SortDescriptor | null>({
@@ -122,8 +143,83 @@ export function ShadowMCPInventoryTable({
   const isMutating = allowServer.isPending || clearServer.isPending;
   const isActionPending = isMutating || pendingServerURL !== null;
 
+  useEffect(() => {
+    setPaginationScope(inventoryScope);
+    setCursor(undefined);
+    setPages([]);
+  }, [inventoryScope]);
+
+  useEffect(() => {
+    if (
+      !hasActivePagination ||
+      !enabled ||
+      projectID.length === 0 ||
+      !inventoryQuery.data
+    ) {
+      return;
+    }
+
+    const pageCursor = activeCursor ?? FIRST_PAGE_CURSOR;
+    setPages((currentPages) => {
+      const page: InventoryPage = {
+        cursor: pageCursor,
+        nextCursor: inventoryQuery.data.nextCursor,
+        servers: inventoryQuery.data.servers,
+      };
+      const existingPageIndex = currentPages.findIndex(
+        (currentPage) => currentPage.cursor === pageCursor,
+      );
+
+      if (existingPageIndex === -1) {
+        return [...currentPages, page];
+      }
+
+      return currentPages.map((currentPage, index) =>
+        index === existingPageIndex ? page : currentPage,
+      );
+    });
+  }, [
+    activeCursor,
+    enabled,
+    hasActivePagination,
+    inventoryQuery.data,
+    projectID,
+  ]);
+
   const refreshInventory = async () => {
+    setCursor(undefined);
+    setPages([]);
     await invalidateAllShadowMCPInventory(queryClient);
+  };
+
+  const loadedServers = useMemo(() => {
+    return activePages.flatMap((page) => page.servers);
+  }, [activePages]);
+
+  const latestPage = activePages[activePages.length - 1];
+  const canUseInventoryQueryData =
+    enabled && projectID.length > 0 && hasActivePagination;
+  const nextCursor =
+    latestPage?.nextCursor ??
+    (canUseInventoryQueryData ? inventoryQuery.data?.nextCursor : undefined);
+  const hasLoadedPages = activePages.length > 0;
+  const isInitialLoading = inventoryQuery.isLoading && !hasLoadedPages;
+  const isInitialError = Boolean(inventoryQuery.error && !hasLoadedPages);
+  const isLoadingMore = Boolean(
+    hasLoadedPages && (inventoryQuery.isFetching || inventoryQuery.isLoading),
+  );
+
+  const loadMoreServers = () => {
+    if (!nextCursor || isLoadingMore) {
+      return;
+    }
+
+    if (activeCursor === nextCursor && inventoryQuery.error) {
+      void inventoryQuery.refetch();
+      return;
+    }
+
+    setCursor(nextCursor);
   };
 
   const allowInventoryServer = async (server: ShadowMCPInventoryServer) => {
@@ -280,18 +376,23 @@ export function ShadowMCPInventoryTable({
     },
   ];
 
-  const servers = inventoryQuery.data?.servers ?? [];
+  const servers =
+    loadedServers.length > 0
+      ? loadedServers
+      : canUseInventoryQueryData
+        ? (inventoryQuery.data?.servers ?? [])
+        : [];
   const sortedServers = sortTableData(
     servers,
     columns,
     sort,
   ) as ShadowMCPInventoryServer[];
 
-  if (inventoryQuery.isLoading) {
+  if (isInitialLoading) {
     return <SkeletonTable />;
   }
 
-  if (inventoryQuery.error) {
+  if (isInitialError) {
     return (
       <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
         <Type variant="body" className="font-medium">
@@ -318,6 +419,9 @@ export function ShadowMCPInventoryTable({
         <Table.Body
           columns={columns}
           data={sortedServers}
+          handleLoadMore={loadMoreServers}
+          hasMore={Boolean(nextCursor)}
+          isLoading={isLoadingMore}
           rowKey={(row) => row.canonicalServerUrl}
           className="min-h-0 content-start overflow-y-auto"
         />
