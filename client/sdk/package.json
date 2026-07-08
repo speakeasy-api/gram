@@ -46,7 +46,7 @@
     "@types/react-dom": "catalog:",
     "eslint": "^9.26.0",
     "globals": "^15.14.0",
-    "typescript": "catalog:",
+    "typescript": "catalog:ts5",
     "typescript-eslint": "^8.26.0"
   },
   "dependencies": {

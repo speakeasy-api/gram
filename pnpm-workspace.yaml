@@ -28,6 +28,13 @@ catalog:
   typescript: 7.0.2
   vite: ^8.1.2
 
+catalogs:
+  # TypeScript 7 (tsgo) no longer ships the compiler's JS API, which
+  # typescript-eslint and vite-plugin-dts require. Packages using those tools
+  # stay on 5.9.3 via this catalog until the ecosystem supports TS7.
+  ts5:
+    typescript: 5.9.3
+
 minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:
