@@ -20,10 +20,19 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ServiceError,
+  ServiceError$inboundSchema,
+} from "../models/errors/serviceerror.js";
+import {
+  DownloadPluginPackageRequest,
+  DownloadPluginPackageRequest$outboundSchema,
+  DownloadPluginPackageResponse,
+  DownloadPluginPackageResponse$inboundSchema,
+  DownloadPluginPackageSecurity,
+} from "../models/operations/downloadpluginpackage.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -35,13 +44,13 @@ import { Result } from "../types/fp.js";
  */
 export function pluginsDownloadPluginPackage(
   client: GramCore,
-  request: operations.DownloadPluginPackageRequest,
-  security?: operations.DownloadPluginPackageSecurity | undefined,
+  request: DownloadPluginPackageRequest,
+  security?: DownloadPluginPackageSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.DownloadPluginPackageResponse,
-    | errors.ServiceError
+    DownloadPluginPackageResponse,
+    | ServiceError
     | GramError
     | ResponseValidationError
     | ConnectionError
@@ -62,14 +71,14 @@ export function pluginsDownloadPluginPackage(
 
 async function $do(
   client: GramCore,
-  request: operations.DownloadPluginPackageRequest,
-  security?: operations.DownloadPluginPackageSecurity | undefined,
+  request: DownloadPluginPackageRequest,
+  security?: DownloadPluginPackageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.DownloadPluginPackageResponse,
-      | errors.ServiceError
+      DownloadPluginPackageResponse,
+      | ServiceError
       | GramError
       | ResponseValidationError
       | ConnectionError
@@ -84,8 +93,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(operations.DownloadPluginPackageRequest$outboundSchema, value),
+    (value) => z.parse(DownloadPluginPackageRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -176,8 +184,8 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.DownloadPluginPackageResponse,
-    | errors.ServiceError
+    DownloadPluginPackageResponse,
+    | ServiceError
     | GramError
     | ResponseValidationError
     | ConnectionError
@@ -187,16 +195,13 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.stream(200, operations.DownloadPluginPackageResponse$inboundSchema, {
+    M.stream(200, DownloadPluginPackageResponse$inboundSchema, {
       ctype: "application/zip",
       hdrs: true,
       key: "Result",
     }),
-    M.jsonErr(
-      [400, 401, 403, 404, 409, 415, 422],
-      errors.ServiceError$inboundSchema,
-    ),
-    M.jsonErr([500, 502], errors.ServiceError$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

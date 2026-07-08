@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  RemoveOrganizationUserRequest,
+  RemoveOrganizationUserSecurity,
+} from "../models/operations/removeorganizationuser.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RemoveOrganizationUserMutationVariables = {
-  request: operations.RemoveOrganizationUserRequest;
-  security?: operations.RemoveOrganizationUserSecurity | undefined;
+  request: RemoveOrganizationUserRequest;
+  security?: RemoveOrganizationUserSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type RemoveOrganizationUserMutationData = void;
 
 export type RemoveOrganizationUserMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

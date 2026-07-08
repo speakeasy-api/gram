@@ -429,7 +429,10 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
 -- primary key is not supported").
 PRIMARY KEY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups)
 ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name)
-TTL time_bucket + INTERVAL 90 DAY
+-- Retained beyond the standard 90-day telemetry window (matching
+-- chat_token_summaries) so the costs page can break down token usage across
+-- the same lookback that TUM billing reports cover.
+TTL time_bucket + INTERVAL 730 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated cost/token/usage metrics broken down by user-identity and request dimensions, powering the generic telemetry.query analytics endpoint.';
 

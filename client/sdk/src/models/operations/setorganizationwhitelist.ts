@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SetOrganizationWhitelistRequestBody,
+  SetOrganizationWhitelistRequestBody$Outbound,
+  SetOrganizationWhitelistRequestBody$outboundSchema,
+} from "../components/setorganizationwhitelistrequestbody.js";
 
 export type SetOrganizationWhitelistSecurity = {
   apikeyHeaderGramKey?: string | undefined;
@@ -15,8 +19,7 @@ export type SetOrganizationWhitelistRequest = {
    * API Key header
    */
   gramKey?: string | undefined;
-  setOrganizationWhitelistRequestBody:
-    components.SetOrganizationWhitelistRequestBody;
+  setOrganizationWhitelistRequestBody: SetOrganizationWhitelistRequestBody;
 };
 
 /** @internal */
@@ -53,7 +56,7 @@ export function setOrganizationWhitelistSecurityToJSON(
 export type SetOrganizationWhitelistRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   SetOrganizationWhitelistRequestBody:
-    components.SetOrganizationWhitelistRequestBody$Outbound;
+    SetOrganizationWhitelistRequestBody$Outbound;
 };
 
 /** @internal */
@@ -64,7 +67,7 @@ export const SetOrganizationWhitelistRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramKey: z.optional(z.string()),
     setOrganizationWhitelistRequestBody:
-      components.SetOrganizationWhitelistRequestBody$outboundSchema,
+      SetOrganizationWhitelistRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

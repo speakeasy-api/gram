@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 func TestCanonicalPresidioRuleID_SnakeCasesAndPrependsPII(t *testing.T) {
@@ -31,7 +32,7 @@ func TestValidateRuleID_AcceptsCanonicalForms(t *testing.T) {
 		"prompt_injection",
 	}
 	for _, id := range valid {
-		assert.NoError(t, ValidateRuleID(id), "expected %q to validate", id)
+		assert.NoError(t, scanners.ValidateRuleID(id), "expected %q to validate", id)
 	}
 }
 
@@ -53,7 +54,7 @@ func TestValidateRuleID_RejectsMalformed(t *testing.T) {
 		"Mixed.Case",           // uppercase
 	}
 	for _, id := range invalid {
-		assert.Error(t, ValidateRuleID(id), "expected %q to fail validation", id)
+		assert.Error(t, scanners.ValidateRuleID(id), "expected %q to fail validation", id)
 	}
 }
 
@@ -69,12 +70,6 @@ func TestDescribe_AllBuildersReturnCanonicalIDs(t *testing.T) {
 		ruleID string
 		fn     func() (string, string)
 	}{
-		{"shadow_mcp (no tool)", "shadow_mcp", func() (string, string) { return DescribeShadowMCP("") }},
-		{"shadow_mcp (with tool)", "shadow_mcp", func() (string, string) { return DescribeShadowMCP("mcp__db__delete") }},
-		{"destructive.tool", "destructive.tool", func() (string, string) { return DescribeDestructiveTool("delete_records") }},
-		{"destructive.shell.rm_rf", "destructive.shell.rm_rf", func() (string, string) {
-			return DescribeCLIDestructive(cliDestructivePattern{Category: "shell", Name: "rm_rf"}, "Bash")
-		}},
 		{"pii.credit_card", "pii.credit_card", func() (string, string) { return DescribePresidioEntity("CREDIT_CARD") }},
 		{"pii.dead_letter", "pii.dead_letter", DescribePresidioDeadLetter},
 		{"prompt_injection", "prompt_injection", DescribePromptInjection},
@@ -83,32 +78,8 @@ func TestDescribe_AllBuildersReturnCanonicalIDs(t *testing.T) {
 		id, desc := c.fn()
 		assert.Equal(t, c.ruleID, id, c.name)
 		assert.NotEmpty(t, desc, c.name)
-		assert.NoError(t, ValidateRuleID(id), c.name)
+		assert.NoError(t, scanners.ValidateRuleID(id), c.name)
 	}
-}
-
-func TestDescribeShadowMCP_DescriptionIncludesToolName(t *testing.T) {
-	t.Parallel()
-
-	_, desc := DescribeShadowMCP("mcp__db__delete")
-	assert.Contains(t, desc, "mcp__db__delete")
-	assert.NotContains(t, desc, "x-gram-toolset-id", "must not leak validator internals")
-}
-
-func TestDescribeDestructiveTool_DescriptionIncludesToolName(t *testing.T) {
-	t.Parallel()
-
-	_, desc := DescribeDestructiveTool("delete_records")
-	assert.Contains(t, desc, "delete_records")
-	assert.Contains(t, desc, "destructive")
-}
-
-func TestDescribeCLIDestructive_IncludesToolAndCommand(t *testing.T) {
-	t.Parallel()
-
-	_, desc := DescribeCLIDestructive(cliDestructivePattern{Category: "shell", Name: "rm_rf"}, "Bash")
-	assert.Contains(t, desc, "Bash", "description must include the tool name")
-	assert.Contains(t, desc, "rm -rf", "description must include the human-readable command")
 }
 
 func TestDescribePresidioEntity_UsesCatalogedDescription(t *testing.T) {
@@ -167,26 +138,4 @@ func TestDescribeBuilders_NeverLeakSensitiveMatch(t *testing.T) {
 		assert.NotContains(t, strings.ToLower(c.desc), strings.ToLower(c.sentinel),
 			"%s: description leaked sensitive sentinel", c.name)
 	}
-}
-
-// TestCLIDestructivePattern_FullNameProducesCanonicalRuleID verifies the
-// pattern type emits a canonical rule id directly, with no indirection
-// layer in rules.go.
-func TestCLIDestructivePattern_FullNameProducesCanonicalRuleID(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, "destructive.shell.rm_rf", (cliDestructivePattern{Category: "shell", Name: "rm_rf"}).FullName())
-	assert.Equal(t, "destructive.git.push_force", (cliDestructivePattern{Category: "git", Name: "push_force"}).FullName())
-	assert.Equal(t, "destructive.database.drop", (cliDestructivePattern{Category: "database", Name: "drop"}).FullName())
-	assert.Equal(t, "destructive.cloud.kubectl_delete_namespace", (cliDestructivePattern{Category: "cloud", Name: "kubectl_delete_namespace"}).FullName())
-}
-
-func TestGuard_PanicsOnMalformedRuleIDInTest(t *testing.T) {
-	t.Parallel()
-
-	// testing.Testing() is true here so enforceRuleIDFormat is on. Wrap a
-	// known-bad id and assert it panics.
-	require.Panics(t, func() {
-		guard("UPPER_SNAKE_INVALID")
-	})
 }

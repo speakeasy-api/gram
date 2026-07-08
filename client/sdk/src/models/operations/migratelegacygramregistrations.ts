@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  MigrateLegacyGramRegistrationsForm,
+  MigrateLegacyGramRegistrationsForm$Outbound,
+  MigrateLegacyGramRegistrationsForm$outboundSchema,
+} from "../components/migratelegacygramregistrationsform.js";
 
 export type MigrateLegacyGramRegistrationsSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,8 +38,7 @@ export type MigrateLegacyGramRegistrationsRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  migrateLegacyGramRegistrationsForm:
-    components.MigrateLegacyGramRegistrationsForm;
+  migrateLegacyGramRegistrationsForm: MigrateLegacyGramRegistrationsForm;
 };
 
 /** @internal */
@@ -153,7 +156,7 @@ export type MigrateLegacyGramRegistrationsRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   MigrateLegacyGramRegistrationsForm:
-    components.MigrateLegacyGramRegistrationsForm$Outbound;
+    MigrateLegacyGramRegistrationsForm$Outbound;
 };
 
 /** @internal */
@@ -167,7 +170,7 @@ export const MigrateLegacyGramRegistrationsRequest$outboundSchema:
       gramKey: z.optional(z.string()),
       gramProject: z.optional(z.string()),
       migrateLegacyGramRegistrationsForm:
-        components.MigrateLegacyGramRegistrationsForm$outboundSchema,
+        MigrateLegacyGramRegistrationsForm$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {

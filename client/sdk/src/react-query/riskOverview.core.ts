@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { riskOverviewGet } from "../funcs/riskOverviewGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RiskOverviewResult } from "../models/components/riskoverviewresult.js";
+import {
+  GetRiskOverviewRequest,
+  GetRiskOverviewSecurity,
+} from "../models/operations/getriskoverview.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskOverviewQueryData = components.RiskOverviewResult;
+export type RiskOverviewQueryData = RiskOverviewResult;
 
 export function prefetchRiskOverview(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetRiskOverviewRequest | undefined,
-  security?: operations.GetRiskOverviewSecurity | undefined,
+  request?: GetRiskOverviewRequest | undefined,
+  security?: GetRiskOverviewSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchRiskOverview(
 
 export function buildRiskOverviewQuery(
   client$: GramCore,
-  request?: operations.GetRiskOverviewRequest | undefined,
-  security?: operations.GetRiskOverviewSecurity | undefined,
+  request?: GetRiskOverviewRequest | undefined,
+  security?: GetRiskOverviewSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

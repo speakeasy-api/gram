@@ -1,7 +1,7 @@
 import type {
   ExternalMCPRemote,
   TransportType,
-} from "@gram/client/models/components";
+} from "@gram/client/models/components/externalmcpremote.js";
 import { describe, expect, it } from "vitest";
 import { dedupeRemotesByUrl, filterToHttpRemotes } from "./remotes";
 import type { PulseMCPServer } from "./hooks";

@@ -11,8 +11,46 @@ import { deploymentsList } from "../funcs/deploymentsList.js";
 import { deploymentsLogs } from "../funcs/deploymentsLogs.js";
 import { deploymentsRedeployDeployment } from "../funcs/deploymentsRedeployDeployment.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { CreateDeploymentResult } from "../models/components/createdeploymentresult.js";
+import { EvolveResult } from "../models/components/evolveresult.js";
+import { GetActiveDeploymentResult } from "../models/components/getactivedeploymentresult.js";
+import { GetDeploymentLogsResult } from "../models/components/getdeploymentlogsresult.js";
+import { GetDeploymentResult } from "../models/components/getdeploymentresult.js";
+import { GetLatestDeploymentResult } from "../models/components/getlatestdeploymentresult.js";
+import { ListDeploymentResult } from "../models/components/listdeploymentresult.js";
+import { RedeployResult } from "../models/components/redeployresult.js";
+import {
+  CreateDeploymentRequest,
+  CreateDeploymentSecurity,
+} from "../models/operations/createdeployment.js";
+import {
+  EvolveDeploymentRequest,
+  EvolveDeploymentSecurity,
+} from "../models/operations/evolvedeployment.js";
+import {
+  GetActiveDeploymentRequest,
+  GetActiveDeploymentSecurity,
+} from "../models/operations/getactivedeployment.js";
+import {
+  GetDeploymentRequest,
+  GetDeploymentSecurity,
+} from "../models/operations/getdeployment.js";
+import {
+  GetDeploymentLogsRequest,
+  GetDeploymentLogsSecurity,
+} from "../models/operations/getdeploymentlogs.js";
+import {
+  GetLatestDeploymentRequest,
+  GetLatestDeploymentSecurity,
+} from "../models/operations/getlatestdeployment.js";
+import {
+  ListDeploymentsRequest,
+  ListDeploymentsSecurity,
+} from "../models/operations/listdeployments.js";
+import {
+  RedeployDeploymentRequest,
+  RedeployDeploymentSecurity,
+} from "../models/operations/redeploydeployment.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Deployments extends ClientSDK {
@@ -23,10 +61,10 @@ export class Deployments extends ClientSDK {
    * Get the active deployment for a project.
    */
   async active(
-    request?: operations.GetActiveDeploymentRequest | undefined,
-    security?: operations.GetActiveDeploymentSecurity | undefined,
+    request?: GetActiveDeploymentRequest | undefined,
+    security?: GetActiveDeploymentSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetActiveDeploymentResult> {
+  ): Promise<GetActiveDeploymentResult> {
     return unwrapAsync(deploymentsActive(
       this,
       request,
@@ -42,10 +80,10 @@ export class Deployments extends ClientSDK {
    * Create a deployment to load tool definitions.
    */
   async create(
-    request: operations.CreateDeploymentRequest,
-    security?: operations.CreateDeploymentSecurity | undefined,
+    request: CreateDeploymentRequest,
+    security?: CreateDeploymentSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.CreateDeploymentResult> {
+  ): Promise<CreateDeploymentResult> {
     return unwrapAsync(deploymentsCreate(
       this,
       request,
@@ -61,10 +99,10 @@ export class Deployments extends ClientSDK {
    * Create a new deployment with additional or updated tool sources.
    */
   async evolveDeployment(
-    request: operations.EvolveDeploymentRequest,
-    security?: operations.EvolveDeploymentSecurity | undefined,
+    request: EvolveDeploymentRequest,
+    security?: EvolveDeploymentSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.EvolveResult> {
+  ): Promise<EvolveResult> {
     return unwrapAsync(deploymentsEvolveDeployment(
       this,
       request,
@@ -80,10 +118,10 @@ export class Deployments extends ClientSDK {
    * Get a deployment by its ID.
    */
   async getById(
-    request: operations.GetDeploymentRequest,
-    security?: operations.GetDeploymentSecurity | undefined,
+    request: GetDeploymentRequest,
+    security?: GetDeploymentSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetDeploymentResult> {
+  ): Promise<GetDeploymentResult> {
     return unwrapAsync(deploymentsGetById(
       this,
       request,
@@ -99,10 +137,10 @@ export class Deployments extends ClientSDK {
    * Get the latest deployment for a project.
    */
   async latest(
-    request?: operations.GetLatestDeploymentRequest | undefined,
-    security?: operations.GetLatestDeploymentSecurity | undefined,
+    request?: GetLatestDeploymentRequest | undefined,
+    security?: GetLatestDeploymentSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetLatestDeploymentResult> {
+  ): Promise<GetLatestDeploymentResult> {
     return unwrapAsync(deploymentsLatest(
       this,
       request,
@@ -118,10 +156,10 @@ export class Deployments extends ClientSDK {
    * List all deployments in descending order of creation.
    */
   async list(
-    request?: operations.ListDeploymentsRequest | undefined,
-    security?: operations.ListDeploymentsSecurity | undefined,
+    request?: ListDeploymentsRequest | undefined,
+    security?: ListDeploymentsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListDeploymentResult> {
+  ): Promise<ListDeploymentResult> {
     return unwrapAsync(deploymentsList(
       this,
       request,
@@ -137,10 +175,10 @@ export class Deployments extends ClientSDK {
    * Get logs for a deployment.
    */
   async logs(
-    request: operations.GetDeploymentLogsRequest,
-    security?: operations.GetDeploymentLogsSecurity | undefined,
+    request: GetDeploymentLogsRequest,
+    security?: GetDeploymentLogsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetDeploymentLogsResult> {
+  ): Promise<GetDeploymentLogsResult> {
     return unwrapAsync(deploymentsLogs(
       this,
       request,
@@ -156,10 +194,10 @@ export class Deployments extends ClientSDK {
    * Redeploys an existing deployment.
    */
   async redeployDeployment(
-    request: operations.RedeployDeploymentRequest,
-    security?: operations.RedeployDeploymentSecurity | undefined,
+    request: RedeployDeploymentRequest,
+    security?: RedeployDeploymentSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RedeployResult> {
+  ): Promise<RedeployResult> {
     return unwrapAsync(deploymentsRedeployDeployment(
       this,
       request,

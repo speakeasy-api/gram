@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetEmployeeDataFlowGraphRequest,
+  GetEmployeeDataFlowGraphSecurity,
+} from "../models/operations/getemployeedataflowgraph.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetEmployeeDataFlowGraphQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetEmployeeDataFlowGraphQueryError =
  * Get an employee's MCP data flow graph across origins, clients, servers, and tools
  */
 export function useGetEmployeeDataFlowGraph(
-  request: operations.GetEmployeeDataFlowGraphRequest,
-  security?: operations.GetEmployeeDataFlowGraphSecurity | undefined,
+  request: GetEmployeeDataFlowGraphRequest,
+  security?: GetEmployeeDataFlowGraphSecurity | undefined,
   options?: QueryHookOptions<
     GetEmployeeDataFlowGraphQueryData,
     GetEmployeeDataFlowGraphQueryError
@@ -88,8 +91,8 @@ export function useGetEmployeeDataFlowGraph(
  * Get an employee's MCP data flow graph across origins, clients, servers, and tools
  */
 export function useGetEmployeeDataFlowGraphSuspense(
-  request: operations.GetEmployeeDataFlowGraphRequest,
-  security?: operations.GetEmployeeDataFlowGraphSecurity | undefined,
+  request: GetEmployeeDataFlowGraphRequest,
+  security?: GetEmployeeDataFlowGraphSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetEmployeeDataFlowGraphQueryData,
     GetEmployeeDataFlowGraphQueryError

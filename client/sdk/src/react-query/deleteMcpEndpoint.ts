@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DeleteMcpEndpointRequest,
+  DeleteMcpEndpointSecurity,
+} from "../models/operations/deletemcpendpoint.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type DeleteMcpEndpointMutationVariables = {
-  request: operations.DeleteMcpEndpointRequest;
-  security?: operations.DeleteMcpEndpointSecurity | undefined;
+  request: DeleteMcpEndpointRequest;
+  security?: DeleteMcpEndpointSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type DeleteMcpEndpointMutationData = void;
 
 export type DeleteMcpEndpointMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

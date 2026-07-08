@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { featuresGet } from "../funcs/featuresGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetProductFeaturesResponseBody } from "../models/components/getproductfeaturesresponsebody.js";
+import {
+  GetProductFeaturesRequest,
+  GetProductFeaturesSecurity,
+} from "../models/operations/getproductfeatures.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ProductFeaturesQueryData =
-  components.GetProductFeaturesResponseBody;
+export type ProductFeaturesQueryData = GetProductFeaturesResponseBody;
 
 export function prefetchProductFeatures(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetProductFeaturesRequest | undefined,
-  security?: operations.GetProductFeaturesSecurity | undefined,
+  request?: GetProductFeaturesRequest | undefined,
+  security?: GetProductFeaturesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchProductFeatures(
 
 export function buildProductFeaturesQuery(
   client$: GramCore,
-  request?: operations.GetProductFeaturesRequest | undefined,
-  security?: operations.GetProductFeaturesSecurity | undefined,
+  request?: GetProductFeaturesRequest | undefined,
+  security?: GetProductFeaturesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

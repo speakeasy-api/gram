@@ -10,12 +10,12 @@ import {
   DropdownMenuTrigger,
   Table,
 } from "@speakeasy-api/moonshine";
+import { useRiskDeleteExclusionMutation } from "@gram/client/react-query/riskDeleteExclusion.js";
 import {
   invalidateAllRiskListExclusions,
-  useRiskDeleteExclusionMutation,
   useRiskListExclusions,
-  useRiskUpdateExclusionMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/riskListExclusions.js";
+import { useRiskUpdateExclusionMutation } from "@gram/client/react-query/riskUpdateExclusion.js";
 import type { RiskExclusion } from "@gram/client/models/components/riskexclusion.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,6 +24,7 @@ import type { JSX, ReactNode } from "react";
 import { Ellipsis, Plus } from "lucide-react";
 import { serializeExclusionExpression } from "./exclusion-expression";
 import { ExclusionSheet, type ExclusionSheetState } from "./exclusion-sheet";
+import { BuiltinLibrary } from "./builtin-library";
 
 export type { ExclusionSheetState } from "./exclusion-sheet";
 
@@ -163,6 +164,7 @@ export function ExclusionsTab({
 
   return (
     <>
+      <BuiltinLibrary />
       {body}
       <ExclusionSheet
         state={sheet}

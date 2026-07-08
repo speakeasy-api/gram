@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { assistantsGetManaged } from "../funcs/assistantsGetManaged.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { Assistant } from "../models/components/assistant.js";
+import {
+  GetManagedAssistantRequest,
+  GetManagedAssistantSecurity,
+} from "../models/operations/getmanagedassistant.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AssistantsGetManagedQueryData = components.Assistant;
+export type AssistantsGetManagedQueryData = Assistant;
 
 export function prefetchAssistantsGetManaged(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetManagedAssistantRequest | undefined,
-  security?: operations.GetManagedAssistantSecurity | undefined,
+  request?: GetManagedAssistantRequest | undefined,
+  security?: GetManagedAssistantSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchAssistantsGetManaged(
 
 export function buildAssistantsGetManagedQuery(
   client$: GramCore,
-  request?: operations.GetManagedAssistantRequest | undefined,
-  security?: operations.GetManagedAssistantSecurity | undefined,
+  request?: GetManagedAssistantRequest | undefined,
+  security?: GetManagedAssistantSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

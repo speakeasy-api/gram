@@ -8,7 +8,7 @@ import {
 } from "react";
 import { Link } from "react-router";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
-import type { RiskResult } from "@gram/client/models/components";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   Popover,
   PopoverContent,
@@ -176,6 +176,20 @@ function MaskedMatchInline({ value }: { value: string }): ReactNode {
 
 type FindingSpan = { match: string; field?: string; path?: string };
 
+type TranscriptFindingSpan = FindingSpan;
+
+type TranscriptFinding = {
+  id: string;
+  label: string;
+  rationale?: string;
+  ruleId?: string;
+  blockId?: string;
+  spans?: TranscriptFindingSpan[];
+  tags?: string[];
+  count?: number;
+  showRuleId?: boolean;
+};
+
 // spansOf returns a finding's matched spans: the spans array when the backend
 // attributed several (e.g. a custom rule matching a tool's function and its
 // arguments on the same call), else the single primary match for legacy rows.
@@ -193,6 +207,118 @@ function spansOf(r: RiskResult): FindingSpan[] {
 function spanFieldLabel(span: FindingSpan): string | null {
   if (!span.field) return null;
   return span.path ? `${span.field}.${span.path}` : span.field;
+}
+
+function TranscriptFindingsCard({
+  findings,
+  title = "Risk Findings",
+}: {
+  findings: TranscriptFinding[];
+  title?: string;
+}): ReactNode {
+  return (
+    <div className="space-y-3">
+      <div className="text-sm font-semibold">{title}</div>
+      <div className="divide-border divide-y">
+        {findings.map((finding) => {
+          return (
+            <div key={finding.id} className="py-2 first:pt-0 last:pb-0">
+              <div className="flex items-center gap-2">
+                <Badge variant="destructive" className="shrink-0 text-[10px]">
+                  {finding.label}
+                </Badge>
+                {finding.showRuleId && finding.ruleId && (
+                  <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
+                    {finding.ruleId}
+                  </span>
+                )}
+                {(finding.count ?? 1) > 1 && (
+                  <Badge
+                    variant="neutral"
+                    className="ml-auto shrink-0 text-[10px]"
+                  >
+                    ×{finding.count}
+                  </Badge>
+                )}
+              </div>
+              {finding.rationale && (
+                <p className="text-muted-foreground mt-1 text-xs">
+                  {finding.rationale}
+                </p>
+              )}
+              {/* When a durable tool call block was recorded for this finding's
+               * message (any agent — Claude, Cursor, Codex), link to its block
+               * page where the viewer can read the full reason and leave 👍/👎
+               * feedback. */}
+              {finding.blockId && (
+                <Link
+                  to={`/blocks/${finding.blockId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-primary mt-1.5 inline-flex items-center gap-1 text-xs hover:underline"
+                >
+                  <ArrowRight className="size-3" />
+                  More Info
+                </Link>
+              )}
+              {finding.spans && finding.spans.length > 0 && (
+                <div className="mt-1 flex flex-col gap-1">
+                  {finding.spans.map((span, i) => {
+                    const label = spanFieldLabel(span);
+                    return (
+                      <div
+                        key={`${label ?? ""}-${span.match}-${i}`}
+                        className="flex flex-wrap items-center gap-1 text-xs"
+                      >
+                        {label && (
+                          <code className="text-muted-foreground font-mono">
+                            {label}:
+                          </code>
+                        )}
+                        <MaskedMatchInline value={span.match} />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {finding.tags && finding.tags.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {finding.tags.map((tag) => (
+                    <Badge key={tag} variant="neutral" className="text-[10px]">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function riskResultToTranscriptFinding({
+  result,
+  spans,
+  count,
+}: {
+  result: RiskResult;
+  spans: FindingSpan[];
+  count: number;
+}): TranscriptFinding {
+  return {
+    id: result.id,
+    label: getRiskBadgeLabel(result),
+    rationale: result.description,
+    ruleId: result.ruleId,
+    blockId: result.blockId,
+    spans: matchShownInDescription(result) ? [] : spans,
+    tags: result.tags,
+    count,
+    showRuleId: shouldShowRiskRuleId(result),
+  };
 }
 
 /** Compact "N risks" badge with a popover listing each unique finding. */
@@ -252,90 +378,9 @@ export function RiskBadge({
         className="max-h-[70vh] w-80 overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="space-y-3">
-          <div className="text-sm font-semibold">Risk Findings</div>
-          <div className="divide-border divide-y">
-            {findings.map(({ result: r, spans, count }) => (
-              <div key={r.id} className="py-2 first:pt-0 last:pb-0">
-                <div className="flex items-center gap-2">
-                  <Badge variant="destructive" className="shrink-0 text-[10px]">
-                    {getRiskBadgeLabel(r)}
-                  </Badge>
-                  {shouldShowRiskRuleId(r) && (
-                    <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-                      {r.ruleId}
-                    </span>
-                  )}
-                  {count > 1 && (
-                    <Badge
-                      variant="neutral"
-                      className="ml-auto shrink-0 text-[10px]"
-                    >
-                      ×{count}
-                    </Badge>
-                  )}
-                </div>
-                {r.description && (
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {r.description}
-                  </p>
-                )}
-                {/* When a durable tool call block was recorded for this
-                 * finding's message (any agent — Claude, Cursor, Codex), link
-                 * to its block page where the viewer can read the full reason
-                 * and leave 👍/👎 feedback. */}
-                {r.blockId && (
-                  <Link
-                    to={`/blocks/${r.blockId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-primary mt-1.5 inline-flex items-center gap-1 text-xs hover:underline"
-                  >
-                    <ArrowRight className="size-3" />
-                    More Info
-                  </Link>
-                )}
-                {/* Skip the reveal-gated span chip for policy types whose match
-                 * already appears in the description above (e.g. the
-                 * account_identity email), so it isn't repeated. */}
-                {spans.length > 0 && !matchShownInDescription(r) && (
-                  <div className="mt-1 flex flex-col gap-1">
-                    {spans.map((span, i) => {
-                      const label = spanFieldLabel(span);
-                      return (
-                        <div
-                          key={`${label ?? ""}-${span.match}-${i}`}
-                          className="flex flex-wrap items-center gap-1 text-xs"
-                        >
-                          {label && (
-                            <code className="text-muted-foreground font-mono">
-                              {label}:
-                            </code>
-                          )}
-                          <MaskedMatchInline value={span.match} />
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {r.tags && r.tags.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {r.tags.map((tag) => (
-                      <Badge
-                        key={tag}
-                        variant="neutral"
-                        className="text-[10px]"
-                      >
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+        <TranscriptFindingsCard
+          findings={findings.map(riskResultToTranscriptFinding)}
+        />
       </PopoverContent>
     </Popover>
   );

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // ExclusionSet evaluates risk exclusions against findings. It mirrors
@@ -67,7 +68,7 @@ func (s ExclusionSet) Empty() bool {
 }
 
 // Excluded reports whether any exclusion suppresses the finding.
-func (s ExclusionSet) Excluded(f Finding) bool {
+func (s ExclusionSet) Excluded(f scanners.Finding) bool {
 	for _, r := range s.rules {
 		if r.ruleIDFilter != "" && f.RuleID != r.ruleIDFilter {
 			continue
@@ -104,7 +105,7 @@ func (s ExclusionSet) Excluded(f Finding) bool {
 // FilterFindings returns a new slice with excluded findings removed. Returns
 // the input unchanged when the set is empty so callers can call it
 // unconditionally.
-func (s ExclusionSet) FilterFindings(in []Finding) []Finding {
+func (s ExclusionSet) FilterFindings(in []scanners.Finding) []scanners.Finding {
 	if s.Empty() || len(in) == 0 {
 		return in
 	}

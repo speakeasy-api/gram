@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetAssistantMemoryRequest,
+  GetAssistantMemorySecurity,
+} from "../models/operations/getassistantmemory.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetAssistantMemoryQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetAssistantMemoryQueryError =
  * Get an assistant memory by ID.
  */
 export function useGetAssistantMemory(
-  request: operations.GetAssistantMemoryRequest,
-  security?: operations.GetAssistantMemorySecurity | undefined,
+  request: GetAssistantMemoryRequest,
+  security?: GetAssistantMemorySecurity | undefined,
   options?: QueryHookOptions<
     GetAssistantMemoryQueryData,
     GetAssistantMemoryQueryError
@@ -85,8 +88,8 @@ export function useGetAssistantMemory(
  * Get an assistant memory by ID.
  */
 export function useGetAssistantMemorySuspense(
-  request: operations.GetAssistantMemoryRequest,
-  security?: operations.GetAssistantMemorySecurity | undefined,
+  request: GetAssistantMemoryRequest,
+  security?: GetAssistantMemorySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetAssistantMemoryQueryData,
     GetAssistantMemoryQueryError

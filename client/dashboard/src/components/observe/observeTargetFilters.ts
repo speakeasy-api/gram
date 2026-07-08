@@ -4,10 +4,8 @@ import type {
 } from "@/components/observe/ObserveFilterBar";
 import type { MultiSelectGroup } from "@/components/ui/multi-select";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
-import type {
-  ToolUsageHostedServerFilterOption,
-  ToolUsageShadowServerFilterOption,
-} from "@gram/client/models/components";
+import type { ToolUsageHostedServerFilterOption } from "@gram/client/models/components/toolusagehostedserverfilteroption.js";
+import type { ToolUsageShadowServerFilterOption } from "@gram/client/models/components/toolusageshadowserverfilteroption.js";
 import type { TargetTypes } from "@gram/client/models/components/gettoolusagesummarypayload";
 import { normalizeUserEmailFilter } from "./observeUserFilters";
 
@@ -21,6 +19,7 @@ const SHADOW_SERVER_PREFIX = "shadow:";
 export const TOOL_USAGE_DEFAULT_TYPES: ObserveTypeFilterValue[] = [];
 export const TOOL_USAGE_VALID_TYPES: ObserveTypeFilterValue[] = [
   "hosted_mcp_server",
+  "tunneled_mcp_server",
   "shadow_mcp_server",
   "local_tool",
   "skill",
@@ -30,6 +29,7 @@ export const TOOL_USAGE_TYPE_OPTIONS: Array<{
   value: ObserveTypeFilterValue;
 }> = [
   { label: "Hosted MCP Servers", value: "hosted_mcp_server" },
+  { label: "Tunneled MCP Servers", value: "tunneled_mcp_server" },
   { label: "Shadow MCP Servers", value: "shadow_mcp_server" },
   { label: "Local Tools", value: "local_tool" },
   { label: "Skills", value: "skill" },

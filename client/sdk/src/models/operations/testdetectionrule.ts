@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  TestDetectionRuleRequestBody,
+  TestDetectionRuleRequestBody$Outbound,
+  TestDetectionRuleRequestBody$outboundSchema,
+} from "../components/testdetectionrulerequestbody.js";
 
 export type TestDetectionRuleSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type TestDetectionRuleRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  testDetectionRuleRequestBody: components.TestDetectionRuleRequestBody;
+  testDetectionRuleRequestBody: TestDetectionRuleRequestBody;
 };
 
 /** @internal */
@@ -143,8 +147,7 @@ export type TestDetectionRuleRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  TestDetectionRuleRequestBody:
-    components.TestDetectionRuleRequestBody$Outbound;
+  TestDetectionRuleRequestBody: TestDetectionRuleRequestBody$Outbound;
 };
 
 /** @internal */
@@ -156,8 +159,7 @@ export const TestDetectionRuleRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    testDetectionRuleRequestBody:
-      components.TestDetectionRuleRequestBody$outboundSchema,
+    testDetectionRuleRequestBody: TestDetectionRuleRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

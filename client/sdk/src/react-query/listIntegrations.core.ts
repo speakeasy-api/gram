@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { integrationsList } from "../funcs/integrationsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListIntegrationsResult } from "../models/components/listintegrationsresult.js";
+import {
+  ListIntegrationsRequest,
+  ListIntegrationsSecurity,
+} from "../models/operations/listintegrations.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListIntegrationsQueryData = components.ListIntegrationsResult;
+export type ListIntegrationsQueryData = ListIntegrationsResult;
 
 export function prefetchListIntegrations(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListIntegrationsRequest | undefined,
-  security?: operations.ListIntegrationsSecurity | undefined,
+  request?: ListIntegrationsRequest | undefined,
+  security?: ListIntegrationsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListIntegrations(
 
 export function buildListIntegrationsQuery(
   client$: GramCore,
-  request?: operations.ListIntegrationsRequest | undefined,
-  security?: operations.ListIntegrationsSecurity | undefined,
+  request?: ListIntegrationsRequest | undefined,
+  security?: ListIntegrationsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

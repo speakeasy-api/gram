@@ -11,16 +11,21 @@ import { GramCore } from "../core.js";
 import { pluginsDownloadObservabilityPlugin } from "../funcs/pluginsDownloadObservabilityPlugin.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  DownloadObservabilityPluginRequest,
+  DownloadObservabilityPluginResponse,
+  DownloadObservabilityPluginSecurity,
+  Platform,
+} from "../models/operations/downloadobservabilityplugin.js";
 import { unwrapAsync } from "../types/fp.js";
 export type PluginsDownloadObservabilityPluginQueryData =
-  operations.DownloadObservabilityPluginResponse;
+  DownloadObservabilityPluginResponse;
 
 export function prefetchPluginsDownloadObservabilityPlugin(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.DownloadObservabilityPluginRequest,
-  security?: operations.DownloadObservabilityPluginSecurity | undefined,
+  request: DownloadObservabilityPluginRequest,
+  security?: DownloadObservabilityPluginSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +40,8 @@ export function prefetchPluginsDownloadObservabilityPlugin(
 
 export function buildPluginsDownloadObservabilityPluginQuery(
   client$: GramCore,
-  request: operations.DownloadObservabilityPluginRequest,
-  security?: operations.DownloadObservabilityPluginSecurity | undefined,
+  request: DownloadObservabilityPluginRequest,
+  security?: DownloadObservabilityPluginSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -76,7 +81,7 @@ export function buildPluginsDownloadObservabilityPluginQuery(
 
 export function queryKeyPluginsDownloadObservabilityPlugin(
   parameters: {
-    platform: operations.Platform;
+    platform: Platform;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

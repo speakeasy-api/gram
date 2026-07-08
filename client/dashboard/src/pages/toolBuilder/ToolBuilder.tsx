@@ -28,18 +28,18 @@ import { handleAPIError } from "@/lib/errors";
 import { Tool, useGroupedTools } from "@/lib/toolTypes";
 import { capitalize, cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import {
-  PromptTemplateKind,
-  ToolsetEntry,
-} from "@gram/client/models/components";
+import { PromptTemplateKind } from "@gram/client/models/components/prompttemplate.js";
+import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import {
   invalidateAllListToolsets,
-  invalidateAllTemplate,
-  invalidateAllTemplates,
   useListToolsetsSuspense,
+} from "@gram/client/react-query/listToolsets.js";
+import {
+  invalidateAllTemplate,
   useTemplateSuspense,
-  useUpdateTemplateMutation,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/template.js";
+import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
+import { useUpdateTemplateMutation } from "@gram/client/react-query/updateTemplate.js";
 import { Button, Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useRef, useState } from "react";

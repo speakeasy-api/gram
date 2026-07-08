@@ -6,7 +6,10 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
-import * as components from "../components/index.js";
+import {
+  ListAssistantMemoriesResult,
+  ListAssistantMemoriesResult$inboundSchema,
+} from "../components/listassistantmemoriesresult.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ListAssistantMemoriesSecurity = {
@@ -46,7 +49,7 @@ export type ListAssistantMemoriesRequest = {
 };
 
 export type ListAssistantMemoriesResponse = {
-  result: components.ListAssistantMemoriesResult;
+  result: ListAssistantMemoriesResult;
 };
 
 /** @internal */
@@ -133,7 +136,7 @@ export const ListAssistantMemoriesResponse$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    Result: components.ListAssistantMemoriesResult$inboundSchema,
+    Result: ListAssistantMemoriesResult$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

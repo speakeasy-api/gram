@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpsertAllowedOriginForm,
+  UpsertAllowedOriginForm$Outbound,
+  UpsertAllowedOriginForm$outboundSchema,
+} from "../components/upsertallowedoriginform.js";
 
 export type UpsertAllowedOriginSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type UpsertAllowedOriginRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  upsertAllowedOriginForm: components.UpsertAllowedOriginForm;
+  upsertAllowedOriginForm: UpsertAllowedOriginForm;
 };
 
 /** @internal */
@@ -145,7 +149,7 @@ export type UpsertAllowedOriginRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  UpsertAllowedOriginForm: components.UpsertAllowedOriginForm$Outbound;
+  UpsertAllowedOriginForm: UpsertAllowedOriginForm$Outbound;
 };
 
 /** @internal */
@@ -157,7 +161,7 @@ export const UpsertAllowedOriginRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    upsertAllowedOriginForm: components.UpsertAllowedOriginForm$outboundSchema,
+    upsertAllowedOriginForm: UpsertAllowedOriginForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetAgentPluginsRequest,
+  GetAgentPluginsSecurity,
+} from "../models/operations/getagentplugins.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type AgentPluginsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type AgentPluginsQueryError =
  * Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.
  */
 export function useAgentPlugins(
-  request: operations.GetAgentPluginsRequest,
-  security?: operations.GetAgentPluginsSecurity | undefined,
+  request: GetAgentPluginsRequest,
+  security?: GetAgentPluginsSecurity | undefined,
   options?: QueryHookOptions<AgentPluginsQueryData, AgentPluginsQueryError>,
 ): UseQueryResult<AgentPluginsQueryData, AgentPluginsQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useAgentPlugins(
  * Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.
  */
 export function useAgentPluginsSuspense(
-  request: operations.GetAgentPluginsRequest,
-  security?: operations.GetAgentPluginsSecurity | undefined,
+  request: GetAgentPluginsRequest,
+  security?: GetAgentPluginsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     AgentPluginsQueryData,
     AgentPluginsQueryError

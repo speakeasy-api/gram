@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import type { RiskResult } from "@gram/client/models/components";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { cn } from "@/lib/utils";
 import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
 import { serializeExclusionExpression } from "@/pages/security/exclusion-expression";

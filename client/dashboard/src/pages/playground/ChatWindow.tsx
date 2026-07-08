@@ -36,7 +36,7 @@ import {
 } from "@/lib/toolTypes";
 import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useChat } from "@ai-sdk/react";
-import { useInstance } from "@gram/client/react-query/index.js";
+import { useInstance } from "@gram/client/react-query/instance.js";
 import {
   jsonSchema,
   lastAssistantMessageIsCompleteWithToolCalls,

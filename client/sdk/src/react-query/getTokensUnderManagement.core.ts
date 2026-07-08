@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { usageGetTokensUnderManagement } from "../funcs/usageGetTokensUnderManagement.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { TokensUnderManagement } from "../models/components/tokensundermanagement.js";
+import {
+  GetTokensUnderManagementRequest,
+  GetTokensUnderManagementSecurity,
+} from "../models/operations/gettokensundermanagement.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetTokensUnderManagementQueryData =
-  components.TokensUnderManagement;
+export type GetTokensUnderManagementQueryData = TokensUnderManagement;
 
 export function prefetchGetTokensUnderManagement(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetTokensUnderManagementRequest | undefined,
-  security?: operations.GetTokensUnderManagementSecurity | undefined,
+  request?: GetTokensUnderManagementRequest | undefined,
+  security?: GetTokensUnderManagementSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchGetTokensUnderManagement(
 
 export function buildGetTokensUnderManagementQuery(
   client$: GramCore,
-  request?: operations.GetTokensUnderManagementRequest | undefined,
-  security?: operations.GetTokensUnderManagementSecurity | undefined,
+  request?: GetTokensUnderManagementRequest | undefined,
+  security?: GetTokensUnderManagementSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

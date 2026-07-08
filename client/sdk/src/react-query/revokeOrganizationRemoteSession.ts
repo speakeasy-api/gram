@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  RevokeOrganizationRemoteSessionRequest,
+  RevokeOrganizationRemoteSessionSecurity,
+} from "../models/operations/revokeorganizationremotesession.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RevokeOrganizationRemoteSessionMutationVariables = {
-  request: operations.RevokeOrganizationRemoteSessionRequest;
-  security?: operations.RevokeOrganizationRemoteSessionSecurity | undefined;
+  request: RevokeOrganizationRemoteSessionRequest;
+  security?: RevokeOrganizationRemoteSessionSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type RevokeOrganizationRemoteSessionMutationData = void;
 
 export type RevokeOrganizationRemoteSessionMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

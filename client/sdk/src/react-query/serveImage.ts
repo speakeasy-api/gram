@@ -18,10 +18,10 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import { ServeImageRequest } from "../models/operations/serveimage.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +42,7 @@ export {
 };
 
 export type ServeImageQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,7 +59,7 @@ export type ServeImageQueryError =
  * Serve an image from Gram.
  */
 export function useServeImage(
-  request: operations.ServeImageRequest,
+  request: ServeImageRequest,
   options?: QueryHookOptions<ServeImageQueryData, ServeImageQueryError>,
 ): UseQueryResult<ServeImageQueryData, ServeImageQueryError> {
   const client = useGramContext();
@@ -80,7 +80,7 @@ export function useServeImage(
  * Serve an image from Gram.
  */
 export function useServeImageSuspense(
-  request: operations.ServeImageRequest,
+  request: ServeImageRequest,
   options?: SuspenseQueryHookOptions<ServeImageQueryData, ServeImageQueryError>,
 ): UseSuspenseQueryResult<ServeImageQueryData, ServeImageQueryError> {
   const client = useGramContext();

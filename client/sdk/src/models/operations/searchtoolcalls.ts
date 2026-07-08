@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SearchToolCallsPayload,
+  SearchToolCallsPayload$Outbound,
+  SearchToolCallsPayload$outboundSchema,
+} from "../components/searchtoolcallspayload.js";
 
 export type SearchToolCallsSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type SearchToolCallsRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  searchToolCallsPayload: components.SearchToolCallsPayload;
+  searchToolCallsPayload: SearchToolCallsPayload;
 };
 
 /** @internal */
@@ -143,7 +147,7 @@ export type SearchToolCallsRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  SearchToolCallsPayload: components.SearchToolCallsPayload$Outbound;
+  SearchToolCallsPayload: SearchToolCallsPayload$Outbound;
 };
 
 /** @internal */
@@ -155,7 +159,7 @@ export const SearchToolCallsRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    searchToolCallsPayload: components.SearchToolCallsPayload$outboundSchema,
+    searchToolCallsPayload: SearchToolCallsPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

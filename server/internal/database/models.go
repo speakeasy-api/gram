@@ -122,6 +122,16 @@ type AssistantDashboardMessage struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type AssistantMcpServer struct {
+	ID            uuid.UUID
+	AssistantID   uuid.UUID
+	McpServerID   uuid.UUID
+	EnvironmentID uuid.NullUUID
+	ProjectID     uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
 type AssistantMemory struct {
 	ID             uuid.UUID
 	AssistantID    uuid.NullUUID
@@ -265,6 +275,17 @@ type AwsKmsKey struct {
 	KeyArn               string
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
+}
+
+type BillingCycleUsage struct {
+	ID             uuid.UUID
+	OrganizationID string
+	CycleStart     pgtype.Timestamptz
+	CycleEnd       pgtype.Timestamptz
+	TumTokens      int64
+	FinalizedAt    pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type BillingMetadatum struct {
@@ -1514,6 +1535,21 @@ type RiskPolicyChallenge struct {
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
+}
+
+type RiskPolicyEvalReview struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatID            uuid.UUID
+	Verdict           string
+	ReviewedBy        string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
 }
 
 type RiskResult struct {

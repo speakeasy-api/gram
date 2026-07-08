@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  ClaudeHookPayload,
+  ClaudeHookPayload$Outbound,
+  ClaudeHookPayload$outboundSchema,
+} from "../components/claudehookpayload.js";
 
 export type HooksNumberClaudeRequest = {
   /**
@@ -23,7 +27,7 @@ export type HooksNumberClaudeRequest = {
    * Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
    */
   idempotencyKey?: string | undefined;
-  claudeHookPayload: components.ClaudeHookPayload;
+  claudeHookPayload: ClaudeHookPayload;
 };
 
 /** @internal */
@@ -32,7 +36,7 @@ export type HooksNumberClaudeRequest$Outbound = {
   "Gram-Project"?: string | undefined;
   "X-Gram-Hook-Hostname"?: string | undefined;
   "Idempotency-Key"?: string | undefined;
-  ClaudeHookPayload: components.ClaudeHookPayload$Outbound;
+  ClaudeHookPayload: ClaudeHookPayload$Outbound;
 };
 
 /** @internal */
@@ -45,7 +49,7 @@ export const HooksNumberClaudeRequest$outboundSchema: z.ZodMiniType<
     gramProject: z.optional(z.string()),
     xGramHookHostname: z.optional(z.string()),
     idempotencyKey: z.optional(z.string()),
-    claudeHookPayload: components.ClaudeHookPayload$outboundSchema,
+    claudeHookPayload: ClaudeHookPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -11,28 +11,31 @@ import { GramCore } from "../core.js";
 import { assistantMemoriesList } from "../funcs/assistantMemoriesList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ListAssistantMemoriesRequest,
+  ListAssistantMemoriesResponse,
+  ListAssistantMemoriesSecurity,
+} from "../models/operations/listassistantmemories.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 import { pageIteratorToJSON } from "./_types.js";
-export type ListAssistantMemoriesQueryData =
-  operations.ListAssistantMemoriesResponse;
+export type ListAssistantMemoriesQueryData = ListAssistantMemoriesResponse;
 
 export type ListAssistantMemoriesInfiniteQueryData = PageIterator<
-  operations.ListAssistantMemoriesResponse,
+  ListAssistantMemoriesResponse,
   { cursor: string }
 >;
 
 export type ListAssistantMemoriesPageParams = PageIterator<
-  operations.ListAssistantMemoriesResponse,
+  ListAssistantMemoriesResponse,
   { cursor: string }
 >["~next"];
 
 export function prefetchListAssistantMemories(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListAssistantMemoriesRequest,
-  security?: operations.ListAssistantMemoriesSecurity | undefined,
+  request: ListAssistantMemoriesRequest,
+  security?: ListAssistantMemoriesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -48,8 +51,8 @@ export function prefetchListAssistantMemories(
 export function prefetchListAssistantMemoriesInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListAssistantMemoriesRequest,
-  security?: operations.ListAssistantMemoriesSecurity | undefined,
+  request: ListAssistantMemoriesRequest,
+  security?: ListAssistantMemoriesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -67,8 +70,8 @@ export function prefetchListAssistantMemoriesInfinite(
 
 export function buildListAssistantMemoriesQuery(
   client$: GramCore,
-  request: operations.ListAssistantMemoriesRequest,
-  security?: operations.ListAssistantMemoriesSecurity | undefined,
+  request: ListAssistantMemoriesRequest,
+  security?: ListAssistantMemoriesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -112,8 +115,8 @@ export function buildListAssistantMemoriesQuery(
 
 export function buildListAssistantMemoriesInfiniteQuery(
   client$: GramCore,
-  request: operations.ListAssistantMemoriesRequest,
-  security?: operations.ListAssistantMemoriesSecurity | undefined,
+  request: ListAssistantMemoriesRequest,
+  security?: ListAssistantMemoriesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

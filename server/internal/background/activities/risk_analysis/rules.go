@@ -1,10 +1,7 @@
 package risk_analysis
 
 import (
-	"fmt"
-	"regexp"
 	"strings"
-	"testing"
 )
 
 // Rule id conventions
@@ -27,25 +24,13 @@ import (
 // dashboard categories.
 //
 // Per-source `Describe*` builders that produce (rule_id, description) for a
-// Finding live next to the scanner that owns them: gitleaks.go, presidio.go,
-// pi_scanner.go, cli_destructive.go, and analyze_batch.go (shadow_mcp +
-// destructive_tool, whose writers live there too). This file is just the
-// shared grammar + constants.
+// Finding live next to the scanner that owns them: presidio.go, pi_scanner.go,
+// and the extracted scanner packages under internal/scanners (gitleaks,
+// clidestructive, destructivetool, shadowmcpscan, accountidentity). This file
+// is just the shared grammar + constants.
 
 const (
-	prefixPII         = "pii."
-	prefixDestructive = "destructive."
-	prefixIdentity    = "identity."
-
-	// RuleShadowMCP is the canonical rule id emitted for every shadow_mcp
-	// finding. The detection mechanism (missing toolset id, unknown
-	// toolset, ...) is implementation detail kept in logs; the rule_id
-	// describes the risk itself.
-	RuleShadowMCP = "shadow_mcp"
-
-	// RuleDestructiveTool is the canonical rule id emitted for every
-	// destructive_tool finding.
-	RuleDestructiveTool = prefixDestructive + "tool"
+	prefixPII = "pii."
 
 	// RulePromptInjection is the canonical rule id emitted for every
 	// prompt-injection finding. There is exactly one rule: whether the
@@ -56,60 +41,7 @@ const (
 	// DeadLetterRuleID is the rule id emitted for Presidio dead-letter
 	// sentinel rows when a message could not be analyzed.
 	DeadLetterRuleID = prefixPII + "dead_letter"
-
-	// RuleIdentityPersonalAccount fires when a session's AI account is
-	// classified as a personal (non-team) account.
-	RuleIdentityPersonalAccount = prefixIdentity + "personal_account"
-
-	// RuleIdentityUnapprovedDomain fires when a session's AI-account email
-	// domain is not on the policy's approved corporate domain list.
-	RuleIdentityUnapprovedDomain = prefixIdentity + "unapproved_domain"
 )
-
-// guard validates the rule id against the canonical grammar and panics in
-// dev/test if it doesn't match. Returns the id unchanged so callers can
-// compose it inline.
-func guard(ruleID string) string {
-	if !enforceRuleIDFormat {
-		return ruleID
-	}
-	if err := ValidateRuleID(ruleID); err != nil {
-		panic(fmt.Sprintf("risk_analysis: invalid canonical rule id: %v", err))
-	}
-	return ruleID
-}
-
-// ruleIDFormat is the canonical rule id grammar: lowercase ASCII letters
-// and digits, underscores within a segment, dots between segments.
-var ruleIDFormat = regexp.MustCompile(`^[a-z0-9]+(_[a-z0-9]+)*(\.[a-z0-9]+(_[a-z0-9]+)*)*$`)
-
-// ValidateRuleID returns an error when id does not conform to the canonical
-// rule id grammar.
-func ValidateRuleID(id string) error {
-	if id == "" {
-		return fmt.Errorf("rule id is empty")
-	}
-	if !ruleIDFormat.MatchString(id) {
-		return fmt.Errorf("rule id %q is not in canonical form (lowercase snake_case segments joined by dots)", id)
-	}
-	return nil
-}
-
-// enforceRuleIDFormat is true when the binary is running under `go test`
-// (covers unit + integration suites) or after cmd/ wiring opts in via
-// EnableRuleIDFormatEnforcement (used in local-dev). In those modes the
-// Describe* builders panic on a malformed canonical rule id so writer
-// drift is caught immediately. Production runs leave the value through.
-var enforceRuleIDFormat = testing.Testing()
-
-// EnableRuleIDFormatEnforcement opts the process in to strict canonical
-// rule_id validation: any Describe* builder returning a malformed id will
-// panic. Intended for local development; cmd/ wires this on when
-// `--environment=local`. Test binaries get the same behavior automatically
-// via testing.Testing().
-func EnableRuleIDFormatEnforcement() {
-	enforceRuleIDFormat = true
-}
 
 // Canonical rule_id helpers per source. These transform a raw upstream
 // identifier (Presidio's UPPER_SNAKE entity type, a gitleaks rule name,

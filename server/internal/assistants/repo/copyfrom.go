@@ -9,6 +9,41 @@ import (
 	"context"
 )
 
+// iteratorForAddAssistantMcpServers implements pgx.CopyFromSource.
+type iteratorForAddAssistantMcpServers struct {
+	rows                 []AddAssistantMcpServersParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForAddAssistantMcpServers) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForAddAssistantMcpServers) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].AssistantID,
+		r.rows[0].McpServerID,
+		r.rows[0].EnvironmentID,
+		r.rows[0].ProjectID,
+	}, nil
+}
+
+func (r iteratorForAddAssistantMcpServers) Err() error {
+	return nil
+}
+
+func (q *Queries) AddAssistantMcpServers(ctx context.Context, arg []AddAssistantMcpServersParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"assistant_mcp_servers"}, []string{"assistant_id", "mcp_server_id", "environment_id", "project_id"}, &iteratorForAddAssistantMcpServers{rows: arg})
+}
+
 // iteratorForAddAssistantToolsets implements pgx.CopyFromSource.
 type iteratorForAddAssistantToolsets struct {
 	rows                 []AddAssistantToolsetsParams

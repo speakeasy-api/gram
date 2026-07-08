@@ -7,18 +7,14 @@ import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
-import {
-  useAuditLogs,
-  useGramContext,
-  useMembers,
-  useProductFeatures,
-} from "@gram/client/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { telemetryGetProjectOverview } from "@gram/client/funcs/telemetryGetProjectOverview";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
-import type {
-  SearchUsersFilter,
-  UserSummary,
-} from "@gram/client/models/components";
+import type { SearchUsersFilter } from "@gram/client/models/components/searchusersfilter.js";
+import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";

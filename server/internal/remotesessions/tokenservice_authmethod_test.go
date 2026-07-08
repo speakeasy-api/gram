@@ -41,14 +41,12 @@ type upstreamSpy struct {
 // setupRefreshFixture seeds the issuer + client + expired session rows
 // needed to drive validateAndRefresh, points the token endpoint at an
 // httptest.Server, and returns a ChallengeManager wired to the same
-// db/encryption client.
-func setupRefreshFixture(t *testing.T, authMethod string, spy *upstreamSpy) (context.Context, *remotesessions.ChallengeManager, uuid.UUID, urn.SessionSubject, string, string) {
+// db/encryption client. An empty authMethod stores NULL; an empty
+// clientSecret stores NULL (a public / misconfigured client).
+func setupRefreshFixture(t *testing.T, authMethod string, clientSecret string, spy *upstreamSpy) (context.Context, *remotesessions.ChallengeManager, uuid.UUID, urn.SessionSubject, string) {
 	t.Helper()
 
-	const (
-		externalCID  = "post-cid"
-		clientSecret = "post-secret"
-	)
+	const externalCID = "post-cid"
 
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -98,9 +96,10 @@ func setupRefreshFixture(t *testing.T, authMethod string, spy *upstreamSpy) (con
 	q := repo.New(ti.conn)
 	authzEP := tokenServer.URL + "/authorize"
 	tokenEP := tokenServer.URL + "/token"
+	methodSlug := conv.Default(strings.ReplaceAll(authMethod, "_", "-"), "unset")
 	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
 		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		Slug:                              "auth-method-" + strings.ReplaceAll(authMethod, "_", "-"),
+		Slug:                              "auth-method-" + methodSlug,
 		Issuer:                            tokenServer.URL,
 		AuthorizationEndpoint:             conv.ToPGText(authzEP),
 		TokenEndpoint:                     conv.ToPGText(tokenEP),
@@ -115,19 +114,23 @@ func setupRefreshFixture(t *testing.T, authMethod string, spy *upstreamSpy) (con
 	})
 	require.NoError(t, err)
 
-	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-"+strings.ReplaceAll(authMethod, "_", "-"))
+	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-"+methodSlug)
 
-	secretCiphertext, err := enc.Encrypt([]byte(clientSecret))
-	require.NoError(t, err)
+	secretPG := pgtype.Text{String: "", Valid: false}
+	if clientSecret != "" {
+		secretCiphertext, encErr := enc.Encrypt([]byte(clientSecret))
+		require.NoError(t, encErr)
+		secretPG = conv.ToPGText(secretCiphertext)
+	}
 	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
 		ClientID:                externalCID,
-		ClientSecretEncrypted:   conv.ToPGText(secretCiphertext),
+		ClientSecretEncrypted:   secretPG,
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now()),
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		TokenEndpointAuthMethod: conv.ToPGText(authMethod),
+		TokenEndpointAuthMethod: conv.ToPGTextEmpty(authMethod),
 	})
 	require.NoError(t, err)
 
@@ -137,10 +140,10 @@ func setupRefreshFixture(t *testing.T, authMethod string, spy *upstreamSpy) (con
 	})
 	require.NoError(t, err)
 
-	subject := urn.NewUserSubject("refresh-subject-" + authMethod)
+	subject := urn.NewUserSubject("refresh-subject-" + methodSlug)
 	seedExpiredRemoteSession(t, ctx, ti, enc, subject, userIssuer, client.ID)
 
-	return ctx, mgr, client.ID, subject, clientSecret, externalCID
+	return ctx, mgr, client.ID, subject, externalCID
 }
 
 // seedExpiredRemoteSession inserts a remote_sessions row whose access token
@@ -171,15 +174,16 @@ func seedExpiredRemoteSession(t *testing.T, ctx context.Context, ti *testInstanc
 func TestResolveAccessToken_RefreshUsesClientSecretPost(t *testing.T) {
 	t.Parallel()
 
+	const clientSecret = "post-secret"
 	var spy upstreamSpy
-	ctx, mgr, clientID, subject, clientSecret, externalCID := setupRefreshFixture(t, "client_secret_post", &spy)
+	ctx, mgr, clientID, subject, externalCID := setupRefreshFixture(t, "client_secret_post", clientSecret, &spy)
 
 	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)
 
-	require.Equal(t, externalCID, spy.form.Get("client_id"), "client_id is in the body regardless of auth method")
+	require.Equal(t, externalCID, spy.form.Get("client_id"), "client_secret_post puts client_id in the body")
 	require.Equal(t, clientSecret, spy.form.Get("client_secret"), "client_secret_post puts secret in the form body")
 	require.Empty(t, spy.authHdr, "client_secret_post must not also send Authorization header")
 }
@@ -188,7 +192,7 @@ func TestResolveAccessToken_RefreshUsesClientSecretBasic(t *testing.T) {
 	t.Parallel()
 
 	var spy upstreamSpy
-	ctx, mgr, clientID, subject, _, _ := setupRefreshFixture(t, "client_secret_basic", &spy)
+	ctx, mgr, clientID, subject, _ := setupRefreshFixture(t, "client_secret_basic", "basic-secret", &spy)
 
 	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
 	require.NoError(t, err)
@@ -196,7 +200,43 @@ func TestResolveAccessToken_RefreshUsesClientSecretBasic(t *testing.T) {
 	require.Equal(t, "refreshed-access", tok)
 
 	require.Empty(t, spy.form.Get("client_secret"), "client_secret_basic must not echo secret in the body")
+	require.Empty(t, spy.form.Get("client_id"), "client_secret_basic must not also echo client_id in the body; it's already the Basic auth username")
 	require.True(t, strings.HasPrefix(spy.authHdr, "Basic "), "client_secret_basic uses Authorization: Basic")
+}
+
+// A client that explicitly declares client_secret_basic but has no stored
+// secret is misconfigured: the refresh must fail fast without contacting the
+// upstream token endpoint, rather than sending an unauthenticated request
+// that draws an opaque 401.
+func TestResolveAccessToken_RefreshMissingSecretForBasicFailsFast(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, mgr, clientID, subject, _ := setupRefreshFixture(t, "client_secret_basic", "", &spy)
+
+	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
+	require.NoError(t, err, "misconfiguration is a no-token signal, not a transport error")
+	require.Empty(t, tok, "no token must be resolved for a misconfigured client")
+	require.Nil(t, spy.form, "the upstream token endpoint must not be contacted")
+}
+
+// A client with no stored token_endpoint_auth_method and no secret resolves
+// to the public path: client_id in the body, no client_secret, no
+// Authorization header.
+func TestResolveAccessToken_RefreshNoMethodNoSecretIsPublic(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, mgr, clientID, subject, externalCID := setupRefreshFixture(t, "", "", &spy)
+
+	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
+	require.NoError(t, err)
+	require.NoError(t, spy.handlerErr)
+	require.Equal(t, "refreshed-access", tok)
+
+	require.Equal(t, externalCID, spy.form.Get("client_id"), "public clients identify via client_id in the body")
+	require.Empty(t, spy.form.Get("client_secret"), "no secret exists to send")
+	require.Empty(t, spy.authHdr, "public clients must not send an Authorization header")
 }
 
 func mustURL(t *testing.T, s string) *url.URL {

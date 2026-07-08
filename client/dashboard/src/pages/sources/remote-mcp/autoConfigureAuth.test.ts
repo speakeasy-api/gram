@@ -1,9 +1,7 @@
 import type { Gram } from "@gram/client";
-import type {
-  McpServer,
-  RemoteMcpServer,
-  RemoteSessionIssuer,
-} from "@gram/client/models/components";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";

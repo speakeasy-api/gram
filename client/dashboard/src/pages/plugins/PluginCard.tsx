@@ -5,7 +5,7 @@ import { Action, MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
-import { Plugin } from "@gram/client/models/components";
+import { Plugin } from "@gram/client/models/components/plugin.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { ArrowRight, Puzzle, Server } from "lucide-react";
 import { Link, useNavigate } from "react-router";

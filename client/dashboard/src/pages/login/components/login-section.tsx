@@ -4,11 +4,11 @@ import { Button } from "@speakeasy-api/moonshine";
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
 import { useSearchParams } from "react-router";
 import { useState } from "react";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import {
   buildRegisterMutation,
   RegisterMutationVariables,
-  useGramContext,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/register.js";
 import { authInfo } from "@gram/client/funcs/authInfo";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMutation } from "@tanstack/react-query";

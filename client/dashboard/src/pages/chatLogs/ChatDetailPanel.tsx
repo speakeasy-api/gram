@@ -30,8 +30,9 @@ import {
   DropdownMenuTrigger,
   Icon,
 } from "@speakeasy-api/moonshine";
-import type { ChatOverview, RiskResult } from "@gram/client/models/components";
-import { useSearchLogsMutation } from "@gram/client/react-query";
+import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
@@ -49,6 +50,8 @@ import {
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
+import { AccountTypeBadge } from "@/components/account-type-badge";
+import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
@@ -231,9 +234,12 @@ function SessionSummary({
   chat,
   messageCount,
   toolCount,
+  compact = false,
 }: {
   chat: {
     externalUserId?: string;
+    accountType?: string;
+    accountEmail?: string;
     source?: string;
     createdAt: Date;
     totalCost?: number;
@@ -245,9 +251,11 @@ function SessionSummary({
   };
   messageCount: number;
   toolCount: number;
+  compact?: boolean;
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const accountEmail = personalAccountEmail(chat);
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
@@ -260,20 +268,29 @@ function SessionSummary({
           type="button"
           className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
         >
-          {hasCost && (
-            <span className="tabular-nums">
-              {formatUsageCost(chat.totalCost!)}
+          {compact ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Info className="size-3.5" />
+              Details
             </span>
+          ) : (
+            <>
+              {hasCost && (
+                <span className="tabular-nums">
+                  {formatUsageCost(chat.totalCost!)}
+                </span>
+              )}
+              {hasCost && tokens > 0 && (
+                <span aria-hidden className="text-muted-foreground/40">
+                  |
+                </span>
+              )}
+              {tokens > 0 && <span>{formatTokenCount(tokens)} tokens</span>}
+            </>
           )}
-          {hasCost && tokens > 0 && (
-            <span aria-hidden className="text-muted-foreground/40">
-              |
-            </span>
-          )}
-          {tokens > 0 && <span>{formatTokenCount(tokens)} tokens</span>}
           {/* No cost telemetry for this session (e.g. ClickHouse miss) — show a
               neutral "Details" label so the trigger is never an empty pill. */}
-          {!hasCost && tokens === 0 && (
+          {!compact && !hasCost && tokens === 0 && (
             <span className="inline-flex items-center gap-1.5">
               <Info className="size-3.5" />
               Details
@@ -287,6 +304,14 @@ function SessionSummary({
           <div className="mb-1 text-sm font-semibold">Session details</div>
           <div className="divide-border divide-y">
             <MetaRow label="User">{chat.externalUserId || "anonymous"}</MetaRow>
+            {accountEmail && (
+              <MetaRow label="Account">
+                <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                  {accountEmail}
+                  <AccountTypeBadge accountType={chat.accountType} noTooltip />
+                </span>
+              </MetaRow>
+            )}
             {chat.source && (
               <MetaRow label="Source">
                 <span className="inline-flex items-center gap-1.5">
@@ -318,6 +343,63 @@ function SessionSummary({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function HeaderMetadataBadge({ children }: { children: ReactNode }) {
+  return (
+    <Badge variant="neutral" className="shrink-0 font-mono text-[10px]">
+      <Badge.Text>{children}</Badge.Text>
+    </Badge>
+  );
+}
+
+function ChatDetailMetadataBadges({
+  chatId,
+  chat,
+  messageCount,
+  toolCount,
+}: {
+  chatId: string;
+  chat: Parameters<typeof SessionSummary>[0]["chat"];
+  messageCount: number;
+  toolCount: number;
+}) {
+  const tokens = totalTokensFor(chat);
+  const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
+      <HeaderMetadataBadge>
+        {messageCount.toLocaleString()} messages
+      </HeaderMetadataBadge>
+      {toolCount > 0 && (
+        <HeaderMetadataBadge>
+          {toolCount.toLocaleString()} tool calls
+        </HeaderMetadataBadge>
+      )}
+      {chat.source && (
+        <Badge variant="neutral" className="shrink-0 text-[10px]">
+          <Badge.Text>
+            <span className="inline-flex items-center gap-1.5">
+              <HookSourceIcon source={chat.source} className="size-3" />
+              {chat.source}
+            </span>
+          </Badge.Text>
+        </Badge>
+      )}
+      {hasCost && (
+        <HeaderMetadataBadge>
+          {formatUsageCost(chat.totalCost!)}
+        </HeaderMetadataBadge>
+      )}
+      {tokens > 0 && (
+        <HeaderMetadataBadge>
+          {formatTokenCount(tokens)} tokens
+        </HeaderMetadataBadge>
+      )}
+    </div>
   );
 }
 
@@ -527,6 +609,7 @@ function ChatDetailHeader({
   messageCount,
   toolCount,
   canManageChat,
+  compactMetadata,
   showFilter,
   typeFilter,
   onTypeFilterChange,
@@ -544,6 +627,7 @@ function ChatDetailHeader({
   messageCount: number;
   toolCount: number;
   canManageChat: boolean;
+  compactMetadata: boolean;
   showFilter: boolean;
   typeFilter: ReadonlySet<MessageCategory>;
   onTypeFilterChange: (next: Set<MessageCategory>) => void;
@@ -574,12 +658,16 @@ function ChatDetailHeader({
                   ({format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm")})
                 </span>
               </span>
-              <Badge
-                variant="neutral"
-                className="shrink-0 font-mono text-[10px]"
-              >
-                <Badge.Text>{getTraceId(chatId)}</Badge.Text>
-              </Badge>
+              {compactMetadata ? (
+                <ChatDetailMetadataBadges
+                  chatId={chatId}
+                  chat={chat}
+                  messageCount={messageCount}
+                  toolCount={toolCount}
+                />
+              ) : (
+                <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
+              )}
             </div>
           </SheetDescription>
         </div>
@@ -588,6 +676,7 @@ function ChatDetailHeader({
             chat={chat}
             messageCount={messageCount}
             toolCount={toolCount}
+            compact={compactMetadata}
           />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -995,6 +1084,11 @@ function ChatDetailPanel({
     activeOccurrence,
   ]);
 
+  // Personal-account sessions label the user's turns with the account's own
+  // email (mirrors the sessions list) instead of the attributed employee's
+  // work email carried on the messages.
+  const userLabelOverride = chat ? personalAccountEmail(chat) : undefined;
+
   const rowCtx = useMemo<RowContext>(
     () => ({
       riskResultsByMessage,
@@ -1003,6 +1097,7 @@ function ChatDetailPanel({
       dimNonRisk,
       searchQuery: searchActive ? searchQuery : undefined,
       userLabel: chat?.externalUserId,
+      userLabelOverride,
     }),
     [
       riskResultsByMessage,
@@ -1012,6 +1107,7 @@ function ChatDetailPanel({
       searchActive,
       searchQuery,
       chat?.externalUserId,
+      userLabelOverride,
     ],
   );
 
@@ -1102,6 +1198,7 @@ function ChatDetailPanel({
         messageCount={chat.numMessages}
         toolCount={toolLogs.length}
         canManageChat={canManageChat}
+        compactMetadata={riskFocus}
         showFilter={view === "chat"}
         typeFilter={typeFilter}
         onTypeFilterChange={setTypeFilter}

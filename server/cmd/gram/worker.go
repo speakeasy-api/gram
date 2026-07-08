@@ -52,6 +52,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -63,6 +66,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 func newWorkerCommand() *cli.Command {
@@ -326,7 +330,7 @@ func newWorkerCommand() *cli.Command {
 			slog.SetDefault(logger)
 
 			if serviceEnv == "local" {
-				risk_analysis.EnableRuleIDFormatEnforcement()
+				scanners.EnableRuleIDFormatEnforcement()
 			}
 
 			ctx, cancel := context.WithCancel(c.Context)
@@ -688,6 +692,9 @@ func newWorkerCommand() *cli.Command {
 				// runtime request through mcp.Service, so the factory is
 				// intentionally nil here.
 				nil,
+				route.NewRouteTable(),
+				"",
+				nil,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -723,6 +730,16 @@ func newWorkerCommand() *cli.Command {
 
 			piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
+			customRuleScanner, err := customruleanalyzer.NewScanner(db)
+			if err != nil {
+				return fmt.Errorf("create custom rules scanner: %w", err)
+			}
+
+			builtinPresets, err := presetlib.New()
+			if err != nil {
+				return fmt.Errorf("load built-in exclusion library: %w", err)
+			}
+
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:                 guardianPolicy,
 				DB:                             db,
@@ -753,6 +770,8 @@ func newWorkerCommand() *cli.Command {
 				TemporalEnv:                    temporalEnv,
 				PIIScanner:                     piiScanner,
 				PIScanner:                      piScanner,
+				CustomRuleScanner:              customRuleScanner,
+				BuiltinPresets:                 builtinPresets,
 				ShadowMCPClient:                shadowMCPClient,
 				AuditLogger:                    auditLogger,
 				WorkOSClient:                   backgroundWorkOSClient,

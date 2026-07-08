@@ -1,4 +1,4 @@
-import type { AuditLog } from "@gram/client/models/components";
+import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 
 // Builds the dashboard path to an audit subject's detail page, or null when the
 // subject has no navigable page (or is missing the slug/id needed to route to

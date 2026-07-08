@@ -18,10 +18,14 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetSourceEnvironmentRequest,
+  GetSourceEnvironmentSecurity,
+  QueryParamSourceKind,
+} from "../models/operations/getsourceenvironment.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +46,7 @@ export {
 };
 
 export type GetSourceEnvironmentQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +63,8 @@ export type GetSourceEnvironmentQueryError =
  * Get the environment linked to a source
  */
 export function useGetSourceEnvironment(
-  request: operations.GetSourceEnvironmentRequest,
-  security?: operations.GetSourceEnvironmentSecurity | undefined,
+  request: GetSourceEnvironmentRequest,
+  security?: GetSourceEnvironmentSecurity | undefined,
   options?: QueryHookOptions<
     GetSourceEnvironmentQueryData,
     GetSourceEnvironmentQueryError
@@ -88,8 +92,8 @@ export function useGetSourceEnvironment(
  * Get the environment linked to a source
  */
 export function useGetSourceEnvironmentSuspense(
-  request: operations.GetSourceEnvironmentRequest,
-  security?: operations.GetSourceEnvironmentSecurity | undefined,
+  request: GetSourceEnvironmentRequest,
+  security?: GetSourceEnvironmentSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetSourceEnvironmentQueryData,
     GetSourceEnvironmentQueryError
@@ -114,7 +118,7 @@ export function setGetSourceEnvironmentData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      sourceKind: operations.QueryParamSourceKind;
+      sourceKind: QueryParamSourceKind;
       sourceSlug: string;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -131,7 +135,7 @@ export function invalidateGetSourceEnvironment(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      sourceKind: operations.QueryParamSourceKind;
+      sourceKind: QueryParamSourceKind;
       sourceSlug: string;
       gramSession?: string | undefined;
       gramProject?: string | undefined;

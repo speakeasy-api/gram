@@ -11,14 +11,17 @@ import { GramCore } from "../core.js";
 import { assetsServeImage } from "../funcs/assetsServeImage.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ServeImageRequest,
+  ServeImageResponse,
+} from "../models/operations/serveimage.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ServeImageQueryData = operations.ServeImageResponse;
+export type ServeImageQueryData = ServeImageResponse;
 
 export function prefetchServeImage(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ServeImageRequest,
+  request: ServeImageRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -32,7 +35,7 @@ export function prefetchServeImage(
 
 export function buildServeImageQuery(
   client$: GramCore,
-  request: operations.ServeImageRequest,
+  request: ServeImageRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

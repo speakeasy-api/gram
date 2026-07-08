@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListTemplatesRequest,
+  ListTemplatesSecurity,
+} from "../models/operations/listtemplates.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type TemplatesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type TemplatesQueryError =
  * List available prompt template.
  */
 export function useTemplates(
-  request?: operations.ListTemplatesRequest | undefined,
-  security?: operations.ListTemplatesSecurity | undefined,
+  request?: ListTemplatesRequest | undefined,
+  security?: ListTemplatesSecurity | undefined,
   options?: QueryHookOptions<TemplatesQueryData, TemplatesQueryError>,
 ): UseQueryResult<TemplatesQueryData, TemplatesQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useTemplates(
  * List available prompt template.
  */
 export function useTemplatesSuspense(
-  request?: operations.ListTemplatesRequest | undefined,
-  security?: operations.ListTemplatesSecurity | undefined,
+  request?: ListTemplatesRequest | undefined,
+  security?: ListTemplatesSecurity | undefined,
   options?: SuspenseQueryHookOptions<TemplatesQueryData, TemplatesQueryError>,
 ): UseSuspenseQueryResult<TemplatesQueryData, TemplatesQueryError> {
   const client = useGramContext();

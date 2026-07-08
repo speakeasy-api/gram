@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { toolsetsSetToolVariationsGroup } from "../funcs/toolsetsSetToolVariationsGroup.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { Toolset } from "../models/components/toolset.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  SetToolsetToolVariationsGroupRequest,
+  SetToolsetToolVariationsGroupSecurity,
+} from "../models/operations/settoolsettoolvariationsgroup.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type SetToolsetToolVariationsGroupMutationVariables = {
-  request: operations.SetToolsetToolVariationsGroupRequest;
-  security?: operations.SetToolsetToolVariationsGroupSecurity | undefined;
+  request: SetToolsetToolVariationsGroupRequest;
+  security?: SetToolsetToolVariationsGroupSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type SetToolsetToolVariationsGroupMutationData = components.Toolset;
+export type SetToolsetToolVariationsGroupMutationData = Toolset;
 
 export type SetToolsetToolVariationsGroupMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

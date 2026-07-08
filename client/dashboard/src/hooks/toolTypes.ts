@@ -1,14 +1,14 @@
 import { asResource, asTools } from "@/lib/toolTypes";
-import { Tool as GeneratedTool } from "@gram/client/models/components";
+import { Tool as GeneratedTool } from "@gram/client/models/components/tool.js";
 import {
   ListToolsRequest,
   ListToolsSecurity,
-} from "@gram/client/models/operations";
+} from "@gram/client/models/operations/listtools.js";
 import {
   ListResourcesRequest,
   ListResourcesSecurity,
 } from "@gram/client/models/operations/listresources.js";
-import { QueryHookOptions } from "@gram/client/react-query";
+import { QueryHookOptions } from "@gram/client/react-query/_types.js";
 import {
   LatestDeploymentQueryData,
   LatestDeploymentQueryError,

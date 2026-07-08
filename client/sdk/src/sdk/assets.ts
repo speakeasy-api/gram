@@ -15,8 +15,63 @@ import { assetsUploadFunctions } from "../funcs/assetsUploadFunctions.js";
 import { assetsUploadImage } from "../funcs/assetsUploadImage.js";
 import { assetsUploadOpenAPIv3 } from "../funcs/assetsUploadOpenAPIv3.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { CreateSignedChatAttachmentURLResult } from "../models/components/createsignedchatattachmenturlresult.js";
+import { ListAssetsResult } from "../models/components/listassetsresult.js";
+import { UploadChatAttachmentResult } from "../models/components/uploadchatattachmentresult.js";
+import { UploadFunctionsResult } from "../models/components/uploadfunctionsresult.js";
+import { UploadImageResult } from "../models/components/uploadimageresult.js";
+import { UploadOpenAPIv3Result } from "../models/components/uploadopenapiv3result.js";
+import {
+  CreateSignedChatAttachmentURLRequest,
+  CreateSignedChatAttachmentURLSecurity,
+} from "../models/operations/createsignedchatattachmenturl.js";
+import {
+  FetchOpenAPIv3FromURLRequest,
+  FetchOpenAPIv3FromURLSecurity,
+} from "../models/operations/fetchopenapiv3fromurl.js";
+import {
+  ListAssetsRequest,
+  ListAssetsSecurity,
+} from "../models/operations/listassets.js";
+import {
+  ServeChatAttachmentRequest,
+  ServeChatAttachmentResponse,
+  ServeChatAttachmentSecurity,
+} from "../models/operations/servechatattachment.js";
+import {
+  ServeChatAttachmentSignedRequest,
+  ServeChatAttachmentSignedResponse,
+} from "../models/operations/servechatattachmentsigned.js";
+import {
+  ServeFunctionRequest,
+  ServeFunctionResponse,
+  ServeFunctionSecurity,
+} from "../models/operations/servefunction.js";
+import {
+  ServeImageRequest,
+  ServeImageResponse,
+} from "../models/operations/serveimage.js";
+import {
+  ServeOpenAPIv3Request,
+  ServeOpenAPIv3Response,
+  ServeOpenAPIv3Security,
+} from "../models/operations/serveopenapiv3.js";
+import {
+  UploadChatAttachmentRequest,
+  UploadChatAttachmentSecurity,
+} from "../models/operations/uploadchatattachment.js";
+import {
+  UploadFunctionsRequest,
+  UploadFunctionsSecurity,
+} from "../models/operations/uploadfunctions.js";
+import {
+  UploadImageRequest,
+  UploadImageSecurity,
+} from "../models/operations/uploadimage.js";
+import {
+  UploadOpenAPIv3AssetRequest,
+  UploadOpenAPIv3AssetSecurity,
+} from "../models/operations/uploadopenapiv3asset.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Assets extends ClientSDK {
@@ -27,10 +82,10 @@ export class Assets extends ClientSDK {
    * Create a time-limited signed URL to access a chat attachment without authentication.
    */
   async createSignedChatAttachmentURL(
-    request: operations.CreateSignedChatAttachmentURLRequest,
-    security?: operations.CreateSignedChatAttachmentURLSecurity | undefined,
+    request: CreateSignedChatAttachmentURLRequest,
+    security?: CreateSignedChatAttachmentURLSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.CreateSignedChatAttachmentURLResult> {
+  ): Promise<CreateSignedChatAttachmentURLResult> {
     return unwrapAsync(assetsCreateSignedChatAttachmentURL(
       this,
       request,
@@ -46,10 +101,10 @@ export class Assets extends ClientSDK {
    * Fetch an OpenAPI v3 document from a URL and upload it to Gram.
    */
   async fetchOpenAPIv3FromURL(
-    request: operations.FetchOpenAPIv3FromURLRequest,
-    security?: operations.FetchOpenAPIv3FromURLSecurity | undefined,
+    request: FetchOpenAPIv3FromURLRequest,
+    security?: FetchOpenAPIv3FromURLSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.UploadOpenAPIv3Result> {
+  ): Promise<UploadOpenAPIv3Result> {
     return unwrapAsync(assetsFetchOpenAPIv3FromURL(
       this,
       request,
@@ -65,10 +120,10 @@ export class Assets extends ClientSDK {
    * List all assets for a project.
    */
   async listAssets(
-    request?: operations.ListAssetsRequest | undefined,
-    security?: operations.ListAssetsSecurity | undefined,
+    request?: ListAssetsRequest | undefined,
+    security?: ListAssetsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListAssetsResult> {
+  ): Promise<ListAssetsResult> {
     return unwrapAsync(assetsListAssets(
       this,
       request,
@@ -84,10 +139,10 @@ export class Assets extends ClientSDK {
    * Serve a chat attachment from Gram.
    */
   async serveChatAttachment(
-    request: operations.ServeChatAttachmentRequest,
-    security?: operations.ServeChatAttachmentSecurity | undefined,
+    request: ServeChatAttachmentRequest,
+    security?: ServeChatAttachmentSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<operations.ServeChatAttachmentResponse> {
+  ): Promise<ServeChatAttachmentResponse> {
     return unwrapAsync(assetsServeChatAttachment(
       this,
       request,
@@ -103,9 +158,9 @@ export class Assets extends ClientSDK {
    * Serve a chat attachment using a signed URL token.
    */
   async serveChatAttachmentSigned(
-    request: operations.ServeChatAttachmentSignedRequest,
+    request: ServeChatAttachmentSignedRequest,
     options?: RequestOptions,
-  ): Promise<operations.ServeChatAttachmentSignedResponse> {
+  ): Promise<ServeChatAttachmentSignedResponse> {
     return unwrapAsync(assetsServeChatAttachmentSigned(
       this,
       request,
@@ -120,10 +175,10 @@ export class Assets extends ClientSDK {
    * Serve a Gram Functions asset from Gram.
    */
   async serveFunction(
-    request: operations.ServeFunctionRequest,
-    security?: operations.ServeFunctionSecurity | undefined,
+    request: ServeFunctionRequest,
+    security?: ServeFunctionSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<operations.ServeFunctionResponse> {
+  ): Promise<ServeFunctionResponse> {
     return unwrapAsync(assetsServeFunction(
       this,
       request,
@@ -139,9 +194,9 @@ export class Assets extends ClientSDK {
    * Serve an image from Gram.
    */
   async serveImage(
-    request: operations.ServeImageRequest,
+    request: ServeImageRequest,
     options?: RequestOptions,
-  ): Promise<operations.ServeImageResponse> {
+  ): Promise<ServeImageResponse> {
     return unwrapAsync(assetsServeImage(
       this,
       request,
@@ -156,10 +211,10 @@ export class Assets extends ClientSDK {
    * Serve an OpenAPIv3 asset from Gram.
    */
   async serveOpenAPIv3(
-    request: operations.ServeOpenAPIv3Request,
-    security?: operations.ServeOpenAPIv3Security | undefined,
+    request: ServeOpenAPIv3Request,
+    security?: ServeOpenAPIv3Security | undefined,
     options?: RequestOptions,
-  ): Promise<operations.ServeOpenAPIv3Response> {
+  ): Promise<ServeOpenAPIv3Response> {
     return unwrapAsync(assetsServeOpenAPIv3(
       this,
       request,
@@ -175,10 +230,10 @@ export class Assets extends ClientSDK {
    * Upload a chat attachment to Gram.
    */
   async uploadChatAttachment(
-    request: operations.UploadChatAttachmentRequest,
-    security?: operations.UploadChatAttachmentSecurity | undefined,
+    request: UploadChatAttachmentRequest,
+    security?: UploadChatAttachmentSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.UploadChatAttachmentResult> {
+  ): Promise<UploadChatAttachmentResult> {
     return unwrapAsync(assetsUploadChatAttachment(
       this,
       request,
@@ -194,10 +249,10 @@ export class Assets extends ClientSDK {
    * Upload functions to Gram.
    */
   async uploadFunctions(
-    request: operations.UploadFunctionsRequest,
-    security?: operations.UploadFunctionsSecurity | undefined,
+    request: UploadFunctionsRequest,
+    security?: UploadFunctionsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.UploadFunctionsResult> {
+  ): Promise<UploadFunctionsResult> {
     return unwrapAsync(assetsUploadFunctions(
       this,
       request,
@@ -213,10 +268,10 @@ export class Assets extends ClientSDK {
    * Upload an image to Gram.
    */
   async uploadImage(
-    request: operations.UploadImageRequest,
-    security?: operations.UploadImageSecurity | undefined,
+    request: UploadImageRequest,
+    security?: UploadImageSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.UploadImageResult> {
+  ): Promise<UploadImageResult> {
     return unwrapAsync(assetsUploadImage(
       this,
       request,
@@ -232,10 +287,10 @@ export class Assets extends ClientSDK {
    * Upload an OpenAPI v3 document to Gram.
    */
   async uploadOpenAPIv3(
-    request: operations.UploadOpenAPIv3AssetRequest,
-    security?: operations.UploadOpenAPIv3AssetSecurity | undefined,
+    request: UploadOpenAPIv3AssetRequest,
+    security?: UploadOpenAPIv3AssetSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.UploadOpenAPIv3Result> {
+  ): Promise<UploadOpenAPIv3Result> {
     return unwrapAsync(assetsUploadOpenAPIv3(
       this,
       request,

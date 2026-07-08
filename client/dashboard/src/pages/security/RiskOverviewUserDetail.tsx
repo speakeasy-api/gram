@@ -8,11 +8,9 @@ import { RequireScope } from "@/components/require-scope";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { type DateRangePreset } from "@gram-ai/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import {
-  useListChats,
-  useRiskOverview,
-  useRiskUserBreakdown,
-} from "@gram/client/react-query/index.js";
+import { useListChats } from "@gram/client/react-query/listChats.js";
+import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
+import { useRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 import { getRuleTitleFallback } from "./risk-utils";
 import { Icon } from "@speakeasy-api/moonshine";

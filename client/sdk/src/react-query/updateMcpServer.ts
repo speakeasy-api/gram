@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { mcpServersUpdate } from "../funcs/mcpServersUpdate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { McpServer } from "../models/components/mcpserver.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  UpdateMcpServerRequest,
+  UpdateMcpServerSecurity,
+} from "../models/operations/updatemcpserver.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UpdateMcpServerMutationVariables = {
-  request: operations.UpdateMcpServerRequest;
-  security?: operations.UpdateMcpServerSecurity | undefined;
+  request: UpdateMcpServerRequest;
+  security?: UpdateMcpServerSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpdateMcpServerMutationData = components.McpServer;
+export type UpdateMcpServerMutationData = McpServer;
 
 export type UpdateMcpServerMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -51,7 +54,7 @@ export type UpdateMcpServerMutationError =
  * updateMcpServer mcpServers
  *
  * @remarks
- * Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.
+ * Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.
  */
 export function useUpdateMcpServerMutation(
   options?: MutationHookOptions<

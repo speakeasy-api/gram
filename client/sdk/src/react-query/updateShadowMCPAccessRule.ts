@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { accessUpdateShadowMCPAccessRule } from "../funcs/accessUpdateShadowMCPAccessRule.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { ShadowMCPAccessRule } from "../models/components/shadowmcpaccessrule.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,25 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  UpdateShadowMCPAccessRuleRequest,
+  UpdateShadowMCPAccessRuleSecurity,
+} from "../models/operations/updateshadowmcpaccessrule.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UpdateShadowMCPAccessRuleMutationVariables = {
-  request: operations.UpdateShadowMCPAccessRuleRequest;
-  security?: operations.UpdateShadowMCPAccessRuleSecurity | undefined;
+  request: UpdateShadowMCPAccessRuleRequest;
+  security?: UpdateShadowMCPAccessRuleSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpdateShadowMCPAccessRuleMutationData =
-  components.ShadowMCPAccessRule;
+export type UpdateShadowMCPAccessRuleMutationData = ShadowMCPAccessRule;
 
 export type UpdateShadowMCPAccessRuleMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

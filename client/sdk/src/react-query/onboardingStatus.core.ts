@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { organizationsGetOnboardingStatus } from "../funcs/organizationsGetOnboardingStatus.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { OnboardingStatusResult } from "../models/components/onboardingstatusresult.js";
+import {
+  GetOnboardingStatusRequest,
+  GetOnboardingStatusSecurity,
+} from "../models/operations/getonboardingstatus.js";
 import { unwrapAsync } from "../types/fp.js";
-export type OnboardingStatusQueryData = components.OnboardingStatusResult;
+export type OnboardingStatusQueryData = OnboardingStatusResult;
 
 export function prefetchOnboardingStatus(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetOnboardingStatusRequest | undefined,
-  security?: operations.GetOnboardingStatusSecurity | undefined,
+  request?: GetOnboardingStatusRequest | undefined,
+  security?: GetOnboardingStatusSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchOnboardingStatus(
 
 export function buildOnboardingStatusQuery(
   client$: GramCore,
-  request?: operations.GetOnboardingStatusRequest | undefined,
-  security?: operations.GetOnboardingStatusSecurity | undefined,
+  request?: GetOnboardingStatusRequest | undefined,
+  security?: GetOnboardingStatusSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetUserSessionClientRequest,
+  GetUserSessionClientSecurity,
+} from "../models/operations/getusersessionclient.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type UserSessionClientQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type UserSessionClientQueryError =
  * Get a user_session_client by id.
  */
 export function useUserSessionClient(
-  request: operations.GetUserSessionClientRequest,
-  security?: operations.GetUserSessionClientSecurity | undefined,
+  request: GetUserSessionClientRequest,
+  security?: GetUserSessionClientSecurity | undefined,
   options?: QueryHookOptions<
     UserSessionClientQueryData,
     UserSessionClientQueryError
@@ -85,8 +88,8 @@ export function useUserSessionClient(
  * Get a user_session_client by id.
  */
 export function useUserSessionClientSuspense(
-  request: operations.GetUserSessionClientRequest,
-  security?: operations.GetUserSessionClientSecurity | undefined,
+  request: GetUserSessionClientRequest,
+  security?: GetUserSessionClientSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     UserSessionClientQueryData,
     UserSessionClientQueryError

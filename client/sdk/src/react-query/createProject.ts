@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { projectsCreate } from "../funcs/projectsCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { CreateProjectResult } from "../models/components/createprojectresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CreateProjectRequest,
+  CreateProjectSecurity,
+} from "../models/operations/createproject.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateProjectMutationVariables = {
-  request: operations.CreateProjectRequest;
-  security?: operations.CreateProjectSecurity | undefined;
+  request: CreateProjectRequest;
+  security?: CreateProjectSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type CreateProjectMutationData = components.CreateProjectResult;
+export type CreateProjectMutationData = CreateProjectResult;
 
 export type CreateProjectMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

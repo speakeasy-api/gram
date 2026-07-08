@@ -5,7 +5,15 @@
 import { userSessionConsentsList } from "../funcs/userSessionConsentsList.js";
 import { userSessionConsentsRevoke } from "../funcs/userSessionConsentsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ListUserSessionConsentsRequest,
+  ListUserSessionConsentsResponse,
+  ListUserSessionConsentsSecurity,
+} from "../models/operations/listusersessionconsents.js";
+import {
+  RevokeUserSessionConsentRequest,
+  RevokeUserSessionConsentSecurity,
+} from "../models/operations/revokeusersessionconsent.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -17,11 +25,11 @@ export class UserSessionConsents extends ClientSDK {
    * List consent records for the caller's project.
    */
   async list(
-    request?: operations.ListUserSessionConsentsRequest | undefined,
-    security?: operations.ListUserSessionConsentsSecurity | undefined,
+    request?: ListUserSessionConsentsRequest | undefined,
+    security?: ListUserSessionConsentsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<
-    PageIterator<operations.ListUserSessionConsentsResponse, { cursor: string }>
+    PageIterator<ListUserSessionConsentsResponse, { cursor: string }>
   > {
     return unwrapResultIterator(userSessionConsentsList(
       this,
@@ -38,8 +46,8 @@ export class UserSessionConsents extends ClientSDK {
    * Withdraw consent. Subsequent authorization requests for matching (subject, user_session_client) pairs re-prompt.
    */
   async revoke(
-    request: operations.RevokeUserSessionConsentRequest,
-    security?: operations.RevokeUserSessionConsentSecurity | undefined,
+    request: RevokeUserSessionConsentRequest,
+    security?: RevokeUserSessionConsentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(userSessionConsentsRevoke(

@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { organizationsListInvites } from "../funcs/organizationsListInvites.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListInvitesResult } from "../models/components/listinvitesresult.js";
+import {
+  ListInvitesRequest,
+  ListInvitesSecurity,
+} from "../models/operations/listinvites.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListInvitesQueryData = components.ListInvitesResult;
+export type ListInvitesQueryData = ListInvitesResult;
 
 export function prefetchListInvites(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListInvitesRequest | undefined,
-  security?: operations.ListInvitesSecurity | undefined,
+  request?: ListInvitesRequest | undefined,
+  security?: ListInvitesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListInvites(
 
 export function buildListInvitesQuery(
   client$: GramCore,
-  request?: operations.ListInvitesRequest | undefined,
-  security?: operations.ListInvitesSecurity | undefined,
+  request?: ListInvitesRequest | undefined,
+  security?: ListInvitesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

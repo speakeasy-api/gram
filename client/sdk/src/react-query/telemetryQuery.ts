@@ -18,10 +18,10 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import { QueryRequest, QuerySecurity } from "../models/operations/query.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +42,7 @@ export {
 };
 
 export type TelemetryQueryQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +59,8 @@ export type TelemetryQueryQueryError =
  * Generic, org-scoped analytics query over pre-aggregated usage metrics. Returns both a grouped table and a per-group hourly timeseries for the same slice of data, supporting arbitrary allowlisted group-by dimensions and filters (e.g. group by department_name, then drill in by filtering department_name and grouping by role).
  */
 export function useTelemetryQuery(
-  request: operations.QueryRequest,
-  security?: operations.QuerySecurity | undefined,
+  request: QueryRequest,
+  security?: QuerySecurity | undefined,
   options?: QueryHookOptions<TelemetryQueryQueryData, TelemetryQueryQueryError>,
 ): UseQueryResult<TelemetryQueryQueryData, TelemetryQueryQueryError> {
   const client = useGramContext();
@@ -82,8 +82,8 @@ export function useTelemetryQuery(
  * Generic, org-scoped analytics query over pre-aggregated usage metrics. Returns both a grouped table and a per-group hourly timeseries for the same slice of data, supporting arbitrary allowlisted group-by dimensions and filters (e.g. group by department_name, then drill in by filtering department_name and grouping by role).
  */
 export function useTelemetryQuerySuspense(
-  request: operations.QueryRequest,
-  security?: operations.QuerySecurity | undefined,
+  request: QueryRequest,
+  security?: QuerySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     TelemetryQueryQueryData,
     TelemetryQueryQueryError

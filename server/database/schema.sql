@@ -108,6 +108,40 @@ ON billing_metadata (organization_id);
 
 COMMENT ON COLUMN billing_metadata.tunneled_mcp_server_limit IS 'Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.';
 
+-- Durable per-billing-cycle "tokens under management" (TUM) snapshots for an
+-- organization. ClickHouse telemetry expires (telemetry_logs after 90 days,
+-- chat_token_summaries after 730 days), so rows here are the permanent record
+-- of each cycle's usage for billing, overage math, and admin reporting.
+CREATE TABLE IF NOT EXISTS billing_cycle_usage (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  -- [cycle_start, cycle_end) boundaries computed from
+  -- billing_metadata.billing_cycle_anchor_day at snapshot time.
+  cycle_start timestamptz NOT NULL,
+  cycle_end timestamptz NOT NULL,
+
+  -- Total tokens under management observed for the cycle.
+  tum_tokens BIGINT NOT NULL DEFAULT 0,
+
+  -- Set once the cycle has closed plus an ingest grace period, after which the
+  -- row is treated as immutable. NULL while the cycle is still being refreshed.
+  finalized_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT billing_cycle_usage_pkey PRIMARY KEY (id),
+  CONSTRAINT billing_cycle_usage_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT billing_cycle_usage_cycle_bounds_check CHECK (cycle_end > cycle_start),
+  -- Token counts originate from client-supplied OTEL attributes; a negative
+  -- sum must never become part of the permanent billing record.
+  CONSTRAINT billing_cycle_usage_tum_tokens_check CHECK (tum_tokens >= 0)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS billing_cycle_usage_organization_id_cycle_start_key
+ON billing_cycle_usage (organization_id, cycle_start);
+
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_slug_key
 ON organization_metadata (slug);
 
@@ -3042,6 +3076,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_slug_null_custom_domain_id_key
 ON mcp_endpoints (slug)
 WHERE custom_domain_id IS NULL AND deleted IS FALSE;
 
+-- MCP servers attached directly to an assistant. The legacy toolset
+-- attachment path lives in assistant_toolsets; this table covers
+-- mcp_servers-modelled backends (remote, tunnelled) that have no toolsets
+-- row and so cannot be attached there. resolveAssistantMCPServers merges
+-- both into the runtime MCP set. Replace-on-write like assistant_toolsets,
+-- so no soft-delete column.
+CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  assistant_id uuid NOT NULL,
+  mcp_server_id uuid NOT NULL,
+  environment_id uuid,
+  project_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT assistant_mcp_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_mcp_servers_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE CASCADE,
+  -- RESTRICT mirrors plugin_servers: mcp_servers soft-delete, so RESTRICT only
+  -- blocks manual hard deletes; SET NULL is not viable for a required backend.
+  CONSTRAINT assistant_mcp_servers_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE RESTRICT,
+  CONSTRAINT assistant_mcp_servers_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_mcp_servers_assistant_id_mcp_server_id_key UNIQUE (assistant_id, mcp_server_id)
+);
+
+CREATE INDEX IF NOT EXISTS assistant_mcp_servers_mcp_server_id_idx ON assistant_mcp_servers (mcp_server_id);
+CREATE INDEX IF NOT EXISTS assistant_mcp_servers_project_id_idx ON assistant_mcp_servers (project_id);
+
 -- Plugin definitions: project-scoped distributable bundles of MCP servers.
 -- Admins create plugins and assign them to roles for distribution.
 CREATE TABLE IF NOT EXISTS plugins (
@@ -3428,6 +3491,49 @@ ON risk_results (project_id, risk_policy_id, rule_id);
 CREATE INDEX IF NOT EXISTS risk_results_excluded_exclusion_idx
 ON risk_results (excluded_exclusion_id)
 WHERE excluded_exclusion_id IS NOT NULL;
+
+-- risk_policy_eval_reviews is the durable "regression set" for a prompt-based
+-- risk policy: a reviewer's ground-truth verdict on whether a given chat session
+-- should be flagged by the policy. The policy-eval workbench replays the
+-- guardrail live and scores its agreement against these saved verdicts. A
+-- verdict is the reviewer's judgment of the policy INTENT, so it persists across
+-- guardrail edits; risk_policy_version records the version in effect when the
+-- verdict was recorded (provenance only). Physically separate from risk_results:
+-- eval review activity never touches live findings, the outbox, or enforcement.
+CREATE TABLE IF NOT EXISTS risk_policy_eval_reviews (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  risk_policy_id uuid NOT NULL,
+  -- Policy version in effect when the verdict was recorded. Provenance only; the
+  -- verdict itself is version-independent ground truth.
+  risk_policy_version BIGINT NOT NULL,
+  chat_id uuid NOT NULL,
+  -- The reviewer's ground-truth judgment of this session under the policy:
+  --   correct        -> the guardrail's flag/clean call matched the reviewer
+  --   false_positive -> the guardrail flagged a session it should not (tighten)
+  --   missed         -> the guardrail missed a session it should flag (broaden)
+  verdict TEXT NOT NULL,
+  -- User id of the reviewer who recorded the verdict.
+  reviewed_by TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT risk_policy_eval_reviews_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_policy_eval_reviews_verdict_check CHECK (verdict IN ('correct', 'false_positive', 'missed')),
+  CONSTRAINT risk_policy_eval_reviews_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_eval_reviews_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_eval_reviews_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_eval_reviews_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+);
+
+-- One active verdict per reviewer per session per policy.
+CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_eval_reviews_policy_chat_reviewer_key
+ON risk_policy_eval_reviews (project_id, risk_policy_id, chat_id, reviewed_by)
+WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS authz_challenge_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

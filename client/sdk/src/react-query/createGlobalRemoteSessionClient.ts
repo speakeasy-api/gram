@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { adminRemoteSessionsCreateGlobalClient } from "../funcs/adminRemoteSessionsCreateGlobalClient.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,25 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CreateGlobalRemoteSessionClientRequest,
+  CreateGlobalRemoteSessionClientSecurity,
+} from "../models/operations/createglobalremotesessionclient.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateGlobalRemoteSessionClientMutationVariables = {
-  request: operations.CreateGlobalRemoteSessionClientRequest;
-  security?: operations.CreateGlobalRemoteSessionClientSecurity | undefined;
+  request: CreateGlobalRemoteSessionClientRequest;
+  security?: CreateGlobalRemoteSessionClientSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type CreateGlobalRemoteSessionClientMutationData =
-  components.RemoteSessionClient;
+export type CreateGlobalRemoteSessionClientMutationData = RemoteSessionClient;
 
 export type CreateGlobalRemoteSessionClientMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

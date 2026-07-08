@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListAllowedOriginsRequest,
+  ListAllowedOriginsSecurity,
+} from "../models/operations/listallowedorigins.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListAllowedOriginsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListAllowedOriginsQueryError =
  * List allowed origins for a project.
  */
 export function useListAllowedOrigins(
-  request?: operations.ListAllowedOriginsRequest | undefined,
-  security?: operations.ListAllowedOriginsSecurity | undefined,
+  request?: ListAllowedOriginsRequest | undefined,
+  security?: ListAllowedOriginsSecurity | undefined,
   options?: QueryHookOptions<
     ListAllowedOriginsQueryData,
     ListAllowedOriginsQueryError
@@ -85,8 +88,8 @@ export function useListAllowedOrigins(
  * List allowed origins for a project.
  */
 export function useListAllowedOriginsSuspense(
-  request?: operations.ListAllowedOriginsRequest | undefined,
-  security?: operations.ListAllowedOriginsSecurity | undefined,
+  request?: ListAllowedOriginsRequest | undefined,
+  security?: ListAllowedOriginsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListAllowedOriginsQueryData,
     ListAllowedOriginsQueryError

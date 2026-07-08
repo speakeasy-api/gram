@@ -1,4 +1,4 @@
-import type { AuditLog } from "@gram/client/models/components";
+import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 
 export function getActorLabel(log: AuditLog): string {
   return log.actorDisplayName || log.actorSlug || "Someone";

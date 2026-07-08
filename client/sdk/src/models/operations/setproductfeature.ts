@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SetProductFeatureRequestBody,
+  SetProductFeatureRequestBody$Outbound,
+  SetProductFeatureRequestBody$outboundSchema,
+} from "../components/setproductfeaturerequestbody.js";
 
 export type SetProductFeatureSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,7 +19,7 @@ export type SetProductFeatureRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  setProductFeatureRequestBody: components.SetProductFeatureRequestBody;
+  setProductFeatureRequestBody: SetProductFeatureRequestBody;
 };
 
 /** @internal */
@@ -49,8 +53,7 @@ export function setProductFeatureSecurityToJSON(
 /** @internal */
 export type SetProductFeatureRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  SetProductFeatureRequestBody:
-    components.SetProductFeatureRequestBody$Outbound;
+  SetProductFeatureRequestBody: SetProductFeatureRequestBody$Outbound;
 };
 
 /** @internal */
@@ -60,8 +63,7 @@ export const SetProductFeatureRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    setProductFeatureRequestBody:
-      components.SetProductFeatureRequestBody$outboundSchema,
+    setProductFeatureRequestBody: SetProductFeatureRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

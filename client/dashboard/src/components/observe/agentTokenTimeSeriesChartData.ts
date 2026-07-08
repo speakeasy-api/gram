@@ -1,5 +1,5 @@
 import { formatChartLabel, smoothData } from "@/components/chart/chartUtils";
-import type { TimeSeriesBucket } from "@gram/client/models/components";
+import type { TimeSeriesBucket } from "@gram/client/models/components/timeseriesbucket.js";
 import type { ChartDataset } from "chart.js";
 
 export type AgentTokenValueMode = "tokens" | "cost";

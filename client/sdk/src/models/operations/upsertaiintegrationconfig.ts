@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpsertConfigRequestBody,
+  UpsertConfigRequestBody$Outbound,
+  UpsertConfigRequestBody$outboundSchema,
+} from "../components/upsertconfigrequestbody.js";
 
 export type UpsertAIIntegrationConfigSecurity = {
   apikeyHeaderGramKey?: string | undefined;
@@ -20,7 +24,7 @@ export type UpsertAIIntegrationConfigRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  upsertAIIntegrationConfigRequest: components.UpsertAIIntegrationConfigRequest;
+  upsertConfigRequestBody: UpsertConfigRequestBody;
 };
 
 /** @internal */
@@ -60,8 +64,7 @@ export function upsertAIIntegrationConfigSecurityToJSON(
 export type UpsertAIIntegrationConfigRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
-  UpsertAIIntegrationConfigRequest:
-    components.UpsertAIIntegrationConfigRequest$Outbound;
+  UpsertConfigRequestBody: UpsertConfigRequestBody$Outbound;
 };
 
 /** @internal */
@@ -72,14 +75,13 @@ export const UpsertAIIntegrationConfigRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-    upsertAIIntegrationConfigRequest:
-      components.UpsertAIIntegrationConfigRequest$outboundSchema,
+    upsertConfigRequestBody: UpsertConfigRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
-      upsertAIIntegrationConfigRequest: "UpsertAIIntegrationConfigRequest",
+      upsertConfigRequestBody: "UpsertConfigRequestBody",
     });
   }),
 );

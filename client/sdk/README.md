@@ -293,6 +293,20 @@ run();
 
 * [receiveWorkOSWebhook](docs/sdks/external/README.md#receiveworkoswebhook) - receiveWorkOSWebhook external
 
+### [ExternalCredentials](docs/sdks/externalcredentials/README.md)
+
+* [createAwsIam](docs/sdks/externalcredentials/README.md#createawsiam) - createAwsIamCredential externalCredentials
+* [createGcpIam](docs/sdks/externalcredentials/README.md#creategcpiam) - createGcpIamCredential externalCredentials
+* [deleteAwsIam](docs/sdks/externalcredentials/README.md#deleteawsiam) - deleteAwsIamCredential externalCredentials
+* [deleteGcpIam](docs/sdks/externalcredentials/README.md#deletegcpiam) - deleteGcpIamCredential externalCredentials
+* [getAwsIam](docs/sdks/externalcredentials/README.md#getawsiam) - getAwsIamCredential externalCredentials
+* [getGcpIam](docs/sdks/externalcredentials/README.md#getgcpiam) - getGcpIamCredential externalCredentials
+* [list](docs/sdks/externalcredentials/README.md#list) - listExternalCredentials externalCredentials
+* [listAwsIam](docs/sdks/externalcredentials/README.md#listawsiam) - listAwsIamCredentials externalCredentials
+* [listGcpIam](docs/sdks/externalcredentials/README.md#listgcpiam) - listGcpIamCredentials externalCredentials
+* [updateAwsIam](docs/sdks/externalcredentials/README.md#updateawsiam) - updateAwsIamCredential externalCredentials
+* [updateGcpIam](docs/sdks/externalcredentials/README.md#updategcpiam) - updateGcpIamCredential externalCredentials
+
 ### [Features](docs/sdks/features/README.md)
 
 * [get](docs/sdks/features/README.md#get) - getProductFeatures features
@@ -502,10 +516,18 @@ run();
 * [suggest](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 * [update](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
 
+### [Risk.Evals](docs/sdks/evals/README.md)
+
+* [deleteReview](docs/sdks/evals/README.md#deletereview) - deleteRiskEvalReview risk
+* [evaluate](docs/sdks/evals/README.md#evaluate) - evaluatePromptGuardrail risk
+* [listReviews](docs/sdks/evals/README.md#listreviews) - listRiskEvalReviews risk
+* [saveReview](docs/sdks/evals/README.md#savereview) - saveRiskEvalReview risk
+
 ### [Risk.Exclusions](docs/sdks/exclusions/README.md)
 
 * [create](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 * [delete](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
+* [listBuiltinExclusions](docs/sdks/exclusions/README.md#listbuiltinexclusions) - listBuiltinExclusions risk
 * [list](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
 * [update](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
 
@@ -612,6 +634,16 @@ run();
 * [pause](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 * [resume](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
 * [update](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
+
+### [TunneledMcp](docs/sdks/tunneledmcp/README.md)
+
+* [createServer](docs/sdks/tunneledmcp/README.md#createserver) - createServer tunneledMcp
+* [deleteServer](docs/sdks/tunneledmcp/README.md#deleteserver) - deleteServer tunneledMcp
+* [getServer](docs/sdks/tunneledmcp/README.md#getserver) - getServer tunneledMcp
+* [listServerConnections](docs/sdks/tunneledmcp/README.md#listserverconnections) - listServerConnections tunneledMcp
+* [listServers](docs/sdks/tunneledmcp/README.md#listservers) - listServers tunneledMcp
+* [rotateServerKey](docs/sdks/tunneledmcp/README.md#rotateserverkey) - rotateServerKey tunneledMcp
+* [updateServer](docs/sdks/tunneledmcp/README.md#updateserver) - updateServer tunneledMcp
 
 ### [Usage](docs/sdks/usage/README.md)
 
@@ -787,6 +819,17 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsSetSourceLink`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`environmentsSetToolsetLink`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`externalCredentialsCreateAwsIam`](docs/sdks/externalcredentials/README.md#createawsiam) - createAwsIamCredential externalCredentials
+- [`externalCredentialsCreateGcpIam`](docs/sdks/externalcredentials/README.md#creategcpiam) - createGcpIamCredential externalCredentials
+- [`externalCredentialsDeleteAwsIam`](docs/sdks/externalcredentials/README.md#deleteawsiam) - deleteAwsIamCredential externalCredentials
+- [`externalCredentialsDeleteGcpIam`](docs/sdks/externalcredentials/README.md#deletegcpiam) - deleteGcpIamCredential externalCredentials
+- [`externalCredentialsGetAwsIam`](docs/sdks/externalcredentials/README.md#getawsiam) - getAwsIamCredential externalCredentials
+- [`externalCredentialsGetGcpIam`](docs/sdks/externalcredentials/README.md#getgcpiam) - getGcpIamCredential externalCredentials
+- [`externalCredentialsList`](docs/sdks/externalcredentials/README.md#list) - listExternalCredentials externalCredentials
+- [`externalCredentialsListAwsIam`](docs/sdks/externalcredentials/README.md#listawsiam) - listAwsIamCredentials externalCredentials
+- [`externalCredentialsListGcpIam`](docs/sdks/externalcredentials/README.md#listgcpiam) - listGcpIamCredentials externalCredentials
+- [`externalCredentialsUpdateAwsIam`](docs/sdks/externalcredentials/README.md#updateawsiam) - updateAwsIamCredential externalCredentials
+- [`externalCredentialsUpdateGcpIam`](docs/sdks/externalcredentials/README.md#updategcpiam) - updateGcpIamCredential externalCredentials
 - [`externalReceiveWorkOSWebhook`](docs/sdks/external/README.md#receiveworkoswebhook) - receiveWorkOSWebhook external
 - [`featuresGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
@@ -925,9 +968,14 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskCustomRulesList`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`riskCustomRulesSuggest`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 - [`riskCustomRulesUpdate`](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
+- [`riskEvalsDeleteReview`](docs/sdks/evals/README.md#deletereview) - deleteRiskEvalReview risk
+- [`riskEvalsEvaluate`](docs/sdks/evals/README.md#evaluate) - evaluatePromptGuardrail risk
+- [`riskEvalsListReviews`](docs/sdks/evals/README.md#listreviews) - listRiskEvalReviews risk
+- [`riskEvalsSaveReview`](docs/sdks/evals/README.md#savereview) - saveRiskEvalReview risk
 - [`riskExclusionsCreate`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 - [`riskExclusionsDelete`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`riskExclusionsList`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
+- [`riskExclusionsListBuiltinExclusions`](docs/sdks/exclusions/README.md#listbuiltinexclusions) - listBuiltinExclusions risk
 - [`riskExclusionsUpdate`](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
 - [`riskExprCompile`](docs/sdks/expr/README.md#compile) - compileExpr risk
 - [`riskOverviewGet`](docs/sdks/overview/README.md#get) - getRiskOverview risk
@@ -1000,6 +1048,13 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`triggersPause`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`triggersResume`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
 - [`triggersUpdate`](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
+- [`tunneledMcpCreateServer`](docs/sdks/tunneledmcp/README.md#createserver) - createServer tunneledMcp
+- [`tunneledMcpDeleteServer`](docs/sdks/tunneledmcp/README.md#deleteserver) - deleteServer tunneledMcp
+- [`tunneledMcpGetServer`](docs/sdks/tunneledmcp/README.md#getserver) - getServer tunneledMcp
+- [`tunneledMcpListServerConnections`](docs/sdks/tunneledmcp/README.md#listserverconnections) - listServerConnections tunneledMcp
+- [`tunneledMcpListServers`](docs/sdks/tunneledmcp/README.md#listservers) - listServers tunneledMcp
+- [`tunneledMcpRotateServerKey`](docs/sdks/tunneledmcp/README.md#rotateserverkey) - rotateServerKey tunneledMcp
+- [`tunneledMcpUpdateServer`](docs/sdks/tunneledmcp/README.md#updateserver) - updateServer tunneledMcp
 - [`usageCreateCheckout`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`usageCreateCustomerSession`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`usageCreateTopUpCheckout`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
@@ -1070,6 +1125,7 @@ To learn about this feature and how to get started, check
 - [`useAttachUserSessionIssuerMutation`](docs/sdks/remotesessionclients/README.md#attachusersessionissuer) - attachUserSessionIssuer remoteSessionClients
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
+- [`useBuiltinExclusions`](docs/sdks/exclusions/README.md#listbuiltinexclusions) - listBuiltinExclusions risk
 - [`useChallengeBuckets`](docs/sdks/access/README.md#listchallengebuckets) - listChallengeBuckets access
 - [`useChallenges`](docs/sdks/access/README.md#listchallenges) - listChallenges access
 - [`useChatDeleteMutation`](docs/sdks/chat/README.md#delete) - deleteChat chat
@@ -1092,12 +1148,14 @@ To learn about this feature and how to get started, check
 - [`useCollectionsListServers`](docs/sdks/collections/README.md#listservers) - listServers collections
 - [`useCollectionsUpdateMutation`](docs/sdks/collections/README.md#update) - update collections
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
+- [`useCreateAwsIamCredentialMutation`](docs/sdks/externalcredentials/README.md#createawsiam) - createAwsIamCredential externalCredentials
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`useCreateCimdOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionissuers/README.md#createcimdclient) - createCimdClient organizationRemoteSessionIssuers
 - [`useCreateCimdRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#createcimd) - createCimd remoteSessionClients
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
+- [`useCreateGcpIamCredentialMutation`](docs/sdks/externalcredentials/README.md#creategcpiam) - createGcpIamCredential externalCredentials
 - [`useCreateGlobalRemoteSessionClientMutation`](docs/sdks/adminremotesessions/README.md#createglobalclient) - createGlobalClient adminRemoteSessions
 - [`useCreateGlobalRemoteSessionIssuerMutation`](docs/sdks/adminremotesessions/README.md#createglobalissuer) - createGlobalIssuer adminRemoteSessions
 - [`useCreateGlobalToolVariationGroupMutation`](docs/sdks/variations/README.md#createglobal) - createGlobal variations
@@ -1120,11 +1178,14 @@ To learn about this feature and how to get started, check
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useCreateTopUpCheckoutMutation`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 - [`useCreateTriggerMutation`](docs/sdks/triggers/README.md#create) - createTriggerInstance triggers
+- [`useCreateTunneledMcpServerMutation`](docs/sdks/tunneledmcp/README.md#createserver) - createServer tunneledMcp
 - [`useCreateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#create) - createUserSessionIssuer userSessionIssuers
 - [`useCustomDomainMcpEndpoints`](docs/sdks/domains/README.md#listmcpendpoints) - listMcpEndpoints domains
 - [`useDeleteAIIntegrationConfigMutation`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
+- [`useDeleteAwsIamCredentialMutation`](docs/sdks/externalcredentials/README.md#deleteawsiam) - deleteAwsIamCredential externalCredentials
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
+- [`useDeleteGcpIamCredentialMutation`](docs/sdks/externalcredentials/README.md#deletegcpiam) - deleteGcpIamCredential externalCredentials
 - [`useDeleteGlobalRemoteSessionClientMutation`](docs/sdks/adminremotesessions/README.md#deleteglobalclient) - deleteGlobalClient adminRemoteSessions
 - [`useDeleteGlobalRemoteSessionIssuerMutation`](docs/sdks/adminremotesessions/README.md#deleteglobalissuer) - deleteGlobalIssuer adminRemoteSessions
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
@@ -1145,6 +1206,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletetoolsetlink) - deleteToolsetEnvironmentLink environments
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeleteTriggerMutation`](docs/sdks/triggers/README.md#delete) - deleteTriggerInstance triggers
+- [`useDeleteTunneledMcpServerMutation`](docs/sdks/tunneledmcp/README.md#deleteserver) - deleteServer tunneledMcp
 - [`useDeleteUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 - [`useDenyShadowMCPApprovalRequestMutation`](docs/sdks/access/README.md#denyshadowmcpapprovalrequest) - denyShadowMCPApprovalRequest access
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
@@ -1163,9 +1225,11 @@ To learn about this feature and how to get started, check
 - [`useFetchOpenAPIv3FromURLMutation`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`useGenerateWorkOSAdminPortalLinkMutation`](docs/sdks/organizations/README.md#generateworkosadminportallink) - generateWorkOSAdminPortalLink organizations
 - [`useGetAssistantMemory`](docs/sdks/assistantmemories/README.md#get) - getAssistantMemory assistantMemories
+- [`useGetAwsIamCredential`](docs/sdks/externalcredentials/README.md#getawsiam) - getAwsIamCredential externalCredentials
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`useGetEmployeeDataFlowGraph`](docs/sdks/telemetry/README.md#getemployeedataflowgraph) - getEmployeeDataFlowGraph telemetry
+- [`useGetGcpIamCredential`](docs/sdks/externalcredentials/README.md#getgcpiam) - getGcpIamCredential externalCredentials
 - [`useGetHooksSummary`](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
 - [`useGetMcpEndpoint`](docs/sdks/mcpendpoints/README.md#get) - getMcpEndpoint mcpEndpoints
 - [`useGetMcpMetadata`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
@@ -1180,6 +1244,7 @@ To learn about this feature and how to get started, check
 - [`useGetToolsetEnvironment`](docs/sdks/environments/README.md#getbytoolset) - getToolsetEnvironment environments
 - [`useGetToolUsageFilterOptions`](docs/sdks/telemetry/README.md#gettoolusagefilteroptions) - getToolUsageFilterOptions telemetry
 - [`useGetToolUsageSummary`](docs/sdks/telemetry/README.md#gettoolusagesummary) - getToolUsageSummary telemetry
+- [`useGetTunneledMcpServer`](docs/sdks/tunneledmcp/README.md#getserver) - getServer tunneledMcp
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGlobalRemoteSessionClient`](docs/sdks/adminremotesessions/README.md#getglobalclient) - getGlobalClient adminRemoteSessions
@@ -1205,12 +1270,15 @@ To learn about this feature and how to get started, check
 - [`useListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
 - [`useListAssistantMemories`](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
 - [`useListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
+- [`useListAwsIamCredentials`](docs/sdks/externalcredentials/README.md#listawsiam) - listAwsIamCredentials externalCredentials
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
 - [`useListChatSources`](docs/sdks/chat/README.md#listsources) - listSources chat
 - [`useListCollections`](docs/sdks/collections/README.md#list) - list collections
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
+- [`useListExternalCredentials`](docs/sdks/externalcredentials/README.md#list) - listExternalCredentials externalCredentials
 - [`useListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
+- [`useListGcpIamCredentials`](docs/sdks/externalcredentials/README.md#listgcpiam) - listGcpIamCredentials externalCredentials
 - [`useListHooksTraces`](docs/sdks/telemetry/README.md#listhookstraces) - listHooksTraces telemetry
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
 - [`useListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
@@ -1228,6 +1296,7 @@ To learn about this feature and how to get started, check
 - [`useListToolsetsForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
 - [`useListToolsetToolFilters`](docs/sdks/toolsets/README.md#listtoolfilters) - listToolFilters toolsets
 - [`useListToolUsageTraces`](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
+- [`useListTunneledMcpServerConnections`](docs/sdks/tunneledmcp/README.md#listserverconnections) - listServerConnections tunneledMcp
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
@@ -1299,11 +1368,14 @@ To learn about this feature and how to get started, check
 - [`useRiskCreatePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
 - [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`useRiskDeleteCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
+- [`useRiskDeleteEvalReviewMutation`](docs/sdks/evals/README.md#deletereview) - deleteRiskEvalReview risk
 - [`useRiskDeleteExclusionMutation`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`useRiskDenyPolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
+- [`useRiskEvaluatePromptGuardrail`](docs/sdks/evals/README.md#evaluate) - evaluatePromptGuardrail risk
 - [`useRiskGetBlock`](docs/sdks/blocks/README.md#get) - getRiskBlock risk
 - [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
 - [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
+- [`useRiskListEvalReviews`](docs/sdks/evals/README.md#listreviews) - listRiskEvalReviews risk
 - [`useRiskListExclusions`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
 - [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk
 - [`useRiskListPolicyBypassRequests`](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
@@ -1318,6 +1390,7 @@ To learn about this feature and how to get started, check
 - [`useRiskPoliciesUpdateMutation`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
 - [`useRiskRevokePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
 - [`useRiskRuleBreakdown`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
+- [`useRiskSaveEvalReviewMutation`](docs/sdks/evals/README.md#savereview) - saveRiskEvalReview risk
 - [`useRiskSubmitBlockFeedbackMutation`](docs/sdks/blocks/README.md#submitfeedback) - submitRiskBlockFeedback risk
 - [`useRiskSuggestCustomRuleMutation`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 - [`useRiskTestDetectionRuleMutation`](docs/sdks/rules/README.md#test) - testDetectionRule risk
@@ -1327,6 +1400,7 @@ To learn about this feature and how to get started, check
 - [`useRiskUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
 - [`useRole`](docs/sdks/access/README.md#getrole) - getRole access
 - [`useRoles`](docs/sdks/access/README.md#listroles) - listRoles access
+- [`useRotateTunneledMcpServerKeyMutation`](docs/sdks/tunneledmcp/README.md#rotateserverkey) - rotateServerKey tunneledMcp
 - [`useSearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 - [`useSearchLogsMutation`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
@@ -1359,8 +1433,11 @@ To learn about this feature and how to get started, check
 - [`useTrigger`](docs/sdks/triggers/README.md#get) - getTriggerInstance triggers
 - [`useTriggerDefinitions`](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
 - [`useTriggers`](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers
+- [`useTunneledMcpServers`](docs/sdks/tunneledmcp/README.md#listservers) - listServers tunneledMcp
+- [`useUpdateAwsIamCredentialMutation`](docs/sdks/externalcredentials/README.md#updateawsiam) - updateAwsIamCredential externalCredentials
 - [`useUpdateDomainMutation`](docs/sdks/domains/README.md#updatedomain) - updateDomain domains
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`useUpdateGcpIamCredentialMutation`](docs/sdks/externalcredentials/README.md#updategcpiam) - updateGcpIamCredential externalCredentials
 - [`useUpdateGlobalRemoteSessionClientMutation`](docs/sdks/adminremotesessions/README.md#updateglobalclient) - updateGlobalClient adminRemoteSessions
 - [`useUpdateGlobalRemoteSessionIssuerMutation`](docs/sdks/adminremotesessions/README.md#updateglobalissuer) - updateGlobalIssuer adminRemoteSessions
 - [`useUpdateInviteRoleMutation`](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
@@ -1382,6 +1459,7 @@ To learn about this feature and how to get started, check
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`useUpdateTriggerMutation`](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
+- [`useUpdateTunneledMcpServerMutation`](docs/sdks/tunneledmcp/README.md#updateserver) - updateServer tunneledMcp
 - [`useUpdateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 - [`useUploadChatAttachmentMutation`](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 - [`useUploadFunctionsMutation`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
@@ -1568,7 +1646,8 @@ run();
 ### Example
 ```typescript
 import { Gram } from "@gram/client";
-import * as errors from "@gram/client/models/errors";
+import { GramError } from "@gram/client/models/errors/gramerror.js.js";
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 
 const gram = new Gram();
 
@@ -1587,14 +1666,14 @@ async function run() {
     console.log(result);
   } catch (error) {
     // The base class for HTTP error responses
-    if (error instanceof errors.GramError) {
+    if (error instanceof GramError) {
       console.log(error.message);
       console.log(error.statusCode);
       console.log(error.body);
       console.log(error.headers);
 
       // Depending on the method different errors may be thrown
-      if (error instanceof errors.ServiceError) {
+      if (error instanceof ServiceError) {
         console.log(error.data$.fault); // boolean
         console.log(error.data$.id); // string
         console.log(error.data$.message); // string

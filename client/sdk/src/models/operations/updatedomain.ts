@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpdateDomainRequestBody,
+  UpdateDomainRequestBody$Outbound,
+  UpdateDomainRequestBody$outboundSchema,
+} from "../components/updatedomainrequestbody.js";
 
 export type UpdateDomainSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,7 +19,7 @@ export type UpdateDomainRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  updateDomainRequestBody: components.UpdateDomainRequestBody;
+  updateDomainRequestBody: UpdateDomainRequestBody;
 };
 
 /** @internal */
@@ -49,7 +53,7 @@ export function updateDomainSecurityToJSON(
 /** @internal */
 export type UpdateDomainRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  UpdateDomainRequestBody: components.UpdateDomainRequestBody$Outbound;
+  UpdateDomainRequestBody: UpdateDomainRequestBody$Outbound;
 };
 
 /** @internal */
@@ -59,7 +63,7 @@ export const UpdateDomainRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    updateDomainRequestBody: components.UpdateDomainRequestBody$outboundSchema,
+    updateDomainRequestBody: UpdateDomainRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

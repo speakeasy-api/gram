@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RiskResult } from "@gram/client/models/components";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   collapseToMatchWindows,
   getMatchStrings,

@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { toolsetsList } from "../funcs/toolsetsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListToolsetsResult } from "../models/components/listtoolsetsresult.js";
+import {
+  ListToolsetsRequest,
+  ListToolsetsSecurity,
+} from "../models/operations/listtoolsets.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListToolsetsQueryData = components.ListToolsetsResult;
+export type ListToolsetsQueryData = ListToolsetsResult;
 
 export function prefetchListToolsets(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListToolsetsRequest | undefined,
-  security?: operations.ListToolsetsSecurity | undefined,
+  request?: ListToolsetsRequest | undefined,
+  security?: ListToolsetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListToolsets(
 
 export function buildListToolsetsQuery(
   client$: GramCore,
-  request?: operations.ListToolsetsRequest | undefined,
-  security?: operations.ListToolsetsSecurity | undefined,
+  request?: ListToolsetsRequest | undefined,
+  security?: ListToolsetsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

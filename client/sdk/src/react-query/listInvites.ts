@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListInvitesRequest,
+  ListInvitesSecurity,
+} from "../models/operations/listinvites.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListInvitesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListInvitesQueryError =
  * List pending WorkOS invitations for the active organization.
  */
 export function useListInvites(
-  request?: operations.ListInvitesRequest | undefined,
-  security?: operations.ListInvitesSecurity | undefined,
+  request?: ListInvitesRequest | undefined,
+  security?: ListInvitesSecurity | undefined,
   options?: QueryHookOptions<ListInvitesQueryData, ListInvitesQueryError>,
 ): UseQueryResult<ListInvitesQueryData, ListInvitesQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useListInvites(
  * List pending WorkOS invitations for the active organization.
  */
 export function useListInvitesSuspense(
-  request?: operations.ListInvitesRequest | undefined,
-  security?: operations.ListInvitesSecurity | undefined,
+  request?: ListInvitesRequest | undefined,
+  security?: ListInvitesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListInvitesQueryData,
     ListInvitesQueryError

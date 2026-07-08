@@ -949,6 +949,55 @@ func TestMergeClaudeAuthContextMetadata_AdoptsBridgedOwnerForPersonalAccount(t *
 	assert.Equal(t, "user-account-id", metadata.UserAccountID)
 }
 
+// TestMergeClaudeAuthContextMetadata_HookEmailWinsOverCachedAccountEmail covers
+// a personal account on an enrolled device: the hook carries the employee's
+// work email while the OTEL cache holds the AI account's own email (a gmail).
+// The employee identity must win — deterministically, not by ingest-order race
+// — while the account identity (which feeds user_accounts / account_email)
+// still rides in from the cache untouched.
+func TestMergeClaudeAuthContextMetadata_HookEmailWinsOverCachedAccountEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	employeeID := "hook-email-wins-employee"
+	workEmail := "hook-email-wins@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, employeeID, workEmail)
+
+	authMetadata, ok := ti.service.claudeAuthContextMetadata(ctx, "hook_email_wins_session", workEmail)
+	require.True(t, ok)
+	metadata := ti.service.mergeClaudeAuthContextMetadata(ctx, authMetadata, SessionMetadata{
+		SessionID:           "hook_email_wins_session",
+		ServiceName:         "claude-code",
+		UserEmail:           "someone-personal@gmail.com",
+		UserID:              "bridged-employee",
+		Provider:            providerAnthropic,
+		ExternalOrgID:       "max-org",
+		ExternalAccountUUID: "acct-personal",
+		ExternalAccountID:   "user_personal",
+		DeviceID:            "device-1",
+		AccountType:         accountTypePersonal,
+		UserAccountID:       "user-account-id",
+		GramOrgID:           "org_from_cache",
+		ProjectID:           "project_from_cache",
+	})
+
+	// The enrolled work email wins over the account's own report, and resolves
+	// to the employee directly.
+	assert.Equal(t, workEmail, metadata.UserEmail)
+	assert.Equal(t, employeeID, metadata.UserID)
+	// The account's own report stays available on ObservedUserEmail.
+	assert.Equal(t, "someone-personal@gmail.com", metadata.ObservedUserEmail)
+	// Account identity is still carried through from the cached OTEL
+	// attribution, so user_accounts / account_email are unaffected.
+	assert.Equal(t, accountTypePersonal, metadata.AccountType)
+	assert.Equal(t, "acct-personal", metadata.ExternalAccountUUID)
+	assert.Equal(t, "user-account-id", metadata.UserAccountID)
+}
+
 // When plugin auth headers are present but the API key is invalid/expired,
 // Claude() must NOT return a 401 error — that causes the client-side hook
 // script to block ALL tool calls, deadlocking the user. Instead it should

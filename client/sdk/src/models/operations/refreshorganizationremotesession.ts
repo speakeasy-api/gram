@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  RiskIDRequestBody,
+  RiskIDRequestBody$Outbound,
+  RiskIDRequestBody$outboundSchema,
+} from "../components/riskidrequestbody.js";
 
 export type RefreshOrganizationRemoteSessionSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -20,7 +24,7 @@ export type RefreshOrganizationRemoteSessionRequest = {
    * API Key header
    */
   gramKey?: string | undefined;
-  riskIDRequestBody: components.RiskIDRequestBody;
+  riskIDRequestBody: RiskIDRequestBody;
 };
 
 /** @internal */
@@ -62,7 +66,7 @@ export function refreshOrganizationRemoteSessionSecurityToJSON(
 export type RefreshOrganizationRemoteSessionRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
-  RiskIDRequestBody: components.RiskIDRequestBody$Outbound;
+  RiskIDRequestBody: RiskIDRequestBody$Outbound;
 };
 
 /** @internal */
@@ -74,7 +78,7 @@ export const RefreshOrganizationRemoteSessionRequest$outboundSchema:
     z.object({
       gramSession: z.optional(z.string()),
       gramKey: z.optional(z.string()),
-      riskIDRequestBody: components.RiskIDRequestBody$outboundSchema,
+      riskIDRequestBody: RiskIDRequestBody$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {

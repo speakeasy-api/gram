@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListUserSessionFacetsRequest,
+  ListUserSessionFacetsSecurity,
+} from "../models/operations/listusersessionfacets.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type UserSessionFacetsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type UserSessionFacetsQueryError =
  * List available user session facet values (clients, users, servers) in the caller's project.
  */
 export function useUserSessionFacets(
-  request?: operations.ListUserSessionFacetsRequest | undefined,
-  security?: operations.ListUserSessionFacetsSecurity | undefined,
+  request?: ListUserSessionFacetsRequest | undefined,
+  security?: ListUserSessionFacetsSecurity | undefined,
   options?: QueryHookOptions<
     UserSessionFacetsQueryData,
     UserSessionFacetsQueryError
@@ -85,8 +88,8 @@ export function useUserSessionFacets(
  * List available user session facet values (clients, users, servers) in the caller's project.
  */
 export function useUserSessionFacetsSuspense(
-  request?: operations.ListUserSessionFacetsRequest | undefined,
-  security?: operations.ListUserSessionFacetsSecurity | undefined,
+  request?: ListUserSessionFacetsRequest | undefined,
+  security?: ListUserSessionFacetsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     UserSessionFacetsQueryData,
     UserSessionFacetsQueryError

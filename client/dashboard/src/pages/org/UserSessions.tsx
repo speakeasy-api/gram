@@ -27,11 +27,9 @@ import { Type } from "@/components/ui/type";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { sessionStatus, subjectLabel } from "@/lib/user-session-status";
-import {
-  useUserSessionFacets,
-  useUserSessionsInfinite,
-} from "@gram/client/react-query";
-import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations";
+import { useUserSessionFacets } from "@gram/client/react-query/userSessionFacets.js";
+import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
+import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
 
 const USER_SESSION_FILTERS = defineFilters([
   { id: "status", label: "Status", kind: "select", pinned: true },

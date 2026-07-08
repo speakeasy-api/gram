@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { deploymentsList } from "../funcs/deploymentsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListDeploymentResult } from "../models/components/listdeploymentresult.js";
+import {
+  ListDeploymentsRequest,
+  ListDeploymentsSecurity,
+} from "../models/operations/listdeployments.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListDeploymentsQueryData = components.ListDeploymentResult;
+export type ListDeploymentsQueryData = ListDeploymentResult;
 
 export function prefetchListDeployments(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListDeploymentsRequest | undefined,
-  security?: operations.ListDeploymentsSecurity | undefined,
+  request?: ListDeploymentsRequest | undefined,
+  security?: ListDeploymentsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListDeployments(
 
 export function buildListDeploymentsQuery(
   client$: GramCore,
-  request?: operations.ListDeploymentsRequest | undefined,
-  security?: operations.ListDeploymentsSecurity | undefined,
+  request?: ListDeploymentsRequest | undefined,
+  security?: ListDeploymentsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

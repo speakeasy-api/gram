@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpsertGlobalToolVariationForm,
+  UpsertGlobalToolVariationForm$Outbound,
+  UpsertGlobalToolVariationForm$outboundSchema,
+} from "../components/upsertglobaltoolvariationform.js";
 
 export type UpsertGlobalVariationSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type UpsertGlobalVariationRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  upsertGlobalToolVariationForm: components.UpsertGlobalToolVariationForm;
+  upsertGlobalToolVariationForm: UpsertGlobalToolVariationForm;
 };
 
 /** @internal */
@@ -145,8 +149,7 @@ export type UpsertGlobalVariationRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  UpsertGlobalToolVariationForm:
-    components.UpsertGlobalToolVariationForm$Outbound;
+  UpsertGlobalToolVariationForm: UpsertGlobalToolVariationForm$Outbound;
 };
 
 /** @internal */
@@ -158,8 +161,7 @@ export const UpsertGlobalVariationRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    upsertGlobalToolVariationForm:
-      components.UpsertGlobalToolVariationForm$outboundSchema,
+    upsertGlobalToolVariationForm: UpsertGlobalToolVariationForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -11,15 +11,19 @@ import { GramCore } from "../core.js";
 import { assetsServeFunction } from "../funcs/assetsServeFunction.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ServeFunctionRequest,
+  ServeFunctionResponse,
+  ServeFunctionSecurity,
+} from "../models/operations/servefunction.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ServeFunctionQueryData = operations.ServeFunctionResponse;
+export type ServeFunctionQueryData = ServeFunctionResponse;
 
 export function prefetchServeFunction(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ServeFunctionRequest,
-  security?: operations.ServeFunctionSecurity | undefined,
+  request: ServeFunctionRequest,
+  security?: ServeFunctionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -34,8 +38,8 @@ export function prefetchServeFunction(
 
 export function buildServeFunctionQuery(
   client$: GramCore,
-  request: operations.ServeFunctionRequest,
-  security?: operations.ServeFunctionSecurity | undefined,
+  request: ServeFunctionRequest,
+  security?: ServeFunctionSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

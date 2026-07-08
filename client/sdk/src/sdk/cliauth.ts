@@ -5,8 +5,13 @@
 import { cliAuthAuthorize } from "../funcs/cliAuthAuthorize.js";
 import { cliAuthRedeem } from "../funcs/cliAuthRedeem.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { AuthorizeResponseBody } from "../models/components/authorizeresponsebody.js";
+import { RedeemRequestBody } from "../models/components/redeemrequestbody.js";
+import { RedeemResponseBody } from "../models/components/redeemresponsebody.js";
+import {
+  CliAuthAuthorizeRequest,
+  CliAuthAuthorizeSecurity,
+} from "../models/operations/cliauthauthorize.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class CliAuth extends ClientSDK {
@@ -17,10 +22,10 @@ export class CliAuth extends ClientSDK {
    * Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin.
    */
   async authorize(
-    request: operations.CliAuthAuthorizeRequest,
-    security?: operations.CliAuthAuthorizeSecurity | undefined,
+    request: CliAuthAuthorizeRequest,
+    security?: CliAuthAuthorizeSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.AuthorizeResponseBody> {
+  ): Promise<AuthorizeResponseBody> {
     return unwrapAsync(cliAuthAuthorize(
       this,
       request,
@@ -36,9 +41,9 @@ export class CliAuth extends ClientSDK {
    * Exchange a one-time code plus its PKCE code_verifier for a freshly minted per-user [agent,hooks] API key. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.
    */
   async redeem(
-    request: components.RedeemRequestBody,
+    request: RedeemRequestBody,
     options?: RequestOptions,
-  ): Promise<components.RedeemResponseBody> {
+  ): Promise<RedeemResponseBody> {
     return unwrapAsync(cliAuthRedeem(
       this,
       request,

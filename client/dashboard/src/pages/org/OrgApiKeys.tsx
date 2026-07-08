@@ -9,7 +9,7 @@ import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert } from "@/lib/utils";
-import { Key } from "@gram/client/models/components";
+import { Key } from "@gram/client/models/components/key.js";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import {
   invalidateListAPIKeys,

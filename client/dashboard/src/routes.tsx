@@ -44,6 +44,7 @@ import Costs from "./pages/costs/Costs";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
+import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
 import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
 import Collections, { CollectionsRoot } from "./pages/collections/Collections";
@@ -82,7 +83,8 @@ import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDet
 import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
 import RiskOverviewUserDetail from "./pages/security/RiskOverviewUserDetail";
 import RiskOverviewUsersIndex from "./pages/security/RiskOverviewUsersIndex";
-import PolicyCenter from "./pages/security/PolicyCenter";
+import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
+import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
@@ -290,6 +292,11 @@ const ROUTE_STRUCTURE = {
         title: "Add Custom Remote MCP Server",
         url: "add-remote-mcp",
         component: CreateRemoteMcp,
+      },
+      addTunneledMcp: {
+        title: "Add Tunneled MCP Server",
+        url: "add-tunneled-mcp",
+        component: CreateTunneledMcp,
       },
     },
   },
@@ -514,7 +521,21 @@ const ROUTE_STRUCTURE = {
     title: "Risk Policies",
     url: "risk-policies",
     icon: "shield-check",
-    component: PolicyCenter,
+    // Layout route: renders the policy list (index) or a policy detail subpage.
+    component: PolicyCenterRoot,
+    indexComponent: PolicyCenter,
+    subPages: {
+      new: {
+        title: "New policy",
+        url: "new",
+        component: PolicyNew,
+      },
+      detail: {
+        title: "Policy",
+        url: ":policyId",
+        component: PolicyDetail,
+      },
+    },
   },
   riskEvents: {
     title: "Risk Events",

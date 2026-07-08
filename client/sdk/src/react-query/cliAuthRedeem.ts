@@ -11,7 +11,8 @@ import { GramCore } from "../core.js";
 import { cliAuthRedeem } from "../funcs/cliAuthRedeem.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { RedeemRequestBody } from "../models/components/redeemrequestbody.js";
+import { RedeemResponseBody } from "../models/components/redeemresponsebody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,22 +21,22 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CliAuthRedeemMutationVariables = {
-  request: components.RedeemRequestBody;
+  request: RedeemRequestBody;
   options?: RequestOptions;
 };
 
-export type CliAuthRedeemMutationData = components.RedeemResponseBody;
+export type CliAuthRedeemMutationData = RedeemResponseBody;
 
 export type CliAuthRedeemMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

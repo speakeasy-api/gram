@@ -737,6 +737,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 			AccountType:         "",
 			BillingMode:         "",
 			UserAccountID:       "",
+			ObservedUserEmail:   "",
 			GramOrgID:           "",
 			ProjectID:           "",
 		}, false
@@ -755,6 +756,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
+		ObservedUserEmail:   "",
 		GramOrgID:           authCtx.ActiveOrganizationID,
 		ProjectID:           authCtx.ProjectID.String(),
 	}
@@ -1130,7 +1132,17 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 
 func (s *Service) mergeClaudeAuthContextMetadata(ctx context.Context, metadata SessionMetadata, cached SessionMetadata) SessionMetadata {
 	metadata.ServiceName = cached.ServiceName
-	if cached.UserEmail != "" {
+	// The hook's user_email is the device-enrolled employee identity and wins
+	// over the OTEL-cached email, which is the AI account's own report (a
+	// personal account reports its own e.g. gmail). Keeping the hook email
+	// makes chat attribution deterministic instead of depending on whether the
+	// chat row was created before or after the first OTEL export; the cache
+	// only fills the gap for older plugin hooks that carry no user_email.
+	// Personal-account attribution is unaffected: user_accounts rows (whose
+	// email chats surface as account_email) are written only by the OTEL
+	// ingest path from the account's own report, and the chat -> account link
+	// rides on cached.UserAccountID below — this merge never feeds either.
+	if metadata.UserEmail == "" {
 		metadata.UserEmail = cached.UserEmail
 	}
 	// Prefer email resolution, which is authoritative for team accounts and
@@ -1155,6 +1167,9 @@ func (s *Service) mergeClaudeAuthContextMetadata(ctx context.Context, metadata S
 	metadata.AccountType = cached.AccountType
 	metadata.BillingMode = cached.BillingMode
 	metadata.UserAccountID = cached.UserAccountID
+	// The OTEL path's UserEmail is the account's own report; fall back to it
+	// for cache entries written before ObservedUserEmail existed.
+	metadata.ObservedUserEmail = conv.Default(cached.ObservedUserEmail, cached.UserEmail)
 	return metadata
 }
 

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ServeFunctionRequest,
+  ServeFunctionSecurity,
+} from "../models/operations/servefunction.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ServeFunctionQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ServeFunctionQueryError =
  * Serve a Gram Functions asset from Gram.
  */
 export function useServeFunction(
-  request: operations.ServeFunctionRequest,
-  security?: operations.ServeFunctionSecurity | undefined,
+  request: ServeFunctionRequest,
+  security?: ServeFunctionSecurity | undefined,
   options?: QueryHookOptions<ServeFunctionQueryData, ServeFunctionQueryError>,
 ): UseQueryResult<ServeFunctionQueryData, ServeFunctionQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useServeFunction(
  * Serve a Gram Functions asset from Gram.
  */
 export function useServeFunctionSuspense(
-  request: operations.ServeFunctionRequest,
-  security?: operations.ServeFunctionSecurity | undefined,
+  request: ServeFunctionRequest,
+  security?: ServeFunctionSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ServeFunctionQueryData,
     ServeFunctionQueryError

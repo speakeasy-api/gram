@@ -9,11 +9,9 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { getPresetRange } from "@gram-ai/elements";
-import type { RiskResult } from "@gram/client/models/components";
-import {
-  useRiskListPolicies,
-  useRiskOverview,
-} from "@gram/client/react-query/index.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -294,7 +292,7 @@ function InactivePolicyNotice({
   policyName: string | undefined;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-8 py-2 text-sm text-amber-700 dark:text-amber-400">
+    <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-5 py-2 text-sm text-amber-700 dark:text-amber-400">
       <History className="size-4 shrink-0" />
       <span>
         {policyName ? (
@@ -316,7 +314,7 @@ function RiskEventsHeader() {
     <div
       className={cn(
         RISK_EVENTS_GRID,
-        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-8 py-2.5 text-xs font-medium tracking-wide uppercase",
+        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase",
       )}
     >
       <div className="min-w-0">Timestamp</div>
@@ -456,7 +454,7 @@ function RiskEventsRow({
       tabIndex={result.chatId ? 0 : undefined}
       className={cn(
         RISK_EVENTS_GRID,
-        "hover:bg-muted/30 w-full items-center border-b px-8 py-3 text-left text-sm transition-colors",
+        "hover:bg-muted/30 w-full items-center border-b px-5 py-3 text-left text-sm transition-colors",
         !result.chatId && "cursor-default",
       )}
       onClick={() => {
@@ -532,7 +530,7 @@ function RiskEventsFooter({
   onLoadMore: () => void;
 }) {
   return (
-    <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center justify-between gap-4 border-t px-8 py-3 text-sm">
+    <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center justify-between gap-4 border-t px-5 py-3 text-sm">
       <span>
         Showing {count.toLocaleString()} of {totalCount.toLocaleString()}{" "}
         {totalCount === 1 ? "finding" : "findings"}

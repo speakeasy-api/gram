@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SendEnterpriseAdminOnboardingEmailRequestBody,
+  SendEnterpriseAdminOnboardingEmailRequestBody$Outbound,
+  SendEnterpriseAdminOnboardingEmailRequestBody$outboundSchema,
+} from "../components/sendenterpriseadminonboardingemailrequestbody.js";
 
 export type SendEnterpriseAdminOnboardingEmailSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -16,7 +20,7 @@ export type SendEnterpriseAdminOnboardingEmailRequest = {
    */
   gramSession?: string | undefined;
   sendEnterpriseAdminOnboardingEmailRequestBody:
-    components.SendEnterpriseAdminOnboardingEmailRequestBody;
+    SendEnterpriseAdminOnboardingEmailRequestBody;
 };
 
 /** @internal */
@@ -55,7 +59,7 @@ export function sendEnterpriseAdminOnboardingEmailSecurityToJSON(
 export type SendEnterpriseAdminOnboardingEmailRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   SendEnterpriseAdminOnboardingEmailRequestBody:
-    components.SendEnterpriseAdminOnboardingEmailRequestBody$Outbound;
+    SendEnterpriseAdminOnboardingEmailRequestBody$Outbound;
 };
 
 /** @internal */
@@ -67,7 +71,7 @@ export const SendEnterpriseAdminOnboardingEmailRequest$outboundSchema:
     z.object({
       gramSession: z.optional(z.string()),
       sendEnterpriseAdminOnboardingEmailRequestBody:
-        components.SendEnterpriseAdminOnboardingEmailRequestBody$outboundSchema,
+        SendEnterpriseAdminOnboardingEmailRequestBody$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {

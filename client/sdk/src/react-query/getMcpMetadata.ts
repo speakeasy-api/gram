@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetMcpMetadataRequest,
+  GetMcpMetadataSecurity,
+} from "../models/operations/getmcpmetadata.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetMcpMetadataQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetMcpMetadataQueryError =
  * Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
  */
 export function useGetMcpMetadata(
-  request?: operations.GetMcpMetadataRequest | undefined,
-  security?: operations.GetMcpMetadataSecurity | undefined,
+  request?: GetMcpMetadataRequest | undefined,
+  security?: GetMcpMetadataSecurity | undefined,
   options?: QueryHookOptions<GetMcpMetadataQueryData, GetMcpMetadataQueryError>,
 ): UseQueryResult<GetMcpMetadataQueryData, GetMcpMetadataQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useGetMcpMetadata(
  * Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
  */
 export function useGetMcpMetadataSuspense(
-  request?: operations.GetMcpMetadataRequest | undefined,
-  security?: operations.GetMcpMetadataSecurity | undefined,
+  request?: GetMcpMetadataRequest | undefined,
+  security?: GetMcpMetadataSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetMcpMetadataQueryData,
     GetMcpMetadataQueryError

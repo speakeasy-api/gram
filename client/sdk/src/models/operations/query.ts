@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  QueryPayload,
+  QueryPayload$Outbound,
+  QueryPayload$outboundSchema,
+} from "../components/querypayload.js";
 
 export type QuerySecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,7 +19,7 @@ export type QueryRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  queryPayload: components.QueryPayload;
+  queryPayload: QueryPayload;
 };
 
 /** @internal */
@@ -45,7 +49,7 @@ export function querySecurityToJSON(querySecurity: QuerySecurity): string {
 /** @internal */
 export type QueryRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  QueryPayload: components.QueryPayload$Outbound;
+  QueryPayload: QueryPayload$Outbound;
 };
 
 /** @internal */
@@ -55,7 +59,7 @@ export const QueryRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    queryPayload: components.QueryPayload$outboundSchema,
+    queryPayload: QueryPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

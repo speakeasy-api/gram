@@ -10,7 +10,7 @@ import { useStepper } from "@/components/upload-asset/stepper/use-stepper";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { useDeploymentLogs } from "@gram/client/react-query/index.js";
+import { useDeploymentLogs } from "@gram/client/react-query/deploymentLogs.js";
 import { Heading } from "@/components/ui/heading";
 import { Button, CodeSnippet, Stack } from "@speakeasy-api/moonshine";
 import { ArrowRightIcon, FileTextIcon, RefreshCcwIcon } from "lucide-react";

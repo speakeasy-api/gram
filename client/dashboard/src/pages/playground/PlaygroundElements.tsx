@@ -20,10 +20,8 @@ import {
   type Model,
 } from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import {
-  useGetMcpMetadata,
-  useListEnvironments,
-} from "@gram/client/react-query/index.js";
+import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
+import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { useMintUserSessionMutation } from "@gram/client/react-query/mintUserSession.js";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";

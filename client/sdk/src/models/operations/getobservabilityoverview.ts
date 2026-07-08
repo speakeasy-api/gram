@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  GetObservabilityOverviewPayload,
+  GetObservabilityOverviewPayload$Outbound,
+  GetObservabilityOverviewPayload$outboundSchema,
+} from "../components/getobservabilityoverviewpayload.js";
 
 export type GetObservabilityOverviewSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type GetObservabilityOverviewRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  getObservabilityOverviewPayload: components.GetObservabilityOverviewPayload;
+  getObservabilityOverviewPayload: GetObservabilityOverviewPayload;
 };
 
 /** @internal */
@@ -149,8 +153,7 @@ export type GetObservabilityOverviewRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  GetObservabilityOverviewPayload:
-    components.GetObservabilityOverviewPayload$Outbound;
+  GetObservabilityOverviewPayload: GetObservabilityOverviewPayload$Outbound;
 };
 
 /** @internal */
@@ -163,7 +166,7 @@ export const GetObservabilityOverviewRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     getObservabilityOverviewPayload:
-      components.GetObservabilityOverviewPayload$outboundSchema,
+      GetObservabilityOverviewPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpsertRequestBody,
+  UpsertRequestBody$Outbound,
+  UpsertRequestBody$outboundSchema,
+} from "../components/upsertrequestbody.js";
 
 export type UpsertServerNameOverrideSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type UpsertServerNameOverrideRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  upsertRequestBody: components.UpsertRequestBody;
+  upsertRequestBody: UpsertRequestBody;
 };
 
 /** @internal */
@@ -149,7 +153,7 @@ export type UpsertServerNameOverrideRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  UpsertRequestBody: components.UpsertRequestBody$Outbound;
+  UpsertRequestBody: UpsertRequestBody$Outbound;
 };
 
 /** @internal */
@@ -161,7 +165,7 @@ export const UpsertServerNameOverrideRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    upsertRequestBody: components.UpsertRequestBody$outboundSchema,
+    upsertRequestBody: UpsertRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

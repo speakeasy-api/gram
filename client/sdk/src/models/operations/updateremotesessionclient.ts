@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpdateRemoteSessionClientForm,
+  UpdateRemoteSessionClientForm$Outbound,
+  UpdateRemoteSessionClientForm$outboundSchema,
+} from "../components/updateremotesessionclientform.js";
 
 export type UpdateRemoteSessionClientSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type UpdateRemoteSessionClientRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  updateRemoteSessionClientForm: components.UpdateRemoteSessionClientForm;
+  updateRemoteSessionClientForm: UpdateRemoteSessionClientForm;
 };
 
 /** @internal */
@@ -149,8 +153,7 @@ export type UpdateRemoteSessionClientRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  UpdateRemoteSessionClientForm:
-    components.UpdateRemoteSessionClientForm$Outbound;
+  UpdateRemoteSessionClientForm: UpdateRemoteSessionClientForm$Outbound;
 };
 
 /** @internal */
@@ -162,8 +165,7 @@ export const UpdateRemoteSessionClientRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    updateRemoteSessionClientForm:
-      components.UpdateRemoteSessionClientForm$outboundSchema,
+    updateRemoteSessionClientForm: UpdateRemoteSessionClientForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

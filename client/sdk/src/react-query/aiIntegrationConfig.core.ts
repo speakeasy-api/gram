@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { aiIntegrationsGetConfig } from "../funcs/aiIntegrationsGetConfig.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { AIIntegrationConfig } from "../models/components/aiintegrationconfig.js";
+import {
+  GetAIIntegrationConfigRequest,
+  GetAIIntegrationConfigSecurity,
+} from "../models/operations/getaiintegrationconfig.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AiIntegrationConfigQueryData = components.AIIntegrationConfig;
+export type AiIntegrationConfigQueryData = AIIntegrationConfig;
 
 export function prefetchAiIntegrationConfig(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetAIIntegrationConfigRequest,
-  security?: operations.GetAIIntegrationConfigSecurity | undefined,
+  request: GetAIIntegrationConfigRequest,
+  security?: GetAIIntegrationConfigSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchAiIntegrationConfig(
 
 export function buildAiIntegrationConfigQuery(
   client$: GramCore,
-  request: operations.GetAIIntegrationConfigRequest,
-  security?: operations.GetAIIntegrationConfigSecurity | undefined,
+  request: GetAIIntegrationConfigRequest,
+  security?: GetAIIntegrationConfigSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

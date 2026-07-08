@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.40.1**](../README.md)
+[**@gram-ai/elements v1.41.0**](../README.md)
 
 ***
 
@@ -132,4 +132,78 @@ const threadId = searchParams.get('threadId')
     initialThreadId: threadId ?? undefined,
   },
 }}>
+```
+
+***
+
+### resolveCreator?
+
+> `optional` **resolveCreator?**: (`chat`) => \{ `name?`: `string`; `email`: `string`; `photoUrl?`: `string`; \} \| `undefined`
+
+Resolve a chat's creator to a displayable identity, shown as an avatar on
+each thread-list row. Called for every chat returned by the thread list
+with that chat's `userId`/`externalUserId`; return the creator's info to
+show it, or `undefined` to fall back to the default row icon.
+
+Elements has no notion of who a `userId` refers to — resolve it however
+the consumer's own identity system works (e.g. looking it up in an
+already-fetched member list) and return the result synchronously.
+
+#### Parameters
+
+##### chat
+
+###### userId?
+
+`string`
+
+###### externalUserId?
+
+`string`
+
+#### Returns
+
+\{ `name?`: `string`; `email`: `string`; `photoUrl?`: `string`; \} \| `undefined`
+
+#### Example
+
+```ts
+resolveCreator: ({ userId }) => {
+  const member = members.find((m) => m.id === userId);
+  return member && { name: member.name, email: member.email, photoUrl: member.photoUrl };
+}
+```
+
+***
+
+### isOwnChat?
+
+> `optional` **isOwnChat?**: (`chat`) => `boolean`
+
+Report whether the signed-in caller owns a chat returned by the thread
+list. Called for every chat with that chat's `userId`/`externalUserId`;
+return `false` to hide the composer for that chat — the backend rejects
+sends into a chat the caller can view (e.g. via an admin-level read
+grant) but didn't create. Omit to always show the composer.
+
+#### Parameters
+
+##### chat
+
+###### userId?
+
+`string`
+
+###### externalUserId?
+
+`string`
+
+#### Returns
+
+`boolean`
+
+#### Example
+
+```ts
+isOwnChat: ({ userId }) => userId === currentUser.id
 ```

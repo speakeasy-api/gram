@@ -28,13 +28,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ping"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
@@ -205,18 +205,16 @@ func newStreamsCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, findingsPub.Stop)
 
-			gitleaksHandler, err := gitleaks.NewHandler(logger, findingsPub)
-			if err != nil {
-				return fmt.Errorf("failed to create gitleaks handler: %w", err)
-			}
+			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub)
 
 			// Custom-rules shadow-mode subscriber: loads a project's selected CEL
 			// detection rules from the read replica (caching their compilation) and
 			// publishes any matches into the shared Finding topic.
-			customRulesHandler, err := customruleanalyzer.NewHandler(logger, replicaDB, findingsPub)
+			scanner, err := customruleanalyzer.NewScanner(replicaDB)
 			if err != nil {
-				return fmt.Errorf("failed to create custom rules handler: %w", err)
+				return fmt.Errorf("failed to create custom rules scanner: %w", err)
 			}
+			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub)
 
 			{
 				controlServer := control.Server{

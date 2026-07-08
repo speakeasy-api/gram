@@ -2,7 +2,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { useRoutes } from "@/routes";
-import { useListDeploymentsSuspense } from "@gram/client/react-query";
+import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
 import {
   Badge,
   Button,

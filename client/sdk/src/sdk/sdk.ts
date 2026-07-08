@@ -20,6 +20,7 @@ import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
 import { External } from "./external.js";
+import { ExternalCredentials } from "./externalcredentials.js";
 import { Features } from "./features.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
@@ -47,6 +48,7 @@ import { Templates } from "./templates.js";
 import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 import { Triggers } from "./triggers.js";
+import { TunneledMcp } from "./tunneledmcp.js";
 import { Usage } from "./usage.js";
 import { UserSessionClients } from "./usersessionclients.js";
 import { UserSessionConsents } from "./usersessionconsents.js";
@@ -140,6 +142,13 @@ export class Gram extends ClientSDK {
   private _external?: External;
   get external(): External {
     return (this._external ??= new External(this._options));
+  }
+
+  private _externalCredentials?: ExternalCredentials;
+  get externalCredentials(): ExternalCredentials {
+    return (this._externalCredentials ??= new ExternalCredentials(
+      this._options,
+    ));
   }
 
   private _hooks?: Hooks;
@@ -280,6 +289,11 @@ export class Gram extends ClientSDK {
   private _triggers?: Triggers;
   get triggers(): Triggers {
     return (this._triggers ??= new Triggers(this._options));
+  }
+
+  private _tunneledMcp?: TunneledMcp;
+  get tunneledMcp(): TunneledMcp {
+    return (this._tunneledMcp ??= new TunneledMcp(this._options));
   }
 
   private _usage?: Usage;

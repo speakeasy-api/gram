@@ -5,14 +5,10 @@ import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import type {
-  DeploymentFunctions,
-  OpenAPIv3DeploymentAsset,
-} from "@gram/client/models/components";
-import {
-  useLatestDeployment,
-  useListAssets,
-} from "@gram/client/react-query/index.js";
+import type { DeploymentFunctions } from "@gram/client/models/components/deploymentfunctions.js";
+import type { OpenAPIv3DeploymentAsset } from "@gram/client/models/components/openapiv3deploymentasset.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { RequireScope } from "@/components/require-scope";
 import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { Download, Eye, Trash2 } from "lucide-react";

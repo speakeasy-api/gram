@@ -100,7 +100,13 @@ var memberScopes = []Scope{
 	ScopeProjectRead,
 	ScopeMCPRead,
 	ScopeMCPConnect,
-	ScopeEnvironmentRead,
+	// environment:read is intentionally NOT a default for members: environment
+	// values include secrets, so viewing them must be granted explicitly via a
+	// custom role. Admins retain environment:read/write via adminScopes.
+	//
+	// The Observe/observability dashboard surface is separately gated on org:admin
+	// at the page level, so basic members (e.g. synced via directory/SCIM) don't
+	// see telemetry by default.
 }
 
 func (s Scope) Parts() ScopeParts {
