@@ -293,7 +293,10 @@ export default function Plugins(): JSX.Element {
                     <>
                       <UninitializedMarketplaceCard
                         publishStatus={publishStatus}
-                        defaultName={marketplaceSettings.defaultName}
+                        defaultName={
+                          marketplaceSettings.marketplaceName ??
+                          marketplaceSettings.defaultName
+                        }
                         onSetup={handleStartSetup}
                         onAddCollaborators={() =>
                           setIsManageCollaboratorsOpen(true)
@@ -317,7 +320,10 @@ export default function Plugins(): JSX.Element {
                   <>
                     <UninitializedMarketplaceCard
                       publishStatus={publishStatus}
-                      defaultName={marketplaceSettings.defaultName}
+                      defaultName={
+                        marketplaceSettings.marketplaceName ??
+                        marketplaceSettings.defaultName
+                      }
                       onSetup={handleStartSetup}
                       onAddCollaborators={() =>
                         setIsManageCollaboratorsOpen(true)

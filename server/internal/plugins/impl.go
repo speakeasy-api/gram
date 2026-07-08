@@ -1339,6 +1339,10 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 // to real-time for the UI to reflect a just-added collaborator promptly.
 const hasCollaboratorsCacheTTL = 60 * time.Second
 
+func collaboratorCacheKey(owner, repo string) string {
+	return fmt.Sprintf("plugins:has-collaborator:%s/%s", owner, repo)
+}
+
 // cachedHasDirectCollaborator wraps GitHubPublisher.HasDirectCollaborator
 // with a short-lived cache. Falls back to an uncached live call when no
 // cache is configured (e.g. the publish-only worker instance from
@@ -1352,7 +1356,7 @@ func (s *Service) cachedHasDirectCollaborator(ctx context.Context, owner, repo s
 		return hasCollaborators, nil
 	}
 
-	key := fmt.Sprintf("plugins:has-collaborator:%s/%s", owner, repo)
+	key := collaboratorCacheKey(owner, repo)
 
 	var cached bool
 	switch err := s.cache.Get(ctx, key, &cached); {
@@ -1637,6 +1641,15 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 				attr.SlogGitHubUsername(username),
 				attr.SlogError(err),
 			)
+		}
+	}
+
+	// Bust the short-lived HasDirectCollaborator cache so the next
+	// GetPublishStatus read reflects a just-added collaborator immediately
+	// instead of the stale cached value for up to hasCollaboratorsCacheTTL.
+	if len(input.GitHubUsernames) > 0 && s.cache != nil {
+		if err := s.cache.Delete(ctx, collaboratorCacheKey(repoOwner, repoName)); err != nil {
+			s.logger.WarnContext(ctx, "invalidate collaborator cache", attr.SlogError(err))
 		}
 	}
 

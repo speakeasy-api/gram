@@ -63,10 +63,16 @@ export type McpSidebarNavItem = {
 
 export function McpSidebarNavShell({
   backHref,
+  topTitle,
+  topContent,
   cardContent,
   items,
 }: {
   backHref: string;
+  /** Eyebrow label for topContent, styled like "At a glance". */
+  topTitle?: string;
+  /** Rendered above the "At a glance" card, e.g. a readiness summary. */
+  topContent?: React.ReactNode;
   cardContent?: React.ReactNode;
   items: McpSidebarNavItem[];
 }): React.JSX.Element {
@@ -85,7 +91,19 @@ export function McpSidebarNavShell({
           />
         </SidebarMenuItem>
 
-        <SidebarDivider className="my-2 px-1" />
+        <SidebarDivider className="mt-3 mb-2 px-1" />
+
+        {topContent && (
+          <>
+            {topTitle && (
+              <SidebarEyebrow align="card">{topTitle}</SidebarEyebrow>
+            )}
+            <li className="pt-2 pb-4 group-data-[collapsible=icon]:hidden">
+              {topContent}
+            </li>
+            <SidebarDivider className="mb-2 group-data-[collapsible=icon]:hidden" />
+          </>
+        )}
 
         <SidebarEyebrow align="card">At a glance</SidebarEyebrow>
 
