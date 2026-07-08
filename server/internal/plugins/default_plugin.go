@@ -83,11 +83,15 @@ func EnsureDefaultPlugin(ctx context.Context, q *repo.Queries, organizationID st
 }
 
 // maxAttachNameAttempts bounds AttachToDefaultPlugin's de-conflict-and-insert
-// loop. Each retry means a concurrent attach took the chosen display name
-// between the check and the insert; contention that deep is effectively
-// impossible, so exhausting this is treated as an error rather than looping
-// forever inside the caller's transaction.
-const maxAttachNameAttempts = 5
+// loop. Convergence is linear in the number of concurrent same-name
+// attaches: every loser re-lists and picks the same lowest free suffix, so
+// each round settles exactly one contender. The budget therefore has to
+// exceed the largest plausible same-name burst within one project — 25
+// simultaneous contenders is far past anything real — because exhausting it
+// fails the caller's action (a server enable or endpoint create) even
+// though a free suffix exists. Each retry costs two cheap queries, so the
+// generous budget is effectively free.
+const maxAttachNameAttempts = 25
 
 // AttachToDefaultPluginParams identifies the server to attach — exactly one
 // of ToolsetID / McpServerID must be Valid, mirroring the plugin_servers
