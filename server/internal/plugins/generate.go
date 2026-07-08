@@ -1083,6 +1083,19 @@ func renderHookRuntimeSourceSnippet() string {
 `
 }
 
+// orgHintAssignment renders the gram_hooks_org_hint line for generated
+// scripts. A baked org id is authoritative: the pin exists so cached
+// credentials minted for another organization are never trusted, and an
+// ambient GRAM_HOOKS_ORG_ID must not repoint a published plugin at a
+// different org. Only the env-driven dogfood render (no baked org) reads the
+// environment.
+func orgHintAssignment(cfg GenerateConfig) string {
+	if cfg.OrgID != "" {
+		return fmt.Sprintf("gram_hooks_org_hint=%q", cfg.OrgID)
+	}
+	return `gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-}"`
+}
+
 func renderAuthPreflightScript(cfg GenerateConfig) []byte {
 	// In observability mode nothing may block or stall session start: auth
 	// failures exit 0, and the interactive browser login (which can wait
@@ -1104,7 +1117,7 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
-gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-%s}"
+%s
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -1121,7 +1134,7 @@ export GRAM_HOOKS_INTERACTIVE=%s
 # the session start; observability mode passes 0 so nothing ever blocks).
 gram_hooks_prepare_auth "$server_url" "$project_slug" %s || true
 exit 0
-`, cfg.ServerURL, cfg.ProjectSlug, cfg.OrgID, failureExit, interactive, failureExit)
+`, cfg.ServerURL, cfg.ProjectSlug, orgHintAssignment(cfg), failureExit, interactive, failureExit)
 }
 
 // renderLoginScript emits hooks/login.sh: the standalone interactive login
@@ -1141,7 +1154,7 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
-gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-%s}"
+%s
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -1172,7 +1185,7 @@ fi
 
 echo "Speakeasy hooks authenticated (project ${GRAM_HOOKS_CACHED_PROJECT:-unset})."
 exit 0
-`, cfg.ServerURL, cfg.ProjectSlug, cfg.OrgID)
+`, cfg.ServerURL, cfg.ProjectSlug, orgHintAssignment(cfg))
 }
 
 // renderSharedAuthScript emits hooks/auth.sh: local device authentication for
@@ -1807,8 +1820,13 @@ gram_hooks_prepare_auth() {
     GRAM_HOOKS_CACHED_API_KEY=""
     GRAM_HOOKS_CACHED_PROJECT=""
     GRAM_HOOKS_CACHED_EMAIL=""
-    if [ "$force" != "force" ]; then
-      gram_hooks_read_auth "$server_url" 2>/dev/null || true
+    if [ "$force" != "force" ] && ! gram_hooks_read_auth "$server_url" 2>/dev/null; then
+      # gram_hooks_read_auth populates the CACHED_* fields before validating
+      # them; a cache rejected for a server or organization mismatch must not
+      # leak into the send path below.
+      GRAM_HOOKS_CACHED_API_KEY=""
+      GRAM_HOOKS_CACHED_PROJECT=""
+      GRAM_HOOKS_CACHED_EMAIL=""
     fi
     if [ -z "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
       if ! gram_hooks_login "$server_url" "$project_hint"; then
@@ -2074,7 +2092,7 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
-gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-%s}"
+%s
 gram_hooks_nonblocking="%s"
 # In observability mode auth-state failures must not block either: prepare_auth
 # exits with this value on an established machine whose credentials broke.
@@ -2123,7 +2141,7 @@ if [ -n "$gram_hooks_nonblocking" ]; then
   exit 0
 fi
 exit 2
-`, cfg.ServerURL, projectSlug, cfg.OrgID, nonblocking, renderHookRuntimeSourceSnippet(), renderHookPayloadNormalizationSnippet("codex"))
+`, cfg.ServerURL, projectSlug, orgHintAssignment(cfg), nonblocking, renderHookRuntimeSourceSnippet(), renderHookPayloadNormalizationSnippet("codex"))
 	}
 
 	return fmt.Appendf(nil, `#!/usr/bin/env bash
@@ -2140,7 +2158,7 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
-gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-%s}"
+%s
 gram_hooks_nonblocking="%s"
 # In observability mode auth-state failures must not block either: prepare_auth
 # exits with this value on an established machine whose credentials broke.
@@ -2168,6 +2186,9 @@ gram_hooks_emit_login_nudge() {
   local plugin_hooks_dir="$2"
   local session_id marker context escaped
   session_id="$(gram_hooks_json_string_value "$payload" "session_id")"
+  # The session id comes from the provider payload; sanitize it before using
+  # it in a filesystem path so a crafted value cannot escape TMPDIR.
+  session_id="$(printf '%%s' "$session_id" | tr -c 'A-Za-z0-9_.-' '_')"
   marker="${TMPDIR:-/tmp}/gram-hooks-login-nudge-${session_id:-$(date +%%Y%%m%%d)}"
   if [ -e "$marker" ]; then
     return 0
@@ -2190,6 +2211,14 @@ if [ "%s" = "cursor" ] && [ "$native_event" != "beforeSubmitPrompt" ]; then
   if [ -z "$gram_hooks_nonblocking" ]; then
     case "$native_event" in
       preToolUse | beforeMCPExecution)
+        # A deny stashed by a backfill on an earlier non-decision event is
+        # consumed here; the take always runs so a deny already relayed
+        # in-process does not leave a stale stash behind.
+        pending_deny="$(gram_hooks_cursor_take_pending_prompt_deny "$provider_payload" "$server_url" "$project_slug")" || pending_deny=""
+        if [ "${GRAM_HOOKS_BACKFILL_DECISION:-}" != "deny" ] && [ -n "$pending_deny" ]; then
+          GRAM_HOOKS_BACKFILL_DECISION="deny"
+          GRAM_HOOKS_BACKFILL_BODY="$pending_deny"
+        fi
         if [ "${GRAM_HOOKS_BACKFILL_DECISION:-}" = "deny" ]; then
           gram_hooks_provider_response "cursor" "$native_event" "$GRAM_HOOKS_BACKFILL_BODY"
           exit 0
@@ -2274,7 +2303,7 @@ if [ -n "$gram_hooks_nonblocking" ]; then
   exit 0
 fi
 exit 2
-`, cfg.ServerURL, projectSlug, cfg.OrgID, nonblocking, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform, platform, platform)
+`, cfg.ServerURL, projectSlug, orgHintAssignment(cfg), nonblocking, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform, platform, platform)
 }
 
 func renderClaudeMCPEnrichmentSnippet() string {

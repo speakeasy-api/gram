@@ -625,8 +625,13 @@ gram_hooks_prepare_auth() {
     GRAM_HOOKS_CACHED_API_KEY=""
     GRAM_HOOKS_CACHED_PROJECT=""
     GRAM_HOOKS_CACHED_EMAIL=""
-    if [ "$force" != "force" ]; then
-      gram_hooks_read_auth "$server_url" 2>/dev/null || true
+    if [ "$force" != "force" ] && ! gram_hooks_read_auth "$server_url" 2>/dev/null; then
+      # gram_hooks_read_auth populates the CACHED_* fields before validating
+      # them; a cache rejected for a server or organization mismatch must not
+      # leak into the send path below.
+      GRAM_HOOKS_CACHED_API_KEY=""
+      GRAM_HOOKS_CACHED_PROJECT=""
+      GRAM_HOOKS_CACHED_EMAIL=""
     fi
     if [ -z "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
       if ! gram_hooks_login "$server_url" "$project_hint"; then

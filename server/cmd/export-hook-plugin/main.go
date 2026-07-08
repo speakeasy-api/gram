@@ -27,6 +27,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "render dogfood plugins: %v\n", err)
 		os.Exit(1)
 	}
+	// The hooks/ subtrees are fully rendered; prune them first so a file the
+	// generators no longer emit does not linger as a stale checked-in copy.
+	// The hand-maintained plugin manifests live outside hooks/ and survive.
+	for _, plugin := range []string{"plugin-claude", "plugin-cursor"} {
+		if err := os.RemoveAll(filepath.Join(*out, plugin, "hooks")); err != nil {
+			fmt.Fprintf(os.Stderr, "prune %s/hooks: %v\n", plugin, err)
+			os.Exit(1)
+		}
+	}
 	for name, content := range files {
 		dst := filepath.Join(*out, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
