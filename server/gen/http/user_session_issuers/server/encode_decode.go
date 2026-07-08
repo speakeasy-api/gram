@@ -1444,6 +1444,7 @@ func marshalTypesUserSessionIssuerToUserSessionIssuerResponseBody(v *types.UserS
 		Slug:                 v.Slug,
 		AuthnChallengeMode:   v.AuthnChallengeMode,
 		SessionDurationHours: v.SessionDurationHours,
+		Classification:       v.Classification,
 		CreatedAt:            v.CreatedAt,
 		UpdatedAt:            v.UpdatedAt,
 	}

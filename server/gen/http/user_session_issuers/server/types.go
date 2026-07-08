@@ -59,9 +59,12 @@ type CreateUserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours int    `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
-	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	SessionDurationHours int `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	// custom | project_default_idp. project_default_idp is the auto-provisioned
+	// built-in Gram issuer and cannot be edited or deleted.
+	Classification string `form:"classification" json:"classification" xml:"classification"`
+	CreatedAt      string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt      string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -76,9 +79,12 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours int    `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
-	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	SessionDurationHours int `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	// custom | project_default_idp. project_default_idp is the auto-provisioned
+	// built-in Gram issuer and cannot be edited or deleted.
+	Classification string `form:"classification" json:"classification" xml:"classification"`
+	CreatedAt      string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt      string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListUserSessionIssuersResponseBody is the type of the "userSessionIssuers"
@@ -101,9 +107,12 @@ type GetUserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours int    `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
-	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	SessionDurationHours int `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	// custom | project_default_idp. project_default_idp is the auto-provisioned
+	// built-in Gram issuer and cannot be edited or deleted.
+	Classification string `form:"classification" json:"classification" xml:"classification"`
+	CreatedAt      string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt      string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // MigrateLegacyGramRegistrationsResponseBody is the type of the
@@ -1267,9 +1276,12 @@ type UserSessionIssuerResponseBody struct {
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
 	// Issued user session lifetime, in hours.
-	SessionDurationHours int    `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
-	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	SessionDurationHours int `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	// custom | project_default_idp. project_default_idp is the auto-provisioned
+	// built-in Gram issuer and cannot be edited or deleted.
+	Classification string `form:"classification" json:"classification" xml:"classification"`
+	CreatedAt      string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt      string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewCreateUserSessionIssuerResponseBody builds the HTTP response body from
@@ -1282,6 +1294,7 @@ func NewCreateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *Creat
 		Slug:                 res.Slug,
 		AuthnChallengeMode:   res.AuthnChallengeMode,
 		SessionDurationHours: res.SessionDurationHours,
+		Classification:       res.Classification,
 		CreatedAt:            res.CreatedAt,
 		UpdatedAt:            res.UpdatedAt,
 	}
@@ -1298,6 +1311,7 @@ func NewUpdateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *Updat
 		Slug:                 res.Slug,
 		AuthnChallengeMode:   res.AuthnChallengeMode,
 		SessionDurationHours: res.SessionDurationHours,
+		Classification:       res.Classification,
 		CreatedAt:            res.CreatedAt,
 		UpdatedAt:            res.UpdatedAt,
 	}
@@ -1336,6 +1350,7 @@ func NewGetUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *GetUserS
 		Slug:                 res.Slug,
 		AuthnChallengeMode:   res.AuthnChallengeMode,
 		SessionDurationHours: res.SessionDurationHours,
+		Classification:       res.Classification,
 		CreatedAt:            res.CreatedAt,
 		UpdatedAt:            res.UpdatedAt,
 	}

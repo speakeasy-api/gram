@@ -59,6 +59,7 @@ function userSessionIssuer(id = "usi-1"): UserSessionIssuer {
     slug: defaults.userSessionIssuerSlug,
     authnChallengeMode: "interactive",
     sessionDurationHours: defaults.sessionDurationHours,
+    classification: "custom",
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };

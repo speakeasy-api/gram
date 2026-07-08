@@ -20,6 +20,9 @@ type UserSessionIssuer struct {
 	AuthnChallengeMode string
 	// Issued user session lifetime, in hours.
 	SessionDurationHours int
-	CreatedAt            string
-	UpdatedAt            string
+	// custom | project_default_idp. project_default_idp is the auto-provisioned
+	// built-in Gram issuer and cannot be edited or deleted.
+	Classification string
+	CreatedAt      string
+	UpdatedAt      string
 }

@@ -16,6 +16,10 @@ export type UserSessionIssuer = {
    * chain | interactive.
    */
   authnChallengeMode: string;
+  /**
+   * custom | project_default_idp. project_default_idp is the auto-provisioned built-in Gram issuer and cannot be edited or deleted.
+   */
+  classification: string;
   createdAt: Date;
   /**
    * The user_session_issuer id.
@@ -43,6 +47,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authn_challenge_mode: z.string(),
+    classification: z.string(),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

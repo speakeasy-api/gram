@@ -129,6 +129,12 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
 	}
 
+	// The project-default issuer is auto-provisioned Gram-as-IdP config, not a
+	// user-owned record — its slug/duration are managed by the runtime.
+	if existing.Classification == ClassificationProjectDefaultIDP {
+		return nil, oops.E(oops.CodeBadRequest, nil, "the built-in project-default issuer cannot be modified").LogError(ctx, logger)
+	}
+
 	beforeView := userSessionIssuerView(existing)
 
 	updated, err := txRepo.UpdateUserSessionIssuer(ctx, repo.UpdateUserSessionIssuerParams{
@@ -288,6 +294,22 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	existing, err := txRepo.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
+	}
+	// The project-default issuer is auto-provisioned; deleting it would only
+	// have the runtime re-materialise it on the next OAuth write.
+	if existing.Classification == ClassificationProjectDefaultIDP {
+		return oops.E(oops.CodeBadRequest, nil, "the built-in project-default issuer cannot be deleted").LogError(ctx, logger)
+	}
 
 	hasActiveOwner, err := txRepo.UserSessionIssuerHasActiveOwner(ctx, repo.UserSessionIssuerHasActiveOwnerParams{
 		ProjectID:           *authCtx.ProjectID,
@@ -456,6 +478,7 @@ func userSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer 
 		Slug:                 row.Slug,
 		AuthnChallengeMode:   row.AuthnChallengeMode,
 		SessionDurationHours: int(dur / time.Hour),
+		Classification:       row.Classification,
 		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 	}

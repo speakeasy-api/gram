@@ -11,6 +11,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
+// user_session_issuers.classification values.
+const (
+	// ClassificationCustom is a user-configured issuer.
+	ClassificationCustom = "custom"
+	// ClassificationProjectDefaultIDP is the auto-provisioned implicit Gram
+	// issuer that gates private servers with no explicit issuer.
+	ClassificationProjectDefaultIDP = "project_default_idp"
+)
+
 // defaultIssuerNamespace seeds the UUIDv5 derivation of every project's
 // implicit issuer id. Fixed forever — changing it orphans previously minted
 // tokens.
