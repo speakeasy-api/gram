@@ -170,10 +170,11 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		toolName = *payload.ToolName
 	}
 
-	hookSource := "claude"
-	if metadata.ServiceName != "" {
-		hookSource = metadata.ServiceName
-	}
+	// Legacy Claude hook rows arrive before (or without) OTEL session metadata,
+	// so the service name may be empty or a non-canonical Claude spelling —
+	// normalize either way so hook rows land in the same bucket as the
+	// session's api_request rows.
+	hookSource := canonicalHookSource(conv.Default(metadata.ServiceName, "claude"))
 
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:    string(telemetry.EventSourceHook),

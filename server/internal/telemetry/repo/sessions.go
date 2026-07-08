@@ -70,6 +70,24 @@ const (
 		"toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), " +
 		"toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), " + sessionUsageMeasureFilter + ")"
 
+	// sessionHookSourceExpr is the per-row normalized consuming surface. Claude
+	// rows were historically stamped with several hook_source spellings
+	// ('claude', 'claude-code-desktop', 'cowork', '') — collapse them to the
+	// canonical 'claude-code' and infer empty values from row provenance,
+	// mirroring the hook_source expression in attribute_metrics_summaries_mv
+	// (server/clickhouse/schema.sql) so aggregate drill-downs resolve the same
+	// sessions. Shared with the hook_source filter in dimensions.go.
+	sessionHookSourceExpr = "multiIf(" +
+		"hook_source IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork'), 'claude-code', " +
+		"hook_source != '', hook_source, " +
+		"service_name IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork') " +
+		"OR toString(resource_attributes.service.name) IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork') " +
+		"OR startsWith(body, 'claude_code.') " +
+		"OR startsWith(gram_urn, 'claude-code:'), 'claude-code', " +
+		"startsWith(gram_urn, 'codex:'), 'codex', " +
+		"startsWith(gram_urn, 'cursor:'), 'cursor', " +
+		"'')"
+
 	// sessionModelExpr is the per-row effective model. Claude api_request rows put
 	// it on attributes.model / attributes.gen_ai.request.model; everyone else on
 	// gen_ai.response.model. Mirrors the aggregate MV's model expression so the
@@ -268,7 +286,7 @@ func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]S
 		"chat_id as gram_chat_id",
 		"any(toString(gram_project_id)) as project_id",
 		"anyIf(user_email, user_email != '') as session_user_email",
-		"anyIf(hook_source, hook_source != '') as session_hook_source",
+		"anyIf("+sessionHookSourceExpr+", "+sessionHookSourceExpr+" != '') as session_hook_source",
 		"argMaxIf("+sessionModelExpr+", time_unix_nano, "+sessionModelExpr+" != '') as session_model",
 		"min(time_unix_nano) as start_time_unix_nano",
 		"max(time_unix_nano) as end_time_unix_nano",

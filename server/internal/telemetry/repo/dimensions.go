@@ -78,8 +78,12 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 	},
 	"hook_source": {
+		// The aggregate column is already normalized by the MV; the raw path
+		// applies the same Claude-family collapse + provenance inference so a
+		// drill-down from the aggregate resolves rows stamped with legacy
+		// spellings ('claude', 'claude-code-desktop', 'cowork', or empty).
 		aggregateColumn:        "hook_source",
-		rawExpr:                "hook_source",
+		rawExpr:                sessionHookSourceExpr,
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
 	},

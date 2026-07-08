@@ -485,7 +485,28 @@ SELECT
         is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
         toString(attributes.gen_ai.response.model)
     ) AS model,
-    hook_source,
+    -- Normalized consuming surface. Claude has historically been stamped with
+    -- several spellings ('claude' from legacy hook rows and the unified-ingest
+    -- adapter, 'claude-code-desktop'/'cowork' from desktop/cowork service
+    -- names, '' on old rows) — collapse them all to the canonical
+    -- 'claude-code' so the Agent breakdown shows one Claude bucket. Empty
+    -- values are inferred from row provenance (Claude service/body/urn, codex
+    -- and cursor usage urns) instead of surfacing as '(unset)'. The raw
+    -- attribute path is used instead of the hook_source materialized column
+    -- because the alias shadows that column (cyclic alias otherwise). Keep in
+    -- sync with sessionHookSourceExpr in
+    -- server/internal/telemetry/repo/sessions.go.
+    multiIf(
+        toString(attributes.gram.hook.source) IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork'), 'claude-code',
+        toString(attributes.gram.hook.source) != '', toString(attributes.gram.hook.source),
+        service_name IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork')
+            OR toString(resource_attributes.service.name) IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork')
+            OR startsWith(body, 'claude_code.')
+            OR startsWith(gram_urn, 'claude-code:'), 'claude-code',
+        startsWith(gram_urn, 'codex:'), 'codex',
+        startsWith(gram_urn, 'cursor:'), 'cursor',
+        ''
+    ) AS hook_source,
 
     -- Multi-valued dimensions extracted tolerantly from JSON/Dynamic values.
     -- Bad or non-array payloads resolve to [] instead of failing MV ingestion.
