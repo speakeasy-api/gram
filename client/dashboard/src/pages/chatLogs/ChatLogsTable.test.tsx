@@ -19,6 +19,10 @@ vi.mock("@/components/ui/tooltip", () => ({
   SimpleTooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
+vi.mock("@gram/client/react-query/members.js", () => ({
+  useMembers: () => ({ data: undefined }),
+}));
+
 function makeChat(id: string): ChatOverview {
   const createdAt = new Date("2026-01-01T12:00:00Z");
 

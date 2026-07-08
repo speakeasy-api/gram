@@ -3,9 +3,12 @@ import { personalAccountEmail } from "@/components/observe/account-display-utils
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { resolveChatOwner } from "@/lib/chat-owner";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useSession } from "@/contexts/Auth";
+import { useMembers } from "@gram/client/react-query/members.js";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useCallback, useState } from "react";
@@ -15,11 +18,14 @@ import { useCallback, useState } from "react";
 // which hides which account was actually used — the adjacent AccountTypeIcon
 // marks it personal). Otherwise the caller's own sessions show "You" (matched by
 // internal user id, or by external user id when it equals their email —
-// seeded/dashboard chats carry the email there). Everyone else falls back to the
-// external user id, or "anonymous" when there is none.
+// seeded/dashboard chats carry the email there). Otherwise resolve the chat's
+// user against the org member list so a known member shows their name/email
+// rather than a raw identifier (e.g. an MCP session's WorkOS `user_…` id).
+// Everyone else falls back to the external user id, or "anonymous".
 function ownerLabel(
   chat: ChatOverview,
   user: { id: string; email: string },
+  members: AccessMember[] | undefined,
 ): string {
   const accountEmail = personalAccountEmail(chat);
   if (accountEmail) return accountEmail;
@@ -27,6 +33,8 @@ function ownerLabel(
     (!!chat.userId && chat.userId === user.id) ||
     (!!chat.externalUserId && chat.externalUserId === user.email);
   if (isMe) return "You";
+  const member = resolveChatOwner(members, chat);
+  if (member) return member.name || member.email;
   return chat.externalUserId || "anonymous";
 }
 
@@ -147,6 +155,7 @@ export function ChatLogsTable({
   error,
 }: ChatLogsTableProps): JSX.Element {
   const { user } = useSession();
+  const { data: membersData } = useMembers();
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   if (isLoading && chats.length === 0) {
     return (
@@ -257,7 +266,7 @@ export function ChatLogsTable({
                     <span className="flex items-center gap-1.5">
                       <AccountTypeIcon accountType={chat.accountType} />
                       <span className="max-w-[120px] truncate">
-                        {ownerLabel(chat, user)}
+                        {ownerLabel(chat, user, membersData?.members)}
                       </span>
                     </span>
                     {source && (

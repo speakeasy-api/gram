@@ -52,6 +52,8 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { AccountTypeBadge } from "@/components/account-type-badge";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
+import { resolveChatOwner } from "@/lib/chat-owner";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
@@ -237,6 +239,7 @@ function SessionSummary({
   compact = false,
 }: {
   chat: {
+    userId?: string;
     externalUserId?: string;
     accountType?: string;
     accountEmail?: string;
@@ -256,6 +259,11 @@ function SessionSummary({
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
   const accountEmail = personalAccountEmail(chat);
+  const { data: membersData } = useMembers();
+  const ownerMember = resolveChatOwner(membersData?.members, chat);
+  const userLabel = ownerMember
+    ? ownerMember.name || ownerMember.email
+    : chat.externalUserId || "anonymous";
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
@@ -303,7 +311,7 @@ function SessionSummary({
         <div className="space-y-1">
           <div className="mb-1 text-sm font-semibold">Session details</div>
           <div className="divide-border divide-y">
-            <MetaRow label="User">{chat.externalUserId || "anonymous"}</MetaRow>
+            <MetaRow label="User">{userLabel}</MetaRow>
             {accountEmail && (
               <MetaRow label="Account">
                 <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
@@ -1086,8 +1094,20 @@ function ChatDetailPanel({
 
   // Personal-account sessions label the user's turns with the account's own
   // email (mirrors the sessions list) instead of the attributed employee's
-  // work email carried on the messages.
-  const userLabelOverride = chat ? personalAccountEmail(chat) : undefined;
+  // work email carried on the messages. Otherwise, when the chat's user resolves
+  // to a known org member, label turns with their name/email so an opaque
+  // identifier (e.g. an MCP session's WorkOS `user_…` id) isn't shown as the
+  // author.
+  const { data: transcriptMembersData } = useMembers();
+  const transcriptOwner = chat
+    ? resolveChatOwner(transcriptMembersData?.members, chat)
+    : undefined;
+  const userLabelOverride = chat
+    ? (personalAccountEmail(chat) ??
+      (transcriptOwner
+        ? transcriptOwner.name || transcriptOwner.email
+        : undefined))
+    : undefined;
 
   const rowCtx = useMemo<RowContext>(
     () => ({
