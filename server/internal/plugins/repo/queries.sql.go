@@ -380,44 +380,6 @@ func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, e
 	return i, err
 }
 
-const getPluginServerByBackend = `-- name: GetPluginServerByBackend :one
-SELECT id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted FROM plugin_servers
-WHERE plugin_id = $1
-  AND toolset_id IS NOT DISTINCT FROM $2::uuid
-  AND mcp_server_id IS NOT DISTINCT FROM $3::uuid
-  AND deleted IS FALSE
-`
-
-type GetPluginServerByBackendParams struct {
-	PluginID    uuid.UUID
-	ToolsetID   uuid.NullUUID
-	McpServerID uuid.NullUUID
-}
-
-// Look up a live plugin server by its backend (toolset or mcp_server).
-// Used by AttachToDefaultPlugin to no-op on already-attached servers before
-// inserting: a duplicate insert can trip the (plugin_id, display_name)
-// unique index rather than a backend one, and either way the failed
-// statement aborts the caller's surrounding transaction.
-func (q *Queries) GetPluginServerByBackend(ctx context.Context, arg GetPluginServerByBackendParams) (PluginServer, error) {
-	row := q.db.QueryRow(ctx, getPluginServerByBackend, arg.PluginID, arg.ToolsetID, arg.McpServerID)
-	var i PluginServer
-	err := row.Scan(
-		&i.ID,
-		&i.PluginID,
-		&i.ToolsetID,
-		&i.McpServerID,
-		&i.DisplayName,
-		&i.Policy,
-		&i.SortOrder,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const getProjectMarketplaceNameContext = `-- name: GetProjectMarketplaceNameContext :one
 SELECT
   pr.slug AS project_slug,

@@ -26,7 +26,6 @@ import { useUpdatePluginMutation } from "@gram/client/react-query/updatePlugin";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
-import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import {
@@ -85,32 +84,19 @@ export default function PluginDetail(): JSX.Element | null {
     [toolsetsData?.toolsets],
   );
 
-  // Remote MCP-backed mcp_servers for this project. All of them back the
-  // cards of already-attached plugin servers (an attached server that's been
-  // disabled or lost its endpoints must still resolve for display), while
-  // only non-disabled servers with at least one endpoint are publishable —
-  // mirroring the backend's AddPluginServer check, so the picker never
-  // offers a server the API would reject.
+  // Remote MCP-backed mcp_servers for this project. Only remote-backed,
+  // non-disabled servers are publishable today.
   const { data: mcpServersData, isLoading: isLoadingMcpServers } =
     useMcpServers({});
-  const { data: mcpEndpointsData, isLoading: isLoadingMcpEndpoints } =
-    useMcpEndpoints({});
   const mcpServers = useMemo(
     () =>
-      (mcpServersData?.mcpServers ?? []).filter((s) => !!s.remoteMcpServerId),
+      (mcpServersData?.mcpServers ?? []).filter(
+        (s) => !!s.remoteMcpServerId && s.visibility !== "disabled",
+      ),
     [mcpServersData],
   );
-  const publishableMcpServers = useMemo(() => {
-    const serverIdsWithEndpoint = new Set(
-      (mcpEndpointsData?.mcpEndpoints ?? []).map((e) => e.mcpServerId),
-    );
-    return mcpServers.filter(
-      (s) => s.visibility !== "disabled" && serverIdsWithEndpoint.has(s.id),
-    );
-  }, [mcpServers, mcpEndpointsData]);
 
-  const isLoadingServers =
-    isLoadingToolsets || isLoadingMcpServers || isLoadingMcpEndpoints;
+  const isLoadingServers = isLoadingToolsets || isLoadingMcpServers;
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.
@@ -289,15 +275,14 @@ export default function PluginDetail(): JSX.Element | null {
     return map;
   }, [mcpServers]);
 
-  // Merge toolsets and publishable Remote MCP-backed servers into one
-  // selectable list.
+  // Merge toolsets and Remote MCP-backed servers into one selectable list.
   const serverOptions = useMemo<ServerOption[]>(() => {
     const opts: ServerOption[] = toolsets.map((t) => ({
       kind: "toolset",
       id: t.id,
       name: t.name,
     }));
-    for (const s of publishableMcpServers) {
+    for (const s of mcpServers) {
       opts.push({
         kind: "mcpServer",
         id: s.id,
@@ -305,7 +290,7 @@ export default function PluginDetail(): JSX.Element | null {
       });
     }
     return opts;
-  }, [toolsets, publishableMcpServers]);
+  }, [toolsets, mcpServers]);
 
   if (!plugin) return null;
 

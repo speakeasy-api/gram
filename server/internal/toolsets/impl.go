@@ -43,6 +43,7 @@ import (
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -262,7 +263,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 // an initial publish for it, but only after their own transaction commits,
 // since this runs pre-commit and the DB writes could still roll back.
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
-	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
+	attached, err := plugins.AttachToDefaultPlugin(ctx, pluginsrepo.New(dbtx), plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
@@ -272,8 +273,46 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, s.logger)
 	}
+	if attached == nil {
+		return false, nil
+	}
 
-	return pluginCreated, nil
+	if attached.PluginCreated {
+		if err := s.audit.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			PluginID:         attached.PluginID,
+			PluginName:       attached.PluginName,
+			PluginSlug:       attached.PluginSlug,
+		}); err != nil {
+			return false, oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
+		}
+	}
+
+	toolsetURN := urn.NewToolset(toolsetID)
+	if err := s.audit.LogPluginServerAdd(ctx, dbtx, audit.LogPluginServerAddEvent{
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         *authCtx.ProjectID,
+		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:  authCtx.Email,
+		ActorSlug:         nil,
+		PluginID:          attached.PluginID,
+		PluginName:        attached.PluginName,
+		PluginSlug:        attached.PluginSlug,
+		ServerID:          attached.Server.ID,
+		ServerDisplayName: attached.Server.DisplayName,
+		ServerPolicy:      attached.Server.Policy,
+		ServerSortOrder:   attached.Server.SortOrder,
+		ToolsetURN:        &toolsetURN,
+		McpServerURN:      nil,
+	}); err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "audit log default plugin server add").LogError(ctx, s.logger)
+	}
+
+	return attached.PluginCreated, nil
 }
 
 // triggerInitialPublishIfNeeded enqueues the first-time GitHub marketplace

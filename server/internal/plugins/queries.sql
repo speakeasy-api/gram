@@ -73,18 +73,6 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
--- name: GetPluginServerByBackend :one
--- Look up a live plugin server by its backend (toolset or mcp_server).
--- Used by AttachToDefaultPlugin to no-op on already-attached servers before
--- inserting: a duplicate insert can trip the (plugin_id, display_name)
--- unique index rather than a backend one, and either way the failed
--- statement aborts the caller's surrounding transaction.
-SELECT * FROM plugin_servers
-WHERE plugin_id = @plugin_id
-  AND toolset_id IS NOT DISTINCT FROM sqlc.narg('toolset_id')::uuid
-  AND mcp_server_id IS NOT DISTINCT FROM sqlc.narg('mcp_server_id')::uuid
-  AND deleted IS FALSE;
-
 -- name: AddPluginServer :one
 -- Inserts a plugin server backed by exactly one of a toolset or an mcp_server.
 -- The plugin_servers backend-exclusivity CHECK enforces the XOR; callers must

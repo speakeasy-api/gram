@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -193,18 +194,58 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		return false, nil
 	}
 
-	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
+	displayName := mcpServerDisplayName(server)
+
+	attached, err := plugins.AttachToDefaultPlugin(ctx, pluginsrepo.New(dbtx), plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpServerID:    uuid.NullUUID{UUID: mcpServerID, Valid: true},
-		DisplayName:    mcpservers.ServerDisplayName(server),
+		DisplayName:    displayName,
 	})
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
 	}
+	if attached == nil {
+		return false, nil
+	}
 
-	return pluginCreated, nil
+	if attached.PluginCreated {
+		if err := s.audit.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			PluginID:         attached.PluginID,
+			PluginName:       attached.PluginName,
+			PluginSlug:       attached.PluginSlug,
+		}); err != nil {
+			return false, oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
+		}
+	}
+
+	mcpServerURN := urn.NewMcpServer(mcpServerID)
+	if err := s.audit.LogPluginServerAdd(ctx, dbtx, audit.LogPluginServerAddEvent{
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         *authCtx.ProjectID,
+		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:  authCtx.Email,
+		ActorSlug:         nil,
+		PluginID:          attached.PluginID,
+		PluginName:        attached.PluginName,
+		PluginSlug:        attached.PluginSlug,
+		ServerID:          attached.Server.ID,
+		ServerDisplayName: attached.Server.DisplayName,
+		ServerPolicy:      attached.Server.Policy,
+		ServerSortOrder:   attached.Server.SortOrder,
+		ToolsetURN:        nil,
+		McpServerURN:      &mcpServerURN,
+	}); err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "audit log default plugin server add").LogError(ctx, s.logger)
+	}
+
+	return attached.PluginCreated, nil
 }
 
 // triggerInitialPublishIfNeeded enqueues the first-time GitHub marketplace
@@ -227,6 +268,20 @@ func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *co
 	}); err != nil {
 		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
 	}
+}
+
+// mcpServerDisplayName derives a default plugin-server display name from an
+// mcp_server, preferring its name, then slug, then id. Mirrors
+// plugins.mcpServerDisplayName, which operates on a different generated row
+// type from a joined query and so can't be reused directly here.
+func mcpServerDisplayName(server mcpserversrepo.McpServer) string {
+	if name := conv.FromPGText[string](server.Name); name != nil && *name != "" {
+		return *name
+	}
+	if slug := conv.FromPGText[string](server.Slug); slug != nil && *slug != "" {
+		return *slug
+	}
+	return server.ID.String()
 }
 
 func (s *Service) GetMcpEndpoint(ctx context.Context, payload *gen.GetMcpEndpointPayload) (*types.McpEndpoint, error) {
