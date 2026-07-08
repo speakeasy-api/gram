@@ -870,9 +870,11 @@ wheels = [
 
 [[package]]
 name = "presidio-analyzer"
-version = "2.2.362"
+version = "2.2.363"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "click" },
+    { name = "numpy" },
     { name = "phonenumbers" },
     { name = "pydantic" },
     { name = "pyyaml" },
@@ -880,8 +882,9 @@ dependencies = [
     { name = "spacy" },
     { name = "tldextract" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/a8/c7/c88c469f06cbf44d00a3af773ea8baea7f6ee045ba39933f4a54993854f8/presidio_analyzer-2.2.363.tar.gz", hash = "sha256:f93eae598710e747e54d1a79d3a3b892caea91d46e87a32becb340fb064bf497", size = 149406, upload-time = "2026-06-28T16:09:10.613Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2f/8a/d6cf4bddbb11d9c78f5c9342bbbcde4f90fe4e3c7de114a836ec4ed8a6cf/presidio_analyzer-2.2.362-py3-none-any.whl", hash = "sha256:4c36438924b1fcb4df92ea5cf2d8dc57508808e116b10923c983b8732aa07d90", size = 201084, upload-time = "2026-03-15T12:40:43.801Z" },
+    { url = "https://files.pythonhosted.org/packages/2d/17/1ff9fbf2cbecb9bf0bf86615aadb4641e29d9712cb6ca51aaeda481f5add/presidio_analyzer-2.2.363-py3-none-any.whl", hash = "sha256:84203d1148a87620ab80004cf31775d5868b965395f2754aa0a27c8d308e7dfb", size = 259041, upload-time = "2026-06-28T16:09:08.993Z" },
 ]
 
 [[package]]
@@ -1093,7 +1096,7 @@ requires-dist = [
     { name = "opentelemetry-instrumentation-system-metrics", specifier = ">=0.64b0" },
     { name = "opentelemetry-sdk", specifier = ">=1.43.0" },
     { name = "opentelemetry-semantic-conventions", specifier = ">=0.64b0" },
-    { name = "presidio-analyzer", specifier = ">=2.2.362" },
+    { name = "presidio-analyzer", specifier = ">=2.2.363" },
     { name = "starlette", specifier = ">=0.40.0" },
     { name = "structlog", specifier = ">=26.1.0" },
     { name = "uvicorn", specifier = ">=0.30.0" },
