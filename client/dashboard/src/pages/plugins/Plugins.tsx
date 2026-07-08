@@ -346,6 +346,12 @@ export default function Plugins(): JSX.Element {
                   />
                 </Page.Toolbar>
               )}
+              <Type small muted>
+                The default plugin is where all newly created MCP servers will
+                be automatically published to. If you have the default plugin
+                installed in your coding agent, then any new MCP servers will
+                become instantly available for installation.
+              </Type>
               <PluginGrid
                 plugins={filteredPlugins}
                 publishStatus={publishStatus}
