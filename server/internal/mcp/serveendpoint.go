@@ -153,7 +153,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for tunneled MCP backend").LogError(ctx, logger)
 		}
-		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken)
+		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate)
 	case mcpServer.ToolsetID.Valid:
 		// AGE-1902: toolset-backed branch still reads runtime config from the
 		// toolsets row (visibility, OAuth, default environment). Once
@@ -413,6 +413,7 @@ func (s *Service) serveTunneledBackend(
 	endpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
 	upstreamAuth string,
+	wwwAuthenticate string,
 ) error {
 	ctx := r.Context()
 	logger = logger.With(attr.SlogTunneledMCPServerID(mcpServer.TunneledMcpServerID.UUID.String()))
@@ -432,7 +433,7 @@ func (s *Service) serveTunneledBackend(
 		return err
 	}
 
-	p, err := s.tunnelManager.buildProxy(ctx, r, logger, endpoint, mcpServer, upstreamAuth)
+	p, err := s.tunnelManager.buildProxy(ctx, r, logger, endpoint, mcpServer, upstreamAuth, wwwAuthenticate)
 	if err != nil {
 		return err
 	}
