@@ -31256,6 +31256,94 @@ paths:
             x-speakeasy-react-hook:
                 name: TelemetryQuery
                 type: query
+    /rpc/telemetry.queryMessageTokenStats:
+        post:
+            description: 'Org-scoped daily message-level token stats: tokens in messages carrying at least one active risk finding and tokens in tool-call messages. Powers the billing page''s usage details table.'
+            operationId: queryMessageTokenStats
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/QueryRiskTokensPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MessageTokenStatsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: queryMessageTokenStats telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: queryMessageTokenStats
+            x-speakeasy-react-hook:
+                name: TelemetryQueryMessageTokenStats
+                type: query
     /rpc/telemetry.queryRiskTokens:
         post:
             description: 'Org-scoped daily token usage split by risk involvement: tokens from sessions with at least one active risk finding in the window versus all session tokens. Powers the token-usage panel''s risk breakdown on the costs page.'
@@ -46661,6 +46749,62 @@ components:
                 - visibility
                 - created_at
                 - updated_at
+        MessageTokenStatsPayload:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                project_id:
+                    type: string
+                    description: Optional project to scope to; defaults to every project in the organization.
+                    format: uuid
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-26T10:00:00Z"
+                    format: date-time
+            description: Payload for the org-scoped message-level token stats query
+            required:
+                - from
+                - to
+        MessageTokenStatsPoint:
+            type: object
+            properties:
+                bucket_time_unix_nano:
+                    type: string
+                    description: Bucket start time in Unix nanoseconds (string for JS precision)
+                risky_message_tokens:
+                    type: integer
+                    description: Tokens in messages carrying at least one active risk finding
+                    format: int64
+                tool_message_tokens:
+                    type: integer
+                    description: Tokens in tool-call messages
+                    format: int64
+            description: One UTC day of message-level token stats
+            required:
+                - bucket_time_unix_nano
+                - risky_message_tokens
+                - tool_message_tokens
+        MessageTokenStatsResult:
+            type: object
+            properties:
+                interval_seconds:
+                    type: integer
+                    description: Timeseries bucket width in seconds. Always 86400 — the stats are bucketed daily.
+                    format: int64
+                points:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MessageTokenStatsPoint'
+                    description: Gap-filled daily buckets in ascending time order
+            description: Result of the message-level token stats query
+            required:
+                - interval_seconds
+                - points
         MigrateLegacyGramRegistrationsForm:
             type: object
             properties:

@@ -562,6 +562,32 @@ WHERE id = ANY(@ids::uuid[])
   AND project_id = ANY(@project_ids::uuid[])
   AND deleted IS FALSE;
 
+-- name: SumMessageTokenStatsByDay :many
+-- Daily message-level token stats for the billing details table
+-- (telemetry.queryMessageTokenStats): tokens in messages carrying at least one
+-- active risk finding (same active-finding semantics as ListChats'
+-- risk_counts), and tokens in tool-call messages. Bucketed by the message's
+-- UTC day so the series lines up with the ClickHouse daily aggregates.
+SELECT
+  (date_trunc('day', cm.created_at AT TIME ZONE 'utc'))::timestamp AS day,
+  COALESCE(SUM(cm.total_tokens) FILTER (WHERE rm.chat_message_id IS NOT NULL), 0)::bigint AS risky_message_tokens,
+  COALESCE(SUM(cm.total_tokens) FILTER (WHERE cm.role = 'tool'), 0)::bigint AS tool_message_tokens
+FROM chat_messages cm
+LEFT JOIN (
+  SELECT DISTINCT rr.chat_message_id
+  FROM risk_results rr
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  WHERE rr.project_id = ANY(@project_ids::uuid[])
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+) rm ON rm.chat_message_id = cm.id
+WHERE cm.project_id = ANY(@project_ids::uuid[])
+  AND cm.created_at >= @from_time
+  AND cm.created_at < @to_time
+GROUP BY 1
+ORDER BY 1;
+
 -- name: ListRiskyChatIDs :many
 -- Distinct chats with at least one active risk finding created in the window,
 -- for the token-by-risk breakdown (telemetry.queryRiskTokens). Mirrors the

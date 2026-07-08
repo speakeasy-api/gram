@@ -17,6 +17,7 @@ import { telemetryListHooksTraces } from "../funcs/telemetryListHooksTraces.js";
 import { telemetryListSessions } from "../funcs/telemetryListSessions.js";
 import { telemetryListToolUsageTraces } from "../funcs/telemetryListToolUsageTraces.js";
 import { telemetryQuery } from "../funcs/telemetryQuery.js";
+import { telemetryQueryMessageTokenStats } from "../funcs/telemetryQueryMessageTokenStats.js";
 import { telemetryQueryRiskTokens } from "../funcs/telemetryQueryRiskTokens.js";
 import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
 import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
@@ -37,6 +38,7 @@ import { ListFilterOptionsResult } from "../models/components/listfilteroptionsr
 import { ListHooksTracesResult } from "../models/components/listhookstracesresult.js";
 import { ListSessionsResult } from "../models/components/listsessionsresult.js";
 import { ListToolUsageTracesResult } from "../models/components/listtoolusagetracesresult.js";
+import { MessageTokenStatsResult } from "../models/components/messagetokenstatsresult.js";
 import { QueryResult } from "../models/components/queryresult.js";
 import { QueryRiskTokensResult } from "../models/components/queryrisktokensresult.js";
 import { SearchChatsResult } from "../models/components/searchchatsresult.js";
@@ -100,6 +102,10 @@ import {
   ListToolUsageTracesSecurity,
 } from "../models/operations/listtoolusagetraces.js";
 import { QueryRequest, QuerySecurity } from "../models/operations/query.js";
+import {
+  QueryMessageTokenStatsRequest,
+  QueryMessageTokenStatsSecurity,
+} from "../models/operations/querymessagetokenstats.js";
 import {
   QueryRiskTokensRequest,
   QueryRiskTokensSecurity,
@@ -401,6 +407,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<QueryResult> {
     return unwrapAsync(telemetryQuery(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * queryMessageTokenStats telemetry
+   *
+   * @remarks
+   * Org-scoped daily message-level token stats: tokens in messages carrying at least one active risk finding and tokens in tool-call messages. Powers the billing page's usage details table.
+   */
+  async queryMessageTokenStats(
+    request: QueryMessageTokenStatsRequest,
+    security?: QueryMessageTokenStatsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<MessageTokenStatsResult> {
+    return unwrapAsync(telemetryQueryMessageTokenStats(
       this,
       request,
       security,

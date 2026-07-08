@@ -718,6 +718,41 @@ func BuildQueryRiskTokensPayload(telemetryQueryRiskTokensBody string, telemetryQ
 	return v, nil
 }
 
+// BuildQueryMessageTokenStatsPayload builds the payload for the telemetry
+// queryMessageTokenStats endpoint from CLI flags.
+func BuildQueryMessageTokenStatsPayload(telemetryQueryMessageTokenStatsBody string, telemetryQueryMessageTokenStatsSessionToken string) (*telemetry.QueryMessageTokenStatsPayload, error) {
+	var err error
+	var body QueryMessageTokenStatsRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryQueryMessageTokenStatsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if body.ProjectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryQueryMessageTokenStatsSessionToken != "" {
+			sessionToken = &telemetryQueryMessageTokenStatsSessionToken
+		}
+	}
+	v := &telemetry.QueryMessageTokenStatsPayload{
+		From:      body.From,
+		To:        body.To,
+		ProjectID: body.ProjectID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListSessionsPayload builds the payload for the telemetry listSessions
 // endpoint from CLI flags.
 func BuildListSessionsPayload(telemetryListSessionsBody string, telemetryListSessionsSessionToken string) (*telemetry.ListSessionsPayload, error) {

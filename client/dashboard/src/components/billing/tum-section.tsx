@@ -25,6 +25,7 @@ import { type BillingCycle, cycleKey, cyclesFromTum } from "./billing-cycles";
 import { stackModeFor } from "./breakdown-options";
 import { BreakdownPicker } from "./breakdown-picker";
 import { TokenUsagePanel } from "./token-usage-panel";
+import { TumDetailsTable } from "./tum-details-table";
 import { TumUsageCard } from "./tum-usage-card";
 
 // Org-wide token breakdown for one billing cycle: stacked daily tokens by a
@@ -161,6 +162,9 @@ export const TumUsageSection = (): JSX.Element => {
             />
             <div className="mt-8">
               <TumTokenBreakdown cycle={selectedCycle} />
+            </div>
+            <div className="mt-4">
+              <TumDetailsTable cycle={selectedCycle} />
             </div>
           </Stack>
         ) : (

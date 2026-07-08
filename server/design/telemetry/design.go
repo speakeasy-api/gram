@@ -357,6 +357,31 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQueryRiskTokens", "type": "query"}`)
 	})
 
+	Method("queryMessageTokenStats", func() {
+		Description("Org-scoped daily message-level token stats: tokens in messages carrying at least one active risk finding and tokens in tool-call messages. Powers the billing page's usage details table.")
+
+		// Org-scoped like queryRiskTokens; project_id optionally narrows the
+		// slice to one of the caller's projects.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(MessageTokenStatsPayload)
+			security.SessionPayload()
+		})
+
+		Result(MessageTokenStatsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.queryMessageTokenStats")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "queryMessageTokenStats")
+		Meta("openapi:extension:x-speakeasy-name-override", "queryMessageTokenStats")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQueryMessageTokenStats", "type": "query"}`)
+	})
+
 	Method("listSessions", func() {
 		Description("Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.")
 
@@ -1458,6 +1483,43 @@ var QueryRiskTokensResult = Type("QueryRiskTokensResult", func() {
 
 	Attribute("interval_seconds", Int64, "Timeseries bucket width in seconds. Always 86400 — the source aggregate is bucketed daily.")
 	Attribute("points", ArrayOf(RiskTokensPoint), "Gap-filled daily buckets in ascending time order")
+
+	Required("interval_seconds", "points")
+})
+
+var MessageTokenStatsPayload = Type("MessageTokenStatsPayload", func() {
+	Description("Payload for the org-scoped message-level token stats query")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-26T10:00:00Z")
+	})
+	Attribute("project_id", String, "Optional project to scope to; defaults to every project in the organization.", func() {
+		Format(FormatUUID)
+	})
+
+	Required("from", "to")
+})
+
+var MessageTokenStatsPoint = Type("MessageTokenStatsPoint", func() {
+	Description("One UTC day of message-level token stats")
+
+	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
+	Attribute("risky_message_tokens", Int64, "Tokens in messages carrying at least one active risk finding")
+	Attribute("tool_message_tokens", Int64, "Tokens in tool-call messages")
+
+	Required("bucket_time_unix_nano", "risky_message_tokens", "tool_message_tokens")
+})
+
+var MessageTokenStatsResult = Type("MessageTokenStatsResult", func() {
+	Description("Result of the message-level token stats query")
+
+	Attribute("interval_seconds", Int64, "Timeseries bucket width in seconds. Always 86400 — the stats are bucketed daily.")
+	Attribute("points", ArrayOf(MessageTokenStatsPoint), "Gap-filled daily buckets in ascending time order")
 
 	Required("interval_seconds", "points")
 })

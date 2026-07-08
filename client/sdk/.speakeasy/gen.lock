@@ -380,6 +380,8 @@ trackedFiles:
   docs/models/components/mcpregistry.md: {}
   docs/models/components/mcpserver.md: {}
   docs/models/components/mcpservervisibility.md: {}
+  docs/models/components/messagetokenstatspoint.md: {}
+  docs/models/components/messagetokenstatsresult.md: {}
   docs/models/components/metricsmode.md: {}
   docs/models/components/migratelegacygramregistrationsform.md: {}
   docs/models/components/migratelegacygramregistrationsresult.md: {}
@@ -1605,6 +1607,8 @@ trackedFiles:
   docs/models/operations/publishsecurity.md: {}
   docs/models/operations/publishsecurityoption1.md: {}
   docs/models/operations/publishsecurityoption2.md: {}
+  docs/models/operations/querymessagetokenstatsrequest.md: {}
+  docs/models/operations/querymessagetokenstatssecurity.md: {}
   docs/models/operations/queryparamoutcome.md: {}
   docs/models/operations/queryparamplatform.md: {}
   docs/models/operations/queryparamsourcekind.md: {}
@@ -2296,6 +2300,7 @@ trackedFiles:
   src/funcs/telemetryListSessions.ts: {}
   src/funcs/telemetryListToolUsageTraces.ts: {}
   src/funcs/telemetryQuery.ts: {}
+  src/funcs/telemetryQueryMessageTokenStats.ts: {}
   src/funcs/telemetryQueryRiskTokens.ts: {}
   src/funcs/telemetrySearchChats.ts: {}
   src/funcs/telemetrySearchLogs.ts: {}
@@ -2669,6 +2674,8 @@ trackedFiles:
   src/models/components/mcpmetadata.ts: {}
   src/models/components/mcpregistry.ts: {}
   src/models/components/mcpserver.ts: {}
+  src/models/components/messagetokenstatspoint.ts: {}
+  src/models/components/messagetokenstatsresult.ts: {}
   src/models/components/migratelegacygramregistrationsform.ts: {}
   src/models/components/migratelegacygramregistrationsresult.ts: {}
   src/models/components/mintusersessionrequestbody.ts: {}
@@ -3233,6 +3240,7 @@ trackedFiles:
   src/models/operations/publish.ts: {}
   src/models/operations/publishplugins.ts: {}
   src/models/operations/query.ts: {}
+  src/models/operations/querymessagetokenstats.ts: {}
   src/models/operations/queryrisktokens.ts: {}
   src/models/operations/receiveworkoswebhook.ts: {}
   src/models/operations/redeploydeployment.ts: {}
@@ -3805,6 +3813,8 @@ trackedFiles:
   src/react-query/telemetryCaptureEvent.ts: {}
   src/react-query/telemetryQuery.core.ts: {}
   src/react-query/telemetryQuery.ts: {}
+  src/react-query/telemetryQueryMessageTokenStats.core.ts: {}
+  src/react-query/telemetryQueryMessageTokenStats.ts: {}
   src/react-query/telemetryQueryRiskTokens.core.ts: {}
   src/react-query/telemetryQueryRiskTokens.ts: {}
   src/react-query/template.core.ts: {}
@@ -6891,6 +6901,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  queryMessageTokenStats:
+    speakeasy-default-query-message-token-stats:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-26T10:00:00Z"}
+      responses:
+        "200":
+          application/json: {"interval_seconds": 87768, "points": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   queryRiskTokens:
     speakeasy-default-query-risk-tokens:
       requestBody:

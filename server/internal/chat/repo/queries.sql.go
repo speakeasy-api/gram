@@ -2623,6 +2623,65 @@ func (q *Queries) SoftDeleteChat(ctx context.Context, arg SoftDeleteChatParams) 
 	return i, err
 }
 
+const sumMessageTokenStatsByDay = `-- name: SumMessageTokenStatsByDay :many
+SELECT
+  (date_trunc('day', cm.created_at AT TIME ZONE 'utc'))::timestamp AS day,
+  COALESCE(SUM(cm.total_tokens) FILTER (WHERE rm.chat_message_id IS NOT NULL), 0)::bigint AS risky_message_tokens,
+  COALESCE(SUM(cm.total_tokens) FILTER (WHERE cm.role = 'tool'), 0)::bigint AS tool_message_tokens
+FROM chat_messages cm
+LEFT JOIN (
+  SELECT DISTINCT rr.chat_message_id
+  FROM risk_results rr
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  WHERE rr.project_id = ANY($1::uuid[])
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+) rm ON rm.chat_message_id = cm.id
+WHERE cm.project_id = ANY($1::uuid[])
+  AND cm.created_at >= $2
+  AND cm.created_at < $3
+GROUP BY 1
+ORDER BY 1
+`
+
+type SumMessageTokenStatsByDayParams struct {
+	ProjectIds []uuid.UUID
+	FromTime   pgtype.Timestamptz
+	ToTime     pgtype.Timestamptz
+}
+
+type SumMessageTokenStatsByDayRow struct {
+	Day                pgtype.Timestamp
+	RiskyMessageTokens int64
+	ToolMessageTokens  int64
+}
+
+// Daily message-level token stats for the billing details table
+// (telemetry.queryMessageTokenStats): tokens in messages carrying at least one
+// active risk finding (same active-finding semantics as ListChats'
+// risk_counts), and tokens in tool-call messages. Bucketed by the message's
+// UTC day so the series lines up with the ClickHouse daily aggregates.
+func (q *Queries) SumMessageTokenStatsByDay(ctx context.Context, arg SumMessageTokenStatsByDayParams) ([]SumMessageTokenStatsByDayRow, error) {
+	rows, err := q.db.Query(ctx, sumMessageTokenStatsByDay, arg.ProjectIds, arg.FromTime, arg.ToTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SumMessageTokenStatsByDayRow
+	for rows.Next() {
+		var i SumMessageTokenStatsByDayRow
+		if err := rows.Scan(&i.Day, &i.RiskyMessageTokens, &i.ToolMessageTokens); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateAIIntegrationConfigChatCursor = `-- name: UpdateAIIntegrationConfigChatCursor :exec
 UPDATE ai_integration_config_chats
 SET last_cursor_id = $1

@@ -49,6 +49,10 @@ type Service interface {
 	// with at least one active risk finding in the window versus all session
 	// tokens. Powers the token-usage panel's risk breakdown on the costs page.
 	QueryRiskTokens(context.Context, *QueryRiskTokensPayload) (res *QueryRiskTokensResult, err error)
+	// Org-scoped daily message-level token stats: tokens in messages carrying at
+	// least one active risk finding and tokens in tool-call messages. Powers the
+	// billing page's usage details table.
+	QueryMessageTokenStats(context.Context, *QueryMessageTokenStatsPayload) (res *MessageTokenStatsResult, err error)
 	// Org-scoped list of individual chat sessions for a slice of usage, filtered
 	// by the same allowlisted dimensions as telemetry.query. Returns per-session
 	// cost, token, and tool metrics with cursor pagination.
@@ -92,7 +96,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [20]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "queryRiskTokens", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
+var MethodNames = [21]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "queryRiskTokens", "queryMessageTokenStats", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -721,6 +725,26 @@ type LogFilter struct {
 	Values []string
 }
 
+// One UTC day of message-level token stats
+type MessageTokenStatsPoint struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string
+	// Tokens in messages carrying at least one active risk finding
+	RiskyMessageTokens int64
+	// Tokens in tool-call messages
+	ToolMessageTokens int64
+}
+
+// MessageTokenStatsResult is the result type of the telemetry service
+// queryMessageTokenStats method.
+type MessageTokenStatsResult struct {
+	// Timeseries bucket width in seconds. Always 86400 — the stats are bucketed
+	// daily.
+	IntervalSeconds int64
+	// Gap-filled daily buckets in ascending time order
+	Points []*MessageTokenStatsPoint
+}
+
 // Model usage statistics
 type ModelUsage struct {
 	// Model name
@@ -871,6 +895,18 @@ type QueryMeasures struct {
 	TotalToolCalls int64
 	// Number of distinct chat sessions
 	TotalChats int64
+}
+
+// QueryMessageTokenStatsPayload is the payload type of the telemetry service
+// queryMessageTokenStats method.
+type QueryMessageTokenStatsPayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Optional project to scope to; defaults to every project in the organization.
+	ProjectID *string
 }
 
 // QueryPayload is the payload type of the telemetry service query method.

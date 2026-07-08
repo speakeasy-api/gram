@@ -224,6 +224,84 @@ func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryR
 	}, nil
 }
 
+// QueryMessageTokenStats returns daily message-level token stats: tokens in
+// messages carrying at least one active risk finding, and tokens in tool-call
+// messages. Sourced from Postgres chat messages (which carry per-message token
+// counts), bucketed by UTC day so the series lines up with the ClickHouse
+// daily aggregates the rest of the billing page reads.
+func (s *Service) QueryMessageTokenStats(ctx context.Context, payload *telem_gen.QueryMessageTokenStatsPayload) (*telem_gen.MessageTokenStatsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	// Org projects, optionally narrowed to the requested one. A project id
+	// outside the caller's organization simply resolves to no projects (and an
+	// all-zero series) rather than acting as an existence probe.
+	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list organization projects")
+	}
+	projectUUIDs := make([]uuid.UUID, 0, len(projects))
+	for _, p := range projects {
+		if payload.ProjectID != nil && *payload.ProjectID != "" && p.ID.String() != *payload.ProjectID {
+			continue
+		}
+		projectUUIDs = append(projectUUIDs, p.ID)
+	}
+
+	rows, err := s.chatRepo.SumMessageTokenStatsByDay(ctx, chatRepo.SumMessageTokenStatsByDayParams{
+		ProjectIds: projectUUIDs,
+		FromTime:   pgtype.Timestamptz{Time: time.Unix(0, timeStart).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
+		ToTime:     pgtype.Timestamptz{Time: time.Unix(0, timeEnd).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to sum message token stats").LogError(ctx, s.logger)
+	}
+
+	byBucket := make(map[int64]chatRepo.SumMessageTokenStatsByDayRow, len(rows))
+	for _, row := range rows {
+		// The day column is a UTC-truncated timestamp without a zone; pgx
+		// decodes it as UTC, so UnixNano lines up with the bucket grid.
+		byBucket[row.Day.Time.UnixNano()] = row
+	}
+
+	// Zero-fill so consumers get one point per day across the whole range,
+	// matching the other telemetry timeseries contracts.
+	starts := bucketStarts(timeStart, timeEnd, riskTokensIntervalSeconds)
+	points := make([]*telem_gen.MessageTokenStatsPoint, 0, len(starts))
+	for _, start := range starts {
+		row := byBucket[start]
+		points = append(points, &telem_gen.MessageTokenStatsPoint{
+			BucketTimeUnixNano: strconv.FormatInt(start, 10),
+			RiskyMessageTokens: row.RiskyMessageTokens,
+			ToolMessageTokens:  row.ToolMessageTokens,
+		})
+	}
+
+	return &telem_gen.MessageTokenStatsResult{
+		IntervalSeconds: riskTokensIntervalSeconds,
+		Points:          points,
+	}, nil
+}
+
 // ListSessions returns org-scoped chat sessions for a filtered analytics slice.
 func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessionsPayload) (*telem_gen.ListSessionsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

@@ -3459,6 +3459,24 @@ async function seedObservabilityData(init: {
     "gpt-4o-mini": [0.15, 0.6, 0.075, 0],
   };
 
+  // Claude attribution catalogs for the api_request rows: MCP servers with
+  // their tools, and skills. These populate the skill / MCP server / MCP tool
+  // breakdowns on the billing and costs pages.
+  const MCP_ATTRIBUTIONS: [server: string, tools: string[]][] = [
+    ["github", ["create_pull_request", "list_issues", "get_file_contents"]],
+    ["slack", ["slack_send_message", "slack_search_public_and_private"]],
+    ["linear", ["list_issues", "save_issue"]],
+    ["notion", ["notion-search", "notion-create-pages"]],
+    ["postgres", ["query"]],
+  ];
+  const SKILL_ATTRIBUTIONS = [
+    "code-review",
+    "commit-helper",
+    "pr-writer",
+    "db-migrate",
+    "spec-writer",
+  ];
+
   // telemetry_logs carries a 90-day TTL that ClickHouse applies at INSERT
   // time: MVs still fire on the full block (so chat_token_summaries / TUM get
   // the whole horizon), but raw rows older than the TTL never persist — the
@@ -3548,22 +3566,95 @@ async function seedObservabilityData(init: {
       // table's tool-call measure.
       const toolRow = `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${toolUrn}', '${traceId}', '{"http.response.status_code": 200, "http.server.request.duration": 0.412, "gram.tool.urn": "${toolUrn}", "gen_ai.conversation.id": "${chatId}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", ${uaFrag}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', '${toolUrn}', 'gram-mcp-gateway', '${chatId}')`;
 
-      // Token/cost usage row: feeds attribute_metrics_summaries (costs page)
-      // and chat_token_summaries (tokens under management).
-      const completionRow = `(${timeNano + BigInt(2_000_000_000)}, ${timeNano + BigInt(2_000_000_000)}, 'INFO', 'Chat completion', '${traceId}', '{${acctFrag}"gen_ai.operation.name": "chat", "gen_ai.conversation.id": "${chatId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.cache_read.input_tokens": ${cacheReadTokens}, "gen_ai.usage.cache_creation.input_tokens": ${cacheCreationTokens}, "gen_ai.usage.total_tokens": ${totalTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${provider}", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "http.response.status_code": 200, ${uaFrag}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`;
+      const sessionRows: string[] = [toolRow];
 
-      chInserts.push(toolRow, completionRow);
+      // A slice of anthropic-surface sessions re-emits its usage the way real
+      // Claude ingestion does: a claude-code:usage row carrying the session
+      // total (feeds chat_token_summaries / TUM but is excluded from the
+      // generic attribute_metrics path) plus api_request rows that split the
+      // tokens across attribution contexts (skill / MCP server + tool), so the
+      // skill and MCP breakdowns have real token data. Everything else keeps
+      // the single generic chat-completion usage row.
+      const claudeSurface =
+        hookSource === "claude-code" || hookSource === "cowork";
+      const attributed = claudeSurface && r() < 0.6;
+      if (attributed) {
+        const claudeModel =
+          r() < 0.65 ? "claude-sonnet-4-6" : "claude-haiku-4-5";
+        const [mcpServer, mcpTools] =
+          MCP_ATTRIBUTIONS[Math.floor(r() * MCP_ATTRIBUTIONS.length)];
+        const mcpTool = mcpTools[Math.floor(r() * mcpTools.length)];
+        const skillName =
+          SKILL_ATTRIBUTIONS[Math.floor(r() * SKILL_ATTRIBUTIONS.length)];
+
+        // Which attribution contexts this session used, and how the session's
+        // tokens split across them (the plain turn always dominates).
+        const patternRoll = r();
+        const attributions: string[] = [""];
+        if (patternRoll < 0.45) {
+          attributions.push(
+            `"mcp_server.name": "${mcpServer}", "mcp_tool.name": "${mcpTool}", `,
+          );
+        } else if (patternRoll < 0.75) {
+          attributions.push(`"skill.name": "${skillName}", `);
+        } else {
+          attributions.push(
+            `"mcp_server.name": "${mcpServer}", "mcp_tool.name": "${mcpTool}", `,
+            `"skill.name": "${skillName}", `,
+          );
+        }
+        const fractions =
+          attributions.length === 2 ? [0.6, 0.4] : [0.5, 0.3, 0.2];
+
+        sessionRows.push(
+          `(${timeNano + BigInt(1_000_000_000)}, ${timeNano + BigInt(1_000_000_000)}, 'INFO', 'claude_code.usage', '${traceId}', '{"gen_ai.conversation.id": "${chatId}", "gen_ai.usage.total_tokens": ${totalTokens}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", ${uaFrag}}', '{"service.name": "claude-code"}', '${projectId}', 'claude-code:usage/tokens', 'claude-code', '${chatId}')`,
+        );
+
+        const [pIn, pOut, pRead, pWrite] = HISTORY_PRICING[claudeModel] ?? [
+          3, 15, 0.3, 3.75,
+        ];
+        attributions.forEach((attrFrag, i) => {
+          const f = fractions[i];
+          const rowIn = Math.round(inputTokens * f);
+          const rowOut = Math.round(outputTokens * f);
+          const rowRead = Math.round(cacheReadTokens * f);
+          const rowWrite = Math.round(cacheCreationTokens * f);
+          const rowCost = (
+            (rowIn * pIn +
+              rowOut * pOut +
+              rowRead * pRead +
+              rowWrite * pWrite) /
+            1_000_000
+          ).toFixed(6);
+          const rowNano = timeNano + BigInt((2 + i) * 1_000_000_000);
+          sessionRows.push(
+            `(${rowNano}, ${rowNano}, 'INFO', 'claude_code.api_request', '${traceId}', '{${acctFrag}"event.name": "api_request", "prompt.id": "prompt-${dayNum}-${s}-${i}", "gen_ai.conversation.id": "${chatId}", "model": "${claudeModel}", "input_tokens": ${rowIn}, "output_tokens": ${rowOut}, "cache_read_tokens": ${rowRead}, "cache_creation_tokens": ${rowWrite}, "cost_usd": ${rowCost}, ${attrFrag}"gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", ${uaFrag}}', '{"service.name": "claude-code"}', '${projectId}', 'claude-code:api_request', 'claude-code', '${chatId}')`,
+          );
+        });
+      } else {
+        // Token/cost usage row: feeds attribute_metrics_summaries (costs page)
+        // and chat_token_summaries (tokens under management).
+        sessionRows.push(
+          `(${timeNano + BigInt(2_000_000_000)}, ${timeNano + BigInt(2_000_000_000)}, 'INFO', 'Chat completion', '${traceId}', '{${acctFrag}"gen_ai.operation.name": "chat", "gen_ai.conversation.id": "${chatId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.cache_read.input_tokens": ${cacheReadTokens}, "gen_ai.usage.cache_creation.input_tokens": ${cacheCreationTokens}, "gen_ai.usage.total_tokens": ${totalTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${provider}", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "http.response.status_code": 200, ${uaFrag}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
+        );
+      }
+
+      chInserts.push(...sessionRows);
       // Rows the raw-table TTL will drop on insert are also staged into the
       // TTL-free scratch clone so the attribute_metrics backfill still sees
       // them (the MVs — and thus TUM — get them from the main insert).
       if (dayStartMs < rawTtlBoundaryMs) {
-        chBackfillInserts.push(toolRow, completionRow);
+        chBackfillInserts.push(...sessionRows);
       }
 
-      // A deterministic slice of history sessions carries a risk finding, so
-      // the token-by-risk breakdown has a risky ribbon across the horizon.
-      // Drawn after every other r() call to keep prior draws stable.
-      if (r() < 0.12) {
+      // A deterministic slice of history sessions gets a Postgres chat: risky
+      // sessions carry a token-bearing user message that seedRiskFindings
+      // attaches findings to (the message-level risk stats), and tool-message
+      // sessions carry a token-bearing 'tool' message (the tool-call token
+      // stats). Drawn after every other r() call so earlier draws stay stable.
+      const risky = r() < 0.12;
+      const hasToolMessage = r() < 0.25;
+      if (risky || hasToolMessage) {
         const createdAtIso = new Date(
           Number(timeNano / BigInt(1_000_000)),
         ).toISOString();
@@ -3573,10 +3664,23 @@ async function seedObservabilityData(init: {
         historyChatRows.push(
           `('${chatId}', '${projectId}', '${organizationId}', '${userId}', '${extUserId}', '${title}', '${createdAtIso}', '${createdAtIso}')`,
         );
-        historyMessageRows.push(
-          `('${chatId}', '${projectId}', 'user', '${title}', '${model}', '${createdAtIso}')`,
-        );
-        seededHistoryRiskChatIds.push(chatId);
+        if (risky) {
+          const promptTokens =
+            inputTokens + cacheReadTokens + cacheCreationTokens;
+          historyMessageRows.push(
+            `('${chatId}', '${projectId}', 'user', '${title}', '${model}', '${createdAtIso}', ${promptTokens}, ${outputTokens}, ${totalTokens})`,
+          );
+          seededHistoryRiskChatIds.push(chatId);
+        }
+        if (hasToolMessage) {
+          const toolMsgTokens = Math.round(totalTokens * (0.1 + r() * 0.25));
+          const toolMsgIso = new Date(
+            Number(timeNano / BigInt(1_000_000)) + 60_000,
+          ).toISOString();
+          historyMessageRows.push(
+            `('${chatId}', '${projectId}', 'tool', '{"content":[{"type":"text","text":"tool result"}]}', '${model}', '${toolMsgIso}', 0, ${toolMsgTokens}, ${toolMsgTokens})`,
+          );
+        }
       }
     }
   }
@@ -3589,7 +3693,7 @@ async function seedObservabilityData(init: {
       BEGIN;
       INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at) VALUES
       ${historyChatRows.join(",\n")};
-      INSERT INTO chat_messages (chat_id, project_id, role, content, model, created_at) VALUES
+      INSERT INTO chat_messages (chat_id, project_id, role, content, model, created_at, prompt_tokens, completion_tokens, total_tokens) VALUES
       ${historyMessageRows.join(",\n")};
       COMMIT;
     `;
@@ -3602,7 +3706,7 @@ async function seedObservabilityData(init: {
         await $`docker compose cp ${tmpFile} gram-db:/tmp/seed-history-chats.sql`.quiet();
         await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -f /tmp/seed-history-chats.sql`.quiet();
         log.info(
-          `Inserted ${historyChatRows.length} risky history chats into PostgreSQL`,
+          `Inserted ${historyChatRows.length} history chats (risk/tool messages) into PostgreSQL`,
         );
       } finally {
         await fs.unlink(tmpFile).catch(() => {});

@@ -587,6 +587,7 @@ run();
 * [listSessions](docs/sdks/telemetry/README.md#listsessions) - listSessions telemetry
 * [listToolUsageTraces](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
 * [query](docs/sdks/telemetry/README.md#query) - query telemetry
+* [queryMessageTokenStats](docs/sdks/telemetry/README.md#querymessagetokenstats) - queryMessageTokenStats telemetry
 * [queryRiskTokens](docs/sdks/telemetry/README.md#queryrisktokens) - queryRiskTokens telemetry
 * [searchChats](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 * [searchLogs](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
@@ -1014,6 +1015,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`telemetryListSessions`](docs/sdks/telemetry/README.md#listsessions) - listSessions telemetry
 - [`telemetryListToolUsageTraces`](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
 - [`telemetryQuery`](docs/sdks/telemetry/README.md#query) - query telemetry
+- [`telemetryQueryMessageTokenStats`](docs/sdks/telemetry/README.md#querymessagetokenstats) - queryMessageTokenStats telemetry
 - [`telemetryQueryRiskTokens`](docs/sdks/telemetry/README.md#queryrisktokens) - queryRiskTokens telemetry
 - [`telemetrySearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 - [`telemetrySearchLogs`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
@@ -1428,6 +1430,7 @@ To learn about this feature and how to get started, check
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`useTelemetryQuery`](docs/sdks/telemetry/README.md#query) - query telemetry
+- [`useTelemetryQueryMessageTokenStats`](docs/sdks/telemetry/README.md#querymessagetokenstats) - queryMessageTokenStats telemetry
 - [`useTelemetryQueryRiskTokens`](docs/sdks/telemetry/README.md#queryrisktokens) - queryRiskTokens telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates

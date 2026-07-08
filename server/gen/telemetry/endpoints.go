@@ -28,6 +28,7 @@ type Endpoints struct {
 	GetProjectOverview        goa.Endpoint
 	Query                     goa.Endpoint
 	QueryRiskTokens           goa.Endpoint
+	QueryMessageTokenStats    goa.Endpoint
 	ListSessions              goa.Endpoint
 	ListFilterOptions         goa.Endpoint
 	ListAttributeKeys         goa.Endpoint
@@ -55,6 +56,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetProjectOverview:        NewGetProjectOverviewEndpoint(s, a.APIKeyAuth),
 		Query:                     NewQueryEndpoint(s, a.APIKeyAuth),
 		QueryRiskTokens:           NewQueryRiskTokensEndpoint(s, a.APIKeyAuth),
+		QueryMessageTokenStats:    NewQueryMessageTokenStatsEndpoint(s, a.APIKeyAuth),
 		ListSessions:              NewListSessionsEndpoint(s, a.APIKeyAuth),
 		ListFilterOptions:         NewListFilterOptionsEndpoint(s, a.APIKeyAuth),
 		ListAttributeKeys:         NewListAttributeKeysEndpoint(s, a.APIKeyAuth),
@@ -80,6 +82,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetProjectOverview = m(e.GetProjectOverview)
 	e.Query = m(e.Query)
 	e.QueryRiskTokens = m(e.QueryRiskTokens)
+	e.QueryMessageTokenStats = m(e.QueryMessageTokenStats)
 	e.ListSessions = m(e.ListSessions)
 	e.ListFilterOptions = m(e.ListFilterOptions)
 	e.ListAttributeKeys = m(e.ListAttributeKeys)
@@ -735,6 +738,29 @@ func NewQueryRiskTokensEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.QueryRiskTokens(ctx, p)
+	}
+}
+
+// NewQueryMessageTokenStatsEndpoint returns an endpoint function that calls
+// the method "queryMessageTokenStats" of service "telemetry".
+func NewQueryMessageTokenStatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*QueryMessageTokenStatsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.QueryMessageTokenStats(ctx, p)
 	}
 }
 

@@ -2915,6 +2915,241 @@ func DecodeQueryRiskTokensResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildQueryMessageTokenStatsRequest instantiates a HTTP request object with
+// method and path set to call the "telemetry" service "queryMessageTokenStats"
+// endpoint
+func (c *Client) BuildQueryMessageTokenStatsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: QueryMessageTokenStatsTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "queryMessageTokenStats", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeQueryMessageTokenStatsRequest returns an encoder for requests sent to
+// the telemetry queryMessageTokenStats server.
+func EncodeQueryMessageTokenStatsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.QueryMessageTokenStatsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "queryMessageTokenStats", "*telemetry.QueryMessageTokenStatsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewQueryMessageTokenStatsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "queryMessageTokenStats", err)
+		}
+		return nil
+	}
+}
+
+// DecodeQueryMessageTokenStatsResponse returns a decoder for responses
+// returned by the telemetry queryMessageTokenStats endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeQueryMessageTokenStatsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeQueryMessageTokenStatsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body QueryMessageTokenStatsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryMessageTokenStats", err)
+			}
+			err = ValidateQueryMessageTokenStatsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryMessageTokenStats", err)
+			}
+			res := NewQueryMessageTokenStatsMessageTokenStatsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body QueryMessageTokenStatsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryMessageTokenStats", err)
+			}
+			err = ValidateQueryMessageTokenStatsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryMessageTokenStats", err)
+			}
+			return nil, NewQueryMessageTokenStatsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body QueryMessageTokenStatsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryMessageTokenStats", err)
+			}
+			err = ValidateQueryMessageTokenStatsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryMessageTokenStats", err)
+			}
+			return nil, NewQueryMessageTokenStatsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body QueryMessageTokenStatsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryMessageTokenStats", err)
+			}
+			err = ValidateQueryMessageTokenStatsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryMessageTokenStats", err)
+			}
+			return nil, NewQueryMessageTokenStatsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body QueryMessageTokenStatsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryMessageTokenStats", err)
+			}
+			err = ValidateQueryMessageTokenStatsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryMessageTokenStats", err)
+			}
+			return nil, NewQueryMessageTokenStatsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body QueryMessageTokenStatsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryMessageTokenStats", err)
+			}
+			err = ValidateQueryMessageTokenStatsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryMessageTokenStats", err)
+			}
+			return nil, NewQueryMessageTokenStatsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body QueryMessageTokenStatsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryMessageTokenStats", err)
+			}
+			err = ValidateQueryMessageTokenStatsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryMessageTokenStats", err)
+			}
+			return nil, NewQueryMessageTokenStatsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body QueryMessageTokenStatsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryMessageTokenStats", err)
+			}
+			err = ValidateQueryMessageTokenStatsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryMessageTokenStats", err)
+			}
+			return nil, NewQueryMessageTokenStatsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body QueryMessageTokenStatsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "queryMessageTokenStats", err)
+				}
+				err = ValidateQueryMessageTokenStatsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "queryMessageTokenStats", err)
+				}
+				return nil, NewQueryMessageTokenStatsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body QueryMessageTokenStatsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "queryMessageTokenStats", err)
+				}
+				err = ValidateQueryMessageTokenStatsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "queryMessageTokenStats", err)
+				}
+				return nil, NewQueryMessageTokenStatsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "queryMessageTokenStats", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body QueryMessageTokenStatsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryMessageTokenStats", err)
+			}
+			err = ValidateQueryMessageTokenStatsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryMessageTokenStats", err)
+			}
+			return nil, NewQueryMessageTokenStatsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "queryMessageTokenStats", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListSessionsRequest instantiates a HTTP request object with method and
 // path set to call the "telemetry" service "listSessions" endpoint
 func (c *Client) BuildListSessionsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -5631,6 +5866,19 @@ func unmarshalRiskTokensPointResponseBodyToTelemetryRiskTokensPoint(v *RiskToken
 		BucketTimeUnixNano: *v.BucketTimeUnixNano,
 		RiskyTokens:        *v.RiskyTokens,
 		TotalTokens:        *v.TotalTokens,
+	}
+
+	return res
+}
+
+// unmarshalMessageTokenStatsPointResponseBodyToTelemetryMessageTokenStatsPoint
+// builds a value of type *telemetry.MessageTokenStatsPoint from a value of
+// type *MessageTokenStatsPointResponseBody.
+func unmarshalMessageTokenStatsPointResponseBodyToTelemetryMessageTokenStatsPoint(v *MessageTokenStatsPointResponseBody) *telemetry.MessageTokenStatsPoint {
+	res := &telemetry.MessageTokenStatsPoint{
+		BucketTimeUnixNano: *v.BucketTimeUnixNano,
+		RiskyMessageTokens: *v.RiskyMessageTokens,
+		ToolMessageTokens:  *v.ToolMessageTokens,
 	}
 
 	return res

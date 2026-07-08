@@ -213,6 +213,17 @@ type QueryRiskTokensRequestBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 }
 
+// QueryMessageTokenStatsRequestBody is the type of the "telemetry" service
+// "queryMessageTokenStats" endpoint HTTP request body.
+type QueryMessageTokenStatsRequestBody struct {
+	// Start time in ISO 8601 format
+	From string `form:"from" json:"from" xml:"from"`
+	// End time in ISO 8601 format
+	To string `form:"to" json:"to" xml:"to"`
+	// Optional project to scope to; defaults to every project in the organization.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+}
+
 // ListSessionsRequestBody is the type of the "telemetry" service
 // "listSessions" endpoint HTTP request body.
 type ListSessionsRequestBody struct {
@@ -470,6 +481,16 @@ type QueryRiskTokensResponseBody struct {
 	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
 	// Gap-filled daily buckets in ascending time order
 	Points []*RiskTokensPointResponseBody `form:"points,omitempty" json:"points,omitempty" xml:"points,omitempty"`
+}
+
+// QueryMessageTokenStatsResponseBody is the type of the "telemetry" service
+// "queryMessageTokenStats" endpoint HTTP response body.
+type QueryMessageTokenStatsResponseBody struct {
+	// Timeseries bucket width in seconds. Always 86400 — the stats are bucketed
+	// daily.
+	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
+	// Gap-filled daily buckets in ascending time order
+	Points []*MessageTokenStatsPointResponseBody `form:"points,omitempty" json:"points,omitempty" xml:"points,omitempty"`
 }
 
 // ListSessionsResponseBody is the type of the "telemetry" service
@@ -2791,6 +2812,196 @@ type QueryRiskTokensGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// QueryMessageTokenStatsUnauthorizedResponseBody is the type of the
+// "telemetry" service "queryMessageTokenStats" endpoint HTTP response body for
+// the "unauthorized" error.
+type QueryMessageTokenStatsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryMessageTokenStatsForbiddenResponseBody is the type of the "telemetry"
+// service "queryMessageTokenStats" endpoint HTTP response body for the
+// "forbidden" error.
+type QueryMessageTokenStatsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryMessageTokenStatsBadRequestResponseBody is the type of the "telemetry"
+// service "queryMessageTokenStats" endpoint HTTP response body for the
+// "bad_request" error.
+type QueryMessageTokenStatsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryMessageTokenStatsNotFoundResponseBody is the type of the "telemetry"
+// service "queryMessageTokenStats" endpoint HTTP response body for the
+// "not_found" error.
+type QueryMessageTokenStatsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryMessageTokenStatsConflictResponseBody is the type of the "telemetry"
+// service "queryMessageTokenStats" endpoint HTTP response body for the
+// "conflict" error.
+type QueryMessageTokenStatsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryMessageTokenStatsUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "queryMessageTokenStats" endpoint HTTP response body for
+// the "unsupported_media" error.
+type QueryMessageTokenStatsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryMessageTokenStatsInvalidResponseBody is the type of the "telemetry"
+// service "queryMessageTokenStats" endpoint HTTP response body for the
+// "invalid" error.
+type QueryMessageTokenStatsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryMessageTokenStatsInvariantViolationResponseBody is the type of the
+// "telemetry" service "queryMessageTokenStats" endpoint HTTP response body for
+// the "invariant_violation" error.
+type QueryMessageTokenStatsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryMessageTokenStatsUnexpectedResponseBody is the type of the "telemetry"
+// service "queryMessageTokenStats" endpoint HTTP response body for the
+// "unexpected" error.
+type QueryMessageTokenStatsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryMessageTokenStatsGatewayErrorResponseBody is the type of the
+// "telemetry" service "queryMessageTokenStats" endpoint HTTP response body for
+// the "gateway_error" error.
+type QueryMessageTokenStatsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListSessionsUnauthorizedResponseBody is the type of the "telemetry" service
 // "listSessions" endpoint HTTP response body for the "unauthorized" error.
 type ListSessionsUnauthorizedResponseBody struct {
@@ -4887,6 +5098,17 @@ type RiskTokensPointResponseBody struct {
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
 }
 
+// MessageTokenStatsPointResponseBody is used to define fields on response body
+// types.
+type MessageTokenStatsPointResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
+	// Tokens in messages carrying at least one active risk finding
+	RiskyMessageTokens *int64 `form:"risky_message_tokens,omitempty" json:"risky_message_tokens,omitempty" xml:"risky_message_tokens,omitempty"`
+	// Tokens in tool-call messages
+	ToolMessageTokens *int64 `form:"tool_message_tokens,omitempty" json:"tool_message_tokens,omitempty" xml:"tool_message_tokens,omitempty"`
+}
+
 // SessionSummaryResponseBody is used to define fields on response body types.
 type SessionSummaryResponseBody struct {
 	// Chat session ID
@@ -5564,6 +5786,17 @@ func NewQueryRequestBody(p *telemetry.QueryPayload) *QueryRequestBody {
 // of the "queryRiskTokens" endpoint of the "telemetry" service.
 func NewQueryRiskTokensRequestBody(p *telemetry.QueryRiskTokensPayload) *QueryRiskTokensRequestBody {
 	body := &QueryRiskTokensRequestBody{
+		From:      p.From,
+		To:        p.To,
+		ProjectID: p.ProjectID,
+	}
+	return body
+}
+
+// NewQueryMessageTokenStatsRequestBody builds the HTTP request body from the
+// payload of the "queryMessageTokenStats" endpoint of the "telemetry" service.
+func NewQueryMessageTokenStatsRequestBody(p *telemetry.QueryMessageTokenStatsPayload) *QueryMessageTokenStatsRequestBody {
+	body := &QueryMessageTokenStatsRequestBody{
 		From:      p.From,
 		To:        p.To,
 		ProjectID: p.ProjectID,
@@ -7851,6 +8084,174 @@ func NewQueryRiskTokensGatewayError(body *QueryRiskTokensGatewayErrorResponseBod
 	return v
 }
 
+// NewQueryMessageTokenStatsMessageTokenStatsResultOK builds a "telemetry"
+// service "queryMessageTokenStats" endpoint result from a HTTP "OK" response.
+func NewQueryMessageTokenStatsMessageTokenStatsResultOK(body *QueryMessageTokenStatsResponseBody) *telemetry.MessageTokenStatsResult {
+	v := &telemetry.MessageTokenStatsResult{
+		IntervalSeconds: *body.IntervalSeconds,
+	}
+	v.Points = make([]*telemetry.MessageTokenStatsPoint, len(body.Points))
+	for i, val := range body.Points {
+		if val == nil {
+			v.Points[i] = nil
+			continue
+		}
+		v.Points[i] = unmarshalMessageTokenStatsPointResponseBodyToTelemetryMessageTokenStatsPoint(val)
+	}
+
+	return v
+}
+
+// NewQueryMessageTokenStatsUnauthorized builds a telemetry service
+// queryMessageTokenStats endpoint unauthorized error.
+func NewQueryMessageTokenStatsUnauthorized(body *QueryMessageTokenStatsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryMessageTokenStatsForbidden builds a telemetry service
+// queryMessageTokenStats endpoint forbidden error.
+func NewQueryMessageTokenStatsForbidden(body *QueryMessageTokenStatsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryMessageTokenStatsBadRequest builds a telemetry service
+// queryMessageTokenStats endpoint bad_request error.
+func NewQueryMessageTokenStatsBadRequest(body *QueryMessageTokenStatsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryMessageTokenStatsNotFound builds a telemetry service
+// queryMessageTokenStats endpoint not_found error.
+func NewQueryMessageTokenStatsNotFound(body *QueryMessageTokenStatsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryMessageTokenStatsConflict builds a telemetry service
+// queryMessageTokenStats endpoint conflict error.
+func NewQueryMessageTokenStatsConflict(body *QueryMessageTokenStatsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryMessageTokenStatsUnsupportedMedia builds a telemetry service
+// queryMessageTokenStats endpoint unsupported_media error.
+func NewQueryMessageTokenStatsUnsupportedMedia(body *QueryMessageTokenStatsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryMessageTokenStatsInvalid builds a telemetry service
+// queryMessageTokenStats endpoint invalid error.
+func NewQueryMessageTokenStatsInvalid(body *QueryMessageTokenStatsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryMessageTokenStatsInvariantViolation builds a telemetry service
+// queryMessageTokenStats endpoint invariant_violation error.
+func NewQueryMessageTokenStatsInvariantViolation(body *QueryMessageTokenStatsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryMessageTokenStatsUnexpected builds a telemetry service
+// queryMessageTokenStats endpoint unexpected error.
+func NewQueryMessageTokenStatsUnexpected(body *QueryMessageTokenStatsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryMessageTokenStatsGatewayError builds a telemetry service
+// queryMessageTokenStats endpoint gateway_error error.
+func NewQueryMessageTokenStatsGatewayError(body *QueryMessageTokenStatsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListSessionsResultOK builds a "telemetry" service "listSessions" endpoint
 // result from a HTTP "OK" response.
 func NewListSessionsResultOK(body *ListSessionsResponseBody) *telemetry.ListSessionsResult {
@@ -9551,6 +9952,25 @@ func ValidateQueryRiskTokensResponseBody(body *QueryRiskTokensResponseBody) (err
 	for _, e := range body.Points {
 		if e != nil {
 			if err2 := ValidateRiskTokensPointResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateQueryMessageTokenStatsResponseBody runs the validations defined on
+// QueryMessageTokenStatsResponseBody
+func ValidateQueryMessageTokenStatsResponseBody(body *QueryMessageTokenStatsResponseBody) (err error) {
+	if body.IntervalSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
+	}
+	if body.Points == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("points", "body"))
+	}
+	for _, e := range body.Points {
+		if e != nil {
+			if err2 := ValidateMessageTokenStatsPointResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -12710,6 +13130,247 @@ func ValidateQueryRiskTokensGatewayErrorResponseBody(body *QueryRiskTokensGatewa
 	return
 }
 
+// ValidateQueryMessageTokenStatsUnauthorizedResponseBody runs the validations
+// defined on queryMessageTokenStats_unauthorized_response_body
+func ValidateQueryMessageTokenStatsUnauthorizedResponseBody(body *QueryMessageTokenStatsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryMessageTokenStatsForbiddenResponseBody runs the validations
+// defined on queryMessageTokenStats_forbidden_response_body
+func ValidateQueryMessageTokenStatsForbiddenResponseBody(body *QueryMessageTokenStatsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryMessageTokenStatsBadRequestResponseBody runs the validations
+// defined on queryMessageTokenStats_bad_request_response_body
+func ValidateQueryMessageTokenStatsBadRequestResponseBody(body *QueryMessageTokenStatsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryMessageTokenStatsNotFoundResponseBody runs the validations
+// defined on queryMessageTokenStats_not_found_response_body
+func ValidateQueryMessageTokenStatsNotFoundResponseBody(body *QueryMessageTokenStatsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryMessageTokenStatsConflictResponseBody runs the validations
+// defined on queryMessageTokenStats_conflict_response_body
+func ValidateQueryMessageTokenStatsConflictResponseBody(body *QueryMessageTokenStatsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryMessageTokenStatsUnsupportedMediaResponseBody runs the
+// validations defined on queryMessageTokenStats_unsupported_media_response_body
+func ValidateQueryMessageTokenStatsUnsupportedMediaResponseBody(body *QueryMessageTokenStatsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryMessageTokenStatsInvalidResponseBody runs the validations
+// defined on queryMessageTokenStats_invalid_response_body
+func ValidateQueryMessageTokenStatsInvalidResponseBody(body *QueryMessageTokenStatsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryMessageTokenStatsInvariantViolationResponseBody runs the
+// validations defined on
+// queryMessageTokenStats_invariant_violation_response_body
+func ValidateQueryMessageTokenStatsInvariantViolationResponseBody(body *QueryMessageTokenStatsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryMessageTokenStatsUnexpectedResponseBody runs the validations
+// defined on queryMessageTokenStats_unexpected_response_body
+func ValidateQueryMessageTokenStatsUnexpectedResponseBody(body *QueryMessageTokenStatsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryMessageTokenStatsGatewayErrorResponseBody runs the validations
+// defined on queryMessageTokenStats_gateway_error_response_body
+func ValidateQueryMessageTokenStatsGatewayErrorResponseBody(body *QueryMessageTokenStatsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListSessionsUnauthorizedResponseBody runs the validations defined on
 // listSessions_unauthorized_response_body
 func ValidateListSessionsUnauthorizedResponseBody(body *ListSessionsUnauthorizedResponseBody) (err error) {
@@ -15492,6 +16153,21 @@ func ValidateRiskTokensPointResponseBody(body *RiskTokensPointResponseBody) (err
 	}
 	if body.TotalTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	return
+}
+
+// ValidateMessageTokenStatsPointResponseBody runs the validations defined on
+// MessageTokenStatsPointResponseBody
+func ValidateMessageTokenStatsPointResponseBody(body *MessageTokenStatsPointResponseBody) (err error) {
+	if body.BucketTimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_time_unix_nano", "body"))
+	}
+	if body.RiskyMessageTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("risky_message_tokens", "body"))
+	}
+	if body.ToolMessageTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_message_tokens", "body"))
 	}
 	return
 }

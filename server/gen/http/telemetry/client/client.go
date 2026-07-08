@@ -64,6 +64,10 @@ type Client struct {
 	// queryRiskTokens endpoint.
 	QueryRiskTokensDoer goahttp.Doer
 
+	// QueryMessageTokenStats Doer is the HTTP client used to make requests to the
+	// queryMessageTokenStats endpoint.
+	QueryMessageTokenStatsDoer goahttp.Doer
+
 	// ListSessions Doer is the HTTP client used to make requests to the
 	// listSessions endpoint.
 	ListSessionsDoer goahttp.Doer
@@ -128,6 +132,7 @@ func NewClient(
 		GetProjectOverviewDoer:        doer,
 		QueryDoer:                     doer,
 		QueryRiskTokensDoer:           doer,
+		QueryMessageTokenStatsDoer:    doer,
 		ListSessionsDoer:              doer,
 		ListFilterOptionsDoer:         doer,
 		ListAttributeKeysDoer:         doer,
@@ -427,6 +432,30 @@ func (c *Client) QueryRiskTokens() goa.Endpoint {
 		resp, err := c.QueryRiskTokensDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "queryRiskTokens", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// QueryMessageTokenStats returns an endpoint that makes HTTP requests to the
+// telemetry service queryMessageTokenStats server.
+func (c *Client) QueryMessageTokenStats() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeQueryMessageTokenStatsRequest(c.encoder)
+		decodeResponse = DecodeQueryMessageTokenStatsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildQueryMessageTokenStatsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.QueryMessageTokenStatsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "queryMessageTokenStats", err)
 		}
 		return decodeResponse(resp)
 	}
