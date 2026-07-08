@@ -85,7 +85,11 @@ export function PluginStatusBanner({
   const queryClient = useQueryClient();
   const { data } = usePlugins();
   const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false);
-  const { data: publishStatus } = usePublishStatus();
+  // Polled so the banner picks up the Temporal generator-rollout schedule's
+  // auto-sync without a manual refresh.
+  const { data: publishStatus } = usePublishStatus(undefined, undefined, {
+    refetchInterval: 5_000,
+  });
   const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 

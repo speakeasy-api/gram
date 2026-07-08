@@ -68,7 +68,13 @@ export default function Plugins(): JSX.Element {
   const navigate = useNavigate();
 
   const { data } = usePluginsSuspense();
-  const { data: publishStatus } = usePublishStatusSuspense();
+  // Polled so the marketplace card and per-plugin sync badges pick up the
+  // Temporal generator-rollout schedule's auto-sync without a manual refresh.
+  const { data: publishStatus } = usePublishStatusSuspense(
+    undefined,
+    undefined,
+    { refetchInterval: 5_000 },
+  );
   const { data: marketplaceSettings } = useMarketplaceSettingsSuspense();
   const { fetch: authFetch } = useFetcher();
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =

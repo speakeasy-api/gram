@@ -84,7 +84,11 @@ export default function PluginDetail(): JSX.Element | null {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
-  const { data: publishStatus } = usePublishStatus();
+  // Polled so the publish-freshness badges/banner pick up the Temporal
+  // generator-rollout schedule's auto-sync without a manual refresh.
+  const { data: publishStatus } = usePublishStatus(undefined, undefined, {
+    refetchInterval: 5_000,
+  });
 
   const client = useSdkClient();
 

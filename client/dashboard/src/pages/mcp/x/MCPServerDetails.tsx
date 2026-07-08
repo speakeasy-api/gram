@@ -15,6 +15,8 @@ import {
 } from "@gram/client/react-query/getMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllPlugins } from "@gram/client/react-query/plugins";
+import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import {
   DropdownMenu,
@@ -223,6 +225,11 @@ export function MCPServerStatusDropdown({
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        // Enabling a disabled server (e.g. disabled -> private) auto-attaches
+        // it to the Default plugin server-side, which the plugin banner's
+        // membership check and publish-freshness state need to pick up.
+        invalidateAllPlugins(queryClient, { refetchType: "all" }),
+        invalidateAllPublishStatus(queryClient, { refetchType: "all" }),
       ]);
       const next = variables.request.updateMcpServerForm.visibility;
       toast.success(
