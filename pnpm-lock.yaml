@@ -1162,8 +1162,8 @@ importers:
         specifier: ^1.0.0-alpha.6
         version: 1.6.0
       zx:
-        specifier: 8.8.5-lite
-        version: 8.8.5-lite
+        specifier: 8.8.5
+        version: 8.8.5
     devDependencies:
       '@gram-ai/functions':
         specifier: workspace:^
@@ -1208,8 +1208,8 @@ importers:
         specifier: ^4
         version: 4.4.3
       zx:
-        specifier: 8.8.5-lite
-        version: 8.8.5-lite
+        specifier: 8.8.5
+        version: 8.8.5
     devDependencies:
       '@types/archiver':
         specifier: ^6.0.4
@@ -9637,10 +9637,6 @@ packages:
     resolution: {integrity: sha512-SNgDF5L0gfN7FwVOdEFguY3orU5AkfFZm9B5YSHog/UDHv+lvmd82ZAsOenOkQixigwH2+yyH198AwNdKhj+RA==}
     engines: {node: '>= 12.17.0'}
     hasBin: true
-
-  zx@8.8.5-lite:
-    resolution: {integrity: sha512-A/u82oc3sd9SZ46hig3NZKh5V1u0tXOwev5AK+3yH0zdqhiJmhd7NcWS0lq19RLOofagpDBS8K77aXLNAkBESQ==}
-    engines: {node: '>= 12.17.0'}
 
 snapshots:
 
@@ -18920,5 +18916,3 @@ snapshots:
   zwitch@2.0.4: {}
 
   zx@8.8.5: {}
-
-  zx@8.8.5-lite: {}

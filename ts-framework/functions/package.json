@@ -62,7 +62,7 @@
     "archiver": "^7.0.1",
     "esbuild": "^0.27.7",
     "zod": "^4",
-    "zx": "8.8.5-lite"
+    "zx": "8.8.5"
   },
   "devDependencies": {
     "@types/archiver": "^6.0.4",
