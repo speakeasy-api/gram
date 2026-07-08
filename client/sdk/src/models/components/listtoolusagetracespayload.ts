@@ -31,6 +31,20 @@ export type ListToolUsageTracesPayloadSort = ClosedEnum<
 >;
 
 /**
+ * Tool usage trace outcome
+ */
+export const Statuses = {
+  Error: "error",
+  Success: "success",
+  Blocked: "blocked",
+  Pending: "pending",
+} as const;
+/**
+ * Tool usage trace outcome
+ */
+export type Statuses = ClosedEnum<typeof Statuses>;
+
+/**
  * Tool usage target type
  */
 export const ListToolUsageTracesPayloadTargetTypes = {
@@ -45,22 +59,6 @@ export const ListToolUsageTracesPayloadTargetTypes = {
  */
 export type ListToolUsageTracesPayloadTargetTypes = ClosedEnum<
   typeof ListToolUsageTracesPayloadTargetTypes
->;
-
-/**
- * Tool usage trace outcome
- */
-export const ListToolUsageTracesPayloadStatuses = {
-  Error: "error",
-  Success: "success",
-  Blocked: "blocked",
-  Pending: "pending",
-} as const;
-/**
- * Tool usage trace outcome
- */
-export type ListToolUsageTracesPayloadStatuses = ClosedEnum<
-  typeof ListToolUsageTracesPayloadStatuses
 >;
 
 /**
@@ -110,7 +108,7 @@ export type ListToolUsageTracesPayload = {
   /**
    * Trace outcomes to include (error, success, blocked, pending). Empty means all.
    */
-  statuses?: Array<ListToolUsageTracesPayloadStatuses> | undefined;
+  statuses?: Array<Statuses> | undefined;
   /**
    * Target types to include. Empty means all target types.
    */
@@ -131,15 +129,15 @@ export const ListToolUsageTracesPayloadSort$outboundSchema: z.ZodMiniEnum<
 > = z.enum(ListToolUsageTracesPayloadSort);
 
 /** @internal */
+export const Statuses$outboundSchema: z.ZodMiniEnum<typeof Statuses> = z.enum(
+  Statuses,
+);
+
+/** @internal */
 export const ListToolUsageTracesPayloadTargetTypes$outboundSchema:
   z.ZodMiniEnum<typeof ListToolUsageTracesPayloadTargetTypes> = z.enum(
     ListToolUsageTracesPayloadTargetTypes,
   );
-
-/** @internal */
-export const ListToolUsageTracesPayloadStatuses$outboundSchema: z.ZodMiniEnum<
-  typeof ListToolUsageTracesPayloadStatuses
-> = z.enum(ListToolUsageTracesPayloadStatuses);
 
 /** @internal */
 export type ListToolUsageTracesPayload$Outbound = {
@@ -175,9 +173,7 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
     query: z.optional(z.string()),
     shadowServerNames: z.optional(z.array(z.string())),
     sort: z._default(ListToolUsageTracesPayloadSort$outboundSchema, "desc"),
-    statuses: z.optional(
-      z.array(ListToolUsageTracesPayloadStatuses$outboundSchema),
-    ),
+    statuses: z.optional(z.array(Statuses$outboundSchema)),
     targetTypes: z.optional(
       z.array(ListToolUsageTracesPayloadTargetTypes$outboundSchema),
     ),

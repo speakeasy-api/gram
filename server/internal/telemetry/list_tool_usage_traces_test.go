@@ -628,6 +628,8 @@ func TestListToolUsageTraces_FiltersByStatus(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			want := len(tc.wantStatus)
 			result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 				From:     from,

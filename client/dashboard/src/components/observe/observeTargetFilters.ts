@@ -8,7 +8,7 @@ import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import type { ToolUsageHostedServerFilterOption } from "@gram/client/models/components/toolusagehostedserverfilteroption.js";
 import type { ToolUsageShadowServerFilterOption } from "@gram/client/models/components/toolusageshadowserverfilteroption.js";
 import type { TargetTypes } from "@gram/client/models/components/gettoolusagesummarypayload";
-import type { ListToolUsageTracesPayloadStatuses } from "@gram/client/models/components/listtoolusagetracespayload";
+import type { Statuses } from "@gram/client/models/components/listtoolusagetracespayload";
 import { normalizeUserEmailFilter } from "./observeUserFilters";
 
 export const SERVER_FILTER_PATH = "gram.tool_call.source";
@@ -55,10 +55,9 @@ export const TOOL_USAGE_STATUS_OPTIONS: Array<{
 
 export function toStatuses(
   selectedStatuses: ObserveStatusFilterValue[],
-): ListToolUsageTracesPayloadStatuses[] | undefined {
-  const mapped = selectedStatuses.filter(
-    (status): status is ListToolUsageTracesPayloadStatuses =>
-      TOOL_USAGE_VALID_STATUSES.includes(status),
+): Statuses[] | undefined {
+  const mapped = selectedStatuses.filter((status): status is Statuses =>
+    TOOL_USAGE_VALID_STATUSES.includes(status),
   );
   return mapped.length > 0 ? mapped : undefined;
 }
