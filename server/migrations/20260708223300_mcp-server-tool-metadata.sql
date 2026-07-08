@@ -4,7 +4,11 @@ CREATE TABLE "mcp_server_tool_metadata" (
   "project_id" uuid NOT NULL,
   "mcp_server_id" uuid NOT NULL,
   "name" text NOT NULL,
-  "annotations" text[] NOT NULL DEFAULT '{}',
+  "title" text NULL,
+  "read_only_hint" boolean NULL,
+  "destructive_hint" boolean NULL,
+  "idempotent_hint" boolean NULL,
+  "open_world_hint" boolean NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "deleted_at" timestamptz NULL,
@@ -17,5 +21,3 @@ CREATE TABLE "mcp_server_tool_metadata" (
 CREATE UNIQUE INDEX "mcp_server_tool_metadata_mcp_server_id_name_key" ON "mcp_server_tool_metadata" ("mcp_server_id", "name") WHERE (deleted IS FALSE);
 -- Create index "mcp_server_tool_metadata_project_id_idx" to table: "mcp_server_tool_metadata"
 CREATE INDEX "mcp_server_tool_metadata_project_id_idx" ON "mcp_server_tool_metadata" ("project_id") WHERE (deleted IS FALSE);
--- Set comment to column: "annotations" on table: "mcp_server_tool_metadata"
-COMMENT ON COLUMN "mcp_server_tool_metadata"."annotations" IS 'Disposition tokens for the tool: read_only, destructive, idempotent, open_world.';

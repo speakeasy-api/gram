@@ -3169,7 +3169,13 @@ CREATE TABLE IF NOT EXISTS mcp_server_tool_metadata (
   project_id uuid NOT NULL,
   mcp_server_id uuid NOT NULL,
   name TEXT NOT NULL,
-  annotations TEXT[] NOT NULL DEFAULT '{}',
+
+  -- MCP tool annotations (admin-set behavioral hints)
+  title TEXT,
+  read_only_hint boolean,
+  destructive_hint boolean,
+  idempotent_hint boolean,
+  open_world_hint boolean,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3188,8 +3194,6 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_server_tool_metadata_mcp_server_id_name_key
 ON mcp_server_tool_metadata (mcp_server_id, name)
 WHERE deleted IS FALSE;
-
-COMMENT ON COLUMN mcp_server_tool_metadata.annotations IS 'Disposition tokens for the tool: read_only, destructive, idempotent, open_world.';
 
 -- Plugin definitions: project-scoped distributable bundles of MCP servers.
 -- Admins create plugins and assign them to roles for distribution.
