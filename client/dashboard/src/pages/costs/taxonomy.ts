@@ -47,7 +47,7 @@ const CHAIN: DimMeta[] = [
 // Every axis the user can pivot to at any level (dynamic taxonomy). The Claude
 // attribution cuts (MCP Server/Tool, Skill, Subagent) are appended last so they
 // never preempt the org-hierarchy default at the root (see defaultGroupBy).
-export const PIVOTS: DimMeta[] = [
+const PIVOTS: DimMeta[] = [
   ...CHAIN,
   { dim: Dimension.JobTitle, label: "Job Title" },
   { dim: Dimension.EmployeeType, label: "Employment Type" },
@@ -115,18 +115,6 @@ export function isAttributionDim(dim: Dimension): boolean {
   return ATTRIBUTION_DIMS.has(dim);
 }
 
-// A nested attribution cut and the parent it must sit under. MCP Tool only makes
-// sense scoped to an MCP Server (a tool call always belongs to a server), so it
-// is offered as a breakdown axis only once its parent is pinned in the drill
-// path. Skill, by contrast, is a valid root cut ("skills run outside a
-// subagent") so it has no required parent.
-const PIVOT_PARENT: Partial<Record<Dimension, Dimension>> = {
-  [Dimension.McpToolName]: Dimension.McpServerName,
-};
-export function pivotParent(dim: Dimension): Dimension | null {
-  return PIVOT_PARENT[dim] ?? null;
-}
-
 // ── Datasets ────────────────────────────────────────────────────────────────
 // A "dataset" is a narrow slice of the overall spend rather than a breakdown of
 // it: the Claude attribution lenses (MCP calls, Subagent runs, Skill runs), each
@@ -134,7 +122,7 @@ export function pivotParent(dim: Dimension): Dimension | null {
 // of the breakdown dropdown because they aren't true breakdown axes. `all` — the
 // full project spend — is the default and keeps the org/attribute breakdowns.
 export const DATASET_PARAM = "dataset";
-export const DATASETS = ["all", "mcp", "subagents", "skills"] as const;
+const DATASETS = ["all", "mcp", "subagents", "skills"] as const;
 export type Dataset = (typeof DATASETS)[number];
 
 export function isDataset(value: string | null | undefined): value is Dataset {
@@ -144,9 +132,8 @@ export function isDataset(value: string | null | undefined): value is Dataset {
 // Per-dataset config: the selector label, the attribution dimensions you can
 // break the slice down by (the first is the default axis on entry), and any
 // parent a nested dim must sit under before it's offered as a breakdown. The
-// `parent` map mirrors PIVOT_PARENT but is dataset-scoped: a Skill is a child of
-// a Subagent here (Subagent → Skill), yet a valid root cut in the standalone
-// Skills dataset.
+// `parent` map is dataset-scoped: a Skill is a child of a Subagent here
+// (Subagent → Skill), yet a valid root cut in the standalone Skills dataset.
 type DatasetMeta = {
   label: string;
   dims: Dimension[];
@@ -170,10 +157,6 @@ const DATASET_META: Record<Dataset, DatasetMeta> = {
 export const DATASET_OPTIONS: { value: Dataset; label: string }[] =
   DATASETS.map((ds) => ({ value: ds, label: DATASET_META[ds].label }));
 
-export function datasetLabel(ds: Dataset): string {
-  return DATASET_META[ds].label;
-}
-
 // The dataset an attribution dimension belongs to — used to promote the `all`
 // view into the right dataset when a drill lands on an attribution cut (e.g. a
 // "Spend by MCP server" mix-card row). Non-attribution dims stay in `all`.
@@ -189,7 +172,7 @@ export function datasetForDim(dim: Dimension): Dataset {
 
 // The non-attribution breakdown axes — the `all` dataset's pivots. Attribution
 // dims are excluded here; they're only reachable inside their own dataset.
-export const BASE_PIVOTS: DimMeta[] = PIVOTS.filter(
+const BASE_PIVOTS: DimMeta[] = PIVOTS.filter(
   (p) => !isAttributionDim(p.dim),
 );
 
