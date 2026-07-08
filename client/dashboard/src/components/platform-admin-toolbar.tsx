@@ -280,6 +280,10 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
   const [platformAdmin, setPlatformAdmin] = useState(
     () => localStorage.getItem(PLATFORM_ADMIN_KEY) === "1",
   );
+  // Leftmost edge (px from viewport left) of any open right-anchored Sheet, or
+  // null when none is open. Drives the shift that keeps the toolkit off panels'
+  // footer buttons.
+  const [panelLeft, setPanelLeft] = useState<number | null>(null);
   const queryClient = useQueryClient();
   const organization = useOrganization();
   const liveProjects = (organization?.projects ?? []).map((project) => ({
@@ -337,6 +341,47 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
   useEffect(() => {
     if (pos) localStorage.setItem(POSITION_KEY, JSON.stringify(pos));
   }, [pos]);
+
+  // Track right-side slide-in panels (Radix Sheets) so the toolkit can move out
+  // of the way of their footer buttons. We read offsetLeft/offsetWidth (layout
+  // values that ignore the slide-in transform) so the panel's resting edge is
+  // correct immediately on mount, mid-animation included.
+  // ponytail: only detects the shared Sheet component; a bespoke right panel
+  // must carry data-slot="sheet-content" to be avoided. Center docks (e.g. the
+  // insights dock) aren't right-anchored and are out of scope here.
+  useEffect(() => {
+    const measure = () => {
+      const panels = document.querySelectorAll<HTMLElement>(
+        '[data-slot="sheet-content"][data-state="open"]',
+      );
+      let leftmost: number | null = null;
+      panels.forEach((panel) => {
+        const left = panel.offsetLeft;
+        const width = panel.offsetWidth;
+        // Right-anchored (near the viewport's right edge) and not a full-width
+        // top/bottom sheet — those would drag the toolkit clean off screen.
+        const rightAnchored = Math.abs(window.innerWidth - (left + width)) < 40;
+        const notFullWidth = width < window.innerWidth * 0.9;
+        if (width > 0 && rightAnchored && notFullWidth) {
+          leftmost = leftmost === null ? left : Math.min(leftmost, left);
+        }
+      });
+      setPanelLeft(leftmost);
+    };
+    measure();
+    const observer = new MutationObserver(measure);
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-state"],
+    });
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
 
   // Clamp position so the expanded toolbar stays within the viewport
   useLayoutEffect(() => {
@@ -470,11 +515,31 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
     (s) => s.enabled,
   ).length;
 
+  // Slide left of an open right panel, clamped so the toolkit (w-80 = 320px)
+  // stays on screen. Only applies in the default (un-dragged) position.
+  const toolbarShift =
+    pos === null && panelLeft !== null
+      ? Math.max(
+          0,
+          Math.min(window.innerWidth - panelLeft, window.innerWidth - 344),
+        )
+      : 0;
+
   return createPortal(
     <div
       ref={rootRef}
-      className="pointer-events-auto fixed z-[99999] select-none"
-      style={pos ? { left: pos.x, top: pos.y } : { right: 16, bottom: 16 }}
+      className="pointer-events-auto fixed z-[99999] transition-transform duration-300 ease-out select-none"
+      style={
+        pos
+          ? { left: pos.x, top: pos.y }
+          : {
+              right: 16,
+              bottom: 16,
+              transform: toolbarShift
+                ? `translateX(-${toolbarShift}px)`
+                : undefined,
+            }
+      }
     >
       <div className={`
           w-80 rounded-xl border shadow-2xl backdrop-blur-md transition-all
