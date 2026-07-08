@@ -1,4 +1,4 @@
-package pijudge
+package openrouter
 
 import (
 	"context"
@@ -28,7 +28,7 @@ type metrics struct {
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
 	ctx := context.Background()
-	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/pijudge")
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter")
 
 	classifications, err := meter.Int64Counter(
 		meterClassifications,

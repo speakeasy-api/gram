@@ -1,4 +1,4 @@
-package risk_analysis
+package promptinjection
 
 import (
 	"testing"
@@ -8,20 +8,20 @@ import (
 
 func assertHeuristicMatches(t *testing.T, input, expectRule string) {
 	t.Helper()
-	findings, err := DetectPromptInjection(t.Context(), input)
+	findings, err := Detect(t.Context(), input)
 	require.NoError(t, err)
 	require.NotEmpty(t, findings)
 	ids := make([]string, 0, len(findings))
 	for _, f := range findings {
 		ids = append(ids, f.RuleID)
-		require.Equal(t, SourcePromptInjection, f.Source)
+		require.Equal(t, Source, f.Source)
 	}
 	require.Contains(t, ids, expectRule)
 }
 
 func assertHeuristicEmpty(t *testing.T, input string) {
 	t.Helper()
-	findings, err := DetectPromptInjection(t.Context(), input)
+	findings, err := Detect(t.Context(), input)
 	require.NoError(t, err)
 	require.Empty(t, findings)
 }

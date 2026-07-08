@@ -1,4 +1,4 @@
-package risk_analysis
+package promptinjection
 
 import (
 	"regexp"
@@ -7,12 +7,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
-// heuristicRule is one named L0 detector. Each rule contributes findings
-// independently; the orchestrator filters by HeuristicEmitThreshold and the
-// per-policy family toggle (e.g. PromptInjectionConfig.DetectRoleHijack).
-// `id` and `description` are kept as diagnostic metadata only — the public
-// finding rule_id is always RulePromptInjection, emitted via
-// DescribePromptInjection().
 type heuristicRule struct {
 	id          string
 	description string
@@ -74,7 +68,6 @@ func init() {
 		},
 	}
 
-	// Delimiter injection: structural attempts to forge role boundaries.
 	delimiterPatterns = regexp.MustCompile(
 		`(?i)(<\s*/?\s*(system|assistant|user|instructions)\s*>|###\s*system\b|\[INST\]|<\|im_start\|>|<\|im_end\|>)`,
 	)
@@ -82,12 +75,6 @@ func init() {
 	overrideKeywords = generateOverrideKeywords()
 }
 
-// generateOverrideKeywords builds the combinatorial keyword bank for
-// instruction-override detection. Inspired by LiteLLM's verb × adjective ×
-// preposition expansion but adds a noun axis (instructions / prompts / rules /
-// context) so exact-substring matching catches real-world phrasings like
-// "ignore previous instructions" without needing a fuzzy ratio. A fuzzy layer
-// can be added later for typo/paraphrase tolerance.
 func generateOverrideKeywords() []string {
 	verbs := []string{
 		"ignore", "disregard", "skip", "forget", "neglect", "overlook",
@@ -152,15 +139,6 @@ func asciiToLower(s string) string {
 	return string(b)
 }
 
-// runHeuristics applies every rule family to text and returns one Finding
-// per match.
-//
-// Only detectInstructionOverrides applies fuzzyMatchInputCap — it does an
-// O(N×M) substring scan against ~1,100 keywords, so unbounded input is the
-// real CPU risk on the realtime hook path. The regex-based detectors run on
-// the full input but rely on Go RE2 with bounded `.{0,N}` quantifiers, which
-// are linear-time; capping them would just trade defense-in-depth coverage
-// (delimiters near the end of long messages) for no measurable CPU win.
 func runHeuristics(text string) []scanners.Finding {
 	if text == "" {
 		return nil
@@ -175,7 +153,6 @@ func runHeuristics(text string) []scanners.Finding {
 	return findings
 }
 
-// runFamily applies all heuristicRules in a family to text.
 func runFamily(text string, fam ruleFamily) []scanners.Finding {
 	var out []scanners.Finding
 	for _, rule := range heuristicRules {
@@ -186,14 +163,14 @@ func runFamily(text string, fam ruleFamily) []scanners.Finding {
 		if loc == nil {
 			continue
 		}
-		ruleID, description := DescribePromptInjection()
+		ruleID, description := Describe()
 		out = append(out, scanners.Finding{
 			RuleID:              ruleID,
 			Description:         description,
 			Match:               text[loc[0]:loc[1]],
 			StartPos:            loc[0],
 			EndPos:              loc[1],
-			Source:              SourcePromptInjection,
+			Source:              Source,
 			Confidence:          rule.confidence,
 			Tags:                []string{},
 			DeadLetterReason:    "",
@@ -226,14 +203,14 @@ func detectInstructionOverrides(text string) []scanners.Finding {
 		if idx < 0 {
 			continue
 		}
-		ruleID, description := DescribePromptInjection()
+		ruleID, description := Describe()
 		out = append(out, scanners.Finding{
 			RuleID:              ruleID,
 			Description:         description,
 			Match:               scan[idx : idx+len(kw)],
 			StartPos:            idx,
 			EndPos:              idx + len(kw),
-			Source:              SourcePromptInjection,
+			Source:              Source,
 			Confidence:          0.9,
 			Tags:                []string{},
 			DeadLetterReason:    "",
@@ -249,20 +226,19 @@ func detectInstructionOverrides(text string) []scanners.Finding {
 	return out
 }
 
-// detectDelimiterInjection looks for forged role/instruction delimiters.
 func detectDelimiterInjection(text string) []scanners.Finding {
 	loc := delimiterPatterns.FindStringIndex(text)
 	if loc == nil {
 		return nil
 	}
-	ruleID, description := DescribePromptInjection()
+	ruleID, description := Describe()
 	return []scanners.Finding{{
 		RuleID:              ruleID,
 		Description:         description,
 		Match:               text[loc[0]:loc[1]],
 		StartPos:            loc[0],
 		EndPos:              loc[1],
-		Source:              SourcePromptInjection,
+		Source:              Source,
 		Confidence:          0.8,
 		Tags:                []string{},
 		DeadLetterReason:    "",
