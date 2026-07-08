@@ -1917,6 +1917,7 @@ type UserSessionIssuer struct {
 	Slug               string
 	AuthnChallengeMode string
 	SessionDuration    pgtype.Interval
+	Classification     string
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
