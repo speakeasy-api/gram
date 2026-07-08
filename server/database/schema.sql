@@ -1273,6 +1273,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS chats_org_external_chat_id_key
 ON chats (organization_id, external_chat_id)
 WHERE external_chat_id IS NOT NULL;
 
+-- Every chat listing (chat.list) drives off project_id + the not-deleted
+-- predicate; without this the planner seq-scans the whole (cross-project) chats
+-- table, which pushes large orgs' listings past statement_timeout.
+CREATE INDEX IF NOT EXISTS chats_project_id_idx
+ON chats (project_id)
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS assistants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
