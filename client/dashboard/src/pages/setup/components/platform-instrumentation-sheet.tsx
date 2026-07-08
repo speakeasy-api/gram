@@ -460,9 +460,16 @@ export function PlatformInstrumentationSheet({
                 }
               }
               // Don't render the code block when a step depends on the API key
-              // and we haven't yet minted one — otherwise users would copy a
-              // snippet with an empty Gram-Key value.
-              const codeBlockReady = !needsKey || !!platformKey;
+              // and we haven't yet minted one, or references the marketplace
+              // name and useMarketplaceSettings hasn't resolved yet (it falls
+              // back to "" while loading) — otherwise users would copy a
+              // snippet with an empty Gram-Key value or a malformed
+              // "<plugin>@" marketplace suffix.
+              const needsMarketplaceName =
+                step.code?.includes(MARKETPLACE_NAME_PLACEHOLDER) ?? false;
+              const codeBlockReady =
+                (!needsKey || !!platformKey) &&
+                (!needsMarketplaceName || !!marketplaceName);
 
               return (
                 <div
