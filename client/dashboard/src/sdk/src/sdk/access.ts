@@ -8,6 +8,7 @@ import { accessCreateShadowMCPAccessRule } from "../funcs/accessCreateShadowMCPA
 import { accessCreateShadowMCPApprovalRequest } from "../funcs/accessCreateShadowMCPApprovalRequest.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
 import { accessDeleteShadowMCPAccessRule } from "../funcs/accessDeleteShadowMCPAccessRule.js";
+import { accessDeleteShadowMCPInventoryAllowRule } from "../funcs/accessDeleteShadowMCPInventoryAllowRule.js";
 import { accessDenyShadowMCPApprovalRequest } from "../funcs/accessDenyShadowMCPApprovalRequest.js";
 import { accessDisableRBAC } from "../funcs/accessDisableRBAC.js";
 import { accessEnableRBAC } from "../funcs/accessEnableRBAC.js";
@@ -24,9 +25,11 @@ import { accessListShadowMCPApprovalRequests } from "../funcs/accessListShadowMC
 import { accessListShadowMCPInventory } from "../funcs/accessListShadowMCPInventory.js";
 import { accessListShadowMCPInventoryUsers } from "../funcs/accessListShadowMCPInventoryUsers.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
+import { accessResolveShadowMCPInventoryRequest } from "../funcs/accessResolveShadowMCPInventoryRequest.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
 import { accessUpdateShadowMCPAccessRule } from "../funcs/accessUpdateShadowMCPAccessRule.js";
+import { accessUpsertShadowMCPInventoryAllowRule } from "../funcs/accessUpsertShadowMCPInventoryAllowRule.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AccessMember } from "../models/components/accessmember.js";
 import { CreateShadowMCPAccessRuleResult } from "../models/components/createshadowmcpaccessruleresult.js";
@@ -46,6 +49,7 @@ import { Role } from "../models/components/role.js";
 import { ShadowMCPAccessRule } from "../models/components/shadowmcpaccessrule.js";
 import { ShadowMCPApprovalDecisionResult } from "../models/components/shadowmcpapprovaldecisionresult.js";
 import { ShadowMCPApprovalRequest } from "../models/components/shadowmcpapprovalrequest.js";
+import { ShadowMCPInventoryURLState } from "../models/components/shadowmcpinventoryurlstate.js";
 import {
   ApproveShadowMCPApprovalRequestRequest,
   ApproveShadowMCPApprovalRequestSecurity,
@@ -70,6 +74,10 @@ import {
   DeleteShadowMCPAccessRuleRequest,
   DeleteShadowMCPAccessRuleSecurity,
 } from "../models/operations/deleteshadowmcpaccessrule.js";
+import {
+  DeleteShadowMCPInventoryAllowRuleRequest,
+  DeleteShadowMCPInventoryAllowRuleSecurity,
+} from "../models/operations/deleteshadowmcpinventoryallowrule.js";
 import {
   DenyShadowMCPApprovalRequestRequest,
   DenyShadowMCPApprovalRequestSecurity,
@@ -135,6 +143,10 @@ import {
   ResolveChallengeSecurity,
 } from "../models/operations/resolvechallenge.js";
 import {
+  ResolveShadowMCPInventoryRequestRequest,
+  ResolveShadowMCPInventoryRequestSecurity,
+} from "../models/operations/resolveshadowmcpinventoryrequest.js";
+import {
   UpdateMemberRolesRequest,
   UpdateMemberRolesSecurity,
 } from "../models/operations/updatememberroles.js";
@@ -146,6 +158,10 @@ import {
   UpdateShadowMCPAccessRuleRequest,
   UpdateShadowMCPAccessRuleSecurity,
 } from "../models/operations/updateshadowmcpaccessrule.js";
+import {
+  UpsertShadowMCPInventoryAllowRuleRequest,
+  UpsertShadowMCPInventoryAllowRuleSecurity,
+} from "../models/operations/upsertshadowmcpinventoryallowrule.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Access extends ClientSDK {
@@ -560,6 +576,63 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ResolveChallengesResult> {
     return unwrapAsync(accessResolveChallenge(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * deleteShadowMCPInventoryAllowRule access
+   *
+   * @remarks
+   * Remove a Shadow MCP URL allow decision.
+   */
+  async deleteShadowMCPInventoryAllowRule(
+    request: DeleteShadowMCPInventoryAllowRuleRequest,
+    security?: DeleteShadowMCPInventoryAllowRuleSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ShadowMCPInventoryURLState> {
+    return unwrapAsync(accessDeleteShadowMCPInventoryAllowRule(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * upsertShadowMCPInventoryAllowRule access
+   *
+   * @remarks
+   * Create or modify a Shadow MCP URL allow decision for selected blocking policies.
+   */
+  async upsertShadowMCPInventoryAllowRule(
+    request: UpsertShadowMCPInventoryAllowRuleRequest,
+    security?: UpsertShadowMCPInventoryAllowRuleSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ShadowMCPInventoryURLState> {
+    return unwrapAsync(accessUpsertShadowMCPInventoryAllowRule(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * resolveShadowMCPInventoryRequest access
+   *
+   * @remarks
+   * Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.
+   */
+  async resolveShadowMCPInventoryRequest(
+    request: ResolveShadowMCPInventoryRequestRequest,
+    security?: ResolveShadowMCPInventoryRequestSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ShadowMCPInventoryURLState> {
+    return unwrapAsync(accessResolveShadowMCPInventoryRequest(
       this,
       request,
       security,

@@ -731,6 +731,126 @@ func BuildListShadowMCPInventoryUsersPayload(accessListShadowMCPInventoryUsersPr
 	return v, nil
 }
 
+// BuildUpsertShadowMCPInventoryAllowRulePayload builds the payload for the
+// access upsertShadowMCPInventoryAllowRule endpoint from CLI flags.
+func BuildUpsertShadowMCPInventoryAllowRulePayload(accessUpsertShadowMCPInventoryAllowRuleBody string, accessUpsertShadowMCPInventoryAllowRuleSessionToken string) (*access.UpsertShadowMCPInventoryAllowRulePayload, error) {
+	var err error
+	var body UpsertShadowMCPInventoryAllowRuleRequestBody
+	{
+		err = json.Unmarshal([]byte(accessUpsertShadowMCPInventoryAllowRuleBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
+		}
+		if body.PolicyIds == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("policy_ids", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
+		for _, e := range body.PolicyIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_ids[*]", e, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessUpsertShadowMCPInventoryAllowRuleSessionToken != "" {
+			sessionToken = &accessUpsertShadowMCPInventoryAllowRuleSessionToken
+		}
+	}
+	v := &access.UpsertShadowMCPInventoryAllowRulePayload{
+		ProjectID: body.ProjectID,
+		ServerURL: body.ServerURL,
+	}
+	if body.PolicyIds != nil {
+		v.PolicyIds = make([]string, len(body.PolicyIds))
+		for i, val := range body.PolicyIds {
+			v.PolicyIds[i] = val
+		}
+	} else {
+		v.PolicyIds = []string{}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildDeleteShadowMCPInventoryAllowRulePayload builds the payload for the
+// access deleteShadowMCPInventoryAllowRule endpoint from CLI flags.
+func BuildDeleteShadowMCPInventoryAllowRulePayload(accessDeleteShadowMCPInventoryAllowRuleProjectID string, accessDeleteShadowMCPInventoryAllowRuleServerURL string, accessDeleteShadowMCPInventoryAllowRuleSessionToken string) (*access.DeleteShadowMCPInventoryAllowRulePayload, error) {
+	var err error
+	var projectID string
+	{
+		projectID = accessDeleteShadowMCPInventoryAllowRuleProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var serverURL string
+	{
+		serverURL = accessDeleteShadowMCPInventoryAllowRuleServerURL
+		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessDeleteShadowMCPInventoryAllowRuleSessionToken != "" {
+			sessionToken = &accessDeleteShadowMCPInventoryAllowRuleSessionToken
+		}
+	}
+	v := &access.DeleteShadowMCPInventoryAllowRulePayload{}
+	v.ProjectID = projectID
+	v.ServerURL = serverURL
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildResolveShadowMCPInventoryRequestPayload builds the payload for the
+// access resolveShadowMCPInventoryRequest endpoint from CLI flags.
+func BuildResolveShadowMCPInventoryRequestPayload(accessResolveShadowMCPInventoryRequestBody string, accessResolveShadowMCPInventoryRequestSessionToken string) (*access.ResolveShadowMCPInventoryRequestPayload, error) {
+	var err error
+	var body ResolveShadowMCPInventoryRequestRequestBody
+	{
+		err = json.Unmarshal([]byte(accessResolveShadowMCPInventoryRequestBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"decision\": \"abc123\",\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
+		for _, e := range body.PolicyIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_ids[*]", e, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessResolveShadowMCPInventoryRequestSessionToken != "" {
+			sessionToken = &accessResolveShadowMCPInventoryRequestSessionToken
+		}
+	}
+	v := &access.ResolveShadowMCPInventoryRequestPayload{
+		ProjectID: body.ProjectID,
+		ServerURL: body.ServerURL,
+		Decision:  body.Decision,
+	}
+	if body.PolicyIds != nil {
+		v.PolicyIds = make([]string, len(body.PolicyIds))
+		for i, val := range body.PolicyIds {
+			v.PolicyIds[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateShadowMCPAccessRulePayload builds the payload for the access
 // createShadowMCPAccessRule endpoint from CLI flags.
 func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody string, accessCreateShadowMCPAccessRuleSessionToken string) (*access.CreateShadowMCPAccessRulePayload, error) {

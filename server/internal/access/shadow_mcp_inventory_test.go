@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -397,6 +398,173 @@ func TestService_ListShadowMCPInventoryUsers_InvalidURLIsBadRequest(t *testing.T
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
+func TestService_UpsertShadowMCPInventoryAllowRule_ReplacesURLGrantsWithPolicyAudience(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	oldPolicy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Old Block Shadow MCP",
+		Action:         "block",
+	})
+	newPolicy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "New Block Shadow MCP",
+		Action:         "block",
+	})
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_shadow_mcp", "Shadow MCP Reviewers", "shadow-mcp-reviewers", "Can review Shadow MCP servers"))
+	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID)
+	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, oldPolicy.ID.String(), authz.AllUsersPrincipal())
+	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, newPolicy.ID.String(), rolePrincipal)
+	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, oldPolicy.ID.String(), "https://mcp.example.com/mcp")
+
+	result, err := ti.service.UpsertShadowMCPInventoryAllowRule(ctx, &gen.UpsertShadowMCPInventoryAllowRulePayload{
+		ProjectID: projectID,
+		ServerURL: "HTTPS://MCP.EXAMPLE.COM:443/mcp?token=ignored#frag",
+		PolicyIds: []string{
+			newPolicy.ID.String(),
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryAccessAllowed, result.Access)
+	require.Equal(t, []string{newPolicy.ID.String()}, result.AllowedPolicyIds)
+
+	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, oldPolicy.ID.String(), "https://mcp.example.com/mcp"))
+	require.Equal(t, []string{rolePrincipal.String()}, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, newPolicy.ID.String(), "https://mcp.example.com/mcp"))
+}
+
+func TestService_ResolveShadowMCPInventoryRequest_ApprovesURLAndResolvesPendingRequests(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	policyOne := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Block Shadow MCP One",
+		Action:         "block",
+	})
+	policyTwo := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Block Shadow MCP Two",
+		Action:         "block",
+	})
+	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, policyOne.ID.String(), authz.AllUsersPrincipal())
+	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, policyTwo.ID.String(), authz.AllUsersPrincipal())
+	firstRequestID := createShadowMCPInventoryBypassRequest(t, ctx, ti, shadowMCPInventoryBypassRequestInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		PolicyID:       policyOne.ID.String(),
+		ServerURL:      "https://mcp.example.com/mcp",
+		RequesterID:    "user_one",
+		RequesterEmail: "one@example.com",
+		RequestedAt:    time.Now().Add(-2 * time.Minute),
+	})
+	secondRequestID := createShadowMCPInventoryBypassRequest(t, ctx, ti, shadowMCPInventoryBypassRequestInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		PolicyID:       policyTwo.ID.String(),
+		ServerURL:      "https://mcp.example.com/mcp",
+		RequesterID:    "user_two",
+		RequesterEmail: "two@example.com",
+		RequestedAt:    time.Now().Add(-1 * time.Minute),
+	})
+
+	result, err := ti.service.ResolveShadowMCPInventoryRequest(ctx, &gen.ResolveShadowMCPInventoryRequestPayload{
+		ProjectID: projectID,
+		ServerURL: "https://mcp.example.com/mcp?token=ignored",
+		Decision:  "allow",
+		PolicyIds: []string{policyOne.ID.String(), policyTwo.ID.String()},
+	})
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryAccessAllowed, result.Access)
+	require.Equal(t, 0, result.RequestCount)
+	wantPolicyIDs := []string{policyOne.ID.String(), policyTwo.ID.String()}
+	slices.Sort(wantPolicyIDs)
+	require.Equal(t, wantPolicyIDs, result.AllowedPolicyIds)
+
+	require.Equal(t, "approved", shadowMCPInventoryBypassRequestStatus(t, ctx, ti, projectID, firstRequestID))
+	require.Equal(t, "approved", shadowMCPInventoryBypassRequestStatus(t, ctx, ti, projectID, secondRequestID))
+	require.Equal(t, []string{authz.AllUsersPrincipal().String()}, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policyOne.ID.String(), "https://mcp.example.com/mcp"))
+	require.Equal(t, []string{authz.AllUsersPrincipal().String()}, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policyTwo.ID.String(), "https://mcp.example.com/mcp"))
+}
+
+func TestService_ResolveShadowMCPInventoryRequest_DeniesURLAndResolvesPendingRequests(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Block Shadow MCP",
+		Action:         "block",
+	})
+	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), authz.AllUsersPrincipal())
+	requestID := createShadowMCPInventoryBypassRequest(t, ctx, ti, shadowMCPInventoryBypassRequestInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		PolicyID:       policy.ID.String(),
+		ServerURL:      "https://mcp.example.com/mcp",
+		RequesterID:    "user_one",
+		RequesterEmail: "one@example.com",
+		RequestedAt:    time.Now(),
+	})
+
+	result, err := ti.service.ResolveShadowMCPInventoryRequest(ctx, &gen.ResolveShadowMCPInventoryRequestPayload{
+		ProjectID: projectID,
+		ServerURL: "https://mcp.example.com/mcp",
+		Decision:  "deny",
+	})
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryAccessBlocked, result.Access)
+	require.Equal(t, 0, result.RequestCount)
+	require.Empty(t, result.AllowedPolicyIds)
+
+	require.Equal(t, "denied", shadowMCPInventoryBypassRequestStatus(t, ctx, ti, projectID, requestID))
+	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://mcp.example.com/mcp"))
+}
+
+func TestService_DeleteShadowMCPInventoryAllowRule_RemovesURLGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Block Shadow MCP",
+		Action:         "block",
+	})
+	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), authz.AllUsersPrincipal())
+	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://mcp.example.com/mcp")
+
+	result, err := ti.service.DeleteShadowMCPInventoryAllowRule(ctx, &gen.DeleteShadowMCPInventoryAllowRulePayload{
+		ProjectID: projectID,
+		ServerURL: "https://mcp.example.com/mcp",
+	})
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryAccessBlocked, result.Access)
+	require.Empty(t, result.AllowedPolicyIds)
+	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://mcp.example.com/mcp"))
+}
+
 type shadowMCPInventoryTelemetryInput struct {
 	ProjectID  string
 	ServerURL  string
@@ -459,6 +627,61 @@ func grantShadowMCPInventoryBypass(t *testing.T, ctx context.Context, ti *testIn
 		Principals: []urn.Principal{authz.AllUsersPrincipal()},
 		Selector:   selector,
 	}))
+}
+
+func grantShadowMCPInventoryPolicyAudience(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, policyID string, principals ...urn.Principal) {
+	t.Helper()
+
+	require.NoError(t, authz.ReplaceGrantAudience(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          authz.ScopeRiskPolicyEvaluate,
+			ResourceID:     policyID,
+		},
+		Effect:     authz.PolicyEffectAllow,
+		Principals: principals,
+		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
+	}))
+}
+
+func shadowMCPInventoryBypassGrantPrincipals(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, policyID string, serverURL string) []string {
+	t.Helper()
+
+	grants, err := authz.ListGrantsForResource(ctx, ti.conn, authz.Resource{
+		OrganizationID: organizationID,
+		Scope:          authz.ScopeRiskPolicyBypass,
+		ResourceID:     policyID,
+	})
+	require.NoError(t, err)
+
+	principals := make([]string, 0, len(grants))
+	for _, grant := range grants {
+		if grant.Effect != authz.PolicyEffectAllow {
+			continue
+		}
+		if grant.Selector[authz.SelectorKeyServerURL] != serverURL {
+			continue
+		}
+		principals = append(principals, grant.PrincipalUrn)
+	}
+	slices.Sort(principals)
+	return slices.Compact(principals)
+}
+
+func shadowMCPInventoryBypassRequestStatus(t *testing.T, ctx context.Context, ti *testInstance, projectID string, requestID string) string {
+	t.Helper()
+
+	parsedProjectID, err := uuid.Parse(projectID)
+	require.NoError(t, err)
+	parsedRequestID, err := uuid.Parse(requestID)
+	require.NoError(t, err)
+
+	request, err := riskrepo.New(ti.conn).GetRiskPolicyBypassRequest(ctx, riskrepo.GetRiskPolicyBypassRequestParams{
+		ID:        parsedRequestID,
+		ProjectID: parsedProjectID,
+	})
+	require.NoError(t, err)
+	return request.Status
 }
 
 func createShadowMCPInventoryBypassRequest(t *testing.T, ctx context.Context, ti *testInstance, input shadowMCPInventoryBypassRequestInput) string {
