@@ -81,11 +81,29 @@ export function RequireScope(
 
     case "component":
       return (
-        <ScopeDisabled reason={props.reason} className={props.className}>
+        <ScopeDisabled
+          reason={props.reason}
+          className={props.className}
+          scopes={scopes}
+          all={all}
+        >
           {resolveChildren(true)}
         </ScopeDisabled>
       );
   }
+}
+
+/**
+ * Build the "required scope" hint shown alongside the tooltip reason so the
+ * user knows exactly which grant they're missing (and can request it).
+ */
+function requiredScopeLabel(scopes: Scope[], all: boolean): string {
+  if (scopes.length === 0) return "";
+  if (scopes.length === 1) return `Requires the ${scopes[0]} scope.`;
+  const joined = scopes.join(", ");
+  return all
+    ? `Requires all of these scopes: ${joined}.`
+    : `Requires one of these scopes: ${joined}.`;
 }
 
 /**
@@ -94,12 +112,17 @@ export function RequireScope(
 function ScopeDisabled({
   reason = "You don't have permission to perform this action.",
   className,
+  scopes,
+  all,
   children,
 }: {
   reason?: string;
   className?: string;
+  scopes: Scope[];
+  all: boolean;
   children: React.ReactNode;
 }) {
+  const scopeLabel = requiredScopeLabel(scopes, all);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -121,7 +144,12 @@ function ScopeDisabled({
           </div>
         </div>
       </TooltipTrigger>
-      <TooltipContent>{reason}</TooltipContent>
+      <TooltipContent>
+        <span>{reason}</span>
+        {scopeLabel && (
+          <span className="mt-1 block font-mono opacity-80">{scopeLabel}</span>
+        )}
+      </TooltipContent>
     </Tooltip>
   );
 }

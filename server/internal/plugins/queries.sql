@@ -160,6 +160,19 @@ WHERE plugin_id = @plugin_id
   AND deleted IS FALSE
 ORDER BY sort_order ASC, created_at ASC;
 
+-- name: ListPluginServersByPluginIDs :many
+-- Batch variant of ListPluginServers for callers that need every server for
+-- a set of plugins (e.g. ListPlugins) without one round-trip per plugin.
+-- Joins plugins and scopes by project_id as defense-in-depth, so this stays
+-- safe even if a future caller passes plugin IDs it hasn't already scoped.
+SELECT plugin_servers.*
+FROM plugin_servers
+JOIN plugins ON plugins.id = plugin_servers.plugin_id
+WHERE plugin_servers.plugin_id = ANY(@plugin_ids::uuid[])
+  AND plugins.project_id = @project_id
+  AND plugin_servers.deleted IS FALSE
+ORDER BY plugin_servers.plugin_id, plugin_servers.sort_order ASC, plugin_servers.created_at ASC;
+
 -- name: UpdatePluginServer :one
 UPDATE plugin_servers
 SET display_name = @display_name,

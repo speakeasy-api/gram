@@ -61,13 +61,24 @@ func TestSharedAuthScriptMatchesCheckedIn(t *testing.T) {
 		"hooks/plugin-claude/hooks/auth.sh has drifted from renderSharedAuthScript() — keep them identical")
 }
 
-// TestSharedAuthScriptBrowserLoginRoundtrip drives the interactive login flow
-// end to end against the real nc-based localhost listener: a stubbed browser
-// opener captures the dashboard URL, the test plays the dashboard's role by
-// requesting the localhost callback with an api_key, and the flow must cache
-// the credentials and clear the attempt cooldown marker.
-func TestSharedAuthScriptBrowserLoginRoundtrip(t *testing.T) {
-	t.Parallel()
+// authLoginHarness is a running gram_hooks_login invocation whose localhost
+// listener is ready to receive callback requests.
+type authLoginHarness struct {
+	cmd      *exec.Cmd
+	output   *bytes.Buffer
+	authFile string
+	urlFile  string
+	port     string
+	state    string
+}
+
+// startSharedAuthScriptLogin drives the interactive login flow against the
+// real nc-based localhost listener: a stubbed browser opener captures the
+// dashboard URL, and the harness returns once the listener's port and
+// per-attempt state token are known so the test can play the dashboard's
+// role.
+func startSharedAuthScriptLogin(t *testing.T) *authLoginHarness {
+	t.Helper()
 	_, err := exec.LookPath("nc")
 	require.NoError(t, err, "netcat is required: the browser login flow depends on it and must stay covered")
 
@@ -109,19 +120,24 @@ if [ -f "$1" ]; then cat "$1" > "$GRAM_TEST_URL_FILE"; else printf '%s' "$1" > "
 	)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 	cmd := exec.CommandContext(ctx, "bash", "-c", `. ./auth.sh; gram_hooks_login https://gram.test default`)
 	cmd.Dir = dir
 	cmd.Env = env
 	// The listener runs as a background child sharing stdout; WaitDelay keeps
 	// Wait from blocking on its pipe if a failure path leaks it.
 	cmd.WaitDelay = 5 * time.Second
-	var output bytes.Buffer
-	cmd.Stdout = &output
-	cmd.Stderr = &output
+	output := &bytes.Buffer{}
+	cmd.Stdout = output
+	cmd.Stderr = output
 	require.NoError(t, cmd.Start())
 
-	var port, state string
+	h := &authLoginHarness{
+		cmd:      cmd,
+		output:   output,
+		authFile: authFile,
+		urlFile:  urlFile,
+	}
 	portPattern := regexp.MustCompile(`127\.0\.0\.1%3A(\d+)%2Fcallback%3Fstate%3D([A-Za-z0-9-]+)`)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		raw, err := os.ReadFile(urlFile)
@@ -130,8 +146,8 @@ if [ -f "$1" ]; then cat "$1" > "$GRAM_TEST_URL_FILE"; else printf '%s' "$1" > "
 		}
 		match := portPattern.FindStringSubmatch(string(raw))
 		if assert.NotNil(c, match, "auth URL missing callback port and state token: %s", string(raw)) {
-			port = match[1]
-			state = match[2]
+			h.port = match[1]
+			h.state = match[2]
 		}
 	}, 30*time.Second, 100*time.Millisecond, "browser opener was never invoked: %s", output.String())
 
@@ -140,12 +156,23 @@ if [ -f "$1" ]; then cat "$1" > "$GRAM_TEST_URL_FILE"; else printf '%s' "$1" > "
 	argv := string(requireFileBytes(t, argvFile))
 	require.NotContains(t, argv, "state", "opener argv must not carry the state token")
 
+	return h
+}
+
+// TestSharedAuthScriptBrowserLoginRoundtrip plays a legacy dashboard that
+// ignores callback_method=post and returns the credentials in the callback
+// query string: the flow must still cache them and clear the attempt
+// cooldown marker.
+func TestSharedAuthScriptBrowserLoginRoundtrip(t *testing.T) {
+	t.Parallel()
+	h := startSharedAuthScriptLogin(t)
+
 	// A callback without the per-attempt state token is an injection attempt
 	// by something else on this machine: rejected, and the listener keeps
 	// waiting for the real redirect.
-	forged := "http://127.0.0.1:" + port + "/callback?api_key=attacker-key&project=evil"
+	forged := "http://127.0.0.1:" + h.port + "/callback?api_key=attacker-key&project=evil"
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, forged, nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, forged, nil)
 		if !assert.NoError(c, err) {
 			return
 		}
@@ -155,11 +182,11 @@ if [ -f "$1" ]; then cat "$1" > "$GRAM_TEST_URL_FILE"; else printf '%s' "$1" > "
 		}
 		assert.NoError(c, resp.Body.Close())
 		assert.Equal(c, http.StatusForbidden, resp.StatusCode)
-	}, 30*time.Second, 200*time.Millisecond, "forged callback was never rejected: %s", output.String())
+	}, 30*time.Second, 200*time.Millisecond, "forged callback was never rejected: %s", h.output.String())
 
-	callback := "http://127.0.0.1:" + port + "/callback?state=" + state + "&api_key=test-key-123&project=default&email=a%40b.c"
+	callback := "http://127.0.0.1:" + h.port + "/callback?state=" + h.state + "&api_key=test-key-123&project=default&email=a%40b.c"
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, callback, nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, callback, nil)
 		if !assert.NoError(c, err) {
 			return
 		}
@@ -171,18 +198,79 @@ if [ -f "$1" ]; then cat "$1" > "$GRAM_TEST_URL_FILE"; else printf '%s' "$1" > "
 		assert.NoError(c, err)
 		assert.NoError(c, resp.Body.Close())
 		assert.Equal(c, http.StatusOK, resp.StatusCode)
-		assert.Contains(c, string(body), "close this tab")
-	}, 30*time.Second, 200*time.Millisecond, "callback request never succeeded: %s", output.String())
+		assert.Contains(c, string(body), "window.close()")
+	}, 30*time.Second, 200*time.Millisecond, "callback request never succeeded: %s", h.output.String())
 
-	require.NoError(t, cmd.Wait(), output.String())
+	require.NoError(t, h.cmd.Wait(), h.output.String())
 
-	cached := string(requireFileBytes(t, authFile))
+	cached := string(requireFileBytes(t, h.authFile))
 	require.Contains(t, cached, "server_url=https://gram.test\n")
 	require.Contains(t, cached, "api_key=test-key-123\n")
 	require.NotContains(t, cached, "attacker-key")
 	require.Contains(t, cached, "project=default\n")
 	require.Contains(t, cached, "email=a@b.c\n")
-	require.NoFileExists(t, authFile+".login-attempt", "successful login must clear the attempt cooldown marker")
+	require.NoFileExists(t, h.authFile+".login-attempt", "successful login must clear the attempt cooldown marker")
+}
+
+// TestSharedAuthScriptBrowserLoginFormPost plays a dashboard that honors the
+// callback_method=post opt-in: the credentials arrive as a form POST body so
+// the API key never appears in a URL, while the state token stays in the
+// callback URL's query string and must still be echoed for the POST to be
+// accepted.
+func TestSharedAuthScriptBrowserLoginFormPost(t *testing.T) {
+	t.Parallel()
+	h := startSharedAuthScriptLogin(t)
+
+	require.Contains(t, string(requireFileBytes(t, h.urlFile)), "callback_method=post",
+		"auth URL must opt into the form POST token exchange")
+
+	// A POSTed body whose callback query lacks this attempt's state token is
+	// an injection attempt by something else on this machine: rejected, and
+	// the listener keeps waiting for the dashboard's real submission.
+	forged := "http://127.0.0.1:" + h.port + "/callback?state=wrong"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, forged,
+			strings.NewReader("api_key=attacker-key&project=evil"))
+		if !assert.NoError(c, err) {
+			return
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		resp, err := http.DefaultClient.Do(req)
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.NoError(c, resp.Body.Close())
+		assert.Equal(c, http.StatusForbidden, resp.StatusCode)
+	}, 30*time.Second, 200*time.Millisecond, "forged POST callback was never rejected: %s", h.output.String())
+
+	callback := "http://127.0.0.1:" + h.port + "/callback?state=" + h.state
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, callback,
+			strings.NewReader("api_key=test-key-456&project=default&email=a%40b.c&organization_id=org-123"))
+		if !assert.NoError(c, err) {
+			return
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		resp, err := http.DefaultClient.Do(req)
+		if !assert.NoError(c, err) {
+			return
+		}
+		body, err := io.ReadAll(resp.Body)
+		assert.NoError(c, err)
+		assert.NoError(c, resp.Body.Close())
+		assert.Equal(c, http.StatusOK, resp.StatusCode)
+		assert.Contains(c, string(body), "window.close()")
+	}, 30*time.Second, 200*time.Millisecond, "POST callback request never succeeded: %s", h.output.String())
+
+	require.NoError(t, h.cmd.Wait(), h.output.String())
+
+	cached := string(requireFileBytes(t, h.authFile))
+	require.Contains(t, cached, "server_url=https://gram.test\n")
+	require.Contains(t, cached, "api_key=test-key-456\n")
+	require.NotContains(t, cached, "attacker-key")
+	require.Contains(t, cached, "project=default\n")
+	require.Contains(t, cached, "email=a@b.c\n")
+	require.Contains(t, cached, "org=org-123\n")
 }
 
 func TestGeneratePluginWithCustomDomainURL(t *testing.T) {
