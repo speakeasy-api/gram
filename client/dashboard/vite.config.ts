@@ -5,39 +5,6 @@ import process from "node:process";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-
-const manualChunkGroups: [string, string[]][] = [
-  ["lucide-react", ["lucide-react"]],
-  ["moonshine", ["@speakeasy-api/moonshine"]],
-  [
-    "three",
-    [
-      "@react-three/drei",
-      "@react-three/fiber",
-      "@react-three/postprocessing",
-      "three",
-    ],
-  ],
-  [
-    "externals",
-    [
-      "posthog-js",
-      "react",
-      "react-dom",
-      "react-error-boundary",
-      "react-router",
-      "sonner",
-      "zod",
-    ],
-  ],
-];
-
-function packagePathRegex(packages: string[]): RegExp {
-  const alternatives = packages.map((pkg) =>
-    pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replaceAll("/", "[\\\\/]"),
-  );
-  return new RegExp(`node_modules[\\\\/](?:${alternatives.join("|")})[\\\\/]`);
-}
 // https://vite.dev/config/
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
@@ -106,40 +73,46 @@ export default defineConfig(({ command }) => {
       __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
     },
     build: {
+      target: "es2022",
       sourcemap: true,
-      rolldownOptions: {
+      rollupOptions: {
         input: {
           main: path.resolve(__dirname, "index.html"),
         },
         output: {
-          codeSplitting: {
-            groups: manualChunkGroups.map(([name, packages]) => ({
-              name,
-              test: packagePathRegex(packages),
-            })),
+          manualChunks: {
+            "lucide-react": ["lucide-react"],
+            moonshine: ["@speakeasy-api/moonshine"],
+            three: [
+              "@react-three/drei",
+              "@react-three/fiber",
+              "@react-three/postprocessing",
+              "three",
+            ],
+            externals: [
+              "posthog-js",
+              "react",
+              "react-dom",
+              "react-error-boundary",
+              "react-router",
+              "sonner",
+              "zod",
+            ],
           },
         },
       },
     },
     worker: {
       format: "es",
-      // The worker bundles are pure vendor code (monaco's ts.worker map alone
-      // is ~16MB, ~28MB across all workers) that we never debug in production,
-      // so skip their sourcemaps while keeping maps for app code. This must be
-      // an outputOptions hook: Vite hard-sets `sourcemap` to build.sourcemap
-      // AFTER spreading worker.rolldownOptions.output, so the plain option is
-      // silently ignored, while plugin outputOptions hooks run last.
-      plugins: () => [
-        {
-          name: "drop-worker-sourcemaps",
-          outputOptions(options) {
-            return { ...options, sourcemap: false };
-          },
-        },
-      ],
+    },
+    esbuild: {
+      target: "es2022",
     },
     optimizeDeps: {
       include: ["monaco-editor"],
+      esbuildOptions: {
+        target: "es2022",
+      },
     },
     server: {
       host: true,

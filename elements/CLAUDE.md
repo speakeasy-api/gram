@@ -25,7 +25,7 @@ pnpm tsc --noEmit     # Check types without building
 | Styling    | TailwindCSS 4.1 + CVA    |
 | Primitives | Radix UI                 |
 | Chat UI    | @assistant-ui/react      |
-| Build      | Vite 8                   |
+| Build      | Vite 7.1                 |
 | Docs       | Storybook 10             |
 | Testing    | Vitest 4.0               |
 

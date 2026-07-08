@@ -10,9 +10,9 @@ export default defineConfig({
     emptyOutDir: true,
     assetsInlineLimit: 100_000_000,
     cssCodeSplit: false,
-    rolldownOptions: {
+    rollupOptions: {
       output: {
-        codeSplitting: false,
+        inlineDynamicImports: true,
       },
     },
   },

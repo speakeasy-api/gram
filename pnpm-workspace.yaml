@@ -17,16 +17,13 @@ packages:
 catalog:
   "@ai-sdk/react": ^3.0.211
   "@modelcontextprotocol/sdk": ^1.29.0
-  "@tailwindcss/vite": ^4.3.1
   "@tanstack/react-query": 5.101.1
   "@types/react": ^19.2.17
   "@types/react-dom": ^19.2.3
   "@assistant-ui/react": ^0.11.0
-  "@vitejs/plugin-react": ^6.0.3
   ai: ^6.0.209
   "lucide-react": ^1.21.0
   typescript: 5.9.3
-  vite: ^8.1.2
 
 minimumReleaseAge: 10080
 
@@ -47,12 +44,6 @@ overrides:
   # dropdown inside it, DNO-393/AIS-168). Force one copy so all primitives share a stack.
   "@radix-ui/react-dismissable-layer": 1.1.13
 
-peerDependencyRules:
-  allowedVersions:
-    # 0.10.0 is the latest release and predates vite 8; the plugin only reads
-    # package.json to compute build externals, so vite 8 is fine.
-    "vite-plugin-externalize-deps>vite": "^8.0.0"
-
 allowBuilds:
   bun: true
   esbuild: true
@@ -62,6 +53,3 @@ allowBuilds:
   msw: false
   ssh2: false
   "@openrouter/sdk": false
-
-patchedDependencies:
-  svix@1.92.2: patches/svix@1.92.2.patch
