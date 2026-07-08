@@ -43,6 +43,7 @@ typescript:
       '@tanstack/react-query': 'catalog:'
       '@types/react': 'catalog:'
       '@types/react-dom': 'catalog:'
+      typescript: 'catalog:'
     peerDependencies: {}
   additionalPackageJSON:
     private: true

@@ -37,7 +37,7 @@
     "concurrently": "^10.0.3",
     "esbuild": "^0.25.12",
     "tsx": "^4.22.4",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vite": "catalog:"
   }
 }
