@@ -119,6 +119,15 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 			failedOrgCount += len(batch)
 		}
 
+		// Persist durable TUM billing-cycle snapshots for the same batch. Runs
+		// as its own activity so Polar refresh failures and snapshot failures
+		// don't mask each other.
+		if err := workflow.ExecuteActivity(ctx, a.SnapshotBillingCycleUsage, batch).Get(ctx, nil); err != nil {
+			logger.Error("Failed to snapshot billing cycle usage batch", "error", err, "batch_start", i)
+			failedBatchCount++
+			failedOrgCount += len(batch)
+		}
+
 		batchesProcessed++
 		if end < len(orgIDs) {
 			// Polar's usage endpoints are rate-limited, so keep a deterministic

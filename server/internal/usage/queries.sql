@@ -39,3 +39,38 @@ SELECT id
 FROM projects
 WHERE organization_id = @organization_id
   AND deleted IS FALSE;
+
+-- name: UpsertBillingCycleUsage :exec
+INSERT INTO billing_cycle_usage (
+    organization_id
+  , cycle_start
+  , cycle_end
+  , tum_tokens
+  , finalized_at
+) VALUES (
+    @organization_id
+  , @cycle_start
+  , @cycle_end
+  , @tum_tokens
+  , sqlc.narg(finalized_at)
+)
+ON CONFLICT (organization_id, cycle_start) DO UPDATE SET
+    cycle_end = EXCLUDED.cycle_end
+  , tum_tokens = EXCLUDED.tum_tokens
+  , finalized_at = EXCLUDED.finalized_at
+  , updated_at = clock_timestamp()
+-- Finalized rows are the permanent billing record and must never be
+-- overwritten by later refreshes.
+WHERE billing_cycle_usage.finalized_at IS NULL;
+
+-- name: ListFinalizedBillingCycleStarts :many
+SELECT cycle_start
+FROM billing_cycle_usage
+WHERE organization_id = @organization_id
+  AND finalized_at IS NOT NULL;
+
+-- name: ListBillingCycleUsage :many
+SELECT *
+FROM billing_cycle_usage
+WHERE organization_id = @organization_id
+ORDER BY cycle_start;
