@@ -15,7 +15,7 @@ packages:
   - dev-idp-dashboard
 
 catalog:
-  "@ai-sdk/react": ^3.0.211
+  "@ai-sdk/react": ^4.0.12
   "@modelcontextprotocol/sdk": ^1.29.0
   "@tailwindcss/vite": ^4.3.1
   "@tanstack/react-query": 5.101.1
@@ -23,7 +23,7 @@ catalog:
   "@types/react-dom": ^19.2.3
   "@assistant-ui/react": ^0.11.0
   "@vitejs/plugin-react": ^6.0.3
-  ai: ^6.0.209
+  ai: ^7.0.11
   "lucide-react": ^1.21.0
   typescript: 5.9.3
   vite: ^8.1.2

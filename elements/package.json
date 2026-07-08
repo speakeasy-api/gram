@@ -177,7 +177,7 @@
     }
   },
   "dependencies": {
-    "@ai-sdk/mcp": "^1.0.52",
+    "@ai-sdk/mcp": "^2.0.5",
     "@chromatic-com/storybook": "^5.2.1",
     "@datadog/browser-rum": "^6.33.0",
     "@json-render/core": "^0.2.0",
@@ -207,7 +207,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@ai-sdk/google": "^3",
+    "@ai-sdk/google": "^4",
     "@openrouter/sdk": "^0.3.16",
     "@storybook/addon-docs": "^10.4.6",
     "@storybook/react-vite": "^10.4.6",
