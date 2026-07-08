@@ -3,9 +3,9 @@ import { Type } from "@/components/ui/type";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Badge } from "@speakeasy-api/moonshine";
 import { ArrowRight, Network } from "lucide-react";
 import { Link } from "react-router";
+import { Badge } from "../ui/badge";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
 
 // MCPServerCard renders an mcp_servers row inside the /mcp listing grid.
@@ -45,10 +45,8 @@ export function MCPServerCard({
           >
             {server.name || "MCP Server"}
           </Type>
-          <Badge variant="neutral" className="bg-card">
-            <Badge.Text>
-              {endpointCount} {endpointCount === 1 ? "endpoint" : "endpoints"}
-            </Badge.Text>
+          <Badge variant="outline">
+            {endpointCount} {endpointCount === 1 ? "endpoint" : "endpoints"}
           </Badge>
         </div>
 

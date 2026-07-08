@@ -122,9 +122,6 @@ export function ToolCallsTimeSeriesChart({
             usePointStyle: true,
             padding: 16,
             font: { size: 11 },
-            // Keep the trend line rendered on the chart, just don't clutter
-            // the legend with a redundant "Total Trend" entry.
-            filter: (legendItem) => legendItem.text !== "Total Trend",
           },
         },
         tooltip: {

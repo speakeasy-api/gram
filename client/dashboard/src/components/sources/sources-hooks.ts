@@ -20,12 +20,8 @@ export const useCatalogIconMap = (): Map<string, string> => {
   }, [catalogData]);
 };
 
-const useCatalogAuthMap = (enabled = true): Map<string, PulseMcpAuthType> => {
-  const { data: catalogData } = useListMCPCatalog(
-    undefined,
-    undefined,
-    enabled,
-  );
+const useCatalogAuthMap = (): Map<string, PulseMcpAuthType> => {
+  const { data: catalogData } = useListMCPCatalog();
 
   return useMemo(() => {
     const result = new Map<string, PulseMcpAuthType>();
@@ -54,15 +50,14 @@ export const useExternalMcpOAuthConfigStatus = (
 ): ExternalMcpOAuthConfigStatus => {
   const { data: toolset } = useToolset(toolsetSlug);
   const { data: deploymentResult } = useLatestDeployment();
-  // Cheap check against data we already have (no extra fetch) — only pay
-  // for the catalog fetch below when this toolset could actually need it.
-  const externalMcpUrn = toolset?.toolUrns?.find((urn) =>
-    urn.includes(":externalmcp:"),
-  );
-  const serverAuthMap = useCatalogAuthMap(!!externalMcpUrn);
+  const serverAuthMap = useCatalogAuthMap();
 
   return useMemo<ExternalMcpOAuthConfigStatus>(() => {
     if (!toolset) return "not-external-mcp";
+
+    const externalMcpUrn = toolset.toolUrns?.find((urn) =>
+      urn.includes(":externalmcp:"),
+    );
     if (!externalMcpUrn) return "not-external-mcp";
 
     const slug = externalMcpUrn.split(":")[2];
@@ -82,5 +77,5 @@ export const useExternalMcpOAuthConfigStatus = (
       toolset.userSessionIssuerSlug
       ? "configured"
       : "required-unconfigured";
-  }, [toolset, externalMcpUrn, deploymentResult, serverAuthMap]);
+  }, [toolset, deploymentResult, serverAuthMap]);
 };

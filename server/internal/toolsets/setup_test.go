@@ -161,10 +161,6 @@ func (fakeGitHubPublisher) AddCollaborator(ctx context.Context, installationID i
 	return nil
 }
 
-func (fakeGitHubPublisher) HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error) {
-	return false, nil
-}
-
 // newTestToolsetsServiceWithGitHubPublishing is newTestToolsetsService with
 // GitHub publishing turned on end-to-end: the shared Temporal worker is
 // additionally configured with a plugins.Service backed by a fake (no-op)

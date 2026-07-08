@@ -622,57 +622,6 @@ func (q *Queries) ListPluginServers(ctx context.Context, pluginID uuid.UUID) ([]
 	return items, nil
 }
 
-const listPluginServersByPluginIDs = `-- name: ListPluginServersByPluginIDs :many
-SELECT plugin_servers.id, plugin_servers.plugin_id, plugin_servers.toolset_id, plugin_servers.mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted
-FROM plugin_servers
-JOIN plugins ON plugins.id = plugin_servers.plugin_id
-WHERE plugin_servers.plugin_id = ANY($1::uuid[])
-  AND plugins.project_id = $2
-  AND plugin_servers.deleted IS FALSE
-ORDER BY plugin_servers.plugin_id, plugin_servers.sort_order ASC, plugin_servers.created_at ASC
-`
-
-type ListPluginServersByPluginIDsParams struct {
-	PluginIds []uuid.UUID
-	ProjectID uuid.UUID
-}
-
-// Batch variant of ListPluginServers for callers that need every server for
-// a set of plugins (e.g. ListPlugins) without one round-trip per plugin.
-// Joins plugins and scopes by project_id as defense-in-depth, so this stays
-// safe even if a future caller passes plugin IDs it hasn't already scoped.
-func (q *Queries) ListPluginServersByPluginIDs(ctx context.Context, arg ListPluginServersByPluginIDsParams) ([]PluginServer, error) {
-	rows, err := q.db.Query(ctx, listPluginServersByPluginIDs, arg.PluginIds, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []PluginServer
-	for rows.Next() {
-		var i PluginServer
-		if err := rows.Scan(
-			&i.ID,
-			&i.PluginID,
-			&i.ToolsetID,
-			&i.McpServerID,
-			&i.DisplayName,
-			&i.Policy,
-			&i.SortOrder,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listPlugins = `-- name: ListPlugins :many
 SELECT
   p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.created_at, p.updated_at, p.deleted_at, p.deleted,

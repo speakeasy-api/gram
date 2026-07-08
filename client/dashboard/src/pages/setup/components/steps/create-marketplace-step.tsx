@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { GitBranch, Loader2 } from "lucide-react";
+import { Book, ExternalLink, GitBranch, Loader2, Users } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -8,7 +8,6 @@ import {
 } from "@gram/client/react-query/publishStatus";
 import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 import { StepContainer } from "../step-container";
-import { MarketplaceCard } from "@/pages/plugins/MarketplaceCard";
 import { PublishDialog } from "@/pages/plugins/PublishDialog";
 
 interface CreateMarketplaceStepProps {
@@ -90,10 +89,74 @@ export function CreateMarketplaceStep({
             <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
           </div>
         ) : isConnected ? (
-          <MarketplaceCard
-            publishStatus={publishStatus}
-            onManageCollaborators={openManageDialog}
-          />
+          <div className="bg-card border-border rounded-md border p-4">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Book className="text-muted-foreground h-4 w-4 flex-shrink-0" />
+              <span className="min-w-0 truncate text-base">
+                {publishStatus.repoOwner && (
+                  <a
+                    href={publishStatus.repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sky-500 hover:text-sky-600 hover:underline"
+                  >
+                    {publishStatus.repoOwner}
+                  </a>
+                )}
+                {publishStatus.repoOwner && publishStatus.repoName && (
+                  <span className="text-muted-foreground/60 mx-1">/</span>
+                )}
+                {publishStatus.repoName && (
+                  <a
+                    href={publishStatus.repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-sky-500 hover:text-sky-600 hover:underline"
+                  >
+                    {publishStatus.repoName}
+                  </a>
+                )}
+              </span>
+              <span className="border-border text-muted-foreground rounded-full border px-2 py-0 text-[10px] font-medium tracking-wider uppercase">
+                Private
+              </span>
+            </div>
+            <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+              This repo is your team's plugin marketplace. The observability
+              plugins are already inside, and any plugins you build in Speakeasy
+              later will be published here too.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-40" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+                <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                  Marketplace set up
+                </span>
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <a
+                  href={publishStatus.repoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Open
+                </a>
+                <button
+                  type="button"
+                  onClick={openManageDialog}
+                  className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors"
+                >
+                  <Users className="h-3 w-3" />
+                  Manage collaborators
+                </button>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="bg-card border-border rounded-lg border p-4">
             <div className="flex items-start gap-3">
@@ -113,6 +176,13 @@ export function CreateMarketplaceStep({
               </div>
             </div>
           </div>
+        )}
+        {isConnected && (
+          <p className="text-muted-foreground text-sm">
+            At least one of your organization's users needs to be attached to
+            the repository as a collaborator so that the repository is
+            discoverable by Agent Platforms.
+          </p>
         )}
       </div>
 

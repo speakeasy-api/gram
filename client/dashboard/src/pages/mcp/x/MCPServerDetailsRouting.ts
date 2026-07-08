@@ -1,6 +1,10 @@
-import type { useRoutes } from "@/routes";
-
-const VALID_TABS = ["overview", "tools", "team-access", "settings"] as const;
+const VALID_TABS = [
+  "overview",
+  "tools",
+  "analytics",
+  "team-access",
+  "settings",
+] as const;
 const LEGACY_AUTHENTICATION_TAB = "authentication";
 
 export type TabValue = (typeof VALID_TABS)[number];
@@ -66,21 +70,4 @@ export function initialTabFromHash(
   if (!isValidTab(hashValue)) return "overview";
   if (hashValue === "team-access" && !isRbacEnabled) return "overview";
   return hashValue;
-}
-
-export function mcpServerTabHref(
-  routes: ReturnType<typeof useRoutes>,
-  mcpServerSlug: string,
-  tab: TabValue,
-): string {
-  switch (tab) {
-    case "overview":
-      return routes.mcp.x.overview.href(mcpServerSlug);
-    case "tools":
-      return routes.mcp.x.tools.href(mcpServerSlug);
-    case "team-access":
-      return routes.mcp.x.teamAccess.href(mcpServerSlug);
-    case "settings":
-      return routes.mcp.x.settings.href(mcpServerSlug);
-  }
 }

@@ -55,10 +55,6 @@ func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, _, 
 	return nil
 }
 
-func (m *mockGitHubPublisher) HasDirectCollaborator(_ context.Context, _ int64, _, _ string) (bool, error) {
-	return len(m.collaborators) > 0, nil
-}
-
 func TestPluginsService_CreatePlugin(t *testing.T) {
 	t.Parallel()
 

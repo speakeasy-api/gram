@@ -1,15 +1,12 @@
 package testenv
 
 import (
-	"context"
 	"flag"
 	"log/slog"
 	"net/url"
 	"os"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
@@ -68,18 +65,4 @@ func NewMeterProvider(t *testing.T) metric.MeterProvider {
 	t.Helper()
 
 	return metricnoop.NewMeterProvider()
-}
-
-// BeginTx starts a transaction that's rolled back on test cleanup, so tests
-// that need a real pgx.Tx (e.g. for savepoint-using functions) don't leak
-// open transactions. Callers that need a write visible to a later call in
-// the same test (simulating separate requests) must Commit explicitly.
-func BeginTx(t *testing.T, ctx context.Context, conn *pgxpool.Pool) pgx.Tx {
-	t.Helper()
-
-	tx, err := conn.Begin(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(ctx) })
-
-	return tx
 }

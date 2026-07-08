@@ -249,12 +249,6 @@ export const PublishDialog = memo(function PublishDialog({
                 To view or remove existing collaborators, open the repository on
                 GitHub.
               </Dialog.Description>
-              <Dialog.Description>
-                <strong className="text-foreground font-semibold">
-                  You will receive an email from GitHub inviting you to join the
-                  repository. Accept the invite in order to proceed.
-                </strong>
-              </Dialog.Description>
             </>
           ) : (
             <>

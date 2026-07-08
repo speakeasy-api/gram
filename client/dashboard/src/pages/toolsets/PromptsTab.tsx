@@ -62,7 +62,7 @@ export function PromptsTabContent({
     return (
       <EmptyState
         heading="No prompts yet"
-        description="Prompt templates are ready-made prompts your MCP server offers to connected clients like Claude Desktop or Cursor, so users can start a common task without typing it out themselves."
+        description="Add prompt templates to this MCP server."
         nonEmptyProjectCTA={
           <RequireScope scope="mcp:write" level="component">
             <Stack gap={2} direction="horizontal">
