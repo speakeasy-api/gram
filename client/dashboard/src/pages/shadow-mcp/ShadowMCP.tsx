@@ -50,6 +50,7 @@ export default function ShadowMCP(): JSX.Element {
                   <ShadowMCPInventoryTable
                     policyState={policyState}
                     projectID={project.id}
+                    projectSlug={project.slug}
                   />
                 </div>
               ) : (

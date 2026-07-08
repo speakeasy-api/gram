@@ -1,6 +1,8 @@
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import type { RiskPolicyBypassRequest } from "@gram/client/models/components/riskpolicybypassrequest.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
+import { useRiskListPolicyBypassRequests } from "@gram/client/react-query/riskListPolicyBypassRequests.js";
 import {
   invalidateAllShadowMCPInventory,
   useShadowMCPInventory,
@@ -36,6 +38,8 @@ import {
 
 const INVENTORY_PAGE_LIMIT = 50;
 const FIRST_PAGE_CURSOR = "";
+const SERVER_URL_TARGET_DIMENSION = "server_url";
+const SHADOW_MCP_TARGET_KIND = "shadow_mcp_server";
 
 type InventoryPage = {
   cursor: string;
@@ -51,6 +55,14 @@ function usageCountLabel(count: number) {
 
 function userCountLabel(count: number) {
   return `${count} ${count === 1 ? "user" : "users"}`;
+}
+
+function shadowMCPRequestServerURL(request: RiskPolicyBypassRequest) {
+  if (request.targetKind !== SHADOW_MCP_TARGET_KIND) {
+    return undefined;
+  }
+
+  return request.targetDimensions[SERVER_URL_TARGET_DIMENSION];
 }
 
 function InventoryServerCell({ server }: { server: ShadowMCPInventoryServer }) {
@@ -109,11 +121,13 @@ export function ShadowMCPInventoryTable({
   enabled = true,
   policyState,
   projectID,
+  projectSlug,
 }: {
   className?: string;
   enabled?: boolean;
   policyState: ShadowMCPPolicyState;
   projectID: string;
+  projectSlug: string;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const inventoryScope = enabled && projectID.length > 0 ? projectID : "";
@@ -133,6 +147,11 @@ export function ShadowMCPInventoryTable({
   const inventoryQuery = useShadowMCPInventory(inventoryRequest, undefined, {
     enabled: enabled && projectID.length > 0,
   });
+  const requestsQuery = useRiskListPolicyBypassRequests(
+    { gramProject: projectSlug },
+    undefined,
+    { enabled: enabled && projectSlug.length > 0 },
+  );
   const allowServer = useAllowShadowMCPInventoryServerMutation();
   const clearServer = useClearShadowMCPInventoryServerAccessMutation();
   const [sort, setSort] = useState<SortDescriptor | null>({
@@ -195,6 +214,22 @@ export function ShadowMCPInventoryTable({
   const loadedServers = useMemo(() => {
     return activePages.flatMap((page) => page.servers);
   }, [activePages]);
+  const requestCountByServerURL = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const request of requestsQuery.data?.requests ?? []) {
+      const serverURL = shadowMCPRequestServerURL(request);
+      if (!serverURL) {
+        continue;
+      }
+
+      counts.set(serverURL, (counts.get(serverURL) ?? 0) + 1);
+    }
+
+    return counts;
+  }, [requestsQuery.data?.requests]);
+  const requestCountForServer = (server: ShadowMCPInventoryServer) =>
+    requestCountByServerURL.get(server.canonicalServerUrl) ?? 0;
 
   const latestPage = activePages[activePages.length - 1];
   const canUseInventoryQueryData =
@@ -366,6 +401,16 @@ export function ShadowMCPInventoryTable({
             {userCountLabel(server.userCount)}
           </Type>
         </div>
+      ),
+    },
+    {
+      key: "requests",
+      header: "Requests",
+      sortable: true,
+      sortValue: requestCountForServer,
+      width: "0.6fr",
+      render: (server) => (
+        <Type variant="small">{requestCountForServer(server)}</Type>
       ),
     },
     {
