@@ -40,11 +40,16 @@ function Stat({
 export function TumUsageCard({
   tokens,
   limit,
+  label,
 }: {
   // Billed TUM tokens for the selected cycle.
   tokens: number;
   // Contracted monthly allowance; null when the org has no contracted cap.
   limit: number | null;
+  // Which billing cycle these figures describe. Essential when the page is
+  // scoped to a custom range: the card's whole-cycle totals exceed the
+  // range's totals, and the label is what keeps that from reading as a bug.
+  label: string;
 }): JSX.Element {
   const overage = limit != null ? Math.max(0, tokens - limit) : 0;
   // The meter spans max(usage, allowance): under the cap it reads as a
@@ -58,6 +63,9 @@ export function TumUsageCard({
 
   return (
     <div className="border-border rounded-lg border p-4">
+      <div className="text-muted-foreground mb-3 text-sm font-medium">
+        {label}
+      </div>
       <div className="flex flex-wrap items-start gap-x-10 gap-y-3">
         <Stat label="Tokens consumed" value={tokens.toLocaleString()} />
         <Stat

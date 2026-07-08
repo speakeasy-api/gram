@@ -5,11 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  type BillingCycle,
-  cycleKey,
-  formatCycleRange,
-} from "./billing-cycles";
+import { type BillingCycle, cycleKey, formatCycleName } from "./billing-cycles";
 
 /**
  * Billing-cycle shortcut next to the time-range picker: selecting a cycle sets
@@ -44,7 +40,7 @@ export function BillingCyclePicker({
       <SelectContent>
         {cycles.map((c) => (
           <SelectItem key={cycleKey(c)} value={cycleKey(c)}>
-            {formatCycleRange(c)}
+            {formatCycleName(c)}
             {c.current ? " (current)" : ""}
           </SelectItem>
         ))}

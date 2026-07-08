@@ -45,27 +45,83 @@ export function cyclesFromTum(tum: TokensUnderManagement): BillingCycle[] {
   );
 }
 
-// The year keeps cycles distinguishable across the 12-cycle history window
-// (the same anchored range recurs every 12 months).
-const cycleDateFormat = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
+const cycleMonthFormat = new Intl.DateTimeFormat("en-US", {
+  month: "long",
   timeZone: "UTC",
 });
 
-export function formatCycleRange(cycle: BillingCycle): string {
-  return `${cycleDateFormat.format(cycle.start)} – ${cycleDateFormat.format(cycle.end)}`;
+// Cycles are named by their start month ("June Billing Cycle") — the
+// 12-cycle window never repeats a month, and the range picker beside the
+// dropdown shows the precise dates.
+export function formatCycleName(cycle: BillingCycle): string {
+  return `${cycleMonthFormat.format(cycle.start)} Billing Cycle`;
 }
 
 export function cycleKey(cycle: BillingCycle): string {
   return cycle.start.toISOString();
 }
 
-// React Query staleTime for data scoped to a cycle: closed cycles are
+// The time window the TUM chart and details table scope to: a full billing
+// cycle, or a custom range (typed into the range picker or drilled into by
+// clicking a chart bar).
+export type BillingPeriod = {
+  start: Date;
+  // Exclusive upper bound for cycles; range-picker instants sit at the last
+  // covered moment — either way the queries treat it as the window's edge.
+  end: Date;
+  // The exactly-matching billing cycle when the period is one, else null.
+  // Billed normalization and overage only apply to full org cycles.
+  cycle: BillingCycle | null;
+  // Display label for custom ranges (e.g. the range picker's parse label).
+  label?: string;
+};
+
+export function periodFromCycle(cycle: BillingCycle): BillingPeriod {
+  return { start: cycle.start, end: cycle.end, cycle, label: undefined };
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// The Unix epoch sits at a UTC midnight, so this holds exactly for UTC
+// day boundaries.
+function isUTCMidnight(d: Date): boolean {
+  return d.getTime() % MS_PER_DAY === 0;
+}
+
+// What the time-range picker should display for a period. The picker renders
+// instants in LOCAL time, but day-aligned periods (billing cycles, calendar
+// picks, bar-click drill-downs) are UTC-day windows with an exclusive end —
+// displayed raw, a June cycle would read "May 31 – Jul 1" anywhere west of
+// UTC. Map those to local midnights of their UTC calendar days, last day
+// inclusive. Ranges with real times (natural-language parses) pass through.
+export function periodDisplayRange(period: BillingPeriod): {
+  from: Date;
+  to: Date;
+} {
+  const last = new Date(period.end.getTime() - 1);
+  if (!isUTCMidnight(period.start) || !isUTCMidnight(period.end)) {
+    return { from: period.start, to: last };
+  }
+  return {
+    from: new Date(
+      period.start.getUTCFullYear(),
+      period.start.getUTCMonth(),
+      period.start.getUTCDate(),
+    ),
+    to: new Date(last.getUTCFullYear(), last.getUTCMonth(), last.getUTCDate()),
+  };
+}
+
+// React Query staleTime for data scoped to a period: closed windows are
 // immutable (telemetry for a past window never changes), so their queries
-// never refetch; the active cycle stays reasonably fresh. Keyed on the
-// server-derived current flag, not the browser clock.
-export function cycleStaleTime(cycle: BillingCycle): number {
-  return cycle.current ? 60_000 : Infinity;
+// never refetch. Cycles key on the server-derived current flag, not the
+// browser clock; custom ranges fall back to the clock with a one-hour guard
+// that absorbs skew and late-arriving telemetry.
+export function periodStaleTime(period: BillingPeriod): number {
+  if (period.cycle) {
+    return period.cycle.current ? 60_000 : Infinity;
+  }
+  return period.end.getTime() <= Date.now() - 60 * 60 * 1000
+    ? Infinity
+    : 60_000;
 }

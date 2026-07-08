@@ -23,10 +23,18 @@ import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBillingMetadata.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Info } from "lucide-react";
+import { Info, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { BillingCyclePicker } from "./billing-cycle-picker";
-import { type BillingCycle, cycleKey, cyclesFromTum } from "./billing-cycles";
+import {
+  type BillingPeriod,
+  cycleKey,
+  cyclesFromTum,
+  formatCycleName,
+  periodDisplayRange,
+  periodFromCycle,
+} from "./billing-cycles";
 import { stackModeFor } from "./breakdown-options";
 import { BreakdownPicker } from "./breakdown-picker";
 import { TokenUsagePanel } from "./token-usage-panel";
@@ -43,11 +51,14 @@ import { TumUsageCard } from "./tum-usage-card";
 // so it would filter against the wrong project — dimensions without data
 // simply chart as "(unset)".
 function TumTokenBreakdown({
-  cycle,
+  period,
   projectId,
+  onSelectRange,
 }: {
-  cycle: BillingCycle;
+  period: BillingPeriod;
   projectId: string | null;
+  // Bar-click drill-down: narrows the page's period to the clicked bucket.
+  onSelectRange: (start: Date, end: Date) => void;
 }): JSX.Element {
   const client = useGramContext();
   const organization = useOrganization();
@@ -57,7 +68,7 @@ function TumTokenBreakdown({
   const [dimension, setDimension] = useState<Dimension>(Dimension.DivisionName);
   const stackBy = stackModeFor(breakdown);
 
-  const scope = { client, orgId: organization.id, cycle, projectId };
+  const scope = { client, orgId: organization.id, period, projectId };
   const { data, isFetching } = useQuery(tumBreakdownQuery(scope, dimension));
   // Shared with the details table's risk rows (same key — one request).
   const { data: riskData } = useQuery(riskPointsQuery(scope));
@@ -98,12 +109,39 @@ function TumTokenBreakdown({
       breakdownPicker={breakdownPicker}
       riskPoints={riskPoints}
       loading={isFetching && !data}
+      onSelectRange={onSelectRange}
     />
   );
 }
 
 // All-projects sentinel for the project filter (Radix Select rejects "").
 const ALL_PROJECTS = "__all__";
+
+// The range picker's calendar hands back local midnights for both ends. The
+// page's data is bucketed by UTC day (matching the billing-cycle boundaries),
+// so a picked day means that UTC calendar day — otherwise a one-day pick
+// spans two UTC buckets and the chart grows a phantom extra day. The last day
+// is inclusive. Natural-language parses carry real times and pass through
+// untouched.
+function customRangeFromPicker(
+  from: Date,
+  to: Date,
+): { start: Date; end: Date } {
+  const isLocalMidnight = (d: Date) =>
+    d.getHours() === 0 &&
+    d.getMinutes() === 0 &&
+    d.getSeconds() === 0 &&
+    d.getMilliseconds() === 0;
+  if (!isLocalMidnight(from) || !isLocalMidnight(to)) {
+    return { start: from, end: to };
+  }
+  return {
+    start: new Date(
+      Date.UTC(from.getFullYear(), from.getMonth(), from.getDate()),
+    ),
+    end: new Date(Date.UTC(to.getFullYear(), to.getMonth(), to.getDate() + 1)),
+  };
+}
 
 export const TumUsageSection = (): JSX.Element => {
   const { data: tum } = useGetTokensUnderManagement();
@@ -125,11 +163,75 @@ export const TumUsageSection = (): JSX.Element => {
     cycles[0] ??
     null;
 
+  // A custom range (typed into the range picker or drilled into via a chart
+  // bar click) overrides the cycle selection for the chart and details table.
+  const [customRange, setCustomRange] = useState<{
+    start: Date;
+    end: Date;
+    label?: string;
+  } | null>(null);
+
   // Optional project scope for the chart and details table. The usage card
   // stays org-wide — the TUM contract is an organization-level number.
   const [projectId, setProjectId] = useState<string | null>(null);
 
+  // Bumped by the Reset button; remounting the breakdown clears its internal
+  // view state too (breakdown pick, granularity, cumulative, hidden series).
+  const [viewNonce, setViewNonce] = useState(0);
+  const handleReset = (): void => {
+    setSelectedKey(null);
+    setCustomRange(null);
+    setProjectId(null);
+    setViewNonce((n) => n + 1);
+  };
+
   const monthlyLimit = tum?.monthlyTokenLimit ?? null;
+
+  // The effective period. A custom range that happens to match a cycle's
+  // exact boundaries IS that cycle (billed normalization applies).
+  const period: BillingPeriod | null = useMemo(() => {
+    if (customRange) {
+      const exact =
+        cycles.find(
+          (c) =>
+            c.start.getTime() === customRange.start.getTime() &&
+            c.end.getTime() === customRange.end.getTime(),
+        ) ?? null;
+      return {
+        start: customRange.start,
+        end: customRange.end,
+        cycle: exact,
+        label: customRange.label,
+      };
+    }
+    return selectedCycle ? periodFromCycle(selectedCycle) : null;
+  }, [customRange, cycles, selectedCycle]);
+
+  // The usage card keeps showing the billing position of the cycle the
+  // period sits inside — bar-click drill-downs never leave the viewed cycle.
+  // A typed range spanning cycles has no single billing position; hide it.
+  const cardCycle = useMemo(() => {
+    if (!period) return null;
+    return (
+      period.cycle ??
+      cycles.find(
+        (c) =>
+          c.start.getTime() <= period.start.getTime() &&
+          period.end.getTime() <= c.end.getTime(),
+      ) ??
+      null
+    );
+  }, [period, cycles]);
+
+  // Bar-click drill-down, clamped to the current period (week/month buckets
+  // can overhang the period's edges).
+  const handleBarSelect = (start: Date, end: Date): void => {
+    if (!period) return;
+    const s = Math.max(start.getTime(), period.start.getTime());
+    const e = Math.min(end.getTime(), period.end.getTime());
+    if (e <= s) return;
+    setCustomRange({ start: new Date(s), end: new Date(e), label: undefined });
+  };
 
   return (
     <Page.Section>
@@ -139,7 +241,7 @@ export const TumUsageSection = (): JSX.Element => {
         analysis on each billing cycle, measured in tokens.
       </Page.Section.Description>
       <Page.Section.Body>
-        {tum && selectedCycle ? (
+        {tum && period ? (
           <Stack gap={3} className="mb-6">
             <Stack direction="horizontal" align="center" gap={1}>
               <Type variant="body" className="font-medium">
@@ -169,18 +271,67 @@ export const TumUsageSection = (): JSX.Element => {
                 </Select>
                 <BillingCyclePicker
                   cycles={cycles}
-                  selected={selectedCycle}
-                  onSelect={(c) => setSelectedKey(cycleKey(c))}
+                  selected={customRange ? null : selectedCycle}
+                  onSelect={(c) => {
+                    setCustomRange(null);
+                    setSelectedKey(cycleKey(c));
+                  }}
                 />
+                {/* Always shows the effective window; typing a range (natural
+                    language or calendar) narrows the section to it, clearing
+                    returns to the selected cycle. */}
+                <TimeRangePicker
+                  preset={null}
+                  customRange={periodDisplayRange(period)}
+                  customRangeLabel={
+                    customRange ? (customRange.label ?? "Custom") : "Cycle"
+                  }
+                  availablePresets={[]}
+                  onCustomRangeChange={(from, to, label) =>
+                    setCustomRange({
+                      ...customRangeFromPicker(from, to),
+                      label,
+                    })
+                  }
+                  onClearCustomRange={() => setCustomRange(null)}
+                  className="bg-background py-1.5 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="border-border hover:bg-muted text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-2.5 py-2 text-sm transition-colors"
+                >
+                  <RotateCcw className="size-3.5" />
+                  Reset
+                </button>
               </div>
             </Stack>
-            <TumUsageCard tokens={selectedCycle.tokens} limit={monthlyLimit} />
+            {cardCycle && (
+              <TumUsageCard
+                tokens={cardCycle.tokens}
+                limit={monthlyLimit}
+                // On a custom range the card still shows the WHOLE containing
+                // cycle's billing position — larger than the range's totals
+                // below, so say which cycle these figures are for.
+                label={
+                  customRange
+                    ? `${formatCycleName(cardCycle)} — full-cycle totals`
+                    : formatCycleName(cardCycle)
+                }
+              />
+            )}
             <div className="mt-8">
-              <TumTokenBreakdown cycle={selectedCycle} projectId={projectId} />
+              <TumTokenBreakdown
+                key={viewNonce}
+                period={period}
+                projectId={projectId}
+                onSelectRange={handleBarSelect}
+              />
             </div>
             <div className="mt-4">
               <TumDetailsTable
-                cycle={selectedCycle}
+                key={viewNonce}
+                period={period}
                 projectId={projectId}
                 limit={monthlyLimit}
               />

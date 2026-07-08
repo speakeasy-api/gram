@@ -92,6 +92,19 @@ function floorBucket(ms: number, granularity: Granularity): number {
   }
 }
 
+// The exclusive end of the bucket starting at ms — one day/week/month later.
+function bucketEndMs(ms: number, granularity: Granularity): number {
+  const d = new Date(ms);
+  switch (granularity) {
+    case "day":
+      return ms + MS_PER_DAY;
+    case "week":
+      return ms + 7 * MS_PER_DAY;
+    case "month":
+      return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+  }
+}
+
 function bucketLabel(ms: number, granularity: Granularity): string {
   const date = new Date(ms);
   return granularity === "month"
@@ -291,6 +304,7 @@ export function TokenUsagePanel({
   breakdownPicker,
   riskPoints,
   loading,
+  onSelectRange,
 }: {
   // Per-group daily timeseries for the selected slice.
   series: QuerySeries[];
@@ -302,6 +316,10 @@ export function TokenUsagePanel({
   // Daily tokens split by risk involvement; null while unavailable.
   riskPoints: RiskTokensPoint[] | null;
   loading: boolean;
+  // Called when a bar is clicked with the bucket's time range — the caller
+  // narrows the page's period to it (drill-down). Bars aren't clickable
+  // without it.
+  onSelectRange?: (start: Date, end: Date) => void;
 }): JSX.Element {
   const [granularity, setGranularity] = useState<Granularity>("day");
   const [cumulative, setCumulative] = useState(false);
@@ -311,6 +329,14 @@ export function TokenUsagePanel({
   // The legend item under the pointer; every other series renders dimmed.
   const [focusLabel, setFocusLabel] = useState<string | null>(null);
   const chartRef = useRef<ChartJS<"bar"> | null>(null);
+  // Drag-to-select: pixel positions of an in-progress drag over the chart,
+  // relative to the chart container. Null when not dragging.
+  const [dragX, setDragX] = useState<{ start: number; current: number } | null>(
+    null,
+  );
+  // Set when a drag just completed so the ensuing Chart.js click event (fired
+  // on the same mouseup) doesn't ALSO drill into the release bar.
+  const didDragRef = useRef(false);
 
   // Guard the async gap: risk mode before the risk data lands renders as the
   // dimension stacking rather than an empty chart.
@@ -354,8 +380,12 @@ export function TokenUsagePanel({
     });
 
     return {
-      labels: buckets.map((b) => bucketLabel(b, granularity)),
-      datasets,
+      data: {
+        labels: buckets.map((b) => bucketLabel(b, granularity)),
+        datasets,
+      },
+      // Bucket start times parallel to the axis, for bar-click drill-down.
+      buckets,
     };
   }, [
     series,
@@ -367,18 +397,56 @@ export function TokenUsagePanel({
     hiddenLabels,
   ]);
 
-  const hasData = chart.datasets.length > 0;
+  const hasData = chart.data.datasets.length > 0;
 
   // Sync legend toggles into the chart instance (visibility is imperative
   // Chart.js state, not part of the data props).
   useEffect(() => {
     const instance = chartRef.current;
     if (!instance) return;
-    chart.datasets.forEach((d, i) => {
+    chart.data.datasets.forEach((d, i) => {
       instance.setDatasetVisibility(i, !hiddenLabels.has(d.label));
     });
     instance.update();
   }, [chart, hiddenLabels]);
+
+  // Dragging horizontally across the chart selects the covered buckets as a
+  // date range (a small movement stays a plain click). Pixel positions map to
+  // axis indexes through the Chart.js category scale.
+  const DRAG_THRESHOLD_PX = 5;
+
+  const relativeX = (e: React.MouseEvent<HTMLDivElement>): number =>
+    e.clientX - e.currentTarget.getBoundingClientRect().left;
+
+  const handleChartMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (!onSelectRange || e.button !== 0) return;
+    didDragRef.current = false;
+    const x = relativeX(e);
+    setDragX({ start: x, current: x });
+  };
+
+  const handleChartMouseMove = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (!dragX) return;
+    setDragX({ start: dragX.start, current: relativeX(e) });
+  };
+
+  const handleChartMouseUp = (): void => {
+    if (!dragX || !onSelectRange) return;
+    const { start: x1, current: x2 } = dragX;
+    setDragX(null);
+    if (Math.abs(x2 - x1) < DRAG_THRESHOLD_PX) return; // plain click
+    const scale = chartRef.current?.scales["x"];
+    if (!scale || chart.buckets.length === 0) return;
+    const clampIndex = (v: number | undefined): number =>
+      Math.min(chart.buckets.length - 1, Math.max(0, Math.round(v ?? 0)));
+    const from = clampIndex(scale.getValueForPixel(Math.min(x1, x2)));
+    const to = clampIndex(scale.getValueForPixel(Math.max(x1, x2)));
+    didDragRef.current = true;
+    const startMs = chart.buckets[from]!;
+    const endMs = bucketEndMs(chart.buckets[to]!, granularity);
+    setGranularity("day");
+    onSelectRange(new Date(startMs), new Date(endMs));
+  };
 
   const toggleLabel = (label: string) => {
     setHiddenLabels((prev) => {
@@ -403,6 +471,25 @@ export function TokenUsagePanel({
     return {
       responsive: true,
       maintainAspectRatio: false,
+      // Clicking a bar drills the page's period down to that bucket. The
+      // zoomed view re-buckets daily so a week/month bar expands into its
+      // days instead of one lone bar.
+      onClick: (_event, elements) => {
+        if (!onSelectRange || didDragRef.current) return;
+        const index = elements[0]?.index;
+        const start = index === undefined ? undefined : chart.buckets[index];
+        if (start === undefined) return;
+        const end = bucketEndMs(start, granularity);
+        setGranularity("day");
+        onSelectRange(new Date(start), new Date(end));
+      },
+      onHover: (event, elements) => {
+        const target = event.native?.target;
+        if (target instanceof HTMLElement) {
+          target.style.cursor =
+            onSelectRange && elements.length > 0 ? "pointer" : "default";
+        }
+      },
       plugins: {
         // The canvas legend can't style hover or read as clickable — an HTML
         // legend below the chart replaces it (see the buttons in the JSX).
@@ -431,7 +518,7 @@ export function TokenUsagePanel({
         },
       },
     };
-  }, [isDark]);
+  }, [isDark, chart.buckets, granularity, onSelectRange]);
 
   return (
     <div className="border-border rounded-lg border p-4">
@@ -470,13 +557,30 @@ export function TokenUsagePanel({
         {loading && <Skeleton className="h-[280px] w-full" />}
         {!loading && hasData && (
           <>
-            <div style={{ height: 280 }}>
-              <Bar ref={chartRef} data={chart} options={chartOptions} />
+            <div
+              className="relative"
+              style={{ height: 280 }}
+              onMouseDown={handleChartMouseDown}
+              onMouseMove={handleChartMouseMove}
+              onMouseUp={handleChartMouseUp}
+              onMouseLeave={() => setDragX(null)}
+            >
+              <Bar ref={chartRef} data={chart.data} options={chartOptions} />
+              {dragX &&
+                Math.abs(dragX.current - dragX.start) >= DRAG_THRESHOLD_PX && (
+                  <div
+                    className="bg-primary/10 border-primary/40 pointer-events-none absolute inset-y-0 border-x"
+                    style={{
+                      left: Math.min(dragX.start, dragX.current),
+                      width: Math.abs(dragX.current - dragX.start),
+                    }}
+                  />
+                )}
             </div>
             {/* HTML legend: hoverable, clearly clickable buttons that toggle
                 their series; hovering spotlights the series in the chart. */}
             <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
-              {chart.datasets.map((d, i) => {
+              {chart.data.datasets.map((d, i) => {
                 const hidden = hiddenLabels.has(d.label);
                 return (
                   <button

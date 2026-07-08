@@ -3,13 +3,13 @@ import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type TumDetailsResult } from "@gram/client/models/components/tumdetailsresult.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useQuery } from "@tanstack/react-query";
-import { Info } from "lucide-react";
-import { useMemo } from "react";
+import { ChevronDown, Info } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { isAttributionDim } from "@/pages/costs/taxonomy";
-import { type BillingCycle } from "./billing-cycles";
+import { type BillingPeriod } from "./billing-cycles";
 import {
   breakdownLabel,
   CHART_COLORS,
@@ -35,8 +35,6 @@ type DetailRow = {
   color: string;
   series: number[];
   total: number;
-  // Only token-denominated rows get an overage share; counts show "—".
-  kind: "tokens" | "count";
 };
 
 type DetailGroup = {
@@ -69,66 +67,26 @@ type MeasureField =
   | "outputTokens"
   | "cacheReadTokens"
   | "cacheWriteTokens"
-  | "agentSessions"
-  | "toolCalls"
-  | "activeUsers"
   | "toolMessageTokens";
 
 type MeasureRowSpec = {
   label: string;
   color: string;
   field: MeasureField;
-  kind: DetailRow["kind"];
 };
 
 const TOKEN_TYPE_ROWS: MeasureRowSpec[] = [
-  {
-    label: "Input",
-    color: CHART_COLORS[0]!,
-    field: "inputTokens",
-    kind: "tokens",
-  },
-  {
-    label: "Output",
-    color: CHART_COLORS[1]!,
-    field: "outputTokens",
-    kind: "tokens",
-  },
-  {
-    label: "Cache read",
-    color: CHART_COLORS[2]!,
-    field: "cacheReadTokens",
-    kind: "tokens",
-  },
-  {
-    label: "Cache write",
-    color: CHART_COLORS[3]!,
-    field: "cacheWriteTokens",
-    kind: "tokens",
-  },
+  { label: "Input", color: CHART_COLORS[0]!, field: "inputTokens" },
+  { label: "Output", color: CHART_COLORS[1]!, field: "outputTokens" },
+  { label: "Cache read", color: CHART_COLORS[2]!, field: "cacheReadTokens" },
+  { label: "Cache write", color: CHART_COLORS[3]!, field: "cacheWriteTokens" },
 ];
 
-const ACTIVITY_ROWS: MeasureRowSpec[] = [
-  {
-    label: "Agent sessions",
-    color: "#38bdf8",
-    field: "agentSessions",
-    kind: "count",
-  },
-  { label: "Tool calls", color: "#4ade80", field: "toolCalls", kind: "count" },
-  {
-    label: "Active users",
-    color: "#facc15",
-    field: "activeUsers",
-    kind: "count",
-  },
-  {
-    label: "Tokens from tool call messages",
-    color: "#94a3b8",
-    field: "toolMessageTokens",
-    kind: "tokens",
-  },
-];
+const TOOL_MESSAGE_ROW: MeasureRowSpec = {
+  label: "Tokens from tool call messages",
+  color: "#94a3b8",
+  field: "toolMessageTokens",
+};
 
 // Row color for a dimension value — same palette walk as the chart's stacks,
 // so a value's dot matches its chart series color.
@@ -165,14 +123,13 @@ function dimensionGroups(
       // more than the total.
       note:
         key === Dimension.Role
-          ? "Users can hold multiple roles; rows overlap and can sum to more than the total."
+          ? "Users can hold multiple roles; rows overlap and can sum to more than the total token usage for the selected time period."
           : undefined,
       rows: visible.map((r, i) => ({
         label: r.value === "" ? "(unset)" : r.value,
         color: valueColor(r.value, i),
         series: r.series,
         total: r.totalTokens,
-        kind: "tokens",
       })),
     });
   }
@@ -229,7 +186,7 @@ function DetailRowItem({
   overageWeights: number[] | null;
 }): JSX.Element {
   const overageTokens =
-    row.kind === "tokens" && overageWeights !== null
+    overageWeights !== null
       ? Math.round(
           row.series.reduce(
             (sum, v, i) => sum + v * (overageWeights[i] ?? 0),
@@ -272,17 +229,17 @@ function DetailRowItem({
 }
 
 /**
- * Per-metric usage details for one billing cycle, rendered under the token
+ * Per-metric usage details for the selected period, rendered under the token
  * usage chart. Everything comes from a single telemetry.queryTumDetails
- * request (plus the risk series shared with the chart); closed cycles cache
+ * request (plus the risk series shared with the chart); closed periods cache
  * forever (their data is immutable).
  */
 export function TumDetailsTable({
-  cycle,
+  period,
   projectId,
   limit,
 }: {
-  cycle: BillingCycle;
+  period: BillingPeriod;
   // Optional project scope, matching the page-level project filter.
   projectId: string | null;
   // Contracted monthly allowance; drives the per-metric overage share.
@@ -290,15 +247,15 @@ export function TumDetailsTable({
 }): JSX.Element {
   const client = useGramContext();
   const organization = useOrganization();
-  const scope = { client, orgId: organization.id, cycle, projectId };
+  const scope = { client, orgId: organization.id, period, projectId };
   const { data, isFetching, isError } = useQuery(tumDetailsQuery(scope));
   // Same query (and key) as the chart's risk series — React Query dedupes.
   const { data: riskData } = useQuery(riskPointsQuery(scope));
 
-  // Billed normalization and overage attribution are organization-level
-  // concepts (the TUM contract has no per-project split), so both switch off
-  // when a project filter narrows the data.
-  const orgScoped = projectId == null;
+  // Billed normalization and overage attribution are organization-cycle
+  // concepts (the TUM contract has no per-project or sub-cycle split), so
+  // both switch off when a project filter or a custom range narrows the data.
+  const billedCycle = projectId == null ? period.cycle : null;
 
   // The table presents BILLED tokens: the analytics aggregate supplies the
   // distribution across metrics (it has the dimensions; billing's per-session
@@ -307,11 +264,11 @@ export function TumDetailsTable({
   // the usage card's number — exactly. The two aggregates track within a
   // fraction of a percent, so the correction is invisible per metric.
   const billedScale = useMemo(() => {
-    if (!orgScoped) return 1;
+    if (!billedCycle) return 1;
     const analyticsTotal = data?.totals?.totalTokens ?? 0;
-    if (analyticsTotal === 0 || cycle.tokens === 0) return 1;
-    return cycle.tokens / analyticsTotal;
-  }, [data, cycle.tokens, orgScoped]);
+    if (analyticsTotal === 0 || billedCycle.tokens === 0) return 1;
+    return billedCycle.tokens / analyticsTotal;
+  }, [data, billedCycle]);
 
   const groups = useMemo<DetailGroup[]>(() => {
     const points = data?.points ?? [];
@@ -330,7 +287,6 @@ export function TumDetailsTable({
       color: spec.color,
       series: points.map((p) => p[spec.field]),
       total: totals?.[spec.field] ?? 0,
-      kind: spec.kind,
     });
 
     const raw: DetailGroup[] = [
@@ -342,54 +298,46 @@ export function TumDetailsTable({
             color: CHART_COLORS[0]!,
             series: points.map((p) => p.totalTokens),
             total: totals?.totalTokens ?? 0,
-            kind: "tokens",
           },
         ],
       },
       ...dimensionGroups(data, LEAD_DIMENSION_SECTIONS),
       { heading: "Token type", rows: TOKEN_TYPE_ROWS.map(measureRow) },
       {
-        heading: "Risk findings",
+        heading: "Sessions & messages",
         rows: [
           {
             label: "Sessions with risk findings",
             color: RISKY_COLOR,
             series: riskPoints.map((p) => p.riskyTokens),
             total: riskyTotal,
-            kind: "tokens",
           },
           {
             label: "Sessions without risk findings",
             color: CLEAN_COLOR,
             series: cleanSeries,
             total: cleanSeries.reduce((sum, v) => sum + v, 0),
-            kind: "tokens",
           },
           {
             label: "Messages with risk findings",
             color: "#e879f9",
             series: points.map((p) => p.riskyMessageTokens),
             total: totals?.riskyMessageTokens ?? 0,
-            kind: "tokens",
           },
+          measureRow(TOOL_MESSAGE_ROW),
         ],
       },
       ...dimensionGroups(data, TAIL_DIMENSION_SECTIONS),
-      { heading: "Activity", rows: ACTIVITY_ROWS.map(measureRow) },
     ];
 
-    // Convert every token-denominated row into billed units (see billedScale).
+    // Convert every row into billed units (see billedScale).
     return raw.map((group) => ({
       ...group,
-      rows: group.rows.map((row) =>
-        row.kind === "tokens"
-          ? {
-              ...row,
-              total: Math.round(row.total * billedScale),
-              series: row.series.map((v) => v * billedScale),
-            }
-          : row,
-      ),
+      rows: group.rows.map((row) => ({
+        ...row,
+        total: Math.round(row.total * billedScale),
+        series: row.series.map((v) => v * billedScale),
+      })),
     }));
   }, [data, riskData, billedScale]);
 
@@ -403,10 +351,10 @@ export function TumDetailsTable({
   // weights are computed from run slightly apart from the billed aggregate,
   // and the usage card's Overage stat is the number to agree with.
   //
-  // Null when overage does not apply: no contracted allowance, or a project
-  // filter is active (the allowance is an org-level number).
+  // Null when overage does not apply: no contracted allowance, a project
+  // filter, or a custom range (the allowance is an org-cycle number).
   const overageWeights = useMemo<number[] | null>(() => {
-    if (limit == null || !orgScoped) return null;
+    if (limit == null || billedCycle == null) return null;
     // The crossing point is found on the billed-unit series (see billedScale),
     // matching the allowance's own units.
     const totals = data?.points.map((p) => p.totalTokens * billedScale) ?? [];
@@ -419,7 +367,7 @@ export function TumDetailsTable({
       weights[i] =
         before >= limit ? 1 : (cumulative - limit) / (totals[i]! || 1);
     }
-    const billedOverage = Math.max(0, cycle.tokens - limit);
+    const billedOverage = Math.max(0, billedCycle.tokens - limit);
     const weightedTotal = totals.reduce(
       (sum, t, i) => sum + t * weights[i]!,
       0,
@@ -427,25 +375,55 @@ export function TumDetailsTable({
     if (weightedTotal === 0) return weights.map(() => 0);
     const scale = billedOverage / weightedTotal;
     return weights.map((w) => w * scale);
-  }, [data, limit, cycle.tokens, billedScale, orgScoped]);
+  }, [data, limit, billedCycle, billedScale]);
 
   const loading = isFetching && !data;
   const failed = !loading && !data && isError;
 
-  const totalTooltip = orgScoped
+  // Sections collapsed via their header band, keyed by heading so the state
+  // survives period/project switches.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleGroup = (heading: string): void => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(heading)) {
+        next.delete(heading);
+      } else {
+        next.add(heading);
+      }
+      return next;
+    });
+  };
+
+  const totalTooltip = billedCycle
     ? "Billed tokens under management, attributed across metrics by the analytics distribution."
-    : "Tokens for the selected project, from the analytics aggregates. Billed normalization applies to the whole organization only.";
-  const overageTooltip = orgScoped
+    : "Tokens for the selected slice, from the analytics aggregates. Billed normalization applies to full organization billing cycles only.";
+  const overageTooltip = billedCycle
     ? "The billed overage (tokens beyond the included allowance), attributed to each metric by its tokens recorded after the allowance ran out. The crossing day is prorated."
-    : "The token allowance is an organization-level number; select All projects to see the overage.";
+    : "The token allowance is an organization-per-cycle number; select a full billing cycle and All projects to see the overage.";
 
   return (
     <div className="border-border overflow-hidden rounded-lg border">
       <div className="flex items-baseline gap-2 px-4 pt-3 pb-1">
-        <span className="text-sm font-semibold">Usage details</span>
-        <span className="text-muted-foreground text-xs">
-          Cumulative totals over the selected billing cycle
+        <span className="text-sm font-semibold">
+          Token Usage Cumulative Breakdown
         </span>
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setCollapsed(new Set(groups.map((g) => g.heading)))}
+            className="text-muted-foreground hover:text-foreground text-xs transition-colors"
+          >
+            Collapse all
+          </button>
+          <button
+            type="button"
+            onClick={() => setCollapsed(new Set())}
+            className="text-muted-foreground hover:text-foreground text-xs transition-colors"
+          >
+            Expand all
+          </button>
+        </div>
       </div>
       <div className="text-muted-foreground flex items-center px-4 py-2 text-xs font-medium">
         <span className="flex-1">Metric</span>
@@ -470,27 +448,46 @@ export function TumDetailsTable({
       )}
       {!loading &&
         !failed &&
-        groups.map((group) => (
-          <div key={group.heading}>
-            <div className="bg-muted/50 text-muted-foreground border-border flex items-center gap-1.5 border-t px-4 py-1.5 text-xs">
-              <span className="font-medium">{group.heading}</span>
-              {group.note && (
-                <SimpleTooltip tooltip={group.note}>
-                  <Info className="size-3 cursor-help" />
-                </SimpleTooltip>
+        groups.map((group) => {
+          const isCollapsed = collapsed.has(group.heading);
+          return (
+            <div key={group.heading}>
+              {/* Clicking the section band collapses/expands its rows. */}
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.heading)}
+                aria-expanded={!isCollapsed}
+                className="bg-muted text-muted-foreground hover:text-foreground border-border dark:border-white/20 flex w-full cursor-pointer items-center gap-1.5 border-t px-4 py-1.5 text-xs transition-colors"
+              >
+                <ChevronDown
+                  className={cn(
+                    "size-3 transition-transform",
+                    isCollapsed && "-rotate-90",
+                  )}
+                />
+                <span className="font-medium">{group.heading}</span>
+                {group.note && (
+                  <SimpleTooltip tooltip={group.note}>
+                    <Info className="size-3 cursor-help" />
+                  </SimpleTooltip>
+                )}
+              </button>
+              {/* The default border token nearly vanishes on the dark canvas;
+                  lift the internal dividers so rows stay separable. */}
+              {!isCollapsed && (
+                <div className="divide-border dark:divide-white/20 divide-y">
+                  {group.rows.map((row) => (
+                    <DetailRowItem
+                      key={row.label}
+                      row={row}
+                      overageWeights={overageWeights}
+                    />
+                  ))}
+                </div>
               )}
             </div>
-            <div className="divide-border divide-y">
-              {group.rows.map((row) => (
-                <DetailRowItem
-                  key={row.label}
-                  row={row}
-                  overageWeights={overageWeights}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+          );
+        })}
     </div>
   );
 }
