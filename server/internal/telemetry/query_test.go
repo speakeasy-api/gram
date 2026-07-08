@@ -251,6 +251,47 @@ func insertAttributeClaudeToolResultLog(t *testing.T, ctx context.Context, proje
 	require.NoError(t, err)
 }
 
+// insertAttributePreDedupSummaryRow plants an attribute_metrics_summaries row
+// directly, shaped like rows written before the unique_tool_calls column
+// existed: total_tool_calls carries a counted state while unique_tool_calls is
+// omitted and defaults to the empty state (exactly what ALTER TABLE ADD COLUMN
+// leaves in existing parts).
+func insertAttributePreDedupSummaryRow(t *testing.T, ctx context.Context, projectID string, bucket time.Time, toolCalls int, cost float64) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO attribute_metrics_summaries (
+			gram_project_id, time_bucket,
+			department_name, job_title, employee_type, division_name, cost_center_name, user_email,
+			model, hook_source, roles, groups,
+			total_chats, total_input_tokens, total_output_tokens, total_tokens,
+			cache_read_input_tokens, cache_creation_input_tokens, total_cost, total_tool_calls,
+			account_type, provider, billing_mode,
+			query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name
+		)
+		SELECT
+			toUUID(?), toDateTime(?, 'UTC'),
+			'', '', '', '', '', 'legacy@example.com',
+			'opus', 'claude-code', [], [],
+			uniqExactIfState('legacy-chat', toUInt8(number = 0)),
+			sumIfState(toInt64(10), toUInt8(number = 0)),
+			sumIfState(toInt64(5), toUInt8(number = 0)),
+			sumIfState(toInt64(15), toUInt8(number = 0)),
+			sumIfState(toInt64(0), toUInt8(number = 0)),
+			sumIfState(toInt64(0), toUInt8(number = 0)),
+			sumIfState(toFloat64(?), toUInt8(number = 0)),
+			countIfState(toUInt8(1)),
+			'', '', '',
+			'', '', '', '', ''
+		FROM numbers(?)`,
+		projectID, bucket.Unix(), cost, toolCalls,
+	)
+	require.NoError(t, err)
+}
+
 func tableCostByGroup(rows []*gen.QueryRow) map[string]float64 {
 	out := make(map[string]float64, len(rows))
 	for _, r := range rows {
@@ -509,6 +550,50 @@ func TestQuery_CountsToolCalls(t *testing.T) {
 	// Tool rows carry no token/cost measures, so admitting them must not
 	// inflate cost from the single api_request row.
 	require.InDelta(t, 0.25, totalResult.Table[0].Measures.TotalCost, 1e-9)
+}
+
+// TestQuery_FallsBackToRowCountedToolCalls covers the expand-contract window:
+// summary rows written before the unique_tool_calls column existed only carry
+// the legacy total_tool_calls count (unique_tool_calls is the empty default
+// state), and the reader must fall back to it instead of reporting zero until
+// the backfiller rebuilds those buckets.
+func TestQuery_FallsBackToRowCountedToolCalls(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	insertAttributePreDedupSummaryRow(t, ctx, projectID, now.Add(-1*time.Hour), 3, 0.75)
+
+	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	var result *gen.QueryResult
+	require.Eventually(t, func() bool {
+		res, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From:   from,
+			To:     to,
+			TopN:   10,
+			SortBy: "total_tool_calls",
+		})
+		if err != nil || res == nil || len(res.Table) != 1 {
+			return false
+		}
+		result = res
+		return res.Table[0].Measures.TotalToolCalls == 3
+	}, 10*time.Second, 200*time.Millisecond)
+
+	require.EqualValues(t, 3, result.Table[0].Measures.TotalToolCalls)
+	require.InDelta(t, 0.75, result.Table[0].Measures.TotalCost, 1e-9)
 }
 
 // TestQuery_ExcludesAssistantChatCompletions guards the provenance rule: the

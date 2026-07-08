@@ -34,7 +34,15 @@ var attributeMeasureSelects = []string{
 	"sumIfMerge(total_tokens) AS m_total_tokens",
 	"sumIfMerge(cache_read_input_tokens) AS m_cache_read_input_tokens",
 	"sumIfMerge(cache_creation_input_tokens) AS m_cache_creation_input_tokens",
-	"uniqExactIfMerge(unique_tool_calls) AS m_total_tool_calls",
+	// Transitional fallback (expand-contract): rows written before the
+	// unique_tool_calls column existed carry only the default empty state, so
+	// uniqExactIfMerge resolves to 0 on them even when total_tool_calls has
+	// counted calls. Fall back to the legacy row count for such groups until
+	// the backfiller has rebuilt history; then this collapses to a plain
+	// uniqExactIfMerge and total_tool_calls can be contracted. Groups mixing
+	// pre- and post-migration buckets undercount (only new rows contribute
+	// unique states) — accepted as transitional, resolved by the backfill.
+	"if(uniqExactIfMerge(unique_tool_calls) = 0, countIfMerge(total_tool_calls), uniqExactIfMerge(unique_tool_calls)) AS m_total_tool_calls",
 	"uniqExactIfMerge(total_chats) AS m_total_chats",
 }
 
