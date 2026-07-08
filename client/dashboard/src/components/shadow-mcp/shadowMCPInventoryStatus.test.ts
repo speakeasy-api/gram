@@ -82,12 +82,6 @@ describe("shadowMCPInventoryStatus", () => {
     ).toBe("blocked");
   });
 
-  it("shows blocked when a URL deny rule exists", () => {
-    expect(shadowMCPInventoryStatus(server({ access: "denied" }), "none")).toBe(
-      "blocked",
-    );
-  });
-
   it("shows observed when blocking is inactive", () => {
     expect(
       shadowMCPInventoryStatus(server({ access: "none" }), "flagging"),
@@ -104,9 +98,6 @@ describe("shadowMCPInventoryStatus", () => {
         "blocking",
       ),
     ).toBe("Allowed by URL rule");
-    expect(
-      shadowMCPInventoryStatusDescription(server({ access: "denied" }), "none"),
-    ).toBe("Blocked by URL rule");
     expect(
       shadowMCPInventoryStatusDescription(
         server({ access: "none" }),

@@ -14,16 +14,14 @@ import {
   type ReactNode,
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { RiskPolicyBypassRequest } from "@gram/client/models/components/riskpolicybypassrequest.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { ShadowMCPInventoryTable } from "./ShadowMCPInventoryTable";
 
 const mocks = vi.hoisted(() => ({
   useShadowMCPInventory: vi.fn(),
-  usePolicyBypassRequests: vi.fn(),
   invalidateShadowMCPInventory: vi.fn(),
-  allowInventoryServerMutation: vi.fn(),
-  clearInventoryServerMutation: vi.fn(),
+  upsertAllowRuleMutation: vi.fn(),
+  deleteAllowRuleMutation: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
@@ -31,19 +29,17 @@ vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
   useShadowMCPInventory: mocks.useShadowMCPInventory,
 }));
 
-vi.mock("@gram/client/react-query/riskListPolicyBypassRequests.js", () => ({
-  useRiskListPolicyBypassRequests: mocks.usePolicyBypassRequests,
-}));
-
-vi.mock("@gram/client/react-query/allowShadowMCPInventoryServer.js", () => ({
-  useAllowShadowMCPInventoryServerMutation: mocks.allowInventoryServerMutation,
-}));
+vi.mock(
+  "@gram/client/react-query/upsertShadowMCPInventoryAllowRule.js",
+  () => ({
+    useUpsertShadowMCPInventoryAllowRuleMutation: mocks.upsertAllowRuleMutation,
+  }),
+);
 
 vi.mock(
-  "@gram/client/react-query/clearShadowMCPInventoryServerAccess.js",
+  "@gram/client/react-query/deleteShadowMCPInventoryAllowRule.js",
   () => ({
-    useClearShadowMCPInventoryServerAccessMutation:
-      mocks.clearInventoryServerMutation,
+    useDeleteShadowMCPInventoryAllowRuleMutation: mocks.deleteAllowRuleMutation,
   }),
 );
 
@@ -51,6 +47,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
   Badge: Object.assign(
     ({ children }: { children: ReactNode }) => <span>{children}</span>,
     {
+      LeftIcon: ({ children }: { children: ReactNode }) => (
+        <span>{children}</span>
+      ),
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
@@ -224,12 +223,13 @@ function inventoryServer(
 
   return {
     access: "none",
+    allowedPolicyIds: [],
     canonicalServerUrl,
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastCalled: undefined,
     lastSeen: new Date("2026-01-02T10:00:00Z"),
     observedUseCount: 0,
-    rule: undefined,
+    requestCount: 0,
     serverName: undefined,
     topUsers: [],
     urlHost: new URL(canonicalServerUrl).host,
@@ -238,41 +238,19 @@ function inventoryServer(
   };
 }
 
-function policyBypassRequest(
-  overrides: Partial<RiskPolicyBypassRequest> & { id: string },
-): RiskPolicyBypassRequest {
-  return {
-    createdAt: new Date("2026-01-01T10:00:00Z"),
-    decidedAt: undefined,
-    decidedBy: undefined,
-    grantedPrincipalUrns: [],
-    note: undefined,
-    policyId: "policy-1",
-    requesterEmail: "dev@example.com",
-    requesterUserId: "user-1",
-    status: "requested",
-    targetDimensions: {},
-    targetKey: undefined,
-    targetKind: "shadow_mcp_server",
-    targetLabel: undefined,
-    updatedAt: new Date("2026-01-01T10:00:00Z"),
-    ...overrides,
-  };
-}
-
 function renderInventoryTable(
   projectID = "project-id-1",
   policyState: "blocking" | "flagging" | "none" | "unavailable" = "blocking",
-  projectSlug = "project-slug-1",
+  blockingPolicyIDs = ["policy-1"],
 ) {
   const queryClient = new QueryClient();
 
   return render(
     <QueryClientProvider client={queryClient}>
       <ShadowMCPInventoryTable
+        blockingPolicyIDs={blockingPolicyIDs}
         policyState={policyState}
         projectID={projectID}
-        projectSlug={projectSlug}
       />
     </QueryClientProvider>,
   );
@@ -307,17 +285,11 @@ describe("ShadowMCPInventoryTable", () => {
     }
 
     mockShadowMCPInventory();
-    mocks.usePolicyBypassRequests.mockReturnValue({
-      data: { requests: [] },
-      isFetching: false,
-      isLoading: false,
-      error: null,
-    });
-    mocks.allowInventoryServerMutation.mockReturnValue({
+    mocks.upsertAllowRuleMutation.mockReturnValue({
       isPending: false,
       mutateAsync: vi.fn(),
     });
-    mocks.clearInventoryServerMutation.mockReturnValue({
+    mocks.deleteAllowRuleMutation.mockReturnValue({
       isPending: false,
       mutateAsync: vi.fn(),
     });
@@ -365,11 +337,6 @@ describe("ShadowMCPInventoryTable", () => {
       undefined,
       expect.objectContaining({ enabled: true }),
     );
-    expect(mocks.usePolicyBypassRequests).toHaveBeenCalledWith(
-      { gramProject: "project-slug-1" },
-      undefined,
-      expect.objectContaining({ enabled: true }),
-    );
   });
 
   it("shows request counts for each Shadow MCP server URL", async () => {
@@ -377,42 +344,15 @@ describe("ShadowMCPInventoryTable", () => {
       servers: [
         inventoryServer({
           canonicalServerUrl: "https://github.example.com/mcp",
+          requestCount: 2,
           serverName: "GitHub MCP",
         }),
         inventoryServer({
           canonicalServerUrl: "https://slack.example.com/mcp",
+          requestCount: 0,
           serverName: "Slack MCP",
         }),
       ],
-    });
-    mocks.usePolicyBypassRequests.mockReturnValue({
-      data: {
-        requests: [
-          policyBypassRequest({
-            id: "request-1",
-            targetDimensions: {
-              server_url: "https://github.example.com/mcp",
-            },
-          }),
-          policyBypassRequest({
-            id: "request-2",
-            status: "denied",
-            targetDimensions: {
-              server_url: "https://github.example.com/mcp",
-            },
-          }),
-          policyBypassRequest({
-            id: "non-shadow-request",
-            targetDimensions: {
-              server_url: "https://github.example.com/mcp",
-            },
-            targetKind: "deployment",
-          }),
-        ],
-      },
-      isFetching: false,
-      isLoading: false,
-      error: null,
     });
 
     renderInventoryTable();
@@ -428,7 +368,7 @@ describe("ShadowMCPInventoryTable", () => {
     }
 
     expect(within(githubRow).getByText("2")).toBeTruthy();
-    expect(within(slackRow).getByText("0")).toBeTruthy();
+    expect(within(slackRow).getByText("-")).toBeTruthy();
   });
 
   it("sorts inventory columns and uses call count for Usage", async () => {
@@ -655,9 +595,9 @@ describe("ShadowMCPInventoryTable", () => {
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
+          blockingPolicyIDs={["policy-1"]}
           policyState="blocking"
           projectID="project-id-1"
-          projectSlug="project-slug-1"
         />
       </QueryClientProvider>,
     );
@@ -669,9 +609,9 @@ describe("ShadowMCPInventoryTable", () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
+          blockingPolicyIDs={["policy-1"]}
           policyState="blocking"
           projectID="project-id-2"
-          projectSlug="project-slug-2"
         />
       </QueryClientProvider>,
     );
@@ -696,10 +636,10 @@ describe("ShadowMCPInventoryTable", () => {
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
+          blockingPolicyIDs={["policy-1"]}
           enabled
           policyState="blocking"
           projectID="project-id-1"
-          projectSlug="project-slug-1"
         />
       </QueryClientProvider>,
     );
@@ -711,10 +651,10 @@ describe("ShadowMCPInventoryTable", () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
+          blockingPolicyIDs={["policy-1"]}
           enabled={false}
           policyState="blocking"
           projectID="project-id-1"
-          projectSlug="project-slug-1"
         />
       </QueryClientProvider>,
     );
@@ -723,8 +663,8 @@ describe("ShadowMCPInventoryTable", () => {
   });
 
   it("adds and removes Shadow MCP inventory URL allow rules", async () => {
-    const allowServer = vi.fn().mockResolvedValue({});
-    const clearServer = vi.fn().mockResolvedValue({});
+    const upsertAllowRule = vi.fn().mockResolvedValue({});
+    const deleteAllowRule = vi.fn().mockResolvedValue({});
     mockShadowMCPInventory({
       servers: [
         inventoryServer({
@@ -739,13 +679,13 @@ describe("ShadowMCPInventoryTable", () => {
         }),
       ],
     });
-    mocks.allowInventoryServerMutation.mockReturnValue({
+    mocks.upsertAllowRuleMutation.mockReturnValue({
       isPending: false,
-      mutateAsync: allowServer,
+      mutateAsync: upsertAllowRule,
     });
-    mocks.clearInventoryServerMutation.mockReturnValue({
+    mocks.deleteAllowRuleMutation.mockReturnValue({
       isPending: false,
-      mutateAsync: clearServer,
+      mutateAsync: deleteAllowRule,
     });
 
     renderInventoryTable();
@@ -763,11 +703,11 @@ describe("ShadowMCPInventoryTable", () => {
     fireEvent.click(within(pendingRow).getByRole("button", { name: "Allow" }));
 
     await waitFor(() => {
-      expect(allowServer).toHaveBeenCalledWith({
+      expect(upsertAllowRule).toHaveBeenCalledWith({
         request: {
-          shadowMCPInventoryServerAccessForm: {
+          shadowMCPInventoryAllowRuleForm: {
+            policyIds: ["policy-1"],
             projectId: "project-id-1",
-            serverName: "Pending MCP",
             serverUrl: "https://pending.example.com/mcp",
           },
         },
@@ -786,59 +726,14 @@ describe("ShadowMCPInventoryTable", () => {
     fireEvent.click(within(allowedRow).getByRole("button", { name: "Clear" }));
 
     await waitFor(() => {
-      expect(clearServer).toHaveBeenCalledWith({
+      expect(deleteAllowRule).toHaveBeenCalledWith({
         request: {
-          clearShadowMCPInventoryServerAccessRequestBody: {
-            projectId: "project-id-1",
-            serverUrl: "https://allowed.example.com/mcp",
-          },
+          projectId: "project-id-1",
+          serverUrl: "https://allowed.example.com/mcp",
         },
       });
     });
     expect(mocks.invalidateShadowMCPInventory).toHaveBeenCalled();
-  });
-
-  it("clears denied Shadow MCP inventory URL rules", async () => {
-    const allowServer = vi.fn().mockResolvedValue({});
-    const clearServer = vi.fn().mockResolvedValue({});
-    mockShadowMCPInventory({
-      servers: [
-        inventoryServer({
-          access: "denied",
-          canonicalServerUrl: "https://denied.example.com/mcp",
-          serverName: "Denied MCP",
-        }),
-      ],
-    });
-    mocks.allowInventoryServerMutation.mockReturnValue({
-      isPending: false,
-      mutateAsync: allowServer,
-    });
-    mocks.clearInventoryServerMutation.mockReturnValue({
-      isPending: false,
-      mutateAsync: clearServer,
-    });
-
-    renderInventoryTable();
-
-    await waitFor(() => {
-      expect(screen.getByText("Denied MCP")).toBeTruthy();
-    });
-
-    expect(screen.getByText("Blocked by URL rule")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
-
-    await waitFor(() => {
-      expect(clearServer).toHaveBeenCalledWith({
-        request: {
-          clearShadowMCPInventoryServerAccessRequestBody: {
-            projectId: "project-id-1",
-            serverUrl: "https://denied.example.com/mcp",
-          },
-        },
-      });
-    });
-    expect(allowServer).not.toHaveBeenCalled();
   });
 
   it("uses the action button as the tooltip trigger", async () => {
@@ -880,7 +775,7 @@ describe("ShadowMCPInventoryTable", () => {
         }),
       ],
     });
-    mocks.allowInventoryServerMutation.mockReturnValue({
+    mocks.upsertAllowRuleMutation.mockReturnValue({
       isPending: false,
       mutateAsync: allowServer,
     });

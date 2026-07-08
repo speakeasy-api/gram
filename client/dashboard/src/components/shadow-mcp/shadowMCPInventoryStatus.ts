@@ -49,7 +49,7 @@ export function shadowMCPInventoryStatus(
   policyState: ShadowMCPPolicyState,
 ): ShadowMCPInventoryStatus {
   if (server.access === "allowed") return "allowed";
-  if (server.access === "denied") return "blocked";
+  if (server.access === "blocked") return "blocked";
   if (policyState === "blocking") return "blocked";
   return "observed";
 }
@@ -85,7 +85,7 @@ export function shadowMCPInventoryStatusDescription(
   policyState: ShadowMCPPolicyState,
 ): string {
   if (server.access === "allowed") return "Allowed by URL rule";
-  if (server.access === "denied") return "Blocked by URL rule";
+  if (server.access === "blocked") return "Blocked by policy";
   if (policyState === "blocking") return "Blocked by policy";
   return "Not blocking";
 }

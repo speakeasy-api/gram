@@ -1,14 +1,12 @@
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
-import type { RiskPolicyBypassRequest } from "@gram/client/models/components/riskpolicybypassrequest.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
-import { useRiskListPolicyBypassRequests } from "@gram/client/react-query/riskListPolicyBypassRequests.js";
+import { useDeleteShadowMCPInventoryAllowRuleMutation } from "@gram/client/react-query/deleteShadowMCPInventoryAllowRule.js";
 import {
   invalidateAllShadowMCPInventory,
   useShadowMCPInventory,
 } from "@gram/client/react-query/shadowMCPInventory.js";
-import { useAllowShadowMCPInventoryServerMutation } from "@gram/client/react-query/allowShadowMCPInventoryServer.js";
-import { useClearShadowMCPInventoryServerAccessMutation } from "@gram/client/react-query/clearShadowMCPInventoryServerAccess.js";
+import { useUpsertShadowMCPInventoryAllowRuleMutation } from "@gram/client/react-query/upsertShadowMCPInventoryAllowRule.js";
 import {
   Badge,
   Button,
@@ -38,8 +36,6 @@ import {
 
 const INVENTORY_PAGE_LIMIT = 50;
 const FIRST_PAGE_CURSOR = "";
-const SERVER_URL_TARGET_DIMENSION = "server_url";
-const SHADOW_MCP_TARGET_KIND = "shadow_mcp_server";
 
 type InventoryPage = {
   cursor: string;
@@ -55,14 +51,6 @@ function usageCountLabel(count: number) {
 
 function userCountLabel(count: number) {
   return `${count} ${count === 1 ? "user" : "users"}`;
-}
-
-function shadowMCPRequestServerURL(request: RiskPolicyBypassRequest) {
-  if (request.targetKind !== SHADOW_MCP_TARGET_KIND) {
-    return undefined;
-  }
-
-  return request.targetDimensions[SERVER_URL_TARGET_DIMENSION];
 }
 
 function InventoryServerCell({ server }: { server: ShadowMCPInventoryServer }) {
@@ -117,17 +105,17 @@ function InventoryEmptyState() {
 }
 
 export function ShadowMCPInventoryTable({
+  blockingPolicyIDs,
   className,
   enabled = true,
   policyState,
   projectID,
-  projectSlug,
 }: {
+  blockingPolicyIDs: string[];
   className?: string;
   enabled?: boolean;
   policyState: ShadowMCPPolicyState;
   projectID: string;
-  projectSlug: string;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const inventoryScope = enabled && projectID.length > 0 ? projectID : "";
@@ -147,19 +135,14 @@ export function ShadowMCPInventoryTable({
   const inventoryQuery = useShadowMCPInventory(inventoryRequest, undefined, {
     enabled: enabled && projectID.length > 0,
   });
-  const requestsQuery = useRiskListPolicyBypassRequests(
-    { gramProject: projectSlug },
-    undefined,
-    { enabled: enabled && projectSlug.length > 0 },
-  );
-  const allowServer = useAllowShadowMCPInventoryServerMutation();
-  const clearServer = useClearShadowMCPInventoryServerAccessMutation();
+  const upsertAllowRule = useUpsertShadowMCPInventoryAllowRuleMutation();
+  const deleteAllowRule = useDeleteShadowMCPInventoryAllowRuleMutation();
   const [sort, setSort] = useState<SortDescriptor | null>({
     id: "lastCalled",
     direction: "desc",
   });
   const [pendingServerURL, setPendingServerURL] = useState<string | null>(null);
-  const isMutating = allowServer.isPending || clearServer.isPending;
+  const isMutating = upsertAllowRule.isPending || deleteAllowRule.isPending;
   const isActionPending = isMutating || pendingServerURL !== null;
 
   useEffect(() => {
@@ -214,22 +197,8 @@ export function ShadowMCPInventoryTable({
   const loadedServers = useMemo(() => {
     return activePages.flatMap((page) => page.servers);
   }, [activePages]);
-  const requestCountByServerURL = useMemo(() => {
-    const counts = new Map<string, number>();
-
-    for (const request of requestsQuery.data?.requests ?? []) {
-      const serverURL = shadowMCPRequestServerURL(request);
-      if (!serverURL) {
-        continue;
-      }
-
-      counts.set(serverURL, (counts.get(serverURL) ?? 0) + 1);
-    }
-
-    return counts;
-  }, [requestsQuery.data?.requests]);
   const requestCountForServer = (server: ShadowMCPInventoryServer) =>
-    requestCountByServerURL.get(server.canonicalServerUrl) ?? 0;
+    server.requestCount;
 
   const latestPage = activePages[activePages.length - 1];
   const canUseInventoryQueryData =
@@ -261,11 +230,14 @@ export function ShadowMCPInventoryTable({
     setPendingServerURL(server.canonicalServerUrl);
     const label = server.serverName ?? server.canonicalServerUrl;
     try {
-      await allowServer.mutateAsync({
+      if (blockingPolicyIDs.length === 0) {
+        throw new Error("No blocking Shadow MCP policy is available");
+      }
+      await upsertAllowRule.mutateAsync({
         request: {
-          shadowMCPInventoryServerAccessForm: {
+          shadowMCPInventoryAllowRuleForm: {
+            policyIds: blockingPolicyIDs,
             projectId: projectID,
-            serverName: server.serverName,
             serverUrl: server.canonicalServerUrl,
           },
         },
@@ -283,12 +255,10 @@ export function ShadowMCPInventoryTable({
     setPendingServerURL(server.canonicalServerUrl);
     const label = server.serverName ?? server.canonicalServerUrl;
     try {
-      await clearServer.mutateAsync({
+      await deleteAllowRule.mutateAsync({
         request: {
-          clearShadowMCPInventoryServerAccessRequestBody: {
-            projectId: projectID,
-            serverUrl: server.canonicalServerUrl,
-          },
+          projectId: projectID,
+          serverUrl: server.canonicalServerUrl,
         },
       });
       await refreshInventory();
@@ -303,8 +273,7 @@ export function ShadowMCPInventoryTable({
   const renderRuleActionCell = (server: ShadowMCPInventoryServer) => {
     const isServerPending = pendingServerURL === server.canonicalServerUrl;
     const label = server.serverName || server.urlHost;
-    const hasAccessRule =
-      server.access === "allowed" || server.access === "denied";
+    const hasAccessRule = server.access === "allowed";
     const buttonLabel = hasAccessRule ? "Clear" : "Allow";
     const iconName = hasAccessRule ? "minus" : "plus";
     const tooltip = hasAccessRule
@@ -409,9 +378,20 @@ export function ShadowMCPInventoryTable({
       sortable: true,
       sortValue: requestCountForServer,
       width: "0.6fr",
-      render: (server) => (
-        <Type variant="small">{requestCountForServer(server)}</Type>
-      ),
+      render: (server) => {
+        const count = requestCountForServer(server);
+        if (count > 0) {
+          return (
+            <Badge variant="warning" background={false}>
+              <Badge.LeftIcon>
+                <Icon name="shield-alert" />
+              </Badge.LeftIcon>
+              <Badge.Text>{count}</Badge.Text>
+            </Badge>
+          );
+        }
+        return <Type variant="small">-</Type>;
+      },
     },
     {
       key: "accessRule",
