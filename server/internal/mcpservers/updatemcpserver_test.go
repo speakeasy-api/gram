@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -794,4 +795,50 @@ func TestUpdateMcpServer_RecreatedServerReattachesUnderOriginalName(t *testing.T
 	require.Len(t, servers, 1)
 	require.Equal(t, replacement.ID, servers[0].McpServerID.UUID.String())
 	require.Equal(t, "Ashby", servers[0].DisplayName, "the freed display name must be reused, not suffixed")
+}
+
+// TestUpdateMcpServer_EnableAdoptsPreexistingDefaultSlugPlugin is the
+// regression for the prod failure where every enable/endpoint-create in a
+// project errored with "attach mcp server to default plugin": the project
+// had a plugin slugged "default" from before auto-provisioning (is_default
+// false), so EnsureDefaultPlugin's create collided with its slug on every
+// attach. Enabling must adopt that plugin and attach into it.
+func TestUpdateMcpServer_EnableAdoptsPreexistingDefaultSlugPlugin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	preexisting, err := pluginsQueries.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Name:           "Default",
+		Slug:           "default",
+		Description:    pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	created, remoteServerID := createDisabledRemoteServer(t, ctx, ti, *authCtx.ProjectID, "Adopted Plugin Server")
+	seedEndpointFor(t, ctx, ti.conn, *authCtx.ProjectID, created.ID)
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                created.ID,
+		Name:              nil,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &remoteServerID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+
+	servers, err := pluginsQueries.ListPluginServers(ctx, preexisting.ID)
+	require.NoError(t, err)
+	require.Len(t, servers, 1, "the server must attach into the adopted pre-existing plugin")
+	require.Equal(t, created.ID, servers[0].McpServerID.UUID.String())
 }

@@ -857,6 +857,45 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectI
 	return items, nil
 }
 
+const promotePluginToDefault = `-- name: PromotePluginToDefault :one
+UPDATE plugins
+SET is_default = TRUE,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND project_id = $2
+  AND slug = 'default'
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+`
+
+type PromotePluginToDefaultParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Flags the project's existing "default"-slug plugin as its Default plugin.
+// Used by EnsureDefaultPlugin to adopt a plugin created manually before
+// auto-provisioning existed (is_default false), instead of failing every
+// attach in the project on the slug unique constraint.
+func (q *Queries) PromotePluginToDefault(ctx context.Context, arg PromotePluginToDefaultParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, promotePluginToDefault, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const removeAllPluginAssignments = `-- name: RemoveAllPluginAssignments :execrows
 DELETE FROM plugin_assignments
 WHERE plugin_id = $1

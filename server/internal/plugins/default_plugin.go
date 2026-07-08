@@ -28,9 +28,10 @@ type EnsureDefaultPluginResult struct {
 // missing — covers projects that predate this feature (created before
 // CreateProject started provisioning one). Concurrent callers racing to
 // create it are resolved by re-fetching on the is_default unique-index
-// violation; any other unique violation (e.g. a pre-existing plugin already
-// named/slugged "Default"/"default") is a real conflict and surfaces as an
-// error rather than masking it.
+// violation. A pre-existing plugin already slugged "default" (created
+// manually before is_default existed) is adopted — promoted to is_default —
+// rather than surfaced as a conflict, since failing here fails every attach
+// in the project, which fails every endpoint create and server enable.
 func EnsureDefaultPlugin(ctx context.Context, q *repo.Queries, organizationID string, projectID uuid.UUID) (*EnsureDefaultPluginResult, error) {
 	plugin, err := q.GetDefaultPlugin(ctx, repo.GetDefaultPluginParams{
 		OrganizationID: organizationID,
@@ -41,6 +42,22 @@ func EnsureDefaultPlugin(ctx context.Context, q *repo.Queries, organizationID st
 		return &EnsureDefaultPluginResult{Plugin: plugin, Created: false}, nil
 	case !errors.Is(err, pgx.ErrNoRows):
 		return nil, fmt.Errorf("get default plugin: %w", err)
+	}
+
+	// Adopt before creating: a project may already hold a plugin slugged
+	// "default" from before auto-provisioning existed. Promoting it must
+	// happen before the INSERT below, not in recovery from its unique
+	// violation — a failed statement aborts the caller's surrounding
+	// transaction, leaving nothing to recover into.
+	promoted, err := q.PromotePluginToDefault(ctx, repo.PromotePluginToDefaultParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	switch {
+	case err == nil:
+		return &EnsureDefaultPluginResult{Plugin: promoted, Created: false}, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return nil, fmt.Errorf("promote existing default plugin: %w", err)
 	}
 
 	created, err := q.CreateDefaultPlugin(ctx, repo.CreateDefaultPluginParams{

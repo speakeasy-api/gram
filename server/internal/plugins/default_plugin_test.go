@@ -51,7 +51,7 @@ func TestEnsureDefaultPlugin_ReturnsExistingWhenPresent(t *testing.T) {
 	require.Equal(t, first.Plugin.ID, second.Plugin.ID)
 }
 
-func TestEnsureDefaultPlugin_ConflictWithExistingNonDefaultPlugin(t *testing.T) {
+func TestEnsureDefaultPlugin_AdoptsExistingNonDefaultPlugin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestPluginsService(t)
@@ -61,10 +61,12 @@ func TestEnsureDefaultPlugin_ConflictWithExistingNonDefaultPlugin(t *testing.T) 
 
 	queries := pluginsrepo.New(ti.conn)
 
-	// A plugin already occupies the "Default"/"default" name+slug, but isn't
-	// marked is_default — a real conflict, not a race with another Ensure
-	// call, so it must surface as an error rather than being masked.
-	_, err := queries.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
+	// A plugin already occupies the "Default"/"default" name+slug but isn't
+	// marked is_default — it predates auto-provisioning. Ensure must adopt
+	// (promote) it rather than error: surfacing a conflict here fails every
+	// attach in the project, which fails every endpoint create and server
+	// enable (seen in prod as "attach mcp server to default plugin").
+	existing, err := queries.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		Name:           "Default",
@@ -73,8 +75,17 @@ func TestEnsureDefaultPlugin_ConflictWithExistingNonDefaultPlugin(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	_, err = plugins.EnsureDefaultPlugin(ctx, queries, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
-	require.Error(t, err)
+	result, err := plugins.EnsureDefaultPlugin(ctx, queries, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.False(t, result.Created)
+	require.Equal(t, existing.ID, result.Plugin.ID)
+	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, result.Plugin.IsDefault)
+
+	// The promotion sticks: a second Ensure finds it by the is_default flag.
+	again, err := plugins.EnsureDefaultPlugin(ctx, queries, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.False(t, again.Created)
+	require.Equal(t, existing.ID, again.Plugin.ID)
 }
 
 func TestAttachToDefaultPlugin_DisplayNameCollision_SuffixesName(t *testing.T) {

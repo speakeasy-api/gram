@@ -14,6 +14,20 @@ INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
 VALUES (@organization_id, @project_id, 'Default', 'default', TRUE)
 RETURNING *;
 
+-- name: PromotePluginToDefault :one
+-- Flags the project's existing "default"-slug plugin as its Default plugin.
+-- Used by EnsureDefaultPlugin to adopt a plugin created manually before
+-- auto-provisioning existed (is_default false), instead of failing every
+-- attach in the project on the slug unique constraint.
+UPDATE plugins
+SET is_default = TRUE,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND slug = 'default'
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: GetDefaultPlugin :one
 -- Used by AttachToDefaultPlugin to find the fallback plugin new servers get
 -- auto-attached to. No rows is expected for projects that predate the
