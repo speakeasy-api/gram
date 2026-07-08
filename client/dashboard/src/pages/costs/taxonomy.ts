@@ -172,9 +172,7 @@ export function datasetForDim(dim: Dimension): Dataset {
 
 // The non-attribution breakdown axes — the `all` dataset's pivots. Attribution
 // dims are excluded here; they're only reachable inside their own dataset.
-const BASE_PIVOTS: DimMeta[] = PIVOTS.filter(
-  (p) => !isAttributionDim(p.dim),
-);
+const BASE_PIVOTS: DimMeta[] = PIVOTS.filter((p) => !isAttributionDim(p.dim));
 
 // The breakdown axes offered inside a dataset: the base org/attribute pivots for
 // `all`, or the dataset's own attribution dims otherwise.
