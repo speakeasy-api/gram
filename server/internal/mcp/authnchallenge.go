@@ -215,6 +215,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 		UserID:                "",
 		ExternalUserID:        "",
 		APIKeyID:              "",
+		APIKeyName:            "",
 		SessionID:             &jti,
 		OrganizationSlug:      orgMetadata.Slug,
 		Email:                 nil,

@@ -1010,7 +1010,8 @@ gram_hooks_build_canonical_payload() {
     "$(gram_hooks_json_string_member "adapter" "%s")" \
     "$(gram_hooks_json_string_member "adapter_version" "$(gram_hooks_first_string "$payload" "cursor_version" "codex_version" "version")")" \
     "$(gram_hooks_json_string_member "raw_event_name" "$native")" \
-    "$(gram_hooks_json_string_member "hostname" "$hostname")")
+    "$(gram_hooks_json_string_member "hostname" "$hostname")" \
+    "$(gram_hooks_json_string_member "user_email" "$(gram_hooks_json_string_value "$payload" "user_email")")")
   session_members=$(gram_hooks_join_members \
     "$(gram_hooks_json_string_member "id" "$session_id")" \
     "$(gram_hooks_json_string_member "turn_id" "$turn_id")" \

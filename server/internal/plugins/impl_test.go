@@ -1499,14 +1499,15 @@ func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *
 	require.NotEmpty(t, hooksKeyPrefix, "expected a plugins-hooks-* API key")
 
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
-	// Hook senders must not embed the publish-time hooks key anymore. Each
-	// developer authenticates locally; auth.sh writes the resulting key to a
-	// protected curl config when the hook fires.
+	// Hook senders embed the publish-time hooks key as the org-wide fallback:
+	// per-user browser login still takes precedence when cached, but a machine
+	// with no personal credentials sends through the baked key instead of
+	// degrading to the unauthenticated pass-through.
 	for _, path := range []string{claudeObservability + "/hooks/hook.sh", "cursor-plugins/" + cursorObservability + "/hooks/hook.sh"} {
 		script := string(mock.lastPushedFiles[path])
 		require.NotEmpty(t, script, path+" missing")
 		require.Contains(t, script, "gram_hooks_post_authenticated", "%s does not use local hook auth", path)
-		require.NotContains(t, script, hooksKeyPrefix, "%s embeds the publish-time hooks key", path)
+		require.Contains(t, script, hooksKeyPrefix, "%s must embed the org-wide hooks key fallback", path)
 		// Must NOT contain the MCP key — separate scope, separate concerns.
 		require.NotContains(t, script, "plugins-mcp-", "%s leaked the MCP key", path)
 	}

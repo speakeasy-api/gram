@@ -33,6 +33,21 @@ func withHookDuplicate(ctx context.Context) context.Context {
 	return context.WithValue(ctx, hookDuplicateContextKey{}, true)
 }
 
+// hookAuthRejectedContextKey marks a request that explicitly presented plugin
+// credentials which failed validation. Distinct from carrying no credentials
+// at all: a never-authenticated machine fails open, while a bad token is a
+// broken-but-established auth state that the MCP guard fails closed on.
+type hookAuthRejectedContextKey struct{}
+
+func withHookAuthRejected(ctx context.Context) context.Context {
+	return context.WithValue(ctx, hookAuthRejectedContextKey{}, true)
+}
+
+func isHookAuthRejected(ctx context.Context) bool {
+	rejected, _ := ctx.Value(hookAuthRejectedContextKey{}).(bool)
+	return rejected
+}
+
 // isHookDuplicate reports whether ctx was tagged as a redelivery.
 func (s *Service) isHookDuplicate(ctx context.Context) bool {
 	dup, _ := ctx.Value(hookDuplicateContextKey{}).(bool)

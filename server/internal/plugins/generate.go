@@ -1253,6 +1253,10 @@ func renderHookRuntimeSourceSnippet() string {
 . "$script_dir/http.sh"
 # shellcheck source=/dev/null
 . "$script_dir/auth.sh"
+if [ -f "$script_dir/identity.sh" ]; then
+  # shellcheck source=/dev/null
+  . "$script_dir/identity.sh"
+fi
 `
 }
 
@@ -1293,6 +1297,7 @@ set -u
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
 %s
+gram_hooks_org_key="${GRAM_HOOKS_ORG_KEY:-%s}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -1307,9 +1312,11 @@ export GRAM_HOOKS_INTERACTIVE=%s
 # warning); once credentials have been established, a broken auth state
 # exits with the configured failure code from inside prepare_auth (2 blocks
 # the session start; observability mode passes 0 so nothing ever blocks).
+# With the baked org-wide key present, auth resolves without a browser and
+# session start never stalls on login.
 gram_hooks_prepare_auth "$server_url" "$project_slug" %s || true
 exit 0
-`, cfg.ServerURL, cfg.ProjectSlug, orgHintAssignment(cfg), failureExit, interactive, failureExit)
+`, cfg.ServerURL, cfg.ProjectSlug, orgHintAssignment(cfg), cfg.HooksAPIKey, failureExit, interactive, failureExit)
 }
 
 // renderLoginScript emits hooks/login.sh: the standalone interactive login
@@ -1986,9 +1993,13 @@ gram_hooks_prepare_auth() {
   api_key=""
   project=""
   email=""
+  GRAM_HOOKS_AUTH_SOURCE=""
   if [ "$force" != "force" ]; then
     api_key="${GRAM_HOOKS_API_KEY:-}"
     project="${GRAM_HOOKS_PROJECT_SLUG:-}"
+    if [ -n "$api_key" ]; then
+      GRAM_HOOKS_AUTH_SOURCE="env"
+    fi
   fi
 
   if [ -z "$api_key" ]; then
@@ -2003,7 +2014,19 @@ gram_hooks_prepare_auth() {
       GRAM_HOOKS_CACHED_PROJECT=""
       GRAM_HOOKS_CACHED_EMAIL=""
     fi
-    if [ -z "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
+    if [ -n "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
+      GRAM_HOOKS_AUTH_SOURCE="cache"
+    elif [ -n "${gram_hooks_org_key:-}" ]; then
+      # No per-user credentials on this machine: fall back to the org-wide
+      # hooks key baked into the published plugin so events keep flowing,
+      # attributed via the payload's self-reported user_email, instead of
+      # degrading to the unauthenticated pass-through. Never cached: a later
+      # browser login upgrades this machine to per-user attribution, and a
+      # republished plugin swaps the key without stale local state.
+      GRAM_HOOKS_AUTH_SOURCE="org"
+      api_key="$gram_hooks_org_key"
+      project="$project_hint"
+    else
       if ! gram_hooks_login "$server_url" "$project_hint"; then
         if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ] && gram_hooks_reauth_needed; then
           GRAM_HTTP_CODE=""
@@ -2021,14 +2044,17 @@ gram_hooks_prepare_auth() {
         echo "Speakeasy hooks could not read Gram authentication after login." >&2
         exit "$failure_exit"
       fi
+      GRAM_HOOKS_AUTH_SOURCE="login"
     fi
-    api_key="${GRAM_HOOKS_CACHED_API_KEY:-}"
-    # An explicit env project selection outranks the project the key was
-    # cached with; the cached project only outranks the baked default, so a
-    # login-time project choice survives sends but GRAM_HOOKS_PROJECT_SLUG
-    # still switches projects without forcing a re-login.
-    project="${GRAM_HOOKS_PROJECT_SLUG:-${GRAM_HOOKS_CACHED_PROJECT:-}}"
-    email="${GRAM_HOOKS_CACHED_EMAIL:-}"
+    if [ "$GRAM_HOOKS_AUTH_SOURCE" != "org" ]; then
+      api_key="${GRAM_HOOKS_CACHED_API_KEY:-}"
+      # An explicit env project selection outranks the project the key was
+      # cached with; the cached project only outranks the baked default, so a
+      # login-time project choice survives sends but GRAM_HOOKS_PROJECT_SLUG
+      # still switches projects without forcing a re-login.
+      project="${GRAM_HOOKS_PROJECT_SLUG:-${GRAM_HOOKS_CACHED_PROJECT:-}}"
+      email="${GRAM_HOOKS_CACHED_EMAIL:-}"
+    fi
   fi
 
   if [ -z "$project" ]; then
@@ -2082,9 +2108,14 @@ gram_hooks_post_authenticated() {
   # precedence over the cache on every send, so a re-login can never replace
   # them: a rejected configured key must fall through to the caller's non-2xx
   # handling (fail closed) rather than wipe the cache and downgrade to the
-  # never-authenticated pass-through.
+  # never-authenticated pass-through. The baked org-wide key is the same
+  # class: there is no cache to wipe and re-preparing would retry the very
+  # key that was just rejected. When the rejected key DID come from the
+  # cache, the force retry below resolves through the org-wide fallback, so
+  # one broken personal key does not stop events flowing.
   if { [ "$first_status" = "401" ] || [ "$first_status" = "403" ]; } \
     && [ -z "${GRAM_HOOKS_API_KEY:-}" ] \
+    && [ "${GRAM_HOOKS_AUTH_SOURCE:-}" != "org" ] \
     && [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" != "1" ]; then
     gram_hooks_forget_auth
     gram_hooks_mark_reauth_needed
@@ -2271,6 +2302,7 @@ set -u
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
 %s
+gram_hooks_org_key="${GRAM_HOOKS_ORG_KEY:-%s}"
 gram_hooks_nonblocking="%s"
 # In observability mode auth-state failures must not block either: prepare_auth
 # exits with this value on an established machine whose credentials broke.
@@ -2281,6 +2313,10 @@ fi
 provider_payload=$(cat)
 
 %s
+
+if type gram_enrich_identity_payload >/dev/null 2>&1; then
+  provider_payload="$(gram_enrich_identity_payload "$provider_payload")"
+fi
 
 %s
 
@@ -2319,7 +2355,7 @@ if [ -n "$gram_hooks_nonblocking" ]; then
   exit 0
 fi
 exit 2
-`, cfg.ServerURL, projectSlug, orgHintAssignment(cfg), nonblocking, renderHookRuntimeSourceSnippet(), renderHookPayloadNormalizationSnippet("codex"))
+`, cfg.ServerURL, projectSlug, orgHintAssignment(cfg), cfg.HooksAPIKey, nonblocking, renderHookRuntimeSourceSnippet(), renderHookPayloadNormalizationSnippet("codex"))
 	}
 
 	return fmt.Appendf(nil, `#!/usr/bin/env bash
@@ -2337,6 +2373,7 @@ set -u
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-%s}"
 %s
+gram_hooks_org_key="${GRAM_HOOKS_ORG_KEY:-%s}"
 gram_hooks_nonblocking="%s"
 # In observability mode auth-state failures must not block either: prepare_auth
 # exits with this value on an established machine whose credentials broke.
@@ -2347,6 +2384,9 @@ fi
 
 %s
 provider_payload=$(cat)
+if type gram_enrich_identity_payload >/dev/null 2>&1; then
+  provider_payload="$(gram_enrich_identity_payload "$provider_payload")"
+fi
 if type gram_hooks_enrich_cursor_mcp_payload >/dev/null 2>&1; then
   provider_payload="$(gram_hooks_enrich_cursor_mcp_payload "$provider_payload")"
 fi
@@ -2481,7 +2521,7 @@ if [ -n "$gram_hooks_nonblocking" ]; then
   exit 0
 fi
 exit 2
-`, cfg.ServerURL, projectSlug, orgHintAssignment(cfg), nonblocking, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform, platform, platform)
+`, cfg.ServerURL, projectSlug, orgHintAssignment(cfg), cfg.HooksAPIKey, nonblocking, renderHookRuntimeSourceSnippet()+cursorMCPEnrichment+claudeMCPEnrichment, renderHookPayloadNormalizationSnippet(platform), platform, platform, platform, platform, platform, platform, platform, platform, platform)
 }
 
 func renderClaudeMCPEnrichmentSnippet() string {

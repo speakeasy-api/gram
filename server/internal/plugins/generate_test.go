@@ -1116,12 +1116,14 @@ func hookAuthTestEnv(dir string, extra ...string) []string {
 // TestRenderHookScriptClaudeUnauthenticatedNudgesLoginOnce verifies the
 // never-authenticated ratchet on Claude prompt submission: the hook must not
 // block (exit 0), must inject an additionalContext nudge pointing at the
-// plugin's login helper, and must inject it at most once per session.
+// plugin's login helper, and must inject it at most once per session. The
+// ratchet only engages when no org-wide key is baked — with one present the
+// event sends through it instead (see the org-key fallback test).
 func TestRenderHookScriptClaudeUnauthenticatedNudgesLoginOnce(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
 		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
+		HooksAPIKey: "",
 		ProjectSlug: "acme-prod",
 	}
 	dir := t.TempDir()
@@ -1156,12 +1158,14 @@ func TestRenderHookScriptClaudeUnauthenticatedNudgesLoginOnce(t *testing.T) {
 
 // TestRenderHookScriptClaudeEstablishedFailsClosed verifies the other side of
 // the ratchet: once credentials have ever been cached on a machine, a missing
-// or invalidated key blocks the hook (exit 2) instead of failing open.
+// or invalidated key blocks the hook (exit 2) instead of failing open. Like
+// the nudge test this only applies to keyless renders — a baked org-wide key
+// resolves auth before the ratchet is consulted.
 func TestRenderHookScriptClaudeEstablishedFailsClosed(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
 		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
+		HooksAPIKey: "",
 		ProjectSlug: "acme-prod",
 	}
 	dir := t.TempDir()
@@ -1185,15 +1189,83 @@ func TestRenderHookScriptClaudeEstablishedFailsClosed(t *testing.T) {
 	require.Contains(t, stderr.String(), "could not authenticate")
 }
 
+// TestRenderHookScriptClaudeOrgKeyFallbackSends verifies the org-wide key
+// fallback: a machine with no per-user credentials — including one whose
+// cached key was forgotten after the auth-established marker was set, the
+// state that used to fail closed — sends the event through the baked key
+// instead of nudging or blocking.
+func TestRenderHookScriptClaudeOrgKeyFallbackSends(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_org_key_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	hookPath := filepath.Join(dir, "hook.sh")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	headersPath := filepath.Join(dir, "headers.txt")
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_HEADERS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_HEADERS"
+printf '{}\n200'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	// The previously-bricked state: established marker present, no cache.
+	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_HEADERS="+headersPath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-orgkey","prompt":"hi"}`)
+	cmd.Env = env
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), "org-key fallback must send instead of blocking: %s", stderr.String())
+	require.NotContains(t, stdout.String(), `"additionalContext"`,
+		"a machine sending through the org key must not be nudged to log in")
+
+	captured := string(requireFileBytes(t, headersPath))
+	require.Contains(t, captured, "Gram-Key: gram_local_org_key_xyz", "event must authenticate with the baked org key")
+	require.Contains(t, captured, "Gram-Project: acme-prod")
+	require.Contains(t, captured, "/rpc/hooks.ingest")
+}
+
 // TestRenderAuthPreflightScriptRatchet verifies SessionStart preflight
 // behavior on both sides of the ratchet: never-authenticated machines start
 // the session (exit 0, after the login attempt is skipped in CI), while
 // established machines with broken credentials block session start (exit 2).
 func TestRenderAuthPreflightScriptRatchet(t *testing.T) {
 	t.Parallel()
+	// Keyless render: with a baked org-wide key the preflight resolves auth
+	// through it and neither side of the ratchet is reachable.
 	cfg := GenerateConfig{
 		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
+		HooksAPIKey: "",
 		ProjectSlug: "acme-prod",
 	}
 	dir := t.TempDir()
@@ -1370,9 +1442,11 @@ printf '{}\n200'
 // of repeatedly blocking UserPromptSubmit with the stale token.
 func TestRenderHookScriptClaudeRejectedCachedKeyClearsAuthAndNudgesLogin(t *testing.T) {
 	t.Parallel()
+	// Keyless render: with a baked org-wide key the follow-up event resolves
+	// through it instead of nudging (see the org-key fallback test).
 	cfg := GenerateConfig{
 		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
+		HooksAPIKey: "",
 		ProjectSlug: "acme-prod",
 	}
 	dir := t.TempDir()
@@ -1448,9 +1522,11 @@ printf '{"message":"unauthorized: api_key not found"}\n401'
 // cached token, blocking non-prompt events still fail closed.
 func TestRenderHookScriptClaudeRejectedCachedKeyStillBlocksToolUse(t *testing.T) {
 	t.Parallel()
+	// Keyless render: with a baked org-wide key the follow-up event resolves
+	// through it instead of failing closed (see the org-key fallback test).
 	cfg := GenerateConfig{
 		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
+		HooksAPIKey: "",
 		ProjectSlug: "acme-prod",
 	}
 	dir := t.TempDir()
@@ -1518,6 +1594,67 @@ printf '{"message":"unauthorized: api_key not found"}\n401'
 	require.Contains(t, stderr.String(), "need to reconnect")
 	requests = string(requireFileBytes(t, capturePath))
 	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"), "reauth-needed tool-use event must not send an unauthenticated request")
+}
+
+// TestRenderHookScriptClaudeRejectedOrgKeyFailsClosed verifies that a 401 on
+// the baked org-wide key blocks the hook without retrying: there is no cache
+// to wipe and re-preparing would resend the very key that was rejected.
+func TestRenderHookScriptClaudeRejectedOrgKeyFailsClosed(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_org_key_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "requests.txt")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) cat "$2" >> "$GRAM_CAPTURE_REQUESTS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
+printf '{"message":"unauthorized: api_key not found"}\n401'
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-org-rejected","tool_name":"Bash"}`)
+	cmd.Env = env
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "rejected org key must block")
+	require.Equal(t, 2, exitErr.ExitCode(), stderr.String())
+	requests := string(requireFileBytes(t, capturePath))
+	require.Contains(t, requests, "Gram-Key: gram_local_org_key_xyz")
+	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"),
+		"a rejected org key must not be retried")
+	require.NoFileExists(t, authFile+".reauth-needed",
+		"an org-key rejection is not a stale-cache state")
 }
 
 // TestRenderHookScriptClaudeInsecureServerURLRatchet verifies that a
@@ -3249,7 +3386,7 @@ func TestRenderHookScriptClaudeUsesLocalHookAuth(t *testing.T) {
 	require.Contains(t, string(renderSharedAuthScript()), "${server_url}/rpc/hooks.ingest")
 	require.NotContains(t, script, `X-Gram-Hook-Source`)
 	require.NotContains(t, script, "/hooks/claude", "must not use the legacy /hooks/<platform> path")
-	require.NotContains(t, script, "gram_local_secret_xyz", "hook sender must not embed the publish-time hooks key")
+	require.Contains(t, script, "gram_local_secret_xyz", "hook sender must embed the org-wide hooks key fallback")
 	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.NotContains(t, script, "Authorization", "endpoint reads Gram-Key, not Authorization")
 }
@@ -3266,7 +3403,7 @@ func TestRenderHookScriptCursorUsesLocalHookAuth(t *testing.T) {
 	require.Contains(t, string(renderSharedAuthScript()), "${server_url}/rpc/hooks.ingest")
 	require.NotContains(t, script, `X-Gram-Hook-Source`)
 	require.NotContains(t, script, `${server_url}/hooks/cursor`, "must not use the legacy /hooks/<platform> path")
-	require.NotContains(t, script, "gram_local_secret_xyz", "hook sender must not embed the publish-time hooks key")
+	require.Contains(t, script, "gram_local_secret_xyz", "hook sender must embed the org-wide hooks key fallback")
 	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.NotContains(t, script, "Authorization", "cursor endpoint does not read Authorization")
 }
@@ -3468,7 +3605,7 @@ func TestRenderHookScriptCursorOmitsProjectHeaderWhenSlugMissing(t *testing.T) {
 	script := string(renderHookScript(cfg, "cursor"))
 
 	require.Contains(t, script, `project_slug="${GRAM_HOOKS_PROJECT_SLUG:-}"`)
-	require.NotContains(t, script, "gram_local_secret_xyz", "hook sender must not embed the publish-time hooks key")
+	require.Contains(t, script, "gram_local_secret_xyz", "hook sender must embed the org-wide hooks key fallback")
 	require.NotContains(t, script, "Gram-Project")
 	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 }
@@ -3520,8 +3657,10 @@ printf '{}\n200'
 	var posted map[string]any
 	postedPayload := string(requireFileBytes(t, capturePath))
 	require.NoError(t, json.Unmarshal([]byte(postedPayload), &posted))
-	require.Nil(t, posted["user_email"])
-	require.NotContains(t, postedPayload, `agent@example.com`, "unified hooks must not enrich attribution from the device agent")
+	source, ok := posted["source"].(map[string]any)
+	require.True(t, ok, "canonical payload must carry a source block")
+	require.Equal(t, "agent@example.com", source["user_email"],
+		"device-agent identity must be self-reported on source.user_email")
 	require.Contains(t, postedPayload, `"adapter":"cursor"`)
 }
 
@@ -3561,7 +3700,10 @@ printf '{}\n200'
 
 	var posted map[string]any
 	require.NoError(t, json.Unmarshal(requireFileBytes(t, capturePath), &posted))
-	require.Nil(t, posted["user_email"])
+	source, ok := posted["source"].(map[string]any)
+	require.True(t, ok, "canonical payload must carry a source block")
+	require.Equal(t, "cursor@example.com", source["user_email"],
+		"without a device agent the provider-reported email passes through")
 	require.Contains(t, string(requireFileBytes(t, capturePath)), `"adapter":"cursor"`)
 }
 
@@ -3915,9 +4057,9 @@ func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T
 	require.Contains(t, script, `gram_hooks_post_authenticated "$server_url" "$payload" 10 "$project_slug" "$gram_hooks_failure_exit"`)
 	require.Contains(t, script, `[ "$http_code" -lt 300 ]`, "generated hooks must not treat redirects as allow")
 	require.NotContains(t, script, `[ "$http_code" -lt 400 ]`, "redirects carry no hook decision and must fail closed")
-	require.NotContains(t, script, cfg.HooksAPIKey, "hook.sh must not embed the publish-time hooks key")
+	require.Contains(t, script, cfg.HooksAPIKey, "hook.sh must embed the org-wide hooks key fallback")
 	require.NotContains(t, script, "auth.json", "hook.sh must not inspect Codex auth claims for attribution")
-	require.NotContains(t, script, `"user_email"`, "hook.sh must not enrich attribution fields; /rpc/hooks.ingest attributes from the Gram auth token")
+	require.Contains(t, script, `"user_email"`, "hook.sh must carry self-reported attribution on source.user_email for org-wide keys")
 	require.NotContains(t, script, "python3", "hook runtime must not depend on python")
 	require.NotContains(t, script, "GRAM_USER_EMAIL", "hook.sh must not rely on a manually configured user email")
 

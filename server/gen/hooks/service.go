@@ -310,6 +310,10 @@ type HookIngestSource struct {
 	RawEventName *string
 	// Hostname of the machine that emitted the hook event.
 	Hostname *string
+	// Self-reported email of the developer on the emitting machine (device agent
+	// or provider account), used for attribution when the API key is shared
+	// org-wide.
+	UserEmail *string
 }
 
 // MCP feature payload.

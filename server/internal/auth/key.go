@@ -32,6 +32,12 @@ const (
 	APIKeyScopeAgent    APIKeyScope = iota
 )
 
+// PluginAPIKeyNamePrefix names the org-wide keys minted by the plugin publish
+// flow (e.g. "plugins-hooks-<ts>-<rand>"). Such a key is shared by every
+// machine the plugin is installed on, so its owner identity must never be
+// used to attribute individual events.
+const PluginAPIKeyNamePrefix = "plugins-"
+
 var APIKeyScopes = map[string]APIKeyScope{
 	"invalid":  APIKeyScopeInvalid,
 	"consumer": APIKeyScopeConsumer,
@@ -163,6 +169,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		UserID:                apiKey.CreatedByUserID,
 		Email:                 &apiKey.Email,
 		APIKeyID:              apiKey.ID.String(),
+		APIKeyName:            apiKey.Name,
 		ProjectID:             projectID,
 		OrganizationSlug:      org.Slug,
 		AccountType:           org.GramAccountType,

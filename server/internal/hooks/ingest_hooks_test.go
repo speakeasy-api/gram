@@ -176,6 +176,73 @@ func TestIngest_DuplicateDeliveryDoesNotMintSecondBlockRow(t *testing.T) {
 		"a duplicate delivery must not mint a second block row and URL")
 }
 
+// The canonical ingest path attributes events to the payload's self-reported
+// user email when present: plugins publish with an org-wide hooks key whose
+// token owner is the publishing admin, so the sender's own identity must win.
+func TestIngest_SelfReportedUserEmailWinsAttribution(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "canonical-self-email-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+
+	selfEmail := "dev@example.com"
+	prompt := "hello from the dev machine"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Source.UserEmail = &selfEmail
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &prompt},
+	}
+
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, selfEmail, msgs[0].ExternalUserID.String,
+		"chat message must attribute to the self-reported email, not the token owner")
+}
+
+// A shared plugin key with no self-reported email must not attribute events to
+// the key's owner (the admin who published the plugin); the event stays
+// unattributed instead.
+func TestResolveCanonicalActor_SharedPluginKeyDoesNotUseOwnerIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	payload := canonicalIngestPayload("claude", "prompt.submitted", "actor-test")
+
+	pluginKeyCtx := *authCtx
+	pluginKeyCtx.APIKeyName = "plugins-hooks-20260708-abc123"
+	actor := ti.service.resolveCanonicalActor(ctx, payload, &pluginKeyCtx)
+	require.Empty(t, actor.UserID, "shared plugin key owner must not become the actor")
+	require.Empty(t, actor.Email)
+
+	personalKeyCtx := *authCtx
+	personalKeyCtx.APIKeyName = "my-personal-key"
+	actor = ti.service.resolveCanonicalActor(ctx, payload, &personalKeyCtx)
+	require.Equal(t, authCtx.UserID, actor.UserID, "personal keys keep token-owner attribution")
+
+	selfEmail := "dev@example.com"
+	payload.Source.UserEmail = &selfEmail
+	actor = ti.service.resolveCanonicalActor(ctx, payload, &pluginKeyCtx)
+	require.Equal(t, selfEmail, actor.Email, "self-reported email attributes shared-key events")
+}
+
 func TestCanonicalShadowMCPEvidence_PrefersStdioCommand(t *testing.T) {
 	t.Parallel()
 

@@ -45545,6 +45545,9 @@ components:
                 raw_event_name:
                     type: string
                     description: Provider-native event name, if one exists.
+                user_email:
+                    type: string
+                    description: Self-reported email of the developer on the emitting machine (device agent or provider account), used for attribution when the API key is shared org-wide.
             description: Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
             required:
                 - adapter

@@ -1393,6 +1393,7 @@ func unmarshalHookIngestSourceRequestBodyToHooksHookIngestSource(v *HookIngestSo
 		AdapterVersion: v.AdapterVersion,
 		RawEventName:   v.RawEventName,
 		Hostname:       v.Hostname,
+		UserEmail:      v.UserEmail,
 	}
 
 	return res

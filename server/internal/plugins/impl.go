@@ -2008,7 +2008,7 @@ func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose str
 		fullKey:   fullKey,
 		keyHash:   keyHash,
 		keyPrefix: s.keyPrefix + token[:5],
-		keyName:   fmt.Sprintf("plugins-%s-%s-%s", purpose, time.Now().UTC().Format("20060102-150405"), token[:6]),
+		keyName:   fmt.Sprintf("%s%s-%s-%s", auth.PluginAPIKeyNamePrefix, purpose, time.Now().UTC().Format("20060102-150405"), token[:6]),
 		scope:     scope,
 	}, nil
 }
