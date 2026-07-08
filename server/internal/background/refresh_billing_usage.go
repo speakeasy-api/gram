@@ -17,11 +17,15 @@ const (
 	refreshBillingUsageBatchSize                   = 5
 	billingUsagePauseEveryBatches                  = 2
 	refreshBillingUsageActivityStartToCloseTimeout = 60 * time.Second
-	refreshBillingUsageActivityMaximumAttempts     = 3
-	// Reserve more than the worst-case retry path for one batch. A batch runs
-	// two activities (Polar refresh + billing-cycle snapshot), each up to
-	// 3 attempts of 60s plus 10s/15s retry backoffs and Temporal jitter.
-	refreshBillingUsageBatchWorstCaseRetryWindow = 10 * time.Minute
+	// The snapshot activity gets its own, wider deadline: a first-run backfill
+	// issues up to 12 cycles × 5 orgs of serial ClickHouse aggregate queries
+	// per attempt — far more work than the Polar refresh.
+	snapshotBillingCycleUsageStartToCloseTimeout = 5 * time.Minute
+	refreshBillingUsageActivityMaximumAttempts   = 3
+	// Reserve more than the worst-case retry path for one batch: the Polar
+	// refresh (3 attempts × 60s) plus the cycle snapshot (3 attempts × 5m),
+	// each with 10s/15s retry backoffs and Temporal jitter.
+	refreshBillingUsageBatchWorstCaseRetryWindow = 20 * time.Minute
 	refreshBillingUsageWorkflowRunTimeout        = 30 * time.Minute
 	refreshBillingUsagesWaitInterval             = 10 * time.Second
 )
@@ -122,8 +126,10 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 
 		// Persist durable TUM billing-cycle snapshots for the same batch. Runs
 		// as its own activity so Polar refresh failures and snapshot failures
-		// don't mask each other.
-		if err := workflow.ExecuteActivity(ctx, a.SnapshotBillingCycleUsage, batch).Get(ctx, nil); err != nil {
+		// don't mask each other, under a wider deadline sized for the
+		// first-run backfill.
+		snapshotCtx := workflow.WithStartToCloseTimeout(ctx, snapshotBillingCycleUsageStartToCloseTimeout)
+		if err := workflow.ExecuteActivity(snapshotCtx, a.SnapshotBillingCycleUsage, batch).Get(ctx, nil); err != nil {
 			logger.Error("Failed to snapshot billing cycle usage batch", "error", err, "batch_start", i)
 			failedBatchCount++
 			failedOrgCount += len(batch)

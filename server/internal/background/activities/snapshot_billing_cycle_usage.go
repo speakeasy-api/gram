@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -99,7 +100,13 @@ func (s *SnapshotBillingCycleUsage) snapshotOrganization(ctx context.Context, qu
 	// After the initial backfill only the active cycle and any recently closed
 	// cycle inside the grace window remain non-finalized, so steady-state runs
 	// touch one or two cycles per organization.
-	for _, cycle := range usage.BillingCycles(now, int(meta.BillingCycleAnchorDay), snapshotBillingCycles) {
+	cycles := usage.BillingCycles(now, int(meta.BillingCycleAnchorDay), snapshotBillingCycles)
+	// Newest-first: the active and just-closed cycles — the ones the grace
+	// window depends on — persist before the historical backfill, in case the
+	// activity deadline cuts the loop short. Progress is durable either way:
+	// each cycle upserts immediately and finalized cycles skip on retry.
+	slices.Reverse(cycles)
+	for _, cycle := range cycles {
 		if finalized[cycle.Start] {
 			continue
 		}
