@@ -34,11 +34,13 @@ ON CONFLICT (organization_id) DO UPDATE SET
   , updated_at = clock_timestamp()
 RETURNING *;
 
--- name: ListProjectIDsByOrganization :many
+-- name: ListBillingProjectIDsByOrganization :many
+-- Intentionally includes soft-deleted projects: usage recorded while a
+-- project was live is still billable, and deleting a project mid-cycle must
+-- not shrink the cycle's tokens-under-management total.
 SELECT id
 FROM projects
-WHERE organization_id = @organization_id
-  AND deleted IS FALSE;
+WHERE organization_id = @organization_id;
 
 -- name: UpsertBillingCycleUsage :exec
 INSERT INTO billing_cycle_usage (

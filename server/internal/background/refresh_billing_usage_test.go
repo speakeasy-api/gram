@@ -18,7 +18,7 @@ func TestRefreshBillingUsageWorkflow_ContinuesAsNewNearRunTimeout(t *testing.T) 
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
-	env.SetWorkflowRunTimeout(refreshBillingUsageActivityWorstCaseRetryWindow + refreshBillingUsagesWaitInterval)
+	env.SetWorkflowRunTimeout(refreshBillingUsageBatchWorstCaseRetryWindow + refreshBillingUsagesWaitInterval)
 
 	orgIDs := make([]string, (billingUsagePauseEveryBatches+1)*refreshBillingUsageBatchSize)
 	for i := range orgIDs {

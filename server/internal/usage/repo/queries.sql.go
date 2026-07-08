@@ -85,6 +85,35 @@ func (q *Queries) ListBillingCycleUsage(ctx context.Context, organizationID stri
 	return items, nil
 }
 
+const listBillingProjectIDsByOrganization = `-- name: ListBillingProjectIDsByOrganization :many
+SELECT id
+FROM projects
+WHERE organization_id = $1
+`
+
+// Intentionally includes soft-deleted projects: usage recorded while a
+// project was live is still billable, and deleting a project mid-cycle must
+// not shrink the cycle's tokens-under-management total.
+func (q *Queries) ListBillingProjectIDsByOrganization(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listBillingProjectIDsByOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listFinalizedBillingCycleStarts = `-- name: ListFinalizedBillingCycleStarts :many
 SELECT cycle_start
 FROM billing_cycle_usage
@@ -105,33 +134,6 @@ func (q *Queries) ListFinalizedBillingCycleStarts(ctx context.Context, organizat
 			return nil, err
 		}
 		items = append(items, cycle_start)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listProjectIDsByOrganization = `-- name: ListProjectIDsByOrganization :many
-SELECT id
-FROM projects
-WHERE organization_id = $1
-  AND deleted IS FALSE
-`
-
-func (q *Queries) ListProjectIDsByOrganization(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listProjectIDsByOrganization, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

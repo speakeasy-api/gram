@@ -18,11 +18,12 @@ const (
 	billingUsagePauseEveryBatches                  = 2
 	refreshBillingUsageActivityStartToCloseTimeout = 60 * time.Second
 	refreshBillingUsageActivityMaximumAttempts     = 3
-	// Reserve more than the worst-case retry path for one batch:
-	// 3 activity attempts plus 10s/15s retry backoffs and Temporal jitter.
-	refreshBillingUsageActivityWorstCaseRetryWindow = 5 * time.Minute
-	refreshBillingUsageWorkflowRunTimeout           = 30 * time.Minute
-	refreshBillingUsagesWaitInterval                = 10 * time.Second
+	// Reserve more than the worst-case retry path for one batch. A batch runs
+	// two activities (Polar refresh + billing-cycle snapshot), each up to
+	// 3 attempts of 60s plus 10s/15s retry backoffs and Temporal jitter.
+	refreshBillingUsageBatchWorstCaseRetryWindow = 10 * time.Minute
+	refreshBillingUsageWorkflowRunTimeout        = 30 * time.Minute
+	refreshBillingUsagesWaitInterval             = 10 * time.Second
 )
 
 type RefreshBillingUsageInput struct {
@@ -174,7 +175,7 @@ func shouldContinueRefreshBillingUsageAsNew(ctx workflow.Context) bool {
 	}
 
 	elapsed := workflow.Now(ctx).Sub(info.WorkflowStartTime)
-	return elapsed+refreshBillingUsageActivityWorstCaseRetryWindow >= runTimeout
+	return elapsed+refreshBillingUsageBatchWorstCaseRetryWindow >= runTimeout
 }
 
 func AddRefreshBillingUsageSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {

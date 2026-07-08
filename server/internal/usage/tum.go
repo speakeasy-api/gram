@@ -126,7 +126,7 @@ const maxTunneledMcpServerLimit = 1<<31 - 1
 func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *contextvalues.AuthContext, meta repo.BillingMetadatum) (*gen.TokensUnderManagement, error) {
 	cycles := BillingCycles(time.Now(), int(meta.BillingCycleAnchorDay), tumHistoryCycles)
 
-	projectIDs, err := s.repo.ListProjectIDsByOrganization(ctx, authCtx.ActiveOrganizationID)
+	projectIDs, err := s.repo.ListBillingProjectIDsByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list organization projects").LogError(ctx, s.logger)
 	}
