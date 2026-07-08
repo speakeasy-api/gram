@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -124,6 +126,102 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	}
 
 	return buildQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil
+}
+
+// riskTokensIntervalSeconds is the fixed bucket width of queryRiskTokens — the
+// source aggregate (chat_token_summaries) is bucketed daily.
+const riskTokensIntervalSeconds int64 = 86400
+
+// QueryRiskTokens returns daily token usage split into tokens from sessions
+// with at least one active risk finding created in the window versus all
+// session tokens. Risk findings live in Postgres while per-chat token usage
+// lives in ClickHouse, so the risky chat set is resolved first and pushed into
+// the ClickHouse aggregation.
+func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryRiskTokensPayload) (*telem_gen.QueryRiskTokensResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	// Org projects, optionally narrowed to the requested one. A project id
+	// outside the caller's organization simply resolves to no projects (and an
+	// all-zero series) rather than acting as an existence probe.
+	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list organization projects")
+	}
+	projectUUIDs := make([]uuid.UUID, 0, len(projects))
+	projectIDs := make([]string, 0, len(projects))
+	for _, p := range projects {
+		if payload.ProjectID != nil && *payload.ProjectID != "" && p.ID.String() != *payload.ProjectID {
+			continue
+		}
+		projectUUIDs = append(projectUUIDs, p.ID)
+		projectIDs = append(projectIDs, p.ID.String())
+	}
+
+	riskyIDs, err := s.chatRepo.ListRiskyChatIDs(ctx, chatRepo.ListRiskyChatIDsParams{
+		ProjectIds: projectUUIDs,
+		FromTime:   pgtype.Timestamptz{Time: time.Unix(0, timeStart).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
+		ToTime:     pgtype.Timestamptz{Time: time.Unix(0, timeEnd).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats with risk findings").LogError(ctx, s.logger)
+	}
+	riskyChatIDs := make([]string, 0, len(riskyIDs))
+	for _, id := range riskyIDs {
+		riskyChatIDs = append(riskyChatIDs, id.String())
+	}
+
+	buckets, err := s.chRepo.GetRiskTokensByDay(ctx, repo.GetRiskTokensParams{
+		ProjectIDs:    projectIDs,
+		RiskyChatIDs:  riskyChatIDs,
+		StartUnixNano: timeStart,
+		EndUnixNano:   timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error running risk tokens query").LogError(ctx, s.logger)
+	}
+
+	byBucket := make(map[int64]repo.RiskTokensDayBucket, len(buckets))
+	for _, b := range buckets {
+		byBucket[b.Day.UTC().UnixNano()] = b
+	}
+
+	// Zero-fill so consumers get one point per day across the whole range,
+	// matching telemetry.query's gap-filled timeseries contract.
+	starts := bucketStarts(timeStart, timeEnd, riskTokensIntervalSeconds)
+	points := make([]*telem_gen.RiskTokensPoint, 0, len(starts))
+	for _, start := range starts {
+		b := byBucket[start]
+		points = append(points, &telem_gen.RiskTokensPoint{
+			BucketTimeUnixNano: strconv.FormatInt(start, 10),
+			RiskyTokens:        b.RiskyTokens,
+			TotalTokens:        b.TotalTokens,
+		})
+	}
+
+	return &telem_gen.QueryRiskTokensResult{
+		IntervalSeconds: riskTokensIntervalSeconds,
+		Points:          points,
+	}, nil
 }
 
 // ListSessions returns org-scoped chat sessions for a filtered analytics slice.

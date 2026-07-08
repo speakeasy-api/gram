@@ -31256,6 +31256,94 @@ paths:
             x-speakeasy-react-hook:
                 name: TelemetryQuery
                 type: query
+    /rpc/telemetry.queryRiskTokens:
+        post:
+            description: 'Org-scoped daily token usage split by risk involvement: tokens from sessions with at least one active risk finding in the window versus all session tokens. Powers the token-usage panel''s risk breakdown on the costs page.'
+            operationId: queryRiskTokens
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/QueryRiskTokensPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/QueryRiskTokensResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: queryRiskTokens telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: queryRiskTokens
+            x-speakeasy-react-hook:
+                name: TelemetryQueryRiskTokens
+                type: query
     /rpc/telemetry.searchChats:
         post:
             description: Search and list chat session summaries that match a search filter
@@ -48614,6 +48702,43 @@ components:
                 - interval_seconds
                 - table
                 - timeseries
+        QueryRiskTokensPayload:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                project_id:
+                    type: string
+                    description: Optional project to scope to; defaults to every project in the organization.
+                    format: uuid
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-26T10:00:00Z"
+                    format: date-time
+            description: Payload for the org-scoped token-by-risk breakdown query
+            required:
+                - from
+                - to
+        QueryRiskTokensResult:
+            type: object
+            properties:
+                interval_seconds:
+                    type: integer
+                    description: Timeseries bucket width in seconds. Always 86400 — the source aggregate is bucketed daily.
+                    format: int64
+                points:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskTokensPoint'
+                    description: Gap-filled daily buckets in ascending time order
+            description: Result of the token-by-risk breakdown query
+            required:
+                - interval_seconds
+                - points
         QueryRow:
             type: object
             properties:
@@ -50137,6 +50262,25 @@ components:
             required:
                 - match_redacted
                 - position_known
+        RiskTokensPoint:
+            type: object
+            properties:
+                bucket_time_unix_nano:
+                    type: string
+                    description: Bucket start time in Unix nanoseconds (string for JS precision)
+                risky_tokens:
+                    type: integer
+                    description: Tokens from sessions with at least one active risk finding created in the query window
+                    format: int64
+                total_tokens:
+                    type: integer
+                    description: All session tokens in the bucket
+                    format: int64
+            description: One UTC day of token usage split by risk involvement
+            required:
+                - bucket_time_unix_nano
+                - risky_tokens
+                - total_tokens
         RiskUnmaskResultResult:
             type: object
             properties:

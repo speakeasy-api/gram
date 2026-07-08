@@ -562,6 +562,23 @@ WHERE id = ANY(@ids::uuid[])
   AND project_id = ANY(@project_ids::uuid[])
   AND deleted IS FALSE;
 
+-- name: ListRiskyChatIDs :many
+-- Distinct chats with at least one active risk finding created in the window,
+-- for the token-by-risk breakdown (telemetry.queryRiskTokens). Mirrors the
+-- risk_counts semantics used by ListChats: a finding counts only while found,
+-- not excluded, not marked false-positive, and its policy is enabled and not
+-- deleted.
+SELECT DISTINCT cm.chat_id
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+WHERE rr.project_id = ANY(@project_ids::uuid[])
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL
+  AND rr.created_at >= @from_time
+  AND rr.created_at < @to_time;
+
 -- name: ListChatMessages :many
 SELECT * FROM chat_messages 
 WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid) 

@@ -30,6 +30,7 @@ type Server struct {
 	GetObservabilityOverview  http.Handler
 	GetProjectOverview        http.Handler
 	Query                     http.Handler
+	QueryRiskTokens           http.Handler
 	ListSessions              http.Handler
 	ListFilterOptions         http.Handler
 	ListAttributeKeys         http.Handler
@@ -78,6 +79,7 @@ func New(
 			{"GetObservabilityOverview", "POST", "/rpc/telemetry.getObservabilityOverview"},
 			{"GetProjectOverview", "POST", "/rpc/telemetry.getProjectOverview"},
 			{"Query", "POST", "/rpc/telemetry.query"},
+			{"QueryRiskTokens", "POST", "/rpc/telemetry.queryRiskTokens"},
 			{"ListSessions", "POST", "/rpc/telemetry.listSessions"},
 			{"ListFilterOptions", "POST", "/rpc/telemetry.listFilterOptions"},
 			{"ListAttributeKeys", "POST", "/rpc/telemetry.listAttributeKeys"},
@@ -98,6 +100,7 @@ func New(
 		GetObservabilityOverview:  NewGetObservabilityOverviewHandler(e.GetObservabilityOverview, mux, decoder, encoder, errhandler, formatter),
 		GetProjectOverview:        NewGetProjectOverviewHandler(e.GetProjectOverview, mux, decoder, encoder, errhandler, formatter),
 		Query:                     NewQueryHandler(e.Query, mux, decoder, encoder, errhandler, formatter),
+		QueryRiskTokens:           NewQueryRiskTokensHandler(e.QueryRiskTokens, mux, decoder, encoder, errhandler, formatter),
 		ListSessions:              NewListSessionsHandler(e.ListSessions, mux, decoder, encoder, errhandler, formatter),
 		ListFilterOptions:         NewListFilterOptionsHandler(e.ListFilterOptions, mux, decoder, encoder, errhandler, formatter),
 		ListAttributeKeys:         NewListAttributeKeysHandler(e.ListAttributeKeys, mux, decoder, encoder, errhandler, formatter),
@@ -125,6 +128,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetObservabilityOverview = m(s.GetObservabilityOverview)
 	s.GetProjectOverview = m(s.GetProjectOverview)
 	s.Query = m(s.Query)
+	s.QueryRiskTokens = m(s.QueryRiskTokens)
 	s.ListSessions = m(s.ListSessions)
 	s.ListFilterOptions = m(s.ListFilterOptions)
 	s.ListAttributeKeys = m(s.ListAttributeKeys)
@@ -151,6 +155,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetObservabilityOverviewHandler(mux, h.GetObservabilityOverview)
 	MountGetProjectOverviewHandler(mux, h.GetProjectOverview)
 	MountQueryHandler(mux, h.Query)
+	MountQueryRiskTokensHandler(mux, h.QueryRiskTokens)
 	MountListSessionsHandler(mux, h.ListSessions)
 	MountListFilterOptionsHandler(mux, h.ListFilterOptions)
 	MountListAttributeKeysHandler(mux, h.ListAttributeKeys)
@@ -729,6 +734,59 @@ func NewQueryHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "query")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountQueryRiskTokensHandler configures the mux to serve the "telemetry"
+// service "queryRiskTokens" endpoint.
+func MountQueryRiskTokensHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.queryRiskTokens", f)
+}
+
+// NewQueryRiskTokensHandler creates a HTTP handler which loads the HTTP
+// request and calls the "telemetry" service "queryRiskTokens" endpoint.
+func NewQueryRiskTokensHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeQueryRiskTokensRequest(mux, decoder)
+		encodeResponse = EncodeQueryRiskTokensResponse(encoder)
+		encodeError    = EncodeQueryRiskTokensError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "queryRiskTokens")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {

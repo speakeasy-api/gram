@@ -1,284 +1,166 @@
-import { ChartCard } from "@/components/chart/ChartCard";
 import { Page } from "@/components/page-layout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { cn } from "@/lib/utils";
-import { TokensUnderManagement } from "@gram/client/models/components/tokensundermanagement.js";
-import { TUMPeriod } from "@gram/client/models/components/tumperiod.js";
+import { isAttributionDim } from "@/pages/costs/taxonomy";
+import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
+import { telemetryQueryRiskTokens } from "@gram/client/funcs/telemetryQueryRiskTokens";
+import { Dimension } from "@gram/client/models/components/queryfilter.js";
+import { type GroupBy } from "@gram/client/models/components/querypayload.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import {
   invalidateAllGetTokensUnderManagement,
   useGetTokensUnderManagement,
 } from "@gram/client/react-query/getTokensUnderManagement.js";
 import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBillingMetadata.js";
+import { unwrapAsync } from "@gram/client/types/fp";
 import { Button, Stack } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  BarElement,
-  CategoryScale,
-  Chart as ChartJS,
-  type ChartDataset,
-  type ChartOptions,
-  Legend,
-  LinearScale,
-  LineElement,
-  PointElement,
-  Tooltip as ChartTooltip,
-} from "chart.js";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Chart } from "react-chartjs-2";
-import { UsageProgress } from "./usage-controls";
+import { BillingCyclePicker } from "./billing-cycle-picker";
+import { type BillingCycle, cycleKey, cyclesFromTum } from "./billing-cycles";
+import { stackModeFor } from "./breakdown-options";
+import { BreakdownPicker } from "./breakdown-picker";
+import { TokenUsagePanel } from "./token-usage-panel";
+import { TumUsageCard } from "./tum-usage-card";
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  ChartTooltip,
-  Legend,
-);
+// Org-wide token breakdown for one billing cycle: stacked daily tokens by a
+// selectable dimension, by token type, or by risk involvement — one unified
+// picker drives all three. Reads the same analytics aggregates as the costs
+// explorer (telemetry.query), scoped to the cycle. No data-availability
+// pruning of the dimension list: the availability probe
+// (telemetry.listAttributeKeys) is project-scoped and this page is org-level,
+// so it would filter against the wrong project — dimensions without data
+// simply chart as "(unset)". The generated hooks key their cache on
+// gramSession only, so the queries are driven directly with payload-encoding
+// keys.
+function TumTokenBreakdown({ cycle }: { cycle: BillingCycle }): JSX.Element {
+  const client = useGramContext();
+  // The picker's selection, plus the last-picked dimension so switching to
+  // token type or risk and back doesn't lose the grouping.
+  const [breakdown, setBreakdown] = useState<string>(Dimension.DivisionName);
+  const [dimension, setDimension] = useState<Dimension>(Dimension.DivisionName);
+  const stackBy = stackModeFor(breakdown);
+  const from = cycle.start;
+  const to = cycle.end;
 
-const cycleDateFormat = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
-const cycleLabelFormat = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  timeZone: "UTC",
-});
-
-const dayLabelFormat = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  timeZone: "UTC",
-});
-
-const compactTokens = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
-function formatCycleRange(tum: TokensUnderManagement): string {
-  return `${cycleDateFormat.format(tum.periodStart)} – ${cycleDateFormat.format(tum.periodEnd)}`;
-}
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-// Builds a contiguous daily series across all cycles, filling days the API
-// omitted (zero usage) so gaps render honestly. Stops at the current UTC day.
-function buildDailySeries(history: TUMPeriod[]): {
-  labels: string[];
-  data: number[];
-} {
-  const first = history[0];
-  const last = history[history.length - 1];
-  if (!first || !last) return { labels: [], data: [] };
-
-  const tokensByDate = new Map<string, number>();
-  for (const period of history) {
-    for (const day of period.days) {
-      const key = day.date.toString();
-      tokensByDate.set(key, (tokensByDate.get(key) ?? 0) + day.tokens);
-    }
-  }
-
-  const startMs = first.periodStart.getTime();
-  const endMs = Math.min(last.periodEnd.getTime(), Date.now() + MS_PER_DAY);
-
-  const labels: string[] = [];
-  const data: number[] = [];
-  for (let ms = startMs; ms < endMs; ms += MS_PER_DAY) {
-    const date = new Date(ms);
-    const key = date.toISOString().slice(0, 10);
-    labels.push(dayLabelFormat.format(date));
-    data.push(tokensByDate.get(key) ?? 0);
-  }
-
-  return { labels, data };
-}
-
-type TumGranularity = "day" | "cycle";
-
-function TumHistoryChart({
-  history,
-  monthlyTokenLimit,
-}: {
-  history: TUMPeriod[];
-  monthlyTokenLimit: number | undefined;
-}): JSX.Element {
-  const [granularity, setGranularity] = useState<TumGranularity>("day");
-
-  const hasData = history.some((p) => p.tokens > 0);
-
-  const chartData = useMemo<{
-    labels: string[];
-    datasets: Array<
-      ChartDataset<"bar", number[]> | ChartDataset<"line", number[]>
-    >;
-  }>(() => {
-    if (granularity === "day") {
-      const { labels, data } = buildDailySeries(history);
-      return {
-        labels,
-        datasets: [
-          {
-            type: "bar" as const,
-            label: "Tokens Under Management",
-            data,
-            backgroundColor: "rgba(96, 165, 250, 0.5)",
+  const { data, isFetching } = useQuery({
+    queryKey: [
+      "tum-breakdown",
+      from.toISOString(),
+      to.toISOString(),
+      dimension,
+    ],
+    throwOnError: false,
+    queryFn: () =>
+      unwrapAsync(
+        telemetryQuery(client, {
+          queryPayload: {
+            from,
+            to,
+            groupBy: dimension as GroupBy,
+            sortBy: "total_tokens",
+            topN: 100,
+            // Daily buckets; the panel rolls up to weekly/monthly client-side.
+            granularitySeconds: 86400,
           },
-        ],
-      };
-    }
+        }),
+      ),
+  });
+  const { data: riskData } = useQuery({
+    queryKey: ["tum-breakdown-risk", from.toISOString(), to.toISOString()],
+    throwOnError: false,
+    queryFn: () =>
+      unwrapAsync(
+        telemetryQueryRiskTokens(client, {
+          queryRiskTokensPayload: { from, to },
+        }),
+      ),
+  });
 
-    const labels = history.map((p) => cycleLabelFormat.format(p.periodStart));
-    const datasets: Array<
-      ChartDataset<"bar", number[]> | ChartDataset<"line", number[]>
-    > = [
-      {
-        type: "bar" as const,
-        label: "Tokens Under Management",
-        data: history.map((p) => p.tokens),
-        backgroundColor: "rgba(96, 165, 250, 0.5)",
-      },
-    ];
+  // Attribution cuts hide the "" (not-applicable) group, same as the costs page.
+  const series = useMemo(() => {
+    const ts = data?.timeseries ?? [];
+    return isAttributionDim(dimension)
+      ? ts.filter((s) => s.groupValue !== "")
+      : ts;
+  }, [data, dimension]);
 
-    if (monthlyTokenLimit != null && monthlyTokenLimit > 0) {
-      datasets.push({
-        type: "line" as const,
-        label: "Contracted Limit",
-        data: history.map(() => monthlyTokenLimit),
-        borderColor: "#f59e0b",
-        borderDash: [6, 4],
-        borderWidth: 1.5,
-        pointRadius: 0,
-      });
-    }
+  const riskPoints = riskData?.points ?? null;
 
-    return { labels, datasets };
-  }, [granularity, history, monthlyTokenLimit]);
-
-  const chartOptions = useMemo<ChartOptions<"bar">>(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: granularity === "cycle" && monthlyTokenLimit != null,
-        },
-        tooltip: {
-          callbacks: {
-            label: (item) =>
-              `${item.dataset.label}: ${Number(item.raw).toLocaleString()} tokens`,
-          },
-        },
-      },
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: { maxTicksLimit: granularity === "day" ? 14 : 12 },
-        },
-        y: {
-          beginAtZero: true,
-          ticks: {
-            callback: (value) => compactTokens.format(Number(value)),
-          },
-        },
-      },
-    }),
-    [granularity, monthlyTokenLimit],
-  );
-
-  const granularityButton = (value: TumGranularity, label: string) => (
-    <button
-      type="button"
-      onClick={() => setGranularity(value)}
-      className={cn(
-        "rounded px-2 py-0.5 text-xs transition-colors",
-        granularity === value
-          ? "bg-muted text-foreground font-medium"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {label}
-    </button>
+  const breakdownPicker = (
+    <BreakdownPicker
+      value={breakdown}
+      showRisk={riskPoints != null}
+      onChange={(value) => {
+        setBreakdown(value);
+        // Only actual dimensions feed the query's group_by; the special modes
+        // (total / token type / risk) keep the last-picked dimension.
+        if (stackModeFor(value) === "group") {
+          setDimension(value as Dimension);
+        }
+      }}
+    />
   );
 
   return (
-    <ChartCard
-      title="Usage History"
-      chartId="tum-history"
-      expandedChart={null}
-      onExpand={() => {}}
-      hasData={hasData}
-      expandable={false}
-    >
-      <div className="mb-2 flex items-center gap-1">
-        {granularityButton("day", "By day")}
-        {granularityButton("cycle", "By billing cycle")}
-      </div>
-      {hasData ? (
-        <div style={{ height: 260 }}>
-          {/* `<Chart>` with an explicit `"bar" | "line"` generic accepts the
-              bar series plus the line limit overlay (see InsightsAgents). */}
-          <Chart<"bar" | "line", number[], string>
-            type="bar"
-            data={chartData}
-            options={chartOptions}
-          />
-        </div>
-      ) : (
-        <Type muted small>
-          No tokens under management recorded yet.
-        </Type>
-      )}
-    </ChartCard>
+    <TokenUsagePanel
+      series={series}
+      stackBy={stackBy}
+      breakdownPicker={breakdownPicker}
+      riskPoints={riskPoints}
+      loading={isFetching && !data}
+    />
   );
 }
 
 export const TumUsageSection = (): JSX.Element => {
   const { data: tum } = useGetTokensUnderManagement();
 
+  // The selected billing cycle scopes the usage bar and the breakdown chart.
+  // Derived (not synced) so the current cycle is the default once TUM loads.
+  const cycles = useMemo(() => (tum ? cyclesFromTum(tum) : []), [tum]);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const selectedCycle =
+    cycles.find((c) => cycleKey(c) === selectedKey) ??
+    cycles.find((c) => c.current) ??
+    cycles[0] ??
+    null;
+
   return (
     <Page.Section>
-      <Page.Section.Title>Tokens Under Management</Page.Section.Title>
+      <Page.Section.Title>Billing</Page.Section.Title>
       <Page.Section.Description>
         The volume of agent traffic Gram has processed, stored, and run security
-        analysis on this billing cycle, measured in tokens.
+        analysis on each billing cycle, measured in tokens.
       </Page.Section.Description>
       <Page.Section.Body>
-        {tum ? (
+        {tum && selectedCycle ? (
           <Stack gap={3} className="mb-6">
             <Stack direction="horizontal" align="center" gap={1}>
               <Type variant="body" className="font-medium">
                 Tokens Under Management
               </Type>
-              <SimpleTooltip tooltip="Counts tokens from agent sessions Gram has stored chats or tool calls for. Compared against your contracted monthly allowance.">
+              <SimpleTooltip tooltip="Counts tokens from agent sessions Gram has stored chats or tool calls for during the selected billing cycle. Compared against your contracted monthly allowance.">
                 <Info className="text-muted-foreground h-4 w-4" />
               </SimpleTooltip>
-              <Type muted small className="ml-auto">
-                Billing cycle: {formatCycleRange(tum)}
-              </Type>
+              <div className="ml-auto">
+                <BillingCyclePicker
+                  cycles={cycles}
+                  selected={selectedCycle}
+                  onSelect={(c) => setSelectedKey(cycleKey(c))}
+                />
+              </div>
             </Stack>
-            <UsageProgress
-              value={tum.tokens}
-              included={tum.monthlyTokenLimit ?? 0}
-              overageIncrement={tum.monthlyTokenLimit ?? 1}
-              noMax={tum.monthlyTokenLimit == null}
+            <TumUsageCard
+              tokens={selectedCycle.tokens}
+              limit={tum.monthlyTokenLimit ?? null}
             />
             <div className="mt-8">
-              <TumHistoryChart
-                history={tum.history}
-                monthlyTokenLimit={tum.monthlyTokenLimit}
-              />
+              <TumTokenBreakdown cycle={selectedCycle} />
             </div>
           </Stack>
         ) : (

@@ -467,6 +467,8 @@ trackedFiles:
   docs/models/components/querypayloadsortby.md: {}
   docs/models/components/querypoint.md: {}
   docs/models/components/queryresult.md: {}
+  docs/models/components/queryrisktokenspayload.md: {}
+  docs/models/components/queryrisktokensresult.md: {}
   docs/models/components/queryrow.md: {}
   docs/models/components/queryseries.md: {}
   docs/models/components/rbacstatus.md: {}
@@ -532,6 +534,7 @@ trackedFiles:
   docs/models/components/risksegment.md: {}
   docs/models/components/riskspan.md: {}
   docs/models/components/riskspanredacted.md: {}
+  docs/models/components/risktokenspoint.md: {}
   docs/models/components/riskunmaskresultresult.md: {}
   docs/models/components/riskuserbreakdownresult.md: {}
   docs/models/components/role.md: {}
@@ -1607,6 +1610,8 @@ trackedFiles:
   docs/models/operations/queryparamsourcekind.md: {}
   docs/models/operations/queryparamstatus.md: {}
   docs/models/operations/queryrequest.md: {}
+  docs/models/operations/queryrisktokensrequest.md: {}
+  docs/models/operations/queryrisktokenssecurity.md: {}
   docs/models/operations/querysecurity.md: {}
   docs/models/operations/receiveworkoswebhookrequest.md: {}
   docs/models/operations/redeploydeploymentrequest.md: {}
@@ -2291,6 +2296,7 @@ trackedFiles:
   src/funcs/telemetryListSessions.ts: {}
   src/funcs/telemetryListToolUsageTraces.ts: {}
   src/funcs/telemetryQuery.ts: {}
+  src/funcs/telemetryQueryRiskTokens.ts: {}
   src/funcs/telemetrySearchChats.ts: {}
   src/funcs/telemetrySearchLogs.ts: {}
   src/funcs/telemetrySearchToolCalls.ts: {}
@@ -2736,6 +2742,8 @@ trackedFiles:
   src/models/components/querypayload.ts: {}
   src/models/components/querypoint.ts: {}
   src/models/components/queryresult.ts: {}
+  src/models/components/queryrisktokenspayload.ts: {}
+  src/models/components/queryrisktokensresult.ts: {}
   src/models/components/queryrow.ts: {}
   src/models/components/queryseries.ts: {}
   src/models/components/rbacstatus.ts: {}
@@ -2785,6 +2793,7 @@ trackedFiles:
   src/models/components/risksegment.ts: {}
   src/models/components/riskspan.ts: {}
   src/models/components/riskspanredacted.ts: {}
+  src/models/components/risktokenspoint.ts: {}
   src/models/components/riskunmaskresultresult.ts: {}
   src/models/components/riskuserbreakdownresult.ts: {}
   src/models/components/role.ts: {}
@@ -3224,6 +3233,7 @@ trackedFiles:
   src/models/operations/publish.ts: {}
   src/models/operations/publishplugins.ts: {}
   src/models/operations/query.ts: {}
+  src/models/operations/queryrisktokens.ts: {}
   src/models/operations/receiveworkoswebhook.ts: {}
   src/models/operations/redeploydeployment.ts: {}
   src/models/operations/refreshorganizationremotesession.ts: {}
@@ -3795,6 +3805,8 @@ trackedFiles:
   src/react-query/telemetryCaptureEvent.ts: {}
   src/react-query/telemetryQuery.core.ts: {}
   src/react-query/telemetryQuery.ts: {}
+  src/react-query/telemetryQueryRiskTokens.core.ts: {}
+  src/react-query/telemetryQueryRiskTokens.ts: {}
   src/react-query/template.core.ts: {}
   src/react-query/template.ts: {}
   src/react-query/templates.core.ts: {}
@@ -6879,6 +6891,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  queryRiskTokens:
+    speakeasy-default-query-risk-tokens:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-26T10:00:00Z"}
+      responses:
+        "200":
+          application/json: {"interval_seconds": 988439, "points": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   receiveWorkOSWebhook: {}
   redeployDeployment:
     speakeasy-default-redeploy-deployment:
