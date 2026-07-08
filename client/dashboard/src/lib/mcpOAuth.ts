@@ -1,5 +1,18 @@
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod/v4";
+
+// isImplicitlyGated mirrors the server-side mcpservers.EligibleForImplicitIssuer:
+// a private remote/tunneled server with no explicit issuer is implicitly gated
+// by the project-default Gram issuer, so it requires a minted JWT and presents
+// built-in Gram authentication.
+export function isImplicitlyGated(mcpServer: McpServer): boolean {
+  return (
+    mcpServer.visibility === "private" &&
+    !mcpServer.userSessionIssuerId &&
+    (!!mcpServer.remoteMcpServerId || !!mcpServer.tunneledMcpServerId)
+  );
+}
 
 const OAuthProtectedResourceMetadataSchema = z.object({
   authorization_servers: z.array(z.string()).optional(),

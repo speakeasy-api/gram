@@ -1,4 +1,5 @@
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import { isImplicitlyGated } from "@/lib/mcpOAuth";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { RemoteMcpToolsSection } from "./RemoteMcpToolsSection";
@@ -19,20 +20,15 @@ export function ToolsTab({
     isLoadingEndpoints,
   );
 
-  // Mirrors mcpservers.EligibleForImplicitIssuer: implicitly gated servers
-  // need a minted JWT too.
-  const implicitlyGated =
-    mcpServer.visibility === "private" &&
-    !mcpServer.userSessionIssuerId &&
-    (!!mcpServer.remoteMcpServerId || !!mcpServer.tunneledMcpServerId);
-
   return (
     <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
       <RemoteMcpToolsSection
         mcpUrl={mcpUrl}
         isResolvingUrl={loading}
         mcpServerId={mcpServer.id}
-        isIssuerGated={!!mcpServer.userSessionIssuerId || implicitlyGated}
+        isIssuerGated={
+          !!mcpServer.userSessionIssuerId || isImplicitlyGated(mcpServer)
+        }
         userSessionIssuerId={mcpServer.userSessionIssuerId}
       />
     </div>
