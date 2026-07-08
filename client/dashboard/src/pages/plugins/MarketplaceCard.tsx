@@ -178,15 +178,21 @@ export function UninitializedMarketplaceCard({
           repository.
         </p>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <span className="text-muted-foreground inline-flex items-center gap-1.5 text-sm">
-            <span className="relative flex h-2.5 w-2.5">
+          <span className="text-muted-foreground inline-flex items-start gap-2 text-sm">
+            <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
               <span className="absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full bg-amber-500 opacity-40" />
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
             </span>
             <span className="font-medium text-amber-700 dark:text-amber-400">
-              {hasRepo
-                ? "Marketplace needs at least one collaborator added"
-                : "Marketplace not yet setup"}
+              {hasRepo ? (
+                <>
+                  Marketplace doesn't have any active collaborators added.
+                  <br />
+                  Please ensure you have accepted the invite email.
+                </>
+              ) : (
+                "Marketplace not yet setup"
+              )}
             </span>
           </span>
           <div className="flex flex-wrap items-center gap-2">
