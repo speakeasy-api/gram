@@ -225,6 +225,15 @@ type Proxy struct {
 	// It is used by tunneled MCP to fail over stale gateway owners.
 	UpstreamResponseRetryer UpstreamResponseRetryer
 
+	// WWWAuthenticate is the challenge relayed to the client when the
+	// upstream rejects a request (401/403), replacing the upstream's own
+	// WWW-Authenticate — the upstream challenge names the upstream's
+	// protected-resource metadata, which misdirects a client that
+	// authenticated with this server. Empty when the endpoint has no
+	// authorization server of its own (nothing to substitute); the
+	// upstream challenge then relays verbatim.
+	WWWAuthenticate string
+
 	UserRequestInterceptors []UserRequestInterceptor
 
 	// InitializeRequestInterceptors run for inbound "initialize" JSON-RPC
@@ -328,7 +337,7 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 	upstreamStatus = upstreamResp.StatusCode
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))
 
-	n, err := writeResponse(w, upstreamResp, upstreamResp.Body)
+	n, err := writeResponse(w, upstreamResp, upstreamResp.Body, p.WWWAuthenticate)
 	responseBytes = n
 	if err != nil {
 		return err
@@ -394,7 +403,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		return nil
 	}
 
-	n, err := writeResponse(w, upstreamResp, upstreamResp.Body)
+	n, err := writeResponse(w, upstreamResp, upstreamResp.Body, p.WWWAuthenticate)
 	responseBytes = n
 	if err != nil {
 		return err
@@ -628,7 +637,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		}
 	}
 
-	n, err := writeResponse(w, upstreamResp, bytes.NewReader(bodyBytes))
+	n, err := writeResponse(w, upstreamResp, bytes.NewReader(bodyBytes), p.WWWAuthenticate)
 	responseBytes = n
 	if err != nil {
 		return err
@@ -714,6 +723,20 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 		resp.Body = &cancellingBody{ReadCloser: resp.Body, cancel: forwardCancel, timer: phaseTimer}
 	}
 
+	// Upstream auth rejections are the primary diagnostic when a stored or
+	// forwarded token is refused (e.g. audience mismatch, upstream-side
+	// revocation). The upstream's RFC 6750 challenge carries the
+	// machine-readable reason and — for issuer-gated endpoints — is
+	// replaced before relay, so this log line is its only surface.
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		p.Logger.WarnContext(ctx, "remote mcp server rejected upstream credentials",
+			attr.SlogComponent("remotemcp.proxy"),
+			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
+			attr.SlogHTTPResponseHeaderWWWAuthenticate(resp.Header.Get("WWW-Authenticate")),
+			attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
+			attr.SlogMcpServerID(p.Identity.McpServerID))
+	}
+
 	return upstreamReq, resp, nil
 }
 
@@ -772,7 +795,7 @@ func (p *Proxy) relaySSEStream(
 	resourcesReadReq *ResourcesReadRequest,
 	resourcesListReq *ResourcesListRequest,
 ) (int64, error) {
-	applyResponseHeaders(w, upstreamResp)
+	applyResponseHeaders(w, upstreamResp, p.WWWAuthenticate)
 	w.WriteHeader(upstreamResp.StatusCode)
 
 	if upstreamResp.Body == nil {
@@ -1277,8 +1300,8 @@ func (p *Proxy) dispatchInterceptorError(
 // bounded by its internal buffer, and the body coming from a parsed POST
 // flow was already capped during [readJSONRPCBody] (upstream response) or
 // [UserRequest.ParseJSONRPCMessages] (inbound user request).
-func writeResponse(w http.ResponseWriter, upstreamResp *http.Response, body io.Reader) (int64, error) {
-	applyResponseHeaders(w, upstreamResp)
+func writeResponse(w http.ResponseWriter, upstreamResp *http.Response, body io.Reader, wwwAuthenticate string) (int64, error) {
+	applyResponseHeaders(w, upstreamResp, wwwAuthenticate)
 	w.WriteHeader(upstreamResp.StatusCode)
 
 	if body == nil {
