@@ -146,6 +146,68 @@ func TestToolUsageStatusPredicate(t *testing.T) {
 	}
 }
 
+func TestToolUsageOutcomePredicate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		statuses []string
+		wantSQL  string
+		wantNil  bool
+	}{
+		{
+			name:    "empty yields no predicate",
+			wantNil: true,
+		},
+		{
+			name:     "unknown-only yields no predicate",
+			statuses: []string{"bogus"},
+			wantNil:  true,
+		},
+		{
+			name:     "blocked",
+			statuses: []string{"blocked"},
+			wantSQL:  "(hook_status = 'blocked')",
+		},
+		{
+			name:     "error combines hook failure and http >= 400",
+			statuses: []string{"error"},
+			wantSQL:  "((hook_status = 'failure' OR (hook_status IS NULL AND http_status_code >= 400)))",
+		},
+		{
+			name:     "success combines hook success and 2xx/3xx http",
+			statuses: []string{"success"},
+			wantSQL:  "((hook_status = 'success' OR (hook_status IS NULL AND http_status_code >= 200 AND http_status_code < 400)))",
+		},
+		{
+			name:     "pending",
+			statuses: []string{"pending"},
+			wantSQL:  "(hook_status = 'pending')",
+		},
+		{
+			name:     "multiple outcomes are ORed",
+			statuses: []string{"error", "blocked"},
+			wantSQL:  "((hook_status = 'failure' OR (hook_status IS NULL AND http_status_code >= 400)) OR hook_status = 'blocked')",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			pred := toolUsageOutcomePredicate(tt.statuses)
+			if tt.wantNil {
+				require.Nil(t, pred)
+				return
+			}
+			require.NotNil(t, pred)
+			sql, args, err := pred.ToSql()
+			require.NoError(t, err)
+			require.Empty(t, args)
+			require.Equal(t, tt.wantSQL, sql)
+		})
+	}
+}
+
 func TestToolUsageFilteredSelect_BuildsWithHostedMCPMatchers(t *testing.T) {
 	t.Parallel()
 

@@ -48,6 +48,22 @@ export type ListToolUsageTracesPayloadTargetTypes = ClosedEnum<
 >;
 
 /**
+ * Tool usage trace outcome
+ */
+export const ListToolUsageTracesPayloadStatuses = {
+  Error: "error",
+  Success: "success",
+  Blocked: "blocked",
+  Pending: "pending",
+} as const;
+/**
+ * Tool usage trace outcome
+ */
+export type ListToolUsageTracesPayloadStatuses = ClosedEnum<
+  typeof ListToolUsageTracesPayloadStatuses
+>;
+
+/**
  * Payload for listing target-aware MCP and tool usage traces
  */
 export type ListToolUsageTracesPayload = {
@@ -92,6 +108,10 @@ export type ListToolUsageTracesPayload = {
    */
   sort?: ListToolUsageTracesPayloadSort | undefined;
   /**
+   * Trace outcomes to include (error, success, blocked, pending). Empty means all.
+   */
+  statuses?: Array<ListToolUsageTracesPayloadStatuses> | undefined;
+  /**
    * Target types to include. Empty means all target types.
    */
   targetTypes?: Array<ListToolUsageTracesPayloadTargetTypes> | undefined;
@@ -117,6 +137,11 @@ export const ListToolUsageTracesPayloadTargetTypes$outboundSchema:
   );
 
 /** @internal */
+export const ListToolUsageTracesPayloadStatuses$outboundSchema: z.ZodMiniEnum<
+  typeof ListToolUsageTracesPayloadStatuses
+> = z.enum(ListToolUsageTracesPayloadStatuses);
+
+/** @internal */
 export type ListToolUsageTracesPayload$Outbound = {
   account_type?: string | undefined;
   cursor?: string | undefined;
@@ -128,6 +153,7 @@ export type ListToolUsageTracesPayload$Outbound = {
   query?: string | undefined;
   shadow_server_names?: Array<string> | undefined;
   sort: string;
+  statuses?: Array<string> | undefined;
   target_types?: Array<string> | undefined;
   to: string;
   user_filters?: Array<ToolUsageUserFilter$Outbound> | undefined;
@@ -149,6 +175,9 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
     query: z.optional(z.string()),
     shadowServerNames: z.optional(z.array(z.string())),
     sort: z._default(ListToolUsageTracesPayloadSort$outboundSchema, "desc"),
+    statuses: z.optional(
+      z.array(ListToolUsageTracesPayloadStatuses$outboundSchema),
+    ),
     targetTypes: z.optional(
       z.array(ListToolUsageTracesPayloadTargetTypes$outboundSchema),
     ),

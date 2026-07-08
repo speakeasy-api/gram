@@ -681,6 +681,9 @@ type ListToolUsageTracesPayload struct {
 	// Optional account type filter ('team' or 'personal'). 'team' includes
 	// unclassified traces.
 	AccountType *string
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []ToolUsageStatus
 	// Free-text attribute search string from the q URL param. Matches useful
 	// identifier attributes such as Gram URN, conversation ID, and trigger
 	// instance ID.
@@ -1365,6 +1368,9 @@ type ToolUsageShadowServerFilterOption struct {
 	// Number of tool usage events observed for the Shadow MCP server
 	EventCount int64
 }
+
+// Tool usage trace outcome
+type ToolUsageStatus string
 
 // Tool usage aggregation target kind
 type ToolUsageTargetKind string

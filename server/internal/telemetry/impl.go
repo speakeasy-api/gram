@@ -2515,6 +2515,11 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		targetTypes = append(targetTypes, string(targetType))
 	}
 
+	statuses := make([]string, 0, len(payload.Statuses))
+	for _, status := range payload.Statuses {
+		statuses = append(statuses, string(status))
+	}
+
 	userFilters := make([]repo.ToolUsageUserFilter, 0, len(payload.UserFilters))
 	for _, filter := range payload.UserFilters {
 		if filter == nil {
@@ -2556,6 +2561,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		UserFilters:        userFilters,
 		HookSources:        payload.HookSources,
 		AccountType:        conv.PtrValOr(payload.AccountType, ""),
+		Statuses:           statuses,
 		Query:              conv.PtrValOr(payload.Query, ""),
 		Filters:            toRepoAttributeFilters(payload.Filters),
 		SortOrder:          params.sortOrder,

@@ -172,6 +172,33 @@ func toolUsageStatusPredicate(f AttributeFilter) squirrel.Sqlizer {
 	}
 }
 
+// toolUsageOutcomePredicate builds a trace-level predicate for the first-class Tool Logs
+// "Status" filter. It ORs together the selected outcomes, evaluated against the
+// aggregated per-trace hook_status (Nullable String) and http_status_code (Nullable
+// Int32) columns projected by both normalized_traces paths. The mapping mirrors the
+// dashboard badge logic (getStatusConfig): hook_status wins when present, otherwise the
+// HTTP status code decides. Unknown/empty selections yield nil so the query is
+// unaffected.
+func toolUsageOutcomePredicate(statuses []string) squirrel.Sqlizer {
+	or := squirrel.Or{}
+	for _, status := range statuses {
+		switch status {
+		case "blocked":
+			or = append(or, squirrel.Expr("hook_status = 'blocked'"))
+		case "failure", "error":
+			or = append(or, squirrel.Expr("(hook_status = 'failure' OR (hook_status IS NULL AND http_status_code >= 400))"))
+		case "success":
+			or = append(or, squirrel.Expr("(hook_status = 'success' OR (hook_status IS NULL AND http_status_code >= 200 AND http_status_code < 400))"))
+		case "pending":
+			or = append(or, squirrel.Expr("hook_status = 'pending'"))
+		}
+	}
+	if len(or) == 0 {
+		return nil
+	}
+	return or
+}
+
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
@@ -2123,7 +2150,8 @@ type ListToolUsageTracesParams struct {
 	ShadowServerNames  []string
 	UserFilters        []ToolUsageUserFilter
 	HookSources        []string
-	AccountType        string // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
+	AccountType        string   // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
+	Statuses           []string // Optional trace-outcome filter: error, success, blocked, pending. Empty means all.
 	Query              string
 	Filters            []AttributeFilter
 	SortOrder          string
@@ -2453,6 +2481,11 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		if pred := toolUsageStatusPredicate(filter); pred != nil {
 			sb = sb.Where(pred)
 		}
+	}
+
+	// First-class Status filter, applied to the aggregated per-trace outcome columns.
+	if pred := toolUsageOutcomePredicate(arg.Statuses); pred != nil {
+		sb = sb.Where(pred)
 	}
 
 	if arg.CursorID != "" {

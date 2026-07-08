@@ -1815,6 +1815,11 @@ var ToolUsageTargetKind = Type("ToolUsageTargetKind", String, func() {
 	Enum("server", "local_tools", "skill")
 })
 
+var ToolUsageStatus = Type("ToolUsageStatus", String, func() {
+	Description("Tool usage trace outcome")
+	Enum("error", "success", "blocked", "pending")
+})
+
 var ToolUsageUserKind = Type("ToolUsageUserKind", String, func() {
 	Description("Tool usage user identity kind")
 	Enum("email", "external_user_id", "user_id", "unknown")
@@ -1884,6 +1889,7 @@ var ListToolUsageTracesPayload = Type("ListToolUsageTracesPayload", func() {
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
 	Attribute("account_type", String, "Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.")
+	Attribute("statuses", ArrayOf(ToolUsageStatus), "Trace outcomes to include (error, success, blocked, pending). Empty means all.")
 	Attribute("query", String, "Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.")
 	Attribute("filters", ArrayOf(LogFilter), "Arbitrary attribute filter conditions from the af URL param")
 	Attribute("cursor", String, "Cursor for pagination")
