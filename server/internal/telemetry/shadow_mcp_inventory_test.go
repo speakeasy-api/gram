@@ -112,6 +112,72 @@ func TestShadowMCPInventoryURLs_PaginatesLastSeen(t *testing.T) {
 	}, inventoryURLRows(secondPage))
 }
 
+func TestShadowMCPInventoryURLs_PaginatesLastCalledThenLastSeen(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	base := time.Date(2026, 6, 29, 12, 45, 0, 0, time.UTC)
+
+	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
+		{GramProjectID: projectID, CanonicalServerURL: "https://never-called.example.com/mcp", URLHost: "never-called.example.com", ServerName: "Never Called", SeenAt: base.Add(5 * time.Minute), FirstSeen: time.Time{}, LastSeen: time.Time{}, UpdatedAt: time.Time{}},
+		{GramProjectID: projectID, CanonicalServerURL: "https://most-recent-call.example.com/mcp", URLHost: "most-recent-call.example.com", ServerName: "Most Recent Call", SeenAt: base, FirstSeen: time.Time{}, LastSeen: time.Time{}, UpdatedAt: time.Time{}},
+		{GramProjectID: projectID, CanonicalServerURL: "https://same-call-newer-seen.example.com/mcp", URLHost: "same-call-newer-seen.example.com", ServerName: "Same Call Newer Seen", SeenAt: base.Add(3 * time.Minute), FirstSeen: time.Time{}, LastSeen: time.Time{}, UpdatedAt: time.Time{}},
+		{GramProjectID: projectID, CanonicalServerURL: "https://same-call-older-seen.example.com/mcp", URLHost: "same-call-older-seen.example.com", ServerName: "Same Call Older Seen", SeenAt: base.Add(2 * time.Minute), FirstSeen: time.Time{}, LastSeen: time.Time{}, UpdatedAt: time.Time{}},
+	}))
+
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://most-recent-call.example.com/mcp",
+		ServerName: "Most Recent Call",
+		UserEmail:  "ada@example.com",
+		ObservedAt: base.Add(4 * time.Minute),
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://same-call-newer-seen.example.com/mcp",
+		ServerName: "Same Call Newer Seen",
+		UserEmail:  "ada@example.com",
+		ObservedAt: base.Add(time.Minute),
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://same-call-older-seen.example.com/mcp",
+		ServerName: "Same Call Older Seen",
+		UserEmail:  "ada@example.com",
+		ObservedAt: base.Add(time.Minute),
+	})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	firstPage, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
+		GramProjectID: projectID,
+		Limit:         2,
+		Cursor:        "",
+	})
+	require.NoError(t, err)
+	require.Len(t, firstPage, 2)
+	require.Equal(t, []string{
+		"https://most-recent-call.example.com/mcp",
+		"https://same-call-newer-seen.example.com/mcp",
+	}, inventoryURLRows(firstPage))
+
+	cursor, err := telemetryRepo.EncodeShadowMCPInventoryURLCursor(firstPage[1])
+	require.NoError(t, err)
+
+	secondPage, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
+		GramProjectID: projectID,
+		Limit:         2,
+		Cursor:        cursor,
+	})
+	require.NoError(t, err)
+	require.Len(t, secondPage, 2)
+	require.Equal(t, []string{
+		"https://same-call-older-seen.example.com/mcp",
+		"https://never-called.example.com/mcp",
+	}, inventoryURLRows(secondPage))
+}
+
 func TestShadowMCPInventoryURLs_RejectsInvalidCursor(t *testing.T) {
 	t.Parallel()
 
@@ -122,10 +188,16 @@ func TestShadowMCPInventoryURLs_RejectsInvalidCursor(t *testing.T) {
 	invalidBase64 := "not base64"
 	invalidJSON := base64.RawURLEncoding.EncodeToString([]byte("not-json"))
 	missingURL := encodeRawInventoryURLCursor(t, map[string]any{
-		"last_seen_unix_nano": lastSeen.UnixNano(),
+		"last_called_unix_nano": int64(0),
+		"last_seen_unix_nano":   lastSeen.UnixNano(),
+	})
+	missingLastCalled := encodeRawInventoryURLCursor(t, map[string]any{
+		"canonical_server_url": "https://alpha.example.com/mcp",
+		"last_seen_unix_nano":  lastSeen.UnixNano(),
 	})
 	missingLastSeen := encodeRawInventoryURLCursor(t, map[string]any{
-		"canonical_server_url": "https://alpha.example.com/mcp",
+		"canonical_server_url":  "https://alpha.example.com/mcp",
+		"last_called_unix_nano": int64(0),
 	})
 
 	invalidCursors := []struct {
@@ -135,6 +207,7 @@ func TestShadowMCPInventoryURLs_RejectsInvalidCursor(t *testing.T) {
 		{name: "invalid base64", cursor: invalidBase64},
 		{name: "invalid JSON", cursor: invalidJSON},
 		{name: "missing URL", cursor: missingURL},
+		{name: "missing last called", cursor: missingLastCalled},
 		{name: "missing last seen", cursor: missingLastSeen},
 	}
 
@@ -223,16 +296,19 @@ func TestShadowMCPInventoryUsage_FiltersToCanonicalURLsBeforeLimit(t *testing.T)
 		ObservedAt: base.Add(time.Hour),
 	})
 
-	usage := requireShadowMCPInventoryUsageEventually(ctx, t, ti, telemetryRepo.ListShadowMCPInventoryUsageParams{
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	usage, err := ti.chClient.ListShadowMCPInventoryUsage(ctx, telemetryRepo.ListShadowMCPInventoryUsageParams{
 		GramProjectID:       projectID,
 		CanonicalServerURLs: []string{"https://target.example.com/mcp"},
 		Limit:               1,
-	}, 1)
+	})
+	require.NoError(t, err)
 	require.Len(t, usage, 1)
-	assert.Equal(t, "https://target.example.com/mcp", usage[0].CanonicalServerURL)
-	assert.EqualValues(t, 1, usage[0].CallCount)
-	assert.EqualValues(t, 1, usage[0].UserCount)
-	assert.Equal(t, []string{"alex@example.com"}, usage[0].TopUsers)
+	require.Equal(t, "https://target.example.com/mcp", usage[0].CanonicalServerURL)
+	require.EqualValues(t, 1, usage[0].CallCount)
+	require.EqualValues(t, 1, usage[0].UserCount)
+	require.Equal(t, []string{"alex@example.com"}, usage[0].TopUsers)
 }
 
 func TestListShadowMCPInventoryUsers_FromTelemetry(t *testing.T) {

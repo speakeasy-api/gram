@@ -319,6 +319,7 @@ type ShadowMCPInventoryURLRow struct {
 	ServerName         string    `ch:"server_name"`
 	FirstSeen          time.Time `ch:"first_seen"`
 	LastSeen           time.Time `ch:"last_seen"`
+	LastCalledUnixNano int64     `ch:"last_called_unix_nano"`
 }
 
 type ListShadowMCPInventoryUsageParams struct {
@@ -369,12 +370,20 @@ type shadowMCPInventoryURLUpsert struct {
 
 type shadowMCPInventoryURLCursor struct {
 	CanonicalServerURL string `json:"canonical_server_url"`
+	LastCalledUnixNano int64  `json:"last_called_unix_nano"`
+	LastSeenUnixNano   int64  `json:"last_seen_unix_nano"`
+}
+
+type rawShadowMCPInventoryURLCursor struct {
+	CanonicalServerURL string `json:"canonical_server_url"`
+	LastCalledUnixNano *int64 `json:"last_called_unix_nano"`
 	LastSeenUnixNano   int64  `json:"last_seen_unix_nano"`
 }
 
 func EncodeShadowMCPInventoryURLCursor(row ShadowMCPInventoryURLRow) (string, error) {
 	payload := shadowMCPInventoryURLCursor{
 		CanonicalServerURL: row.CanonicalServerURL,
+		LastCalledUnixNano: row.LastCalledUnixNano,
 		LastSeenUnixNano:   row.LastSeen.UTC().UnixNano(),
 	}
 
@@ -392,9 +401,17 @@ func decodeShadowMCPInventoryURLCursor(cursor string) (shadowMCPInventoryURLCurs
 		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: decoding: %w", ErrInvalidShadowMCPInventoryURLCursor, err)
 	}
 
-	var payload shadowMCPInventoryURLCursor
-	if err := json.Unmarshal(data, &payload); err != nil {
+	var rawPayload rawShadowMCPInventoryURLCursor
+	if err := json.Unmarshal(data, &rawPayload); err != nil {
 		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: parsing: %w", ErrInvalidShadowMCPInventoryURLCursor, err)
+	}
+	if rawPayload.LastCalledUnixNano == nil {
+		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: last called is required", ErrInvalidShadowMCPInventoryURLCursor)
+	}
+	payload := shadowMCPInventoryURLCursor{
+		CanonicalServerURL: rawPayload.CanonicalServerURL,
+		LastCalledUnixNano: *rawPayload.LastCalledUnixNano,
+		LastSeenUnixNano:   rawPayload.LastSeenUnixNano,
 	}
 	if payload.CanonicalServerURL == "" {
 		return shadowMCPInventoryURLCursor{}, fmt.Errorf("%w: canonical server url is required", ErrInvalidShadowMCPInventoryURLCursor)
@@ -598,28 +615,69 @@ func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadow
 		Where("gram_project_id = ?", arg.GramProjectID).
 		GroupBy("gram_project_id", "canonical_server_url")
 
+	traceUsageRows := sq.Select("trace_id").
+		Column("replaceRegexpOne(max(mcp_server_url), ?, '') AS canonical_server_url", "[?#].*$").
+		Column("max(start_time_unix_nano) AS called_at_unix_nano").
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		GroupBy("trace_id").
+		Having("canonical_server_url != ''")
+
+	traceUsageSQL, traceUsageArgs, err := traceUsageRows.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory usage ordering query: %w", err)
+	}
+
+	inventoryRowsWithUsage := sq.Select(
+		"inventory_urls.canonical_server_url",
+		"inventory_urls.url_host",
+		"inventory_urls.server_name",
+		"inventory_urls.first_seen",
+		"inventory_urls.last_seen",
+		"maxIf(ifNull(trace_usage.called_at_unix_nano, 0), ifNull(trace_usage.canonical_server_url, '') != '') AS last_called_unix_nano",
+	).
+		FromSelect(inventoryRows, "inventory_urls").
+		LeftJoin(fmt.Sprintf(
+			"(%s) AS trace_usage ON trace_usage.canonical_server_url = inventory_urls.canonical_server_url",
+			traceUsageSQL,
+		), traceUsageArgs...).
+		GroupBy(
+			"inventory_urls.canonical_server_url",
+			"inventory_urls.url_host",
+			"inventory_urls.server_name",
+			"inventory_urls.first_seen",
+			"inventory_urls.last_seen",
+		)
+
 	sb := sq.Select(
 		"canonical_server_url",
 		"url_host",
 		"server_name",
 		"first_seen",
 		"last_seen",
+		"last_called_unix_nano",
 	).
-		FromSelect(inventoryRows, "inventory_urls").
+		FromSelect(inventoryRowsWithUsage, "inventory_urls").
 		Limit(limit)
 
 	if arg.Cursor != "" {
 		lastSeen := time.Unix(0, cursor.LastSeenUnixNano).UTC()
 		sb = sb.Where(squirrel.Or{
-			squirrel.Expr("last_seen < ?", lastSeen),
+			squirrel.Expr("last_called_unix_nano < ?", cursor.LastCalledUnixNano),
 			squirrel.And{
-				squirrel.Expr("last_seen = ?", lastSeen),
-				squirrel.Expr("canonical_server_url > ?", cursor.CanonicalServerURL),
+				squirrel.Expr("last_called_unix_nano = ?", cursor.LastCalledUnixNano),
+				squirrel.Or{
+					squirrel.Expr("last_seen < ?", lastSeen),
+					squirrel.And{
+						squirrel.Expr("last_seen = ?", lastSeen),
+						squirrel.Expr("canonical_server_url > ?", cursor.CanonicalServerURL),
+					},
+				},
 			},
 		})
 	}
 
-	sb = sb.OrderBy("last_seen DESC", "canonical_server_url ASC")
+	sb = sb.OrderBy("last_called_unix_nano DESC", "last_seen DESC", "canonical_server_url ASC")
 
 	query, queryArgs, err := sb.ToSql()
 	if err != nil {
