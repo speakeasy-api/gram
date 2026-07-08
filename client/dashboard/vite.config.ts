@@ -5,6 +5,39 @@ import process from "node:process";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+
+const manualChunkGroups: [string, string[]][] = [
+  ["lucide-react", ["lucide-react"]],
+  ["moonshine", ["@speakeasy-api/moonshine"]],
+  [
+    "three",
+    [
+      "@react-three/drei",
+      "@react-three/fiber",
+      "@react-three/postprocessing",
+      "three",
+    ],
+  ],
+  [
+    "externals",
+    [
+      "posthog-js",
+      "react",
+      "react-dom",
+      "react-error-boundary",
+      "react-router",
+      "sonner",
+      "zod",
+    ],
+  ],
+];
+
+function packagePathRegex(packages: string[]): RegExp {
+  const alternatives = packages.map((pkg) =>
+    pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replaceAll("/", "[\\\\/]"),
+  );
+  return new RegExp(`node_modules[\\\\/](?:${alternatives.join("|")})[\\\\/]`);
+}
 // https://vite.dev/config/
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
@@ -73,31 +106,17 @@ export default defineConfig(({ command }) => {
       __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
     },
     build: {
-      target: "es2022",
       sourcemap: true,
-      rollupOptions: {
+      rolldownOptions: {
         input: {
           main: path.resolve(__dirname, "index.html"),
         },
         output: {
-          manualChunks: {
-            "lucide-react": ["lucide-react"],
-            moonshine: ["@speakeasy-api/moonshine"],
-            three: [
-              "@react-three/drei",
-              "@react-three/fiber",
-              "@react-three/postprocessing",
-              "three",
-            ],
-            externals: [
-              "posthog-js",
-              "react",
-              "react-dom",
-              "react-error-boundary",
-              "react-router",
-              "sonner",
-              "zod",
-            ],
+          codeSplitting: {
+            groups: manualChunkGroups.map(([name, packages]) => ({
+              name,
+              test: packagePathRegex(packages),
+            })),
           },
         },
       },
@@ -105,14 +124,8 @@ export default defineConfig(({ command }) => {
     worker: {
       format: "es",
     },
-    esbuild: {
-      target: "es2022",
-    },
     optimizeDeps: {
       include: ["monaco-editor"],
-      esbuildOptions: {
-        target: "es2022",
-      },
     },
     server: {
       host: true,

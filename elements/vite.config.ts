@@ -31,7 +31,6 @@ export default defineConfig({
   ],
   build: {
     sourcemap: true,
-    minify: "esbuild",
     lib: {
       entry: {
         elements: resolve(__dirname, "src/index.ts"),
@@ -52,7 +51,7 @@ export default defineConfig({
       },
       formats: ["es", "cjs"],
     },
-    rollupOptions: {
+    rolldownOptions: {
       // NOTE: do not define externals here, as they are defined in the externalizeDeps plugin
       output: {
         globals: {

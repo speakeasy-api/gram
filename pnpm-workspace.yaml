@@ -44,6 +44,12 @@ overrides:
   # dropdown inside it, DNO-393/AIS-168). Force one copy so all primitives share a stack.
   "@radix-ui/react-dismissable-layer": 1.1.13
 
+peerDependencyRules:
+  allowedVersions:
+    # 0.10.0 is the latest release and predates vite 8; the plugin only reads
+    # package.json to compute build externals, so vite 8 is fine.
+    "vite-plugin-externalize-deps>vite": "^8.0.0"
+
 allowBuilds:
   bun: true
   esbuild: true
@@ -53,3 +59,6 @@ allowBuilds:
   msw: false
   ssh2: false
   "@openrouter/sdk": false
+
+patchedDependencies:
+  svix@1.92.2: patches/svix@1.92.2.patch
