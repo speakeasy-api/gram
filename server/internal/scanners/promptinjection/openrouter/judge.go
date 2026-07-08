@@ -1,19 +1,5 @@
-// Package pijudge holds the OpenRouter-backed LLM-judge engine for
-// prompt-injection detection. It is the L1 engine that supersedes the
-// deberta-v3 ML classifier (see POC-193): an LLM judge generalizes to the
-// tool/function-"abuse" class that pattern-matching and the classifier miss.
-//
-// Like riskjudge, this package lives outside risk_analysis so that package —
-// which testenv imports — does not pull in the OpenRouter client dependency
-// chain (openrouter -> productfeatures -> authz), which would otherwise create
-// an import cycle in authz tests. Its Classify method is wired into the scanner
-// as an ra.PromptInjectionEngine (a plain function value, no interface), replacing the
-// removed deberta sidecar.
-//
-// This is the single-stage judge. The risk-triggered cascade (escalate to a
-// stronger model on sensitive/consequential tool calls) layers on top of this
-// via the stage-tagged metrics and is tracked in POC-193.
-package pijudge
+// Package openrouter holds the OpenRouter-backed L1 engine for prompt-injection detection.
+package openrouter
 
 import (
 	"context"
@@ -32,12 +18,13 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 const (
@@ -111,29 +98,25 @@ type Engine struct {
 	logger      *slog.Logger
 	tracer      trace.Tracer
 	metrics     *metrics
-	client      openrouter.CompletionClient
+	client      gramopenrouter.CompletionClient
 	limiter     *ratelimit.Limiter
 	model       string
 	temperature float64
 	schema      or.ChatJSONSchemaConfig // built once; the verdict shape is constant
 }
 
-// Classify satisfies ra.PromptInjectionEngine; the scanner takes the method value.
-var _ ra.PromptInjectionEngine = (*Engine)(nil).Classify
+var _ promptinjection.Engine = (*Engine)(nil).Classify
 
-// safeResult is the not-an-attack verdict. It is returned for empty messages and
-// for every fail-open path (canceled context, rate limit, judge error) so a
-// judge outage degrades to the L0 heuristics rather than dropping the scan.
-var safeResult = ra.PromptInjectionResult{Label: ra.LabelSafe, Score: 0, Rationale: ""}
+var safeResult = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: ""}
 
 // New constructs an Engine. The composition root constructs the completions
 // client unconditionally, so it is always non-nil here.
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, limiter *ratelimit.Limiter) *Engine {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient, limiter *ratelimit.Limiter) *Engine {
 	logger = logger.With(attr.SlogComponent("pi-llm-judge"))
 	strict := true
 	return &Engine{
 		logger:      logger,
-		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/pijudge"),
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"),
 		metrics:     newMetrics(meterProvider, logger),
 		client:      client,
 		limiter:     limiter,
@@ -153,7 +136,7 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 // rate limit yields a SAFE result for that message (fail open) so the scanner
 // keeps the other verdicts and its L0 findings. Messages with no content are
 // SAFE without a call.
-func (c *Engine) Classify(ctx context.Context, req ra.PromptInjectionRequest) (_ []ra.PromptInjectionResult, err error) {
+func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ []promptinjection.Result, err error) {
 	n := len(req.Messages)
 	if n == 0 {
 		return nil, nil
@@ -172,7 +155,7 @@ func (c *Engine) Classify(ctx context.Context, req ra.PromptInjectionRequest) (_
 		span.End()
 	}()
 
-	results := make([]ra.PromptInjectionResult, n)
+	results := make([]promptinjection.Result, n)
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 	for i := range req.Messages {
@@ -183,7 +166,7 @@ func (c *Engine) Classify(ctx context.Context, req ra.PromptInjectionRequest) (_
 		}
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int, msg ra.JudgeMessage) {
+		go func(i int, msg judgemessage.Message) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			results[i] = c.classifyOne(ctx, req, msg)
@@ -193,9 +176,8 @@ func (c *Engine) Classify(ctx context.Context, req ra.PromptInjectionRequest) (_
 	return results, nil
 }
 
-// classifyOne runs the judge for a single message and maps the verdict onto an
-// PromptInjectionResult. Every failure path returns SAFE (fail open).
-func (c *Engine) classifyOne(ctx context.Context, req ra.PromptInjectionRequest, msg ra.JudgeMessage) ra.PromptInjectionResult {
+// classifyOne returns SAFE for every fail-open path.
+func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message) promptinjection.Result {
 	// Bail before spending a rate-limit token (or making the call) on a context
 	// that is already canceled — otherwise a cancellation burst can drain the
 	// org's budget and throttle real requests into fail-open SAFE. (cubic)
@@ -204,7 +186,7 @@ func (c *Engine) classifyOne(ctx context.Context, req ra.PromptInjectionRequest,
 	}
 	// A Store outage is not a throttle — proceed rather than let limiter infra
 	// silence the scanner.
-	switch res, err := c.limiter.Allow(ctx, openrouter.JudgeRateLimitKey(req.OrgID, c.model)); {
+	switch res, err := c.limiter.Allow(ctx, gramopenrouter.JudgeRateLimitKey(req.OrgID, c.model)); {
 	case err != nil:
 		c.logger.WarnContext(ctx, "pi judge rate limiter unavailable, allowing call",
 			attr.SlogError(err),
@@ -238,7 +220,7 @@ func (c *Engine) classifyOne(ctx context.Context, req ra.PromptInjectionRequest,
 	c.logger.InfoContext(ctx, "pi judge flagged prompt injection",
 		attr.SlogOrganizationID(req.OrgID),
 	)
-	return ra.PromptInjectionResult{Label: ra.LabelInjection, Score: verdict.Confidence, Rationale: verdict.Rationale}
+	return promptinjection.Result{Label: promptinjection.LabelInjection, Score: verdict.Confidence, Rationale: verdict.Rationale}
 }
 
 // judgePayload is the user turn: the captured event rendered as a structured
@@ -258,7 +240,7 @@ type judgeVerdict struct {
 	Rationale  string  `json:"rationale"`
 }
 
-func (c *Engine) call(ctx context.Context, req ra.PromptInjectionRequest, msg ra.JudgeMessage) (judgeVerdict, error) {
+func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judgemessage.Message) (judgeVerdict, error) {
 	payload, err := json.Marshal(judgePayload{Message: riskjudge.RenderMessage(msg)})
 	if err != nil {
 		// Unreachable: the payload is strings, bools, and slices. Fall back to the
@@ -269,7 +251,7 @@ func (c *Engine) call(ctx context.Context, req ra.PromptInjectionRequest, msg ra
 	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
 	defer cancel()
 
-	response, err := c.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
+	response, err := c.client.GetObjectCompletion(callCtx, gramopenrouter.ObjectCompletionRequest{
 		OrgID:          req.OrgID,
 		ProjectID:      req.ProjectID,
 		Model:          c.model,
@@ -288,7 +270,7 @@ func (c *Engine) call(ctx context.Context, req ra.PromptInjectionRequest, msg ra
 	if response == nil || response.Message == nil {
 		return judgeVerdict{}, fmt.Errorf("empty completion response")
 	}
-	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
+	raw := strings.TrimSpace(gramopenrouter.GetText(*response.Message))
 	if raw == "" {
 		return judgeVerdict{}, fmt.Errorf("empty completion content")
 	}
@@ -328,7 +310,7 @@ func labelFor(isAttack bool, err error) string {
 		return "error"
 	}
 	if isAttack {
-		return ra.LabelInjection
+		return promptinjection.LabelInjection
 	}
-	return ra.LabelSafe
+	return promptinjection.LabelSafe
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -209,7 +210,7 @@ func TestEvaluatePromptGuardrail_CELScopeExemptSkipsToolCall(t *testing.T) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	seen := []ra.JudgeMessage{}
+	seen := []judgemessage.Message{}
 	ti.judge.evaluate = func(in ra.JudgeInput) *ra.JudgeVerdict {
 		seen = append(seen, in.Message)
 		return &ra.JudgeVerdict{

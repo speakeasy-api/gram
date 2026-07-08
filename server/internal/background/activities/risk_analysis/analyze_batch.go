@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
@@ -41,7 +42,7 @@ type AnalyzeBatch struct {
 	db                     *pgxpool.Pool
 	gitleaksScanner        *gitleaks.Scanner
 	piiScanner             PIIScanner
-	promptInjectionScanner *PromptInjectionScanner
+	promptInjectionScanner *promptinjection.Scanner
 	shadowMCPScanner       *shadowmcpscan.Scanner
 	judge                  PromptJudge
 	flags                  feature.Provider
@@ -61,7 +62,7 @@ func NewAnalyzeBatch(
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	piiScanner PIIScanner,
-	promptInjectionScanner *PromptInjectionScanner,
+	promptInjectionScanner *promptinjection.Scanner,
 	shadowMCPClient *shadowmcp.Client,
 	mcpMatchLookup MCPMatchLookup,
 	judge PromptJudge,
@@ -79,7 +80,7 @@ func NewAnalyzeBatch(
 		piiScanner = &StubPIIScanner{}
 	}
 	if promptInjectionScanner == nil {
-		promptInjectionScanner = NewPromptInjectionScanner(logger, nil)
+		promptInjectionScanner = promptinjection.NewScanner(logger, nil)
 	}
 
 	return &AnalyzeBatch{

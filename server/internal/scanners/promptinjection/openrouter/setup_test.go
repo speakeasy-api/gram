@@ -1,4 +1,4 @@
-package pijudge
+package openrouter
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 var infra *testenv.Environment
@@ -40,5 +40,5 @@ func testJudgeLimiter(t *testing.T) *ratelimit.Limiter {
 	t.Helper()
 	client, err := infra.NewRedisClient(t, int(redisDBCounter.Add(1))%16)
 	require.NoError(t, err)
-	return openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(client))
+	return gramopenrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(client))
 }
