@@ -37,6 +37,23 @@ func requireMapValue(t *testing.T, values map[string]any, key string) map[string
 	return value
 }
 
+// TestDogfoodPluginsMatchCheckedIn guards against drift between the checked-in
+// dogfood plugins (hooks/plugin-claude, hooks/plugin-cursor) and the renders
+// the publish path produces: the dogfood senders must exercise the exact
+// scripts customers run — canonical payloads, /rpc/hooks.ingest, ratchet and
+// org-key recovery. On failure, regenerate with `go run ./cmd/export-hook-plugin`.
+func TestDogfoodPluginsMatchCheckedIn(t *testing.T) {
+	t.Parallel()
+	files, err := DogfoodPluginFiles()
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
+	for name, content := range files {
+		checkedIn := requireFileBytes(t, filepath.Join("..", "..", "..", "hooks", filepath.FromSlash(name)))
+		require.Equal(t, string(content), string(checkedIn),
+			"hooks/%s has drifted from the render — regenerate with `go run ./cmd/export-hook-plugin`", name)
+	}
+}
+
 // TestSharedHTTPScriptMatchesCheckedIn guards against drift between the
 // generated hooks/http.sh (renderSharedHTTPScript) and the checked-in
 // hooks/plugin-claude/hooks/http.sh sourced by the local-dev plugin. Both must
@@ -1960,8 +1977,8 @@ func TestRenderLoginScriptsPinOrganization(t *testing.T) {
 		ProjectSlug: "acme-prod",
 		OrgID:       "org_12345",
 	}
-	require.Contains(t, string(renderLoginScript(cfg)), `gram_hooks_org_hint="org_12345"`)
-	require.Contains(t, string(renderAuthPreflightScript(cfg)), `gram_hooks_org_hint="org_12345"`)
+	require.Contains(t, string(renderLoginScript(cfg)), `gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-org_12345}"`)
+	require.Contains(t, string(renderAuthPreflightScript(cfg)), `gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-org_12345}"`)
 	require.Contains(t, string(renderSharedAuthScript()), "organization_id=${gram_hooks_org_hint}")
 }
 
@@ -2200,7 +2217,7 @@ func TestRenderAuthPreflightScriptObservabilityModeFailsOpen(t *testing.T) {
 func checkedInSenderCapturedRequest(t *testing.T, plugin, payload string) string {
 	t.Helper()
 
-	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", plugin, "hooks", "send_hook.sh"))
+	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", plugin, "hooks", "hook.sh"))
 	require.NoError(t, err)
 
 	dir := t.TempDir()
@@ -2255,13 +2272,13 @@ func TestCheckedInCursorSenderUsesCachedBrowserAuth(t *testing.T) {
 		`{"hook_event_name":"beforeSubmitPrompt","conversation_id":"sess-cached","prompt":"hi"}`)
 	require.Contains(t, headers, "Gram-Key: gram_cached_browser_key", "sender must use the cached browser-login key")
 	require.Contains(t, headers, "Gram-Project: acme-prod")
-	require.Contains(t, headers, "/rpc/hooks.cursor")
+	require.Contains(t, headers, "/rpc/hooks.ingest")
 }
 
 // TestCheckedInClaudeSenderUsesCachedBrowserAuth verifies the checked-in
 // Claude plugin's per-event sender attaches the credentials cached by the
 // browser login flow when no env key is set, so policy enforcement that needs
-// auth context is not silently skipped on the legacy path.
+// auth context is not silently skipped.
 func TestCheckedInClaudeSenderUsesCachedBrowserAuth(t *testing.T) {
 	t.Parallel()
 
@@ -2269,7 +2286,7 @@ func TestCheckedInClaudeSenderUsesCachedBrowserAuth(t *testing.T) {
 		`{"hook_event_name":"UserPromptSubmit","session_id":"sess-cached-claude","prompt":"hi"}`)
 	require.Contains(t, headers, "Gram-Key: gram_cached_browser_key", "sender must use the cached browser-login key")
 	require.Contains(t, headers, "Gram-Project: acme-prod")
-	require.Contains(t, headers, "/rpc/hooks.claude")
+	require.Contains(t, headers, "/rpc/hooks.ingest")
 }
 
 // TestRenderHookScriptCursorBackfillsLaterTurnPrompts verifies the prompt

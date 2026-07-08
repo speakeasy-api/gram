@@ -1,5 +1,71 @@
 {
   "hooks": {
+    "ConfigChange": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/hook.sh\"",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/hook.sh\"",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/hook.sh\"",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/hook.sh\"",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/hook.sh\"",
+            "async": false
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/hook.sh\"",
+            "async": true
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
@@ -11,30 +77,8 @@
           },
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_mcp_inventory.sh\"",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/hook.sh\"",
             "async": true
-          }
-        ]
-      }
-    ],
-    "ConfigChange": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_mcp_inventory.sh\"",
-            "async": true
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
-            "async": false
           }
         ]
       }
@@ -44,41 +88,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/hook.sh\"",
             "async": false
           }
         ]
       }
     ],
-    "PreToolUse": [
+    "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/hook.sh\"",
             "async": false
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
-            "async": true
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_hook.sh\"",
-            "async": true
           }
         ]
       }

@@ -1,0 +1,1 @@
+../../plugin-claude/hooks/auth.sh

@@ -1,62 +1,62 @@
 {
   "version": 1,
   "hooks": {
-    "sessionStart": [
+    "afterAgentResponse": [
       {
-        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/auth_preflight.sh\"",
-        "timeout": 330,
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/hook.sh\""
+      }
+    ],
+    "afterAgentThought": [
+      {
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/hook.sh\""
+      }
+    ],
+    "afterMCPExecution": [
+      {
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/hook.sh\""
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/hook.sh\"",
         "failClosed": true
       }
     ],
     "beforeSubmitPrompt": [
       {
-        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
-        "timeout": 10
-      }
-    ],
-    "afterAgentResponse": [
-      {
-        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
-        "timeout": 10
-      }
-    ],
-    "afterAgentThought": [
-      {
-        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
-        "timeout": 10
-      }
-    ],
-    "preToolUse": [
-      {
-        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
-        "matcher": "^(?!MCP:)",
-        "timeout": 10
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/hook.sh\"",
+        "failClosed": true
       }
     ],
     "postToolUse": [
       {
-        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
-        "matcher": "^(?!MCP:)",
-        "timeout": 10
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/hook.sh\""
       }
     ],
     "postToolUseFailure": [
       {
-        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
-        "matcher": "^(?!MCP:)",
-        "timeout": 10
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/hook.sh\""
       }
     ],
-    "beforeMCPExecution": [
+    "preToolUse": [
       {
-        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
-        "timeout": 10
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/hook.sh\"",
+        "failClosed": true
       }
     ],
-    "afterMCPExecution": [
+    "sessionStart": [
       {
-        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
-        "timeout": 10
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/auth_preflight.sh\"",
+        "timeout": 330,
+        "failClosed": true
+      },
+      {
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/hook.sh\""
+      }
+    ],
+    "stop": [
+      {
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/hook.sh\""
       }
     ]
   }
