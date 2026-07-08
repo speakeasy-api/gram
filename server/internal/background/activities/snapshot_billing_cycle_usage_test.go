@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -23,7 +24,7 @@ import (
 // predict which cycles the activity finalizes.
 const billingCycleFinalizeGrace = 72 * time.Hour
 
-func setupSnapshotBillingCycleUsageTest(t *testing.T, dbName string) (act *activities.SnapshotBillingCycleUsage, queries *usagerepo.Queries, telemetryQueries *telemetryrepo.Queries, orgID string, projectID uuid.UUID) {
+func setupSnapshotBillingCycleUsageTest(t *testing.T, dbName string) (act *activities.SnapshotBillingCycleUsage, conn *pgxpool.Pool, telemetryQueries *telemetryrepo.Queries, orgID string, projectID uuid.UUID) {
 	t.Helper()
 	ctx := t.Context()
 
@@ -52,7 +53,7 @@ func setupSnapshotBillingCycleUsageTest(t *testing.T, dbName string) (act *activ
 
 	act = activities.NewSnapshotBillingCycleUsage(testenv.NewLogger(t), conn, chConn)
 
-	return act, usagerepo.New(conn), telemetryrepo.New(chConn), orgID, project.ID
+	return act, conn, telemetryrepo.New(chConn), orgID, project.ID
 }
 
 // insertTUMTelemetryRow inserts a raw telemetry_logs row. The
@@ -109,7 +110,8 @@ func TestSnapshotBillingCycleUsage_SnapshotsTrailingCycles(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	act, queries, telemetryQueries, orgID, projectID := setupSnapshotBillingCycleUsageTest(t, "snapshot_billing_cycles")
+	act, conn, telemetryQueries, orgID, projectID := setupSnapshotBillingCycleUsageTest(t, "snapshot_billing_cycles")
+	queries := usagerepo.New(conn)
 
 	insertStoredSession(t, ctx, telemetryQueries, projectID.String(), time.Now().UTC(), 450)
 
@@ -150,7 +152,8 @@ func TestSnapshotBillingCycleUsage_FinalizedRowsImmutable(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	act, queries, _, orgID, _ := setupSnapshotBillingCycleUsageTest(t, "snapshot_billing_finalized")
+	act, conn, _, orgID, _ := setupSnapshotBillingCycleUsageTest(t, "snapshot_billing_finalized")
+	queries := usagerepo.New(conn)
 
 	// No ClickHouse data: every cycle snapshots as zero and old cycles finalize.
 	require.NoError(t, act.Do(ctx, []string{orgID}))
@@ -198,7 +201,8 @@ func TestSnapshotBillingCycleUsage_RejectsNegativeTokens(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	act, queries, _, orgID, _ := setupSnapshotBillingCycleUsageTest(t, "snapshot_billing_negative")
+	act, conn, _, orgID, _ := setupSnapshotBillingCycleUsageTest(t, "snapshot_billing_negative")
+	queries := usagerepo.New(conn)
 
 	require.NoError(t, act.Do(ctx, []string{orgID}))
 
@@ -217,6 +221,38 @@ func TestSnapshotBillingCycleUsage_RejectsNegativeTokens(t *testing.T) {
 		FinalizedAt:    pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 	})
 	require.ErrorContains(t, err, "billing_cycle_usage_tum_tokens_check")
+}
+
+func TestSnapshotBillingCycleUsage_IncludesDeletedProjects(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	act, conn, telemetryQueries, orgID, projectID := setupSnapshotBillingCycleUsageTest(t, "snapshot_billing_deleted_project")
+	queries := usagerepo.New(conn)
+
+	insertStoredSession(t, ctx, telemetryQueries, projectID.String(), time.Now().UTC(), 300)
+
+	// Deleting the project mid-cycle must not erase its usage from the
+	// billing record: the tokens were consumed while it was live.
+	_, err := projectsrepo.New(conn).DeleteProject(ctx, projectID)
+	require.NoError(t, err)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		if !assert.NoError(c, act.Do(ctx, []string{orgID})) {
+			return
+		}
+
+		rows, err := queries.ListBillingCycleUsage(ctx, orgID)
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.Len(c, rows, 12) {
+			return
+		}
+
+		active := rows[len(rows)-1]
+		assert.Equal(c, int64(300), active.TumTokens, "deleted project's usage must still count toward the cycle")
+	}, 15*time.Second, 500*time.Millisecond)
 }
 
 func TestSnapshotBillingCycleUsage_NoProjects(t *testing.T) {

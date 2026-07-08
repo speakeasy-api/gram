@@ -74,7 +74,7 @@ func (s *SnapshotBillingCycleUsage) snapshotOrganization(ctx context.Context, qu
 	// On pgx.ErrNoRows the zero-value row stands in for an unconfigured
 	// contract; BillingCycles treats anchor day 0 as 1.
 
-	projectIDs, err := queries.ListProjectIDsByOrganization(ctx, orgID)
+	projectIDs, err := queries.ListBillingProjectIDsByOrganization(ctx, orgID)
 	if err != nil {
 		return fmt.Errorf("list organization projects: %w", err)
 	}
