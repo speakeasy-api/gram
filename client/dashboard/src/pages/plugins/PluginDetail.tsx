@@ -534,6 +534,7 @@ export default function PluginDetail(): JSX.Element | null {
                   }
                   isLoading={isLoadingServers}
                   onRemove={() => handleRemoveServer(server)}
+                  lastPublishedAt={publishStatus?.lastPublishedAt}
                 />
               ))}
             </div>
@@ -822,18 +823,27 @@ function PluginServerCard({
   mcpServer,
   isLoading,
   onRemove,
+  lastPublishedAt,
 }: {
   server: PluginServer;
   toolset: ToolsetEntry | undefined;
   mcpServer: McpServer | undefined;
   isLoading: boolean;
   onRemove: () => void;
+  /** Undefined when the marketplace has never been published. */
+  lastPublishedAt: Date | undefined;
 }) {
   const routes = useRoutes();
 
   // Remote MCP-backed servers reference an mcp_server; toolset-backed servers
   // reference a toolset. Exactly one backend is set per row.
   const isRemote = !!server.mcpServerId;
+  // Approximates per-server publish freshness from the project-wide
+  // fingerprint: publish itself isn't scoped to a single server, but a
+  // server added after the last publish timestamp can't possibly be in the
+  // pushed repo yet.
+  const notYetPublished =
+    !lastPublishedAt || server.createdAt > lastPublishedAt;
   // The card is clickable only once its backing resource resolves.
   const isClickable = isRemote ? !!mcpServer : !!toolset;
 
@@ -862,7 +872,20 @@ function PluginServerCard({
         >
           {server.displayName}
         </Type>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          {notYetPublished ? (
+            <Badge
+              variant="warning"
+              className="text-xs"
+              title="Added since the marketplace was last published"
+            >
+              Unpublished
+            </Badge>
+          ) : (
+            <Badge variant="success" className="text-xs">
+              Published
+            </Badge>
+          )}
           {isRemote ? (
             // Remote MCP servers have no Gram-side tool catalog, so the
             // tool-collection badge is omitted.
