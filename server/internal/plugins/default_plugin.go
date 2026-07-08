@@ -31,7 +31,16 @@ type EnsureDefaultPluginResult struct {
 // violation; any other unique violation (e.g. a pre-existing plugin already
 // named/slugged "Default"/"default") is a real conflict and surfaces as an
 // error rather than masking it.
-func EnsureDefaultPlugin(ctx context.Context, q *repo.Queries, organizationID string, projectID uuid.UUID) (*EnsureDefaultPluginResult, error) {
+//
+// Takes the raw transaction (not just *repo.Queries) because the insert
+// attempt runs inside a SAVEPOINT: a Postgres transaction is aborted after
+// any failed statement, so without a savepoint the fallback SELECT on a lost
+// race would itself fail with "current transaction is aborted" instead of
+// recovering — every caller here already runs inside an outer transaction,
+// so we can't just let a lost race abort the whole thing.
+func EnsureDefaultPlugin(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID) (*EnsureDefaultPluginResult, error) {
+	q := repo.New(tx)
+
 	plugin, err := q.GetDefaultPlugin(ctx, repo.GetDefaultPluginParams{
 		OrganizationID: organizationID,
 		ProjectID:      projectID,
@@ -43,6 +52,11 @@ func EnsureDefaultPlugin(ctx context.Context, q *repo.Queries, organizationID st
 		return nil, fmt.Errorf("get default plugin: %w", err)
 	}
 
+	const savepoint = "ensure_default_plugin_insert"
+	if _, err := tx.Exec(ctx, "SAVEPOINT "+savepoint); err != nil {
+		return nil, fmt.Errorf("begin savepoint: %w", err)
+	}
+
 	created, err := q.CreateDefaultPlugin(ctx, repo.CreateDefaultPluginParams{
 		OrganizationID: organizationID,
 		ProjectID:      projectID,
@@ -50,6 +64,9 @@ func EnsureDefaultPlugin(ctx context.Context, q *repo.Queries, organizationID st
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "plugins_project_id_is_default_key" {
+			if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT "+savepoint); err != nil {
+				return nil, fmt.Errorf("rollback savepoint after race: %w", err)
+			}
 			plugin, err := q.GetDefaultPlugin(ctx, repo.GetDefaultPluginParams{
 				OrganizationID: organizationID,
 				ProjectID:      projectID,
@@ -60,6 +77,10 @@ func EnsureDefaultPlugin(ctx context.Context, q *repo.Queries, organizationID st
 			return &EnsureDefaultPluginResult{Plugin: plugin, Created: false}, nil
 		}
 		return nil, fmt.Errorf("create default plugin: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, "RELEASE SAVEPOINT "+savepoint); err != nil {
+		return nil, fmt.Errorf("release savepoint: %w", err)
 	}
 
 	return &EnsureDefaultPluginResult{Plugin: created, Created: true}, nil
@@ -93,11 +114,13 @@ type AttachToDefaultPluginResult struct {
 // on MCP-enable; mcpendpoints, on first endpoint) run this in the same
 // transaction as the triggering write. A server that's already attached is
 // an expected no-op, not an error — reported by a nil result.
-func AttachToDefaultPlugin(ctx context.Context, q *repo.Queries, params AttachToDefaultPluginParams) (*AttachToDefaultPluginResult, error) {
-	ensured, err := EnsureDefaultPlugin(ctx, q, params.OrganizationID, params.ProjectID)
+func AttachToDefaultPlugin(ctx context.Context, tx pgx.Tx, params AttachToDefaultPluginParams) (*AttachToDefaultPluginResult, error) {
+	ensured, err := EnsureDefaultPlugin(ctx, tx, params.OrganizationID, params.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("ensure default plugin: %w", err)
 	}
+
+	q := repo.New(tx)
 
 	// Check for an existing attachment before inserting rather than relying
 	// on unique-violation classification alone: a duplicate insert of an
@@ -168,7 +191,7 @@ func AttachToDefaultPlugin(ctx context.Context, q *repo.Queries, params AttachTo
 // marketplace publish for it, but only after their own transaction commits,
 // since this runs pre-commit and the DB writes could still roll back.
 func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams) (bool, error) {
-	attached, err := AttachToDefaultPlugin(ctx, repo.New(dbtx), params)
+	attached, err := AttachToDefaultPlugin(ctx, dbtx, params)
 	if err != nil {
 		return false, fmt.Errorf("attach server to default plugin: %w", err)
 	}

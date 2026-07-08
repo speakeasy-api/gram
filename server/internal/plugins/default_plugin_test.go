@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestEnsureDefaultPlugin_CreatesWhenMissing(t *testing.T) {
@@ -21,9 +22,9 @@ func TestEnsureDefaultPlugin_CreatesWhenMissing(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	queries := pluginsrepo.New(ti.conn)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
 
-	result, err := plugins.EnsureDefaultPlugin(ctx, queries, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	result, err := plugins.EnsureDefaultPlugin(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	require.NoError(t, err)
 	require.True(t, result.Created)
 	require.Equal(t, "Default", result.Plugin.Name)
@@ -39,13 +40,17 @@ func TestEnsureDefaultPlugin_ReturnsExistingWhenPresent(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	queries := pluginsrepo.New(ti.conn)
-
-	first, err := plugins.EnsureDefaultPlugin(ctx, queries, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	// Separate transactions, each committed — mirrors the real calling
+	// convention (one transaction per request) and exercises the savepoint
+	// retry path across genuinely distinct transactions, not just one.
+	tx1 := testenv.BeginTx(t, ctx, ti.conn)
+	first, err := plugins.EnsureDefaultPlugin(ctx, tx1, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	require.NoError(t, err)
 	require.True(t, first.Created)
+	require.NoError(t, tx1.Commit(ctx))
 
-	second, err := plugins.EnsureDefaultPlugin(ctx, queries, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	tx2 := testenv.BeginTx(t, ctx, ti.conn)
+	second, err := plugins.EnsureDefaultPlugin(ctx, tx2, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	require.NoError(t, err)
 	require.False(t, second.Created)
 	require.Equal(t, first.Plugin.ID, second.Plugin.ID)
@@ -73,7 +78,8 @@ func TestEnsureDefaultPlugin_ConflictWithExistingNonDefaultPlugin(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	_, err = plugins.EnsureDefaultPlugin(ctx, queries, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	_, err = plugins.EnsureDefaultPlugin(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	require.Error(t, err)
 }
 
@@ -88,7 +94,8 @@ func TestAttachToDefaultPlugin_DisplayNameCollision_ReturnsError(t *testing.T) {
 	queries := pluginsrepo.New(ti.conn)
 
 	first := createTestMcpServer(t, ctx, ti.conn, "Attach Test Server", mcpservers.VisibilityPublic)
-	result, err := plugins.AttachToDefaultPlugin(ctx, queries, plugins.AttachToDefaultPluginParams{
+	tx1 := testenv.BeginTx(t, ctx, ti.conn)
+	result, err := plugins.AttachToDefaultPlugin(ctx, tx1, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		McpServerID:    uuid.NullUUID{UUID: first.id, Valid: true},
@@ -96,12 +103,14 @@ func TestAttachToDefaultPlugin_DisplayNameCollision_ReturnsError(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
+	require.NoError(t, tx1.Commit(ctx))
 
 	// A different mcp_server that happens to derive the same display name
 	// must not be silently dropped — the display_name unique violation is a
 	// different failure mode than "already attached" and must surface.
 	second := createTestMcpServer(t, ctx, ti.conn, "Attach Test Server 2", mcpservers.VisibilityPublic)
-	_, err = plugins.AttachToDefaultPlugin(ctx, queries, plugins.AttachToDefaultPluginParams{
+	tx2 := testenv.BeginTx(t, ctx, ti.conn)
+	_, err = plugins.AttachToDefaultPlugin(ctx, tx2, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		McpServerID:    uuid.NullUUID{UUID: second.id, Valid: true},

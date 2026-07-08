@@ -114,6 +114,10 @@ func (fakeGitHubPublisher) AddCollaborator(ctx context.Context, installationID i
 	return nil
 }
 
+func (fakeGitHubPublisher) HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error) {
+	return false, nil
+}
+
 // newTestServiceWithGitHubPublishing is newTestService with GitHub publishing
 // turned on end-to-end: a Temporal worker is started, configured with a
 // plugins.Service backed by a fake (no-op) GitHub client, so an mcp_server's
