@@ -349,6 +349,9 @@ func DescribeToolsetEntries(
 		resourceUrns := resourceUrnsByToolsetID[toolset.ID]
 
 		var tools []*types.ToolEntry
+		if len(toolUrns) > 0 {
+			tools = make([]*types.ToolEntry, 0, len(toolUrns))
+		}
 		var functionEnvVars []*types.FunctionEnvironmentVariable
 		var externalMCPHeaderDefinitions []*types.ExternalMCPHeaderDefinition
 		toolsetEnvLookups := make([]ToolEnvLookupParams, 0, len(toolUrns))
@@ -429,6 +432,9 @@ func DescribeToolsetEntries(
 		}
 
 		var resources []*types.ResourceEntry
+		if len(resourceUrns) > 0 {
+			resources = make([]*types.ResourceEntry, 0, len(resourceUrns))
+		}
 		for _, resourceUrn := range resourceUrns {
 			resource, ok := resourceDefByUrn[resourceUrn]
 			if !ok {
