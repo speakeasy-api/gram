@@ -34,7 +34,7 @@ var attributeMeasureSelects = []string{
 	"sumIfMerge(total_tokens) AS m_total_tokens",
 	"sumIfMerge(cache_read_input_tokens) AS m_cache_read_input_tokens",
 	"sumIfMerge(cache_creation_input_tokens) AS m_cache_creation_input_tokens",
-	"countIfMerge(total_tool_calls) AS m_total_tool_calls",
+	"uniqExactIfMerge(unique_tool_calls) AS m_total_tool_calls",
 	"uniqExactIfMerge(total_chats) AS m_total_chats",
 }
 

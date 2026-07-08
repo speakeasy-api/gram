@@ -377,7 +377,7 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
 
     -- Request dimensions
     model String,
-    hook_source String, -- consuming surface (gram.hook.source): claude-code, cowork, cursor, ...
+    hook_source String, -- consuming surface, derived from row provenance: claude-code | codex | cursor
 
     -- Multi-valued user dimensions stored intact (not exploded) so totals stay
     -- exact; the query layer arrayJoin()s these to attribute spend per role/group.
@@ -397,8 +397,13 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     -- Cost
     total_cost AggregateFunction(sumIf, Float64, UInt8),
 
-    -- Tool call count
+    -- Tool call count. total_tool_calls counts rows (legacy; kept warm during
+    -- the expand-contract transition), unique_tool_calls dedups by the call's
+    -- identity (Claude tool_use_id / gen_ai.tool.call.id) so re-emitted events
+    -- cannot double-count. Readers use unique_tool_calls; total_tool_calls is
+    -- contracted in a later migration.
     total_tool_calls AggregateFunction(countIf, UInt8),
+    unique_tool_calls AggregateFunction(uniqExactIf, String, UInt8),
 
     -- AI account classification (gram.account_type): 'team' | 'personal' | ''
     -- (unclassified); AI provider (gram.provider): 'anthropic' | 'openai' |
@@ -437,36 +442,59 @@ SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated cost/token/usage metrics broken down by user-identity and request dimensions, powering the generic telemetry.query analytics endpoint.';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribute_metrics_summaries AS
--- Cutoff separates live MV ingestion from one-time historical backfill.
+-- Provenance-first ingestion: only rows from the three agent surfaces are
+-- admitted. Claude data comes exclusively from the Claude OTEL log stream
+-- (api_request rows for usage, tool_result rows for tool calls); Codex and
+-- Cursor come from their usage-metrics rows plus completed tool-call hook
+-- rows. Everything else — Gram-hosted chat completions, claude-code:usage
+-- metric rows (which duplicate api_request usage), Claude hook rows, MCP hook
+-- rows — is excluded so cost attribution never mixes sources or surfaces
+-- stray hook_source spellings.
+-- Keep the predicates in sync with the session* constants in
+-- server/internal/telemetry/repo/sessions.go, which apply the same
+-- classification to raw telemetry_logs.
 WITH
+    -- Cutoff separates live MV ingestion from one-time historical backfill.
     toUnixTimestamp64Nano(toDateTime64('2026-06-20 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano,
-    -- Claude emits one api_request row with model, token, cost, and attribution
-    -- fields. Do not count legacy claude-code:usage rows for Claude cost.
+    -- Every persisted Claude OTEL log row carries this URN (stamped at ingest).
+    (gram_urn = 'claude-code:otel:logs') AS is_claude_otel_row,
+    -- Claude emits one api_request row per turn with model, token, cost, and
+    -- attribution fields — the sole Claude usage source.
     (
-        chat_id != ''
+        is_claude_otel_row
+        AND chat_id != ''
         AND toString(attributes.prompt.id) != ''
         AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
-        AND (
-            service_name = 'claude-code'
-            OR toString(resource_attributes.service.name) = 'claude-code'
-            OR startsWith(body, 'claude_code.')
-        )
     ) AS is_claude_api_request,
+    -- Claude emits one tool_result row per completed tool call (carrying
+    -- tool_use_id) — the sole Claude tool-call source; Claude hook rows are
+    -- not counted.
     (
-        startsWith(gram_urn, 'codex:usage')
-        OR startsWith(gram_urn, 'cursor:usage')
-        OR (
-            toString(attributes.gen_ai.operation.name) = 'chat'
-            AND toString(attributes.gen_ai.usage.cost) != ''
-            AND NOT is_claude_api_request
-            AND NOT startsWith(gram_urn, 'claude-code:usage')
-        )
-    ) AS is_generic_usage_row,
+        is_claude_otel_row
+        AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
+    ) AS is_claude_tool_result,
+    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage')) AS is_agent_usage_row,
+    -- Codex/Cursor have no OTEL log stream; their tool calls arrive as hook
+    -- rows, one PostToolUse/PostToolUseFailure row per completed call. The
+    -- hook.event guard is required: every call also emits a PreToolUse row
+    -- with the same gram.tool.name. Provider names (the usage-metrics rows'
+    -- tool.name) are excluded — they are not tool calls.
     (
-        toString(attributes.gram.tool.name) != ''
+        toString(attributes.gram.hook.source) IN ('codex', 'cursor')
+        AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
-    ) AS is_tool_row,
-    (is_tool_row AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')) AS is_completed_tool_call
+        AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
+    ) AS is_agent_tool_call,
+    (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
+    -- Dedup identity per tool call: Claude tool_result rows carry tool_use_id,
+    -- Cursor/unified-ingest hook rows carry gen_ai.tool.call.id. Rows with no
+    -- call id fall back to the row id, degrading to count-per-row rather than
+    -- collapsing distinct calls into one.
+    multiIf(
+        toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id),
+        toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
+        toString(id)
+    ) AS tool_call_dedup_id
 SELECT
     gram_project_id,
     toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
@@ -485,26 +513,18 @@ SELECT
         is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
         toString(attributes.gen_ai.response.model)
     ) AS model,
-    -- Normalized consuming surface. Claude has historically been stamped with
-    -- several spellings ('claude' from legacy hook rows and the unified-ingest
-    -- adapter, 'claude-code-desktop'/'cowork' from desktop/cowork service
-    -- names, '' on old rows) — collapse them all to the canonical
-    -- 'claude-code' so the Agent breakdown shows one Claude bucket. Empty
-    -- values are inferred from row provenance (Claude service/body/urn, codex
-    -- and cursor usage urns) instead of surfacing as '(unset)'. The raw
-    -- attribute path is used instead of the hook_source materialized column
-    -- because the alias shadows that column (cyclic alias otherwise). Keep in
-    -- sync with sessionHookSourceExpr in
-    -- server/internal/telemetry/repo/sessions.go.
+    -- Consuming surface, derived from row provenance rather than the stamped
+    -- gram.hook.source attribute (whose spellings vary by writer: 'claude'
+    -- from the legacy hook endpoint and unified-ingest adapter,
+    -- 'claude-code-desktop'/'cowork' from client service names). The WHERE
+    -- clause admits only these three surfaces, so the '' branch is
+    -- unreachable. The raw attribute path is used instead of the hook_source
+    -- materialized column because the alias shadows that column (cyclic alias
+    -- otherwise).
     multiIf(
-        toString(attributes.gram.hook.source) IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork'), 'claude-code',
-        toString(attributes.gram.hook.source) != '', toString(attributes.gram.hook.source),
-        service_name IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork')
-            OR toString(resource_attributes.service.name) IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork')
-            OR startsWith(body, 'claude_code.')
-            OR startsWith(gram_urn, 'claude-code:'), 'claude-code',
-        startsWith(gram_urn, 'codex:'), 'codex',
-        startsWith(gram_urn, 'cursor:'), 'cursor',
+        is_claude_otel_row, 'claude-code',
+        startsWith(gram_urn, 'codex:usage') OR toString(attributes.gram.hook.source) = 'codex', 'codex',
+        startsWith(gram_urn, 'cursor:usage') OR toString(attributes.gram.hook.source) = 'cursor', 'cursor',
         ''
     ) AS hook_source,
 
@@ -514,25 +534,24 @@ SELECT
     arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)')) AS groups,
 
     -- Cardinality
-    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND (is_claude_api_request OR is_generic_usage_row)) AS total_chats,
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND (is_claude_api_request OR is_agent_usage_row)) AS total_chats,
 
     -- Token sums
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_claude_api_request OR is_generic_usage_row) AS total_input_tokens,
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_claude_api_request OR is_generic_usage_row) AS total_output_tokens,
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_read_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))), is_claude_api_request OR is_generic_usage_row) AS total_tokens,
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_claude_api_request OR is_generic_usage_row) AS cache_read_input_tokens,
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_generic_usage_row) AS cache_creation_input_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_input_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_output_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_read_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS cache_read_input_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS cache_creation_input_tokens,
 
     -- Cost
-    sumIfState(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_claude_api_request OR is_generic_usage_row) AS total_cost,
+    sumIfState(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_claude_api_request OR is_agent_usage_row) AS total_cost,
 
-    -- Tool-call count. Tool calls in a session — Gram and non-Gram alike — are
-    -- reported via agent hooks as one PostToolUse / PostToolUseFailure row per
-    -- call (carrying gram.tool.name). The hook.event guard is required: every
-    -- tool call also emits a PreToolUse row with the same gram.tool.name, so a
-    -- bare `tool.name != ''` count would double-count. Provider names (the
-    -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
-    countIfState(is_completed_tool_call) AS total_tool_calls,
+    -- Tool-call counts: Claude tool_result rows plus Codex/Cursor completed
+    -- tool-call hook rows. unique_tool_calls dedups by call identity and is
+    -- what readers consume; total_tool_calls counts rows and is kept warm
+    -- until it is contracted.
+    countIfState(is_counted_tool_call) AS total_tool_calls,
+    uniqExactIfState(tool_call_dedup_id, is_counted_tool_call) AS unique_tool_calls,
 
     -- Account-type + provider + billing-mode + attribution dimensions (grouped;
     -- appended to the sort key so each billing/attribution combination remains
@@ -546,11 +565,12 @@ SELECT
     if(is_claude_api_request, toString(attributes.mcp_server.name), '') AS mcp_server_name,
     if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name
 FROM telemetry_logs
--- Admit Claude api_request rows, generic usage/cost-bearing rows, and tool-call
--- hook rows. Tool rows carry no token/cost fields, so they only contribute to
--- total_tool_calls.
+-- Admit only the three agent surfaces: Claude OTEL api_request/tool_result
+-- rows, Codex/Cursor usage rows, and Codex/Cursor completed tool-call hook
+-- rows. Tool rows carry no token/cost fields, so they only contribute to the
+-- tool-call counts.
 WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
-  AND (is_claude_api_request OR is_generic_usage_row OR is_tool_row)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
 GROUP BY
     gram_project_id,
     time_bucket,

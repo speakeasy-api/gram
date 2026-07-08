@@ -78,10 +78,10 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 	},
 	"hook_source": {
-		// The aggregate column is already normalized by the MV; the raw path
-		// applies the same Claude-family collapse + provenance inference so a
-		// drill-down from the aggregate resolves rows stamped with legacy
-		// spellings ('claude', 'claude-code-desktop', 'cowork', or empty).
+		// The aggregate column is provenance-derived by the MV; the raw path
+		// applies the same provenance classification (Claude OTEL URN, codex,
+		// cursor) so a drill-down from the aggregate resolves the same rows
+		// regardless of what gram.hook.source was stamped with.
 		aggregateColumn:        "hook_source",
 		rawExpr:                sessionHookSourceExpr,
 		kind:                   attributeDimScalar,

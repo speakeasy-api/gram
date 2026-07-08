@@ -494,7 +494,7 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:    string(telemetry.EventSourceHook),
 		attr.HookEventKey:      hookEventName,
-		attr.HookSourceKey:     canonicalHookSource(payload.Source.Adapter),
+		attr.HookSourceKey:     strings.TrimSpace(payload.Source.Adapter),
 		attr.ProjectIDKey:      authCtx.ProjectID.String(),
 		attr.OrganizationIDKey: authCtx.ActiveOrganizationID,
 		attr.SpanIDKey:         generateSpanID(),
