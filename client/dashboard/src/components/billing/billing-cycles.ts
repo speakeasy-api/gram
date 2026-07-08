@@ -13,6 +13,10 @@ export type BillingCycle = {
   tokens: number;
   // Whether this is the active cycle.
   current: boolean;
+  // Billed tokens per UTC day (days without usage omitted). This is the
+  // org-wide series overage attribution derives its crossing point from —
+  // it must not follow the page's project filter.
+  days: { date: string; tokens: number }[];
 };
 
 // The selectable cycles from a TUM response, most recent first. The active
@@ -30,6 +34,8 @@ export function cyclesFromTum(tum: TokensUnderManagement): BillingCycle[] {
       end: p.periodEnd,
       tokens: current ? tum.tokens : p.tokens,
       current,
+      // RFCDate serializes to the "YYYY-MM-DD" the buckets align on.
+      days: p.days.map((d) => ({ date: d.date.toString(), tokens: d.tokens })),
     });
   }
   if (!byStart.has(tum.periodStart.getTime())) {
@@ -38,6 +44,7 @@ export function cyclesFromTum(tum: TokensUnderManagement): BillingCycle[] {
       end: tum.periodEnd,
       tokens: tum.tokens,
       current: true,
+      days: [],
     });
   }
   return [...byStart.values()].sort(

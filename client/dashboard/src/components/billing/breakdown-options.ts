@@ -28,8 +28,8 @@ export type StackMode = "group" | "tokenType" | "risk" | "total";
 
 // Sentinel values for the non-dimension modes. Dimension values are
 // snake_case attribute keys, so these can't collide.
-export const BREAKDOWN_TOTAL = "total";
-export const BREAKDOWN_TOKEN_TYPE = "tokenType";
+const BREAKDOWN_TOTAL = "total";
+const BREAKDOWN_TOKEN_TYPE = "tokenType";
 export const BREAKDOWN_RISK = "risk";
 
 // The chart series palette, shared with the usage details table so a metric's
@@ -50,7 +50,7 @@ export const OTHER_COLOR = "#94a3b8"; // slate — the top-N remainder rollup
 export const RISKY_COLOR = "#fb7185"; // rose — tokens from sessions with risk findings
 export const CLEAN_COLOR = "#60a5fa"; // blue — everything else
 
-export type BreakdownOption = {
+type BreakdownOption = {
   value: string;
   label: string;
   icon: LucideIcon;

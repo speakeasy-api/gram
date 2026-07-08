@@ -88,6 +88,19 @@ const TOOL_MESSAGE_ROW: MeasureRowSpec = {
   field: "toolMessageTokens",
 };
 
+// The UTC calendar day of a daily bucket, as "YYYY-MM-DD" — the key the
+// billed per-day series (BillingCycle.days) aligns on. Bucket timestamps are
+// unix-nano strings that exceed Number precision; divide as BigInt first.
+function bucketDate(nano: string): string {
+  try {
+    return new Date(Number(BigInt(nano) / 1_000_000n))
+      .toISOString()
+      .slice(0, 10);
+  } catch {
+    return "";
+  }
+}
+
 // Row color for a dimension value — same palette walk as the chart's stacks,
 // so a value's dot matches its chart series color.
 function valueColor(value: string, index: number): string {
@@ -342,32 +355,44 @@ export function TumDetailsTable({
   }, [data, riskData, billedScale]);
 
   // Time-based overage attribution: tokens count as overage from the moment
-  // the cycle's cumulative usage crossed the included allowance. Days before
-  // the crossing weigh 0, days after weigh 1, and the crossing day is prorated
-  // by how far into its tokens the allowance ran out (the data is daily, so
-  // metrics are assumed to share the within-day distribution). The weights are
-  // then scaled so the "Total tokens" row reproduces the BILLED overage
-  // (cycle TUM tokens − allowance) to the token — the analytics totals the
-  // weights are computed from run slightly apart from the billed aggregate,
-  // and the usage card's Overage stat is the number to agree with.
+  // the ORGANIZATION's cumulative usage crossed the included allowance. Days
+  // before the crossing weigh 0, days after weigh 1, and the crossing day is
+  // prorated by how far into its tokens the allowance ran out (the data is
+  // daily, so metrics are assumed to share the within-day distribution). The
+  // crossing point comes from the cycle's org-wide BILLED daily series — a
+  // project filter must not move it — so a project-scoped view shows that
+  // project's share of the overage: its tokens recorded after the org
+  // crossed.
   //
-  // Null when overage does not apply: no contracted allowance, a project
-  // filter, or a custom range (the allowance is an org-cycle number).
+  // Null when overage does not apply: no contracted allowance, or a custom
+  // range (the allowance is an org-cycle number).
   const overageWeights = useMemo<number[] | null>(() => {
-    if (limit == null || billedCycle == null) return null;
-    // The crossing point is found on the billed-unit series (see billedScale),
-    // matching the allowance's own units.
-    const totals = data?.points.map((p) => p.totalTokens * billedScale) ?? [];
-    const weights = totals.map(() => 0);
+    const cycle = period.cycle;
+    if (limit == null || cycle == null) return null;
+    const points = data?.points ?? [];
+    const billedByDate = new Map(cycle.days.map((d) => [d.date, d.tokens]));
+    const billed = points.map(
+      (p) => billedByDate.get(bucketDate(p.bucketTimeUnixNano)) ?? 0,
+    );
+    const weights = billed.map(() => 0);
     let cumulative = 0;
-    for (let i = 0; i < totals.length; i++) {
+    for (let i = 0; i < billed.length; i++) {
       const before = cumulative;
-      cumulative += totals[i]!;
+      cumulative += billed[i]!;
       if (cumulative <= limit) continue;
       weights[i] =
-        before >= limit ? 1 : (cumulative - limit) / (totals[i]! || 1);
+        before >= limit ? 1 : (cumulative - limit) / (billed[i]! || 1);
     }
-    const billedOverage = Math.max(0, billedCycle.tokens - limit);
+    if (!billedCycle) {
+      // Project scope: the raw weights are exact against the billed series,
+      // and weighting the project's rows by them yields its true share.
+      return weights;
+    }
+    // Org scope: the rows are billed-scaled analytics, which track the billed
+    // series within a fraction of a percent but not to the token — pin the
+    // "Total tokens" row's overage to the usage card's number exactly.
+    const billedOverage = Math.max(0, cycle.tokens - limit);
+    const totals = points.map((p) => p.totalTokens * billedScale);
     const weightedTotal = totals.reduce(
       (sum, t, i) => sum + t * weights[i]!,
       0,
@@ -375,7 +400,7 @@ export function TumDetailsTable({
     if (weightedTotal === 0) return weights.map(() => 0);
     const scale = billedOverage / weightedTotal;
     return weights.map((w) => w * scale);
-  }, [data, limit, billedCycle, billedScale]);
+  }, [data, limit, period.cycle, billedCycle, billedScale]);
 
   const loading = isFetching && !data;
   const failed = !loading && !data && isError;
@@ -398,9 +423,17 @@ export function TumDetailsTable({
   const totalTooltip = billedCycle
     ? "Billed tokens under management, attributed across metrics by the analytics distribution."
     : "Tokens for the selected slice, from the analytics aggregates. Billed normalization applies to full organization billing cycles only.";
-  const overageTooltip = billedCycle
-    ? "The billed overage (tokens beyond the included allowance), attributed to each metric by its tokens recorded after the allowance ran out. The crossing day is prorated."
-    : "The token allowance is an organization-per-cycle number; select a full billing cycle and All projects to see the overage.";
+  let overageTooltip: string;
+  if (billedCycle) {
+    overageTooltip =
+      "The billed overage (tokens beyond the included allowance), attributed to each metric by its tokens recorded after the allowance ran out. The crossing day is prorated.";
+  } else if (period.cycle) {
+    overageTooltip =
+      "This project's share of the organization's billed overage: its tokens recorded after the organization's usage crossed the included allowance. The crossing day is prorated.";
+  } else {
+    overageTooltip =
+      "The token allowance is an organization-per-cycle number; select a full billing cycle to see the overage.";
+  }
 
   return (
     <div className="border-border overflow-hidden rounded-lg border">
