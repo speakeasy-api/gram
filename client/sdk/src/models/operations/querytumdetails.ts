@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  QueryRiskTokensPayload,
-  QueryRiskTokensPayload$Outbound,
-  QueryRiskTokensPayload$outboundSchema,
-} from "../components/queryrisktokenspayload.js";
+  TelemetryWindowPayload,
+  TelemetryWindowPayload$Outbound,
+  TelemetryWindowPayload$outboundSchema,
+} from "../components/telemetrywindowpayload.js";
 
 export type QueryTumDetailsSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -19,7 +19,7 @@ export type QueryTumDetailsRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  queryRiskTokensPayload: QueryRiskTokensPayload;
+  telemetryWindowPayload: TelemetryWindowPayload;
 };
 
 /** @internal */
@@ -53,7 +53,7 @@ export function queryTumDetailsSecurityToJSON(
 /** @internal */
 export type QueryTumDetailsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  QueryRiskTokensPayload: QueryRiskTokensPayload$Outbound;
+  TelemetryWindowPayload: TelemetryWindowPayload$Outbound;
 };
 
 /** @internal */
@@ -63,12 +63,12 @@ export const QueryTumDetailsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    queryRiskTokensPayload: QueryRiskTokensPayload$outboundSchema,
+    telemetryWindowPayload: TelemetryWindowPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      queryRiskTokensPayload: "QueryRiskTokensPayload",
+      telemetryWindowPayload: "TelemetryWindowPayload",
     });
   }),
 );

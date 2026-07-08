@@ -467,7 +467,6 @@ trackedFiles:
   docs/models/components/querypayloadsortby.md: {}
   docs/models/components/querypoint.md: {}
   docs/models/components/queryresult.md: {}
-  docs/models/components/queryrisktokenspayload.md: {}
   docs/models/components/queryrisktokensresult.md: {}
   docs/models/components/queryrow.md: {}
   docs/models/components/queryseries.md: {}
@@ -618,6 +617,7 @@ trackedFiles:
   docs/models/components/targettype.md: {}
   docs/models/components/targettypes.md: {}
   docs/models/components/telemetrylogrecord.md: {}
+  docs/models/components/telemetrywindowpayload.md: {}
   docs/models/components/testdetectionrulematch.md: {}
   docs/models/components/testdetectionrulerequestbody.md: {}
   docs/models/components/testdetectionruleresult.md: {}
@@ -2751,7 +2751,6 @@ trackedFiles:
   src/models/components/querypayload.ts: {}
   src/models/components/querypoint.ts: {}
   src/models/components/queryresult.ts: {}
-  src/models/components/queryrisktokenspayload.ts: {}
   src/models/components/queryrisktokensresult.ts: {}
   src/models/components/queryrow.ts: {}
   src/models/components/queryseries.ts: {}
@@ -2858,6 +2857,7 @@ trackedFiles:
   src/models/components/suggestcustomdetectionrulerequestbody.ts: {}
   src/models/components/suggestcustomdetectionruleresult.ts: {}
   src/models/components/telemetrylogrecord.ts: {}
+  src/models/components/telemetrywindowpayload.ts: {}
   src/models/components/testdetectionrulematch.ts: {}
   src/models/components/testdetectionrulerequestbody.ts: {}
   src/models/components/testdetectionruleresult.ts: {}

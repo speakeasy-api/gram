@@ -340,7 +340,7 @@ var _ = Service("telemetry", func() {
 		Security(security.Session)
 
 		Payload(func() {
-			Extend(QueryRiskTokensPayload)
+			Extend(TelemetryWindowPayload)
 			security.SessionPayload()
 		})
 
@@ -365,7 +365,7 @@ var _ = Service("telemetry", func() {
 		Security(security.Session)
 
 		Payload(func() {
-			Extend(TumDetailsPayload)
+			Extend(TelemetryWindowPayload)
 			security.SessionPayload()
 		})
 
@@ -1450,8 +1450,12 @@ var QueryFilter = Type("QueryFilter", func() {
 	Required("dimension", "values")
 })
 
-var QueryRiskTokensPayload = Type("QueryRiskTokensPayload", func() {
-	Description("Payload for the org-scoped token-by-risk breakdown query")
+// TelemetryWindowPayload is deliberately shared by queryRiskTokens and
+// queryTumDetails: both take exactly an org-scoped time window with an
+// optional project filter, and a single neutrally-named type keeps the
+// generated SDK from surfacing one endpoint's payload under the other's name.
+var TelemetryWindowPayload = Type("TelemetryWindowPayload", func() {
+	Description("An org-scoped time window, optionally narrowed to one project")
 
 	Attribute("from", String, "Start time in ISO 8601 format", func() {
 		Format(FormatDateTime)
@@ -1485,24 +1489,6 @@ var QueryRiskTokensResult = Type("QueryRiskTokensResult", func() {
 	Attribute("points", ArrayOf(RiskTokensPoint), "Gap-filled daily buckets in ascending time order")
 
 	Required("interval_seconds", "points")
-})
-
-var TumDetailsPayload = Type("TumDetailsPayload", func() {
-	Description("Payload for the org-scoped billing usage details query")
-
-	Attribute("from", String, "Start time in ISO 8601 format", func() {
-		Format(FormatDateTime)
-		Example("2025-12-19T10:00:00Z")
-	})
-	Attribute("to", String, "End time in ISO 8601 format", func() {
-		Format(FormatDateTime)
-		Example("2025-12-26T10:00:00Z")
-	})
-	Attribute("project_id", String, "Optional project to scope to; defaults to every project in the organization.", func() {
-		Format(FormatUUID)
-	})
-
-	Required("from", "to")
 })
 
 // The per-metric fields shared by the daily points and the range totals.

@@ -6,9 +6,9 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
- * Payload for the org-scoped token-by-risk breakdown query
+ * An org-scoped time window, optionally narrowed to one project
  */
-export type QueryRiskTokensPayload = {
+export type TelemetryWindowPayload = {
   /**
    * Start time in ISO 8601 format
    */
@@ -24,16 +24,16 @@ export type QueryRiskTokensPayload = {
 };
 
 /** @internal */
-export type QueryRiskTokensPayload$Outbound = {
+export type TelemetryWindowPayload$Outbound = {
   from: string;
   project_id?: string | undefined;
   to: string;
 };
 
 /** @internal */
-export const QueryRiskTokensPayload$outboundSchema: z.ZodMiniType<
-  QueryRiskTokensPayload$Outbound,
-  QueryRiskTokensPayload
+export const TelemetryWindowPayload$outboundSchema: z.ZodMiniType<
+  TelemetryWindowPayload$Outbound,
+  TelemetryWindowPayload
 > = z.pipe(
   z.object({
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
@@ -47,10 +47,10 @@ export const QueryRiskTokensPayload$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function queryRiskTokensPayloadToJSON(
-  queryRiskTokensPayload: QueryRiskTokensPayload,
+export function telemetryWindowPayloadToJSON(
+  telemetryWindowPayload: TelemetryWindowPayload,
 ): string {
   return JSON.stringify(
-    QueryRiskTokensPayload$outboundSchema.parse(queryRiskTokensPayload),
+    TelemetryWindowPayload$outboundSchema.parse(telemetryWindowPayload),
   );
 }

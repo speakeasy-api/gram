@@ -146,10 +146,10 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list billing cycle snapshots").LogError(ctx, s.logger)
 	}
-	finalizedTokens := make(map[int64]int64, len(snapshots))
+	finalized := make(map[int64]repo.BillingCycleUsage, len(snapshots))
 	for _, snap := range snapshots {
 		if snap.FinalizedAt.Valid {
-			finalizedTokens[snap.CycleStart.Time.UTC().Unix()] = snap.TumTokens
+			finalized[snap.CycleStart.Time.UTC().Unix()] = snap
 		}
 	}
 
@@ -178,9 +178,14 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 
 		// The finalized snapshot wins over the live recompute; the daily
 		// points remain advisory (they can drift or expire — the sealed total
-		// is the billed number).
-		if snapTokens, ok := finalizedTokens[cycle.Start.UTC().Unix()]; ok {
-			cycleTokens = snapTokens
+		// is the billed number). Matched on BOTH boundaries: if the contract's
+		// anchor day changed since a cycle was sealed, a stale-boundary
+		// snapshot no longer describes this period, so the cycle recomputes
+		// live (the aggregate's retention covers the full window) and the
+		// hourly snapshot job re-finalizes it on the new boundaries. The
+		// old-boundary rows stay untouched as the invoiced record.
+		if snap, ok := finalized[cycle.Start.UTC().Unix()]; ok && snap.CycleEnd.Time.UTC().Equal(cycle.End.UTC()) {
+			cycleTokens = snap.TumTokens
 		}
 
 		history = append(history, &gen.TUMPeriod{

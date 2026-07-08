@@ -31281,7 +31281,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/QueryRiskTokensPayload'
+                            $ref: '#/components/schemas/TelemetryWindowPayload'
                 required: true
             responses:
                 "200":
@@ -31369,7 +31369,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/QueryRiskTokensPayload'
+                            $ref: '#/components/schemas/TelemetryWindowPayload'
                 required: true
             responses:
                 "200":
@@ -48799,27 +48799,6 @@ components:
                 - interval_seconds
                 - table
                 - timeseries
-        QueryRiskTokensPayload:
-            type: object
-            properties:
-                from:
-                    type: string
-                    description: Start time in ISO 8601 format
-                    example: "2025-12-19T10:00:00Z"
-                    format: date-time
-                project_id:
-                    type: string
-                    description: Optional project to scope to; defaults to every project in the organization.
-                    format: uuid
-                to:
-                    type: string
-                    description: End time in ISO 8601 format
-                    example: "2025-12-26T10:00:00Z"
-                    format: date-time
-            description: Payload for the org-scoped token-by-risk breakdown query
-            required:
-                - from
-                - to
         QueryRiskTokensResult:
             type: object
             properties:
@@ -52115,6 +52094,27 @@ components:
                 - attributes
                 - resource_attributes
                 - service
+        TelemetryWindowPayload:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                project_id:
+                    type: string
+                    description: Optional project to scope to; defaults to every project in the organization.
+                    format: uuid
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-26T10:00:00Z"
+                    format: date-time
+            description: An org-scoped time window, optionally narrowed to one project
+            required:
+                - from
+                - to
         TestDetectionRuleMatch:
             type: object
             properties:
@@ -53728,27 +53728,6 @@ components:
                 - value
                 - total_tokens
                 - series
-        TumDetailsPayload:
-            type: object
-            properties:
-                from:
-                    type: string
-                    description: Start time in ISO 8601 format
-                    example: "2025-12-19T10:00:00Z"
-                    format: date-time
-                project_id:
-                    type: string
-                    description: Optional project to scope to; defaults to every project in the organization.
-                    format: uuid
-                to:
-                    type: string
-                    description: End time in ISO 8601 format
-                    example: "2025-12-26T10:00:00Z"
-                    format: date-time
-            description: Payload for the org-scoped billing usage details query
-            required:
-                - from
-                - to
         TumDetailsPoint:
             type: object
             properties:

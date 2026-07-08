@@ -66,7 +66,7 @@ export function riskPointsQuery(
   return cycleQuery("tum-risk-tokens", scope, [], () =>
     unwrapAsync(
       telemetryQueryRiskTokens(scope.client, {
-        queryRiskTokensPayload: {
+        telemetryWindowPayload: {
           from: scope.cycle.start,
           to: scope.cycle.end,
           projectId: scope.projectId ?? undefined,
@@ -83,9 +83,7 @@ export function tumDetailsQuery(
   return cycleQuery("tum-details", scope, [], () =>
     unwrapAsync(
       telemetryQueryTumDetails(scope.client, {
-        // The generator dedupes structurally identical payload schemas, so
-        // this request reuses the risk-tokens payload shape/name.
-        queryRiskTokensPayload: {
+        telemetryWindowPayload: {
           from: scope.cycle.start,
           to: scope.cycle.end,
           projectId: scope.projectId ?? undefined,
