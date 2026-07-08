@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { riskEvalsListReviews } from "../funcs/riskEvalsListReviews.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListRiskEvalReviewsResult } from "../models/components/listriskevalreviewsresult.js";
+import {
+  ListRiskEvalReviewsRequest,
+  ListRiskEvalReviewsSecurity,
+} from "../models/operations/listriskevalreviews.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskListEvalReviewsQueryData = components.ListRiskEvalReviewsResult;
+export type RiskListEvalReviewsQueryData = ListRiskEvalReviewsResult;
 
 export function prefetchRiskListEvalReviews(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListRiskEvalReviewsRequest,
-  security?: operations.ListRiskEvalReviewsSecurity | undefined,
+  request: ListRiskEvalReviewsRequest,
+  security?: ListRiskEvalReviewsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchRiskListEvalReviews(
 
 export function buildRiskListEvalReviewsQuery(
   client$: GramCore,
-  request: operations.ListRiskEvalReviewsRequest,
-  security?: operations.ListRiskEvalReviewsSecurity | undefined,
+  request: ListRiskEvalReviewsRequest,
+  security?: ListRiskEvalReviewsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

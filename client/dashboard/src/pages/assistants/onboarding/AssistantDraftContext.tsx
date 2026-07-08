@@ -1,14 +1,14 @@
 import { Assistant } from "@gram/client/models/components/assistant.js";
 import {
   invalidateAllAssistantsGet,
-  invalidateAllAssistantsList,
-  invalidateAllListEnvironments,
-  invalidateAllListToolsets,
-  invalidateAllTrigger,
-  invalidateAllTriggers,
   queryKeyAssistantsGet,
   useAssistantsGet,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/assistantsGet.js";
+import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
+import { invalidateAllListEnvironments } from "@gram/client/react-query/listEnvironments.js";
+import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { invalidateAllTrigger } from "@gram/client/react-query/trigger.js";
+import { invalidateAllTriggers } from "@gram/client/react-query/triggers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ReactNode,

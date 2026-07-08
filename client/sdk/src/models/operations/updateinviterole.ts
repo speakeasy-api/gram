@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpdateInviteRoleRequestBody,
+  UpdateInviteRoleRequestBody$Outbound,
+  UpdateInviteRoleRequestBody$outboundSchema,
+} from "../components/updateinviterolerequestbody.js";
 
 export type UpdateInviteRoleSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,7 +19,7 @@ export type UpdateInviteRoleRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  updateInviteRoleRequestBody: components.UpdateInviteRoleRequestBody;
+  updateInviteRoleRequestBody: UpdateInviteRoleRequestBody;
 };
 
 /** @internal */
@@ -49,7 +53,7 @@ export function updateInviteRoleSecurityToJSON(
 /** @internal */
 export type UpdateInviteRoleRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  UpdateInviteRoleRequestBody: components.UpdateInviteRoleRequestBody$Outbound;
+  UpdateInviteRoleRequestBody: UpdateInviteRoleRequestBody$Outbound;
 };
 
 /** @internal */
@@ -59,8 +63,7 @@ export const UpdateInviteRoleRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    updateInviteRoleRequestBody:
-      components.UpdateInviteRoleRequestBody$outboundSchema,
+    updateInviteRoleRequestBody: UpdateInviteRoleRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

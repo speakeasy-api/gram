@@ -1,10 +1,8 @@
-import {
-  InfoResponseBody,
-  OrganizationEntry,
-  ProjectEntry,
-} from "@gram/client/models/components";
-import { SessionInfoResponse } from "@gram/client/models/operations";
-import { useSessionInfo } from "@gram/client/react-query";
+import { InfoResponseBody } from "@gram/client/models/components/inforesponsebody.js";
+import { OrganizationEntry } from "@gram/client/models/components/organizationentry.js";
+import { ProjectEntry } from "@gram/client/models/components/projectentry.js";
+import { SessionInfoResponse } from "@gram/client/models/operations/sessioninfo.js";
+import { useSessionInfo } from "@gram/client/react-query/sessionInfo.js";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useLocation } from "react-router";
 import { initializePylon, PYLON_APP_ID } from "@/lib/pylon";

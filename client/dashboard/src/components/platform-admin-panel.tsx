@@ -1,15 +1,13 @@
 import { Input } from "@/components/ui/input";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { FeatureName } from "@gram/client/models/components";
-import {
-  useDisableRBACMutation,
-  useEnableRBACMutation,
-  useFeaturesSetMutation,
-  useProductFeatures,
-  useRbacStatus,
-  useSendEnterpriseAdminOnboardingEmailMutation,
-} from "@gram/client/react-query";
+import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
+import { useDisableRBACMutation } from "@gram/client/react-query/disableRBAC.js";
+import { useEnableRBACMutation } from "@gram/client/react-query/enableRBAC.js";
+import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useRbacStatus } from "@gram/client/react-query/rbacStatus.js";
+import { useSendEnterpriseAdminOnboardingEmailMutation } from "@gram/client/react-query/sendEnterpriseAdminOnboardingEmail.js";
 import { invalidateAllProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { invalidateAllRbacStatus } from "@gram/client/react-query/rbacStatus.js";
 import { useQueryClient } from "@tanstack/react-query";

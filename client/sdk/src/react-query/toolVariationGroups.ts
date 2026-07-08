@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListToolVariationGroupsRequest,
+  ListToolVariationGroupsSecurity,
+} from "../models/operations/listtoolvariationgroups.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ToolVariationGroupsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ToolVariationGroupsQueryError =
  * List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.
  */
 export function useToolVariationGroups(
-  request?: operations.ListToolVariationGroupsRequest | undefined,
-  security?: operations.ListToolVariationGroupsSecurity | undefined,
+  request?: ListToolVariationGroupsRequest | undefined,
+  security?: ListToolVariationGroupsSecurity | undefined,
   options?: QueryHookOptions<
     ToolVariationGroupsQueryData,
     ToolVariationGroupsQueryError
@@ -85,8 +88,8 @@ export function useToolVariationGroups(
  * List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.
  */
 export function useToolVariationGroupsSuspense(
-  request?: operations.ListToolVariationGroupsRequest | undefined,
-  security?: operations.ListToolVariationGroupsSecurity | undefined,
+  request?: ListToolVariationGroupsRequest | undefined,
+  security?: ListToolVariationGroupsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ToolVariationGroupsQueryData,
     ToolVariationGroupsQueryError

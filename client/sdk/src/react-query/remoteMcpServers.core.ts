@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { remoteMcpListServers } from "../funcs/remoteMcpListServers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListServersResult } from "../models/components/listserversresult.js";
+import {
+  ListRemoteMcpServersRequest,
+  ListRemoteMcpServersSecurity,
+} from "../models/operations/listremotemcpservers.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RemoteMcpServersQueryData = components.ListServersResult;
+export type RemoteMcpServersQueryData = ListServersResult;
 
 export function prefetchRemoteMcpServers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListRemoteMcpServersRequest | undefined,
-  security?: operations.ListRemoteMcpServersSecurity | undefined,
+  request?: ListRemoteMcpServersRequest | undefined,
+  security?: ListRemoteMcpServersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchRemoteMcpServers(
 
 export function buildRemoteMcpServersQuery(
   client$: GramCore,
-  request?: operations.ListRemoteMcpServersRequest | undefined,
-  security?: operations.ListRemoteMcpServersSecurity | undefined,
+  request?: ListRemoteMcpServersRequest | undefined,
+  security?: ListRemoteMcpServersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

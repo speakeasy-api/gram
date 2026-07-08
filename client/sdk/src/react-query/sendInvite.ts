@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { OrganizationInvitation } from "../models/components/organizationinvitation.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  SendInviteRequest,
+  SendInviteSecurity,
+} from "../models/operations/sendinvite.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type SendInviteMutationVariables = {
-  request: operations.SendInviteRequest;
-  security?: operations.SendInviteSecurity | undefined;
+  request: SendInviteRequest;
+  security?: SendInviteSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type SendInviteMutationData = components.OrganizationInvitation;
+export type SendInviteMutationData = OrganizationInvitation;
 
 export type SendInviteMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SetToolVariationsGroupRequestBody,
+  SetToolVariationsGroupRequestBody$Outbound,
+  SetToolVariationsGroupRequestBody$outboundSchema,
+} from "../components/settoolvariationsgrouprequestbody.js";
 
 export type SetToolsetToolVariationsGroupSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -38,8 +42,7 @@ export type SetToolsetToolVariationsGroupRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  setToolVariationsGroupRequestBody:
-    components.SetToolVariationsGroupRequestBody;
+  setToolVariationsGroupRequestBody: SetToolVariationsGroupRequestBody;
 };
 
 /** @internal */
@@ -160,8 +163,7 @@ export type SetToolsetToolVariationsGroupRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  SetToolVariationsGroupRequestBody:
-    components.SetToolVariationsGroupRequestBody$Outbound;
+  SetToolVariationsGroupRequestBody: SetToolVariationsGroupRequestBody$Outbound;
 };
 
 /** @internal */
@@ -175,7 +177,7 @@ export const SetToolsetToolVariationsGroupRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     setToolVariationsGroupRequestBody:
-      components.SetToolVariationsGroupRequestBody$outboundSchema,
+      SetToolVariationsGroupRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

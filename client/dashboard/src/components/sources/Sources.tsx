@@ -9,13 +9,11 @@ import { useCatalogIconMap } from "./sources-hooks";
 import { remoteMcpRouteParam, tunneledMcpRouteParam } from "@/lib/sources";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
-import {
-  useLatestDeployment,
-  useListAssets,
-  useListTools,
-  useRemoteMcpServers,
-  useTunneledMcpServers,
-} from "@gram/client/react-query/index.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useListAssets } from "@gram/client/react-query/listAssets.js";
+import { useListTools } from "@gram/client/react-query/listTools.js";
+import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
+import { useTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import {
   Button,
   Dialog,

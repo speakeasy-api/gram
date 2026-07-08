@@ -11,16 +11,16 @@ import { GramCore } from "../core.js";
 import { telemetryQuery } from "../funcs/telemetryQuery.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { QueryResult } from "../models/components/queryresult.js";
+import { QueryRequest, QuerySecurity } from "../models/operations/query.js";
 import { unwrapAsync } from "../types/fp.js";
-export type TelemetryQueryQueryData = components.QueryResult;
+export type TelemetryQueryQueryData = QueryResult;
 
 export function prefetchTelemetryQuery(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.QueryRequest,
-  security?: operations.QuerySecurity | undefined,
+  request: QueryRequest,
+  security?: QuerySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +35,8 @@ export function prefetchTelemetryQuery(
 
 export function buildTelemetryQueryQuery(
   client$: GramCore,
-  request: operations.QueryRequest,
-  security?: operations.QuerySecurity | undefined,
+  request: QueryRequest,
+  security?: QuerySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

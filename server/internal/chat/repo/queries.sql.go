@@ -568,7 +568,7 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.user_account_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type
+SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.user_account_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
 WHERE c.id = $1 AND c.deleted IS FALSE
@@ -590,11 +590,13 @@ type GetChatRow struct {
 	DeletedAt        pgtype.Timestamptz
 	Deleted          bool
 	AccountType      string
+	AccountEmail     string
 }
 
 // Loads a chat plus the team/personal classification of the AI account that
 // produced it (chats.user_account_id has no FK), scoped by organization. Returns
-// ” for account_type when the chat has no linked account or it is unclassified.
+// ” for account_type/account_email when the chat has no linked account or it
+// is unclassified.
 func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (GetChatRow, error) {
 	row := q.db.QueryRow(ctx, getChat, id)
 	var i GetChatRow
@@ -614,6 +616,7 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (GetChatRow, error)
 		&i.DeletedAt,
 		&i.Deleted,
 		&i.AccountType,
+		&i.AccountEmail,
 	)
 	return i, err
 }
@@ -1611,7 +1614,8 @@ candidate_chats AS (
     c.created_at,
     c.updated_at,
     COALESCE(rc.cnt, 0) AS risk_findings_count,
-    COALESCE(ua.account_type, '')::text AS account_type
+    COALESCE(ua.account_type, '')::text AS account_type,
+    COALESCE(ua.email, '')::text AS account_email
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   -- Resolve the AI account that produced the chat (chats.user_account_id has no FK,
@@ -1700,7 +1704,8 @@ filtered_chats AS (
     cs.num_messages,
     cs.last_message_timestamp,
     cc.risk_findings_count,
-    cc.account_type
+    cc.account_type,
+    cc.account_email
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
   WHERE ($13::timestamptz IS NULL OR cs.last_message_timestamp >= $13)
@@ -1718,7 +1723,8 @@ limited_chats AS (
     (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
     fc.risk_findings_count,
-    fc.account_type
+    fc.account_type,
+    fc.account_email
   FROM filtered_chats fc
   ORDER BY
     CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
@@ -1741,7 +1747,8 @@ SELECT
   lc.num_messages,
   lc.last_message_timestamp,
   lc.risk_findings_count,
-  lc.account_type
+  lc.account_type,
+  lc.account_email
 FROM limited_chats lc
 `
 
@@ -1778,6 +1785,7 @@ type ListChatsRow struct {
 	LastMessageTimestamp pgtype.Timestamptz
 	RiskFindingsCount    int32
 	AccountType          string
+	AccountEmail         string
 }
 
 // risk_counts pre-aggregates active findings per chat once for the whole
@@ -1824,6 +1832,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.LastMessageTimestamp,
 			&i.RiskFindingsCount,
 			&i.AccountType,
+			&i.AccountEmail,
 		); err != nil {
 			return nil, err
 		}

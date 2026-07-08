@@ -20,10 +20,19 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ServiceError,
+  ServiceError$inboundSchema,
+} from "../models/errors/serviceerror.js";
+import {
+  ListUserSessionConsentsRequest,
+  ListUserSessionConsentsRequest$outboundSchema,
+  ListUserSessionConsentsResponse,
+  ListUserSessionConsentsResponse$inboundSchema,
+  ListUserSessionConsentsSecurity,
+} from "../models/operations/listusersessionconsents.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 import {
@@ -41,14 +50,14 @@ import {
  */
 export function userSessionConsentsList(
   client: GramCore,
-  request?: operations.ListUserSessionConsentsRequest | undefined,
-  security?: operations.ListUserSessionConsentsSecurity | undefined,
+  request?: ListUserSessionConsentsRequest | undefined,
+  security?: ListUserSessionConsentsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
     Result<
-      operations.ListUserSessionConsentsResponse,
-      | errors.ServiceError
+      ListUserSessionConsentsResponse,
+      | ServiceError
       | GramError
       | ResponseValidationError
       | ConnectionError
@@ -71,15 +80,15 @@ export function userSessionConsentsList(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListUserSessionConsentsRequest | undefined,
-  security?: operations.ListUserSessionConsentsSecurity | undefined,
+  request?: ListUserSessionConsentsRequest | undefined,
+  security?: ListUserSessionConsentsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     PageIterator<
       Result<
-        operations.ListUserSessionConsentsResponse,
-        | errors.ServiceError
+        ListUserSessionConsentsResponse,
+        | ServiceError
         | GramError
         | ResponseValidationError
         | ConnectionError
@@ -97,10 +106,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        z.optional(operations.ListUserSessionConsentsRequest$outboundSchema),
-        value,
-      ),
+      z.parse(z.optional(ListUserSessionConsentsRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -210,8 +216,8 @@ async function $do(
   };
 
   const [result, raw] = await M.match<
-    operations.ListUserSessionConsentsResponse,
-    | errors.ServiceError
+    ListUserSessionConsentsResponse,
+    | ServiceError
     | GramError
     | ResponseValidationError
     | ConnectionError
@@ -221,14 +227,11 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, operations.ListUserSessionConsentsResponse$inboundSchema, {
+    M.json(200, ListUserSessionConsentsResponse$inboundSchema, {
       key: "Result",
     }),
-    M.jsonErr(
-      [400, 401, 403, 404, 409, 415, 422],
-      errors.ServiceError$inboundSchema,
-    ),
-    M.jsonErr([500, 502], errors.ServiceError$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });
@@ -245,8 +248,8 @@ async function $do(
   ): {
     next: Paginator<
       Result<
-        operations.ListUserSessionConsentsResponse,
-        | errors.ServiceError
+        ListUserSessionConsentsResponse,
+        | ServiceError
         | GramError
         | ResponseValidationError
         | ConnectionError

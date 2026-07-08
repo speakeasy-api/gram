@@ -5,7 +5,7 @@ Tool annotations providing behavioral hints about the tool
 ## Example Usage
 
 ```typescript
-import { ToolAnnotations } from "@gram/client/models/components";
+import { ToolAnnotations } from "@gram/client/models/components/toolannotations.js";
 
 let value: ToolAnnotations = {};
 ```

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListIntegrationsRequest,
+  ListIntegrationsSecurity,
+} from "../models/operations/listintegrations.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListIntegrationsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListIntegrationsQueryError =
  * List available third-party integrations.
  */
 export function useListIntegrations(
-  request?: operations.ListIntegrationsRequest | undefined,
-  security?: operations.ListIntegrationsSecurity | undefined,
+  request?: ListIntegrationsRequest | undefined,
+  security?: ListIntegrationsSecurity | undefined,
   options?: QueryHookOptions<
     ListIntegrationsQueryData,
     ListIntegrationsQueryError
@@ -85,8 +88,8 @@ export function useListIntegrations(
  * List available third-party integrations.
  */
 export function useListIntegrationsSuspense(
-  request?: operations.ListIntegrationsRequest | undefined,
-  security?: operations.ListIntegrationsSecurity | undefined,
+  request?: ListIntegrationsRequest | undefined,
+  security?: ListIntegrationsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListIntegrationsQueryData,
     ListIntegrationsQueryError

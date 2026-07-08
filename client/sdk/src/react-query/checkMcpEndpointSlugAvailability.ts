@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CheckMcpEndpointSlugAvailabilityRequest,
+  CheckMcpEndpointSlugAvailabilitySecurity,
+} from "../models/operations/checkmcpendpointslugavailability.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type CheckMcpEndpointSlugAvailabilityQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type CheckMcpEndpointSlugAvailabilityQueryError =
  * Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.
  */
 export function useCheckMcpEndpointSlugAvailability(
-  request: operations.CheckMcpEndpointSlugAvailabilityRequest,
-  security?: operations.CheckMcpEndpointSlugAvailabilitySecurity | undefined,
+  request: CheckMcpEndpointSlugAvailabilityRequest,
+  security?: CheckMcpEndpointSlugAvailabilitySecurity | undefined,
   options?: QueryHookOptions<
     CheckMcpEndpointSlugAvailabilityQueryData,
     CheckMcpEndpointSlugAvailabilityQueryError
@@ -88,8 +91,8 @@ export function useCheckMcpEndpointSlugAvailability(
  * Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.
  */
 export function useCheckMcpEndpointSlugAvailabilitySuspense(
-  request: operations.CheckMcpEndpointSlugAvailabilityRequest,
-  security?: operations.CheckMcpEndpointSlugAvailabilitySecurity | undefined,
+  request: CheckMcpEndpointSlugAvailabilityRequest,
+  security?: CheckMcpEndpointSlugAvailabilitySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     CheckMcpEndpointSlugAvailabilityQueryData,
     CheckMcpEndpointSlugAvailabilityQueryError

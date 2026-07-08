@@ -23,23 +23,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  CreateRemoteSessionClientFormTokenEndpointAuthMethod,
-  RemoteSessionClient,
-  RemoteSessionIssuer,
-} from "@gram/client/models/components";
+import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { useCreateGlobalRemoteSessionClientMutation } from "@gram/client/react-query/createGlobalRemoteSessionClient.js";
+import { useCreateGlobalRemoteSessionIssuerMutation } from "@gram/client/react-query/createGlobalRemoteSessionIssuer.js";
+import { useDeleteGlobalRemoteSessionClientMutation } from "@gram/client/react-query/deleteGlobalRemoteSessionClient.js";
+import { useDeleteGlobalRemoteSessionIssuerMutation } from "@gram/client/react-query/deleteGlobalRemoteSessionIssuer.js";
 import {
   invalidateAllGlobalRemoteSessionClients,
-  invalidateAllGlobalRemoteSessionIssuers,
-  useCreateGlobalRemoteSessionClientMutation,
-  useCreateGlobalRemoteSessionIssuerMutation,
-  useDeleteGlobalRemoteSessionClientMutation,
-  useDeleteGlobalRemoteSessionIssuerMutation,
   useGlobalRemoteSessionClients,
+} from "@gram/client/react-query/globalRemoteSessionClients.js";
+import {
+  invalidateAllGlobalRemoteSessionIssuers,
   useGlobalRemoteSessionIssuers,
-  useUpdateGlobalRemoteSessionClientMutation,
-  useUpdateGlobalRemoteSessionIssuerMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/globalRemoteSessionIssuers.js";
+import { useUpdateGlobalRemoteSessionClientMutation } from "@gram/client/react-query/updateGlobalRemoteSessionClient.js";
+import { useUpdateGlobalRemoteSessionIssuerMutation } from "@gram/client/react-query/updateGlobalRemoteSessionIssuer.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";

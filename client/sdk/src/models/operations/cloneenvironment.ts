@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CloneEnvironmentRequestBody,
+  CloneEnvironmentRequestBody$Outbound,
+  CloneEnvironmentRequestBody$outboundSchema,
+} from "../components/cloneenvironmentrequestbody.js";
 
 export type CloneEnvironmentSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -24,7 +28,7 @@ export type CloneEnvironmentRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  cloneEnvironmentRequestBody: components.CloneEnvironmentRequestBody;
+  cloneEnvironmentRequestBody: CloneEnvironmentRequestBody;
 };
 
 /** @internal */
@@ -63,7 +67,7 @@ export type CloneEnvironmentRequest$Outbound = {
   slug: string;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  CloneEnvironmentRequestBody: components.CloneEnvironmentRequestBody$Outbound;
+  CloneEnvironmentRequestBody: CloneEnvironmentRequestBody$Outbound;
 };
 
 /** @internal */
@@ -75,8 +79,7 @@ export const CloneEnvironmentRequest$outboundSchema: z.ZodMiniType<
     slug: z.string(),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    cloneEnvironmentRequestBody:
-      components.CloneEnvironmentRequestBody$outboundSchema,
+    cloneEnvironmentRequestBody: CloneEnvironmentRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { telemetryListSessions } from "../funcs/telemetryListSessions.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListSessionsResult } from "../models/components/listsessionsresult.js";
+import {
+  ListSessionsRequest,
+  ListSessionsSecurity,
+} from "../models/operations/listsessions.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListSessionsQueryData = components.ListSessionsResult;
+export type ListSessionsQueryData = ListSessionsResult;
 
 export function prefetchListSessions(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListSessionsRequest,
-  security?: operations.ListSessionsSecurity | undefined,
+  request: ListSessionsRequest,
+  security?: ListSessionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListSessions(
 
 export function buildListSessionsQuery(
   client$: GramCore,
-  request: operations.ListSessionsRequest,
-  security?: operations.ListSessionsSecurity | undefined,
+  request: ListSessionsRequest,
+  security?: ListSessionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

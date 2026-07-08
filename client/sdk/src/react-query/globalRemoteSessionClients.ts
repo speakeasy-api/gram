@@ -24,10 +24,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListGlobalRemoteSessionClientsRequest,
+  ListGlobalRemoteSessionClientsSecurity,
+} from "../models/operations/listglobalremotesessionclients.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -60,7 +63,7 @@ export {
 };
 
 export type GlobalRemoteSessionClientsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -77,8 +80,8 @@ export type GlobalRemoteSessionClientsQueryError =
  * List the global remote_session_clients registered with a global remote_session_issuer. Requires platform admin.
  */
 export function useGlobalRemoteSessionClients(
-  request: operations.ListGlobalRemoteSessionClientsRequest,
-  security?: operations.ListGlobalRemoteSessionClientsSecurity | undefined,
+  request: ListGlobalRemoteSessionClientsRequest,
+  security?: ListGlobalRemoteSessionClientsSecurity | undefined,
   options?: QueryHookOptions<
     GlobalRemoteSessionClientsQueryData,
     GlobalRemoteSessionClientsQueryError
@@ -106,8 +109,8 @@ export function useGlobalRemoteSessionClients(
  * List the global remote_session_clients registered with a global remote_session_issuer. Requires platform admin.
  */
 export function useGlobalRemoteSessionClientsSuspense(
-  request: operations.ListGlobalRemoteSessionClientsRequest,
-  security?: operations.ListGlobalRemoteSessionClientsSecurity | undefined,
+  request: ListGlobalRemoteSessionClientsRequest,
+  security?: ListGlobalRemoteSessionClientsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GlobalRemoteSessionClientsQueryData,
     GlobalRemoteSessionClientsQueryError
@@ -135,8 +138,8 @@ export function useGlobalRemoteSessionClientsSuspense(
  * List the global remote_session_clients registered with a global remote_session_issuer. Requires platform admin.
  */
 export function useGlobalRemoteSessionClientsInfinite(
-  request: operations.ListGlobalRemoteSessionClientsRequest,
-  security?: operations.ListGlobalRemoteSessionClientsSecurity | undefined,
+  request: ListGlobalRemoteSessionClientsRequest,
+  security?: ListGlobalRemoteSessionClientsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     GlobalRemoteSessionClientsInfiniteQueryData,
     GlobalRemoteSessionClientsQueryError
@@ -178,8 +181,8 @@ export function useGlobalRemoteSessionClientsInfinite(
  * List the global remote_session_clients registered with a global remote_session_issuer. Requires platform admin.
  */
 export function useGlobalRemoteSessionClientsInfiniteSuspense(
-  request: operations.ListGlobalRemoteSessionClientsRequest,
-  security?: operations.ListGlobalRemoteSessionClientsSecurity | undefined,
+  request: ListGlobalRemoteSessionClientsRequest,
+  security?: ListGlobalRemoteSessionClientsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     GlobalRemoteSessionClientsInfiniteQueryData,
     GlobalRemoteSessionClientsQueryError

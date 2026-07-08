@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { projectsUpsertAllowedOrigin } from "../funcs/projectsUpsertAllowedOrigin.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { UpsertAllowedOriginResult } from "../models/components/upsertallowedoriginresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,25 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  UpsertAllowedOriginRequest,
+  UpsertAllowedOriginSecurity,
+} from "../models/operations/upsertallowedorigin.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UpsertAllowedOriginMutationVariables = {
-  request: operations.UpsertAllowedOriginRequest;
-  security?: operations.UpsertAllowedOriginSecurity | undefined;
+  request: UpsertAllowedOriginRequest;
+  security?: UpsertAllowedOriginSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpsertAllowedOriginMutationData =
-  components.UpsertAllowedOriginResult;
+export type UpsertAllowedOriginMutationData = UpsertAllowedOriginResult;
 
 export type UpsertAllowedOriginMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpdateServerForm,
+  UpdateServerForm$Outbound,
+  UpdateServerForm$outboundSchema,
+} from "../components/updateserverform.js";
 
 export type UpdateRemoteMcpServerSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type UpdateRemoteMcpServerRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  updateServerForm: components.UpdateServerForm;
+  updateServerForm: UpdateServerForm;
 };
 
 /** @internal */
@@ -145,7 +149,7 @@ export type UpdateRemoteMcpServerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  UpdateServerForm: components.UpdateServerForm$Outbound;
+  UpdateServerForm: UpdateServerForm$Outbound;
 };
 
 /** @internal */
@@ -157,7 +161,7 @@ export const UpdateRemoteMcpServerRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    updateServerForm: components.UpdateServerForm$outboundSchema,
+    updateServerForm: UpdateServerForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

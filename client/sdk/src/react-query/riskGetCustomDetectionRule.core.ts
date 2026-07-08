@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { riskCustomRulesGet } from "../funcs/riskCustomRulesGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RiskCustomDetectionRule } from "../models/components/riskcustomdetectionrule.js";
+import {
+  GetCustomDetectionRuleRequest,
+  GetCustomDetectionRuleSecurity,
+} from "../models/operations/getcustomdetectionrule.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskGetCustomDetectionRuleQueryData =
-  components.RiskCustomDetectionRule;
+export type RiskGetCustomDetectionRuleQueryData = RiskCustomDetectionRule;
 
 export function prefetchRiskGetCustomDetectionRule(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetCustomDetectionRuleRequest,
-  security?: operations.GetCustomDetectionRuleSecurity | undefined,
+  request: GetCustomDetectionRuleRequest,
+  security?: GetCustomDetectionRuleSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchRiskGetCustomDetectionRule(
 
 export function buildRiskGetCustomDetectionRuleQuery(
   client$: GramCore,
-  request: operations.GetCustomDetectionRuleRequest,
-  security?: operations.GetCustomDetectionRuleSecurity | undefined,
+  request: GetCustomDetectionRuleRequest,
+  security?: GetCustomDetectionRuleSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -9,7 +9,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useBuiltinExclusions } from "@gram/client/react-query/index.js";
+import { useBuiltinExclusions } from "@gram/client/react-query/builtinExclusions.js";
 import type { BuiltinExclusionEntry } from "@gram/client/models/components/builtinexclusionentry.js";
 import { Info } from "lucide-react";
 import type { JSX } from "react";

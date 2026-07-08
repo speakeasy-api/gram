@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { triggersListDefinitions } from "../funcs/triggersListDefinitions.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListTriggerDefinitionsResult } from "../models/components/listtriggerdefinitionsresult.js";
+import {
+  ListTriggerDefinitionsRequest,
+  ListTriggerDefinitionsSecurity,
+} from "../models/operations/listtriggerdefinitions.js";
 import { unwrapAsync } from "../types/fp.js";
-export type TriggerDefinitionsQueryData =
-  components.ListTriggerDefinitionsResult;
+export type TriggerDefinitionsQueryData = ListTriggerDefinitionsResult;
 
 export function prefetchTriggerDefinitions(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListTriggerDefinitionsRequest | undefined,
-  security?: operations.ListTriggerDefinitionsSecurity | undefined,
+  request?: ListTriggerDefinitionsRequest | undefined,
+  security?: ListTriggerDefinitionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchTriggerDefinitions(
 
 export function buildTriggerDefinitionsQuery(
   client$: GramCore,
-  request?: operations.ListTriggerDefinitionsRequest | undefined,
-  security?: operations.ListTriggerDefinitionsSecurity | undefined,
+  request?: ListTriggerDefinitionsRequest | undefined,
+  security?: ListTriggerDefinitionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

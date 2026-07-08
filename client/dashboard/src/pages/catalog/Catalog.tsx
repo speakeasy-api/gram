@@ -10,7 +10,7 @@ import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { CommandBar } from "@/pages/catalog/CommandBar";
 import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import { useLatestDeployment } from "@gram/client/react-query";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { SearchXIcon } from "lucide-react";
 import { useMemo, useState } from "react";

@@ -3293,7 +3293,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DeleteAIIntegrationConfigRequest'
+              $ref: '#/components/schemas/DeleteConfigRequestBody'
         required: true
       responses:
         "204":
@@ -3483,7 +3483,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpsertAIIntegrationConfigRequest'
+              $ref: '#/components/schemas/UpsertConfigRequestBody'
         required: true
       responses:
         "200":
@@ -11134,6 +11134,970 @@ paths:
       x-speakeasy-name-override: receiveWorkOSWebhook
       x-speakeasy-react-hook:
         disabled: true
+  /rpc/externalCredentials.createAwsIam:
+    post:
+      description: Create an AWS IAM external credential. Requires org:admin.
+      operationId: createAwsIamCredential
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAwsIamCredentialForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AwsIamCredential'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: createAwsIamCredential externalCredentials
+      tags:
+        - externalCredentials
+      x-speakeasy-name-override: createAwsIam
+      x-speakeasy-react-hook:
+        name: CreateAwsIamCredential
+  /rpc/externalCredentials.createGcpIam:
+    post:
+      description: Create a GCP IAM external credential. Requires org:admin.
+      operationId: createGcpIamCredential
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGcpIamCredentialForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GcpIamCredential'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: createGcpIamCredential externalCredentials
+      tags:
+        - externalCredentials
+      x-speakeasy-name-override: createGcpIam
+      x-speakeasy-react-hook:
+        name: CreateGcpIamCredential
+  /rpc/externalCredentials.deleteAwsIam:
+    delete:
+      description: Soft-delete an AWS IAM external credential by ID. Requires org:admin.
+      operationId: deleteAwsIamCredential
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the credential to delete.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the credential to delete.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: deleteAwsIamCredential externalCredentials
+      tags:
+        - externalCredentials
+      x-speakeasy-name-override: deleteAwsIam
+      x-speakeasy-react-hook:
+        name: DeleteAwsIamCredential
+  /rpc/externalCredentials.deleteGcpIam:
+    delete:
+      description: Soft-delete a GCP IAM external credential by ID. Requires org:admin.
+      operationId: deleteGcpIamCredential
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the credential to delete.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the credential to delete.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: deleteGcpIamCredential externalCredentials
+      tags:
+        - externalCredentials
+      x-speakeasy-name-override: deleteGcpIam
+      x-speakeasy-react-hook:
+        name: DeleteGcpIamCredential
+  /rpc/externalCredentials.getAwsIam:
+    get:
+      description: Get an AWS IAM external credential by ID. Requires org:read.
+      operationId: getAwsIamCredential
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the credential to get.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the credential to get.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AwsIamCredential'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getAwsIamCredential externalCredentials
+      tags:
+        - externalCredentials
+      x-speakeasy-name-override: getAwsIam
+      x-speakeasy-react-hook:
+        name: GetAwsIamCredential
+  /rpc/externalCredentials.getGcpIam:
+    get:
+      description: Get a GCP IAM external credential by ID. Requires org:read.
+      operationId: getGcpIamCredential
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the credential to get.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the credential to get.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GcpIamCredential'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getGcpIamCredential externalCredentials
+      tags:
+        - externalCredentials
+      x-speakeasy-name-override: getGcpIam
+      x-speakeasy-react-hook:
+        name: GetGcpIamCredential
+  /rpc/externalCredentials.list:
+    get:
+      description: List the organization's external credentials (provider-independent summary). Optionally filter by provider. Requires org:read.
+      operationId: listExternalCredentials
+      parameters:
+        - allowEmptyValue: true
+          description: Only return credentials for this provider.
+          in: query
+          name: provider
+          schema:
+            description: Only return credentials for this provider.
+            enum:
+              - aws_iam
+              - gcp_iam
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListExternalCredentialsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listExternalCredentials externalCredentials
+      tags:
+        - externalCredentials
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: ListExternalCredentials
+  /rpc/externalCredentials.listAwsIam:
+    get:
+      description: List the organization's AWS IAM external credentials. Requires org:read.
+      operationId: listAwsIamCredentials
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListExternalCredentialsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listAwsIamCredentials externalCredentials
+      tags:
+        - externalCredentials
+      x-speakeasy-name-override: listAwsIam
+      x-speakeasy-react-hook:
+        name: ListAwsIamCredentials
+  /rpc/externalCredentials.listGcpIam:
+    get:
+      description: List the organization's GCP IAM external credentials. Requires org:read.
+      operationId: listGcpIamCredentials
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListExternalCredentialsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listGcpIamCredentials externalCredentials
+      tags:
+        - externalCredentials
+      x-speakeasy-name-override: listGcpIam
+      x-speakeasy-react-hook:
+        name: ListGcpIamCredentials
+  /rpc/externalCredentials.updateAwsIam:
+    post:
+      description: Replace an AWS IAM external credential's configuration. Requires org:admin.
+      operationId: updateAwsIamCredential
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAwsIamCredentialRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AwsIamCredential'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateAwsIamCredential externalCredentials
+      tags:
+        - externalCredentials
+      x-speakeasy-name-override: updateAwsIam
+      x-speakeasy-react-hook:
+        name: UpdateAwsIamCredential
+  /rpc/externalCredentials.updateGcpIam:
+    post:
+      description: Replace a GCP IAM external credential's configuration. Requires org:admin.
+      operationId: updateGcpIamCredential
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGcpIamCredentialRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GcpIamCredential'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateGcpIamCredential externalCredentials
+      tags:
+        - externalCredentials
+      x-speakeasy-name-override: updateGcpIam
+      x-speakeasy-react-hook:
+        name: UpdateGcpIamCredential
   /rpc/hooks.claude:
     post:
       tags:
@@ -18147,7 +19111,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpsertConfigRequestBody'
+              $ref: '#/components/schemas/UpsertConfigRequestBody2'
         required: true
       responses:
         "200":
@@ -38100,6 +39064,56 @@ components:
         - role_slugs
         - evaluated_grant_count
         - matched_grant_count
+    AwsIamCredential:
+      type: object
+      properties:
+        assume_role_arn:
+          type: string
+          description: The customer IAM role ARN Gram assumes.
+        created_at:
+          type: string
+          description: When the credential was created.
+          format: date-time
+        external_id:
+          type: string
+          description: The Gram-generated ExternalId the customer must require in their role trust policy. Present when Gram assumes the role with an ExternalId.
+        id:
+          type: string
+          description: The ID of the external credential.
+          format: uuid
+        name:
+          type: string
+          description: A human-readable name for the credential.
+        oidc_audience:
+          type: string
+          description: The OIDC audience. Present when Gram assumes the role with a web identity.
+        oidc_subject:
+          type: string
+          description: Optional OIDC subject pin (web-identity approach).
+        organization_id:
+          type: string
+          description: The organization that owns the credential.
+        provider:
+          type: string
+          description: The cloud provider of the credential.
+          enum:
+            - aws_iam
+            - gcp_iam
+        sts_region:
+          type: string
+          description: Optional STS region override.
+        updated_at:
+          type: string
+          description: When the credential was last updated.
+          format: date-time
+      description: An AWS IAM external credential.
+      required:
+        - id
+        - organization_id
+        - provider
+        - name
+        - created_at
+        - updated_at
     BaseResourceAttributes:
       type: object
       properties:
@@ -38473,6 +39487,9 @@ components:
     Chat:
       type: object
       properties:
+        account_email:
+          type: string
+          description: Email of the AI account that produced the chat, resolved from the linked AI account. May differ from the employee's work email (e.g. a personal account).
         account_type:
           type: string
           description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
@@ -38629,6 +39646,9 @@ components:
     ChatOverview:
       type: object
       properties:
+        account_email:
+          type: string
+          description: Email of the AI account that produced the chat, resolved from the linked AI account. May differ from the employee's work email (e.g. a personal account).
         account_type:
           type: string
           description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
@@ -39172,6 +40192,26 @@ components:
         - model
         - instructions
         - toolsets
+    CreateAwsIamCredentialForm:
+      type: object
+      properties:
+        assume_role_arn:
+          type: string
+          description: The customer IAM role ARN Gram assumes. Omit for a KMS key-policy grant.
+        name:
+          type: string
+          description: A human-readable name for the credential.
+        oidc_audience:
+          type: string
+          description: The OIDC audience. Provide (with assume_role_arn) to assume the role with a web identity.
+        oidc_subject:
+          type: string
+          description: Optional OIDC subject pin; only valid alongside oidc_audience.
+        sts_region:
+          type: string
+          description: Optional STS region override.
+      required:
+        - name
     CreateCimdForm:
       type: object
       properties:
@@ -39387,6 +40427,26 @@ components:
         - organization_id
         - name
         - entries
+    CreateGcpIamCredentialForm:
+      type: object
+      properties:
+        impersonate_service_account:
+          type: string
+          description: The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
+        name:
+          type: string
+          description: A human-readable name for the credential.
+        wif_pool_id:
+          type: string
+          description: Workload Identity Federation pool ID. Set together with the other wif_* fields.
+        wif_project_number:
+          type: string
+          description: GCP project number backing the WIF pool. Set together with the other wif_* fields.
+        wif_provider_id:
+          type: string
+          description: Workload Identity Federation provider ID. Set together with the other wif_* fields.
+      required:
+        - name
     CreateGlobalRemoteSessionClientForm:
       type: object
       properties:
@@ -40592,7 +41652,7 @@ components:
         - project_name
         - project_slug
         - mcp_server_id
-    DeleteAIIntegrationConfigRequest:
+    DeleteConfigRequestBody:
       type: object
       properties:
         provider:
@@ -41226,6 +42286,41 @@ components:
       required:
         - ok
         - error
+    ExternalCredentialSummary:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the credential was created.
+          format: date-time
+        id:
+          type: string
+          description: The ID of the external credential.
+          format: uuid
+        name:
+          type: string
+          description: A human-readable name for the credential.
+        organization_id:
+          type: string
+          description: The organization that owns the credential.
+        provider:
+          type: string
+          description: The cloud provider of the credential.
+          enum:
+            - aws_iam
+            - gcp_iam
+        updated_at:
+          type: string
+          description: When the credential was last updated.
+          format: date-time
+      description: Provider-independent summary of an external credential.
+      required:
+        - id
+        - organization_id
+        - provider
+        - name
+        - created_at
+        - updated_at
     ExternalMCPHeaderDefinition:
       type: object
       properties:
@@ -41819,6 +42914,53 @@ components:
         - description
         - schema
         - tool_urn
+        - created_at
+        - updated_at
+    GcpIamCredential:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the credential was created.
+          format: date-time
+        id:
+          type: string
+          description: The ID of the external credential.
+          format: uuid
+        impersonate_service_account:
+          type: string
+          description: The service account Gram impersonates (impersonation approach, or the WIF hop).
+        name:
+          type: string
+          description: A human-readable name for the credential.
+        organization_id:
+          type: string
+          description: The organization that owns the credential.
+        provider:
+          type: string
+          description: The cloud provider of the credential.
+          enum:
+            - aws_iam
+            - gcp_iam
+        updated_at:
+          type: string
+          description: When the credential was last updated.
+          format: date-time
+        wif_pool_id:
+          type: string
+          description: Workload Identity Federation pool ID.
+        wif_project_number:
+          type: string
+          description: GCP project number backing the WIF pool.
+        wif_provider_id:
+          type: string
+          description: Workload Identity Federation provider ID.
+      description: A GCP IAM external credential.
+      required:
+        - id
+        - organization_id
+        - provider
+        - name
         - created_at
         - updated_at
     GenerateTitleRequestBody:
@@ -43711,6 +44853,16 @@ components:
       description: Result type for listing environments
       required:
         - environments
+    ListExternalCredentialsResult:
+      type: object
+      properties:
+        credentials:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalCredentialSummary'
+          description: The organization's external credentials.
+      required:
+        - credentials
     ListFilterOptionsPayload:
       type: object
       properties:
@@ -52091,6 +53243,31 @@ components:
           format: int64
       required:
         - id
+    UpdateAwsIamCredentialRequestBody:
+      type: object
+      properties:
+        assume_role_arn:
+          type: string
+          description: The customer IAM role ARN Gram assumes. Omit for a KMS key-policy grant.
+        id:
+          type: string
+          description: The ID of the credential to update.
+          format: uuid
+        name:
+          type: string
+          description: A human-readable name for the credential.
+        oidc_audience:
+          type: string
+          description: The OIDC audience. Provide (with assume_role_arn) to assume the role with a web identity.
+        oidc_subject:
+          type: string
+          description: Optional OIDC subject pin; only valid alongside oidc_audience.
+        sts_region:
+          type: string
+          description: Optional STS region override.
+      required:
+        - id
+        - name
     UpdateCustomDetectionRuleRequestBody:
       type: object
       properties:
@@ -52184,6 +53361,31 @@ components:
       required:
         - entries_to_update
         - entries_to_remove
+    UpdateGcpIamCredentialRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the credential to update.
+          format: uuid
+        impersonate_service_account:
+          type: string
+          description: The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
+        name:
+          type: string
+          description: A human-readable name for the credential.
+        wif_pool_id:
+          type: string
+          description: Workload Identity Federation pool ID. Set together with the other wif_* fields.
+        wif_project_number:
+          type: string
+          description: GCP project number backing the WIF pool. Set together with the other wif_* fields.
+        wif_provider_id:
+          type: string
+          description: Workload Identity Federation provider ID. Set together with the other wif_* fields.
+      required:
+        - id
+        - name
     UpdateInviteRoleRequestBody:
       type: object
       properties:
@@ -53142,28 +54344,6 @@ components:
           $ref: '#/components/schemas/Asset'
       required:
         - asset
-    UpsertAIIntegrationConfigRequest:
-      type: object
-      properties:
-        api_key:
-          type: string
-          description: Provider API key. Stored encrypted at rest; never returned on reads.
-        billing_mode:
-          type: string
-          description: 'How the provider org is billed: ''metered'', ''flat_rate'', or ''unknown''. Free-form; omit to leave the existing value unchanged.'
-        enabled:
-          type: boolean
-          description: Whether the integration should be active.
-        external_organization_id:
-          type: string
-          description: Provider organization identifier. Required for anthropic_compliance.
-        provider:
-          type: string
-          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
-      required:
-        - provider
-        - api_key
-        - enabled
     UpsertAllowedOriginForm:
       type: object
       properties:
@@ -53189,6 +54369,28 @@ components:
       required:
         - allowed_origin
     UpsertConfigRequestBody:
+      type: object
+      properties:
+        api_key:
+          type: string
+          description: Provider API key. Stored encrypted at rest; never returned on reads.
+        billing_mode:
+          type: string
+          description: 'How the provider org is billed: ''metered'', ''flat_rate'', or ''unknown''. Free-form; omit to leave the existing value unchanged.'
+        enabled:
+          type: boolean
+          description: Whether the integration should be active.
+        external_organization_id:
+          type: string
+          description: Provider organization identifier. Required for anthropic_compliance.
+        provider:
+          type: string
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
+      required:
+        - provider
+        - api_key
+        - enabled
+    UpsertConfigRequestBody2:
       type: object
       properties:
         enabled:
@@ -53798,6 +55000,8 @@ tags:
     description: Manage custom domains for gram.
   - name: environments
     description: Managing toolset environments.
+  - name: externalCredentials
+    description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
   - name: mcpRegistries
     description: External MCP registry operations
   - name: collections

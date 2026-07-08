@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateRequestBody,
+  CreateRequestBody$Outbound,
+  CreateRequestBody$outboundSchema,
+} from "../components/createrequestbody.js";
 
 export type CreateChatSessionSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type CreateChatSessionRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  createRequestBody: components.CreateRequestBody;
+  createRequestBody: CreateRequestBody;
 };
 
 /** @internal */
@@ -143,7 +147,7 @@ export type CreateChatSessionRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  CreateRequestBody: components.CreateRequestBody$Outbound;
+  CreateRequestBody: CreateRequestBody$Outbound;
 };
 
 /** @internal */
@@ -155,7 +159,7 @@ export const CreateChatSessionRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    createRequestBody: components.CreateRequestBody$outboundSchema,
+    createRequestBody: CreateRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -312,6 +312,96 @@ func TestListSessions_CrossRowDirectoryAndHookFilters(t *testing.T) {
 	require.Equal(t, int64(1), session.MessageCount)
 }
 
+func TestListSessions_CoLocatesAttributionFilters(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Now().UTC()
+	matchingChatID := uuid.NewString()
+	nonMatchingChatID := uuid.NewString()
+
+	// This row is the aggregate slice the UI drills into: skill=golang with no
+	// subagent attribution.
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    now.Add(-10 * time.Minute),
+		chatID:       matchingChatID,
+		email:        "skill@example.com",
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  100,
+		outputTokens: 50,
+		totalTokens:  150,
+		cost:         1.0,
+		skillName:    "golang",
+	})
+	// The same chat later carries a subagent. An independent agent_name=""
+	// HAVING would wrongly reject the whole chat even though the skill row above
+	// belongs to the drilled aggregate slice.
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    now.Add(-9 * time.Minute),
+		chatID:       matchingChatID,
+		email:        "skill@example.com",
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  50,
+		outputTokens: 25,
+		totalTokens:  75,
+		cost:         0.5,
+		skillName:    "claude-api",
+		agentName:    "Explore",
+	})
+	// Another chat has the requested skill, but only on a row with an agent. It
+	// must not match the co-located skill=golang AND agent="" slice.
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    now.Add(-8 * time.Minute),
+		chatID:       nonMatchingChatID,
+		email:        "skill@example.com",
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  200,
+		outputTokens: 50,
+		totalTokens:  250,
+		cost:         2.0,
+		skillName:    "golang",
+		agentName:    "Explore",
+	})
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	res := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		From: from,
+		To:   to,
+		Filters: []*gen.QueryFilter{
+			{Dimension: "skill_name", Values: []string{"golang"}},
+			{Dimension: "agent_name", Values: []string{""}},
+		},
+		SortBy: "total_cost",
+		Limit:  10,
+	}, func(res *gen.ListSessionsResult) bool {
+		return len(res.Sessions) == 1 && res.Sessions[0].GramChatID == matchingChatID
+	})
+
+	require.Len(t, res.Sessions, 1)
+	session := res.Sessions[0]
+	require.Equal(t, matchingChatID, session.GramChatID)
+	require.InDelta(t, 1.5, session.TotalCost, 1e-9)
+	require.Equal(t, int64(2), session.MessageCount)
+}
+
 func TestListSessions_IncludesCostBearingAssistantChatCompletions(t *testing.T) {
 	t.Parallel()
 
@@ -501,6 +591,8 @@ type listSessionLogParams struct {
 	cost         float64
 	statusCode   int32
 	toolURN      string
+	skillName    string
+	agentName    string
 }
 
 func insertListSessionCompletionLog(t *testing.T, ctx context.Context, p listSessionLogParams) {
@@ -567,6 +659,12 @@ func insertListSessionClaudeAPIRequestLog(t *testing.T, ctx context.Context, p l
 		"gram.hook.source":                p.hookSource,
 		"user.email":                      p.email,
 		"user.attributes.department_name": p.department,
+	}
+	if p.skillName != "" {
+		attributes["skill.name"] = p.skillName
+	}
+	if p.agentName != "" {
+		attributes["agent.name"] = p.agentName
 	}
 	if p.roles != nil {
 		attributes["user.roles"] = p.roles

@@ -22,8 +22,98 @@ import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
 import { telemetrySearchToolCalls } from "../funcs/telemetrySearchToolCalls.js";
 import { telemetrySearchUsers } from "../funcs/telemetrySearchUsers.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { CaptureEventResult } from "../models/components/captureeventresult.js";
+import { GetEmployeeDataFlowGraphResult } from "../models/components/getemployeedataflowgraphresult.js";
+import { GetHooksSummaryResult } from "../models/components/gethookssummaryresult.js";
+import { GetMetricsSummaryResult } from "../models/components/getmetricssummaryresult.js";
+import { GetObservabilityOverviewResult } from "../models/components/getobservabilityoverviewresult.js";
+import { GetProjectOverviewResult } from "../models/components/getprojectoverviewresult.js";
+import { GetToolUsageFilterOptionsResult } from "../models/components/gettoolusagefilteroptionsresult.js";
+import { GetToolUsageSummaryResult } from "../models/components/gettoolusagesummaryresult.js";
+import { GetUserMetricsSummaryResult } from "../models/components/getusermetricssummaryresult.js";
+import { ListAttributeKeysResult } from "../models/components/listattributekeysresult.js";
+import { ListFilterOptionsResult } from "../models/components/listfilteroptionsresult.js";
+import { ListHooksTracesResult } from "../models/components/listhookstracesresult.js";
+import { ListSessionsResult } from "../models/components/listsessionsresult.js";
+import { ListToolUsageTracesResult } from "../models/components/listtoolusagetracesresult.js";
+import { QueryResult } from "../models/components/queryresult.js";
+import { SearchChatsResult } from "../models/components/searchchatsresult.js";
+import { SearchLogsResult } from "../models/components/searchlogsresult.js";
+import { SearchToolCallsResult } from "../models/components/searchtoolcallsresult.js";
+import { SearchUsersResult } from "../models/components/searchusersresult.js";
+import {
+  CaptureEventRequest,
+  CaptureEventSecurity,
+} from "../models/operations/captureevent.js";
+import {
+  GetEmployeeDataFlowGraphRequest,
+  GetEmployeeDataFlowGraphSecurity,
+} from "../models/operations/getemployeedataflowgraph.js";
+import {
+  GetHooksSummaryRequest,
+  GetHooksSummarySecurity,
+} from "../models/operations/gethookssummary.js";
+import {
+  GetObservabilityOverviewRequest,
+  GetObservabilityOverviewSecurity,
+} from "../models/operations/getobservabilityoverview.js";
+import {
+  GetProjectMetricsSummaryRequest,
+  GetProjectMetricsSummarySecurity,
+} from "../models/operations/getprojectmetricssummary.js";
+import {
+  GetProjectOverviewRequest,
+  GetProjectOverviewSecurity,
+} from "../models/operations/getprojectoverview.js";
+import {
+  GetToolUsageFilterOptionsRequest,
+  GetToolUsageFilterOptionsSecurity,
+} from "../models/operations/gettoolusagefilteroptions.js";
+import {
+  GetToolUsageSummaryRequest,
+  GetToolUsageSummarySecurity,
+} from "../models/operations/gettoolusagesummary.js";
+import {
+  GetUserMetricsSummaryRequest,
+  GetUserMetricsSummarySecurity,
+} from "../models/operations/getusermetricssummary.js";
+import {
+  ListAttributeKeysRequest,
+  ListAttributeKeysSecurity,
+} from "../models/operations/listattributekeys.js";
+import {
+  ListFilterOptionsRequest,
+  ListFilterOptionsSecurity,
+} from "../models/operations/listfilteroptions.js";
+import {
+  ListHooksTracesRequest,
+  ListHooksTracesSecurity,
+} from "../models/operations/listhookstraces.js";
+import {
+  ListSessionsRequest,
+  ListSessionsSecurity,
+} from "../models/operations/listsessions.js";
+import {
+  ListToolUsageTracesRequest,
+  ListToolUsageTracesSecurity,
+} from "../models/operations/listtoolusagetraces.js";
+import { QueryRequest, QuerySecurity } from "../models/operations/query.js";
+import {
+  SearchChatsRequest,
+  SearchChatsSecurity,
+} from "../models/operations/searchchats.js";
+import {
+  SearchLogsRequest,
+  SearchLogsSecurity,
+} from "../models/operations/searchlogs.js";
+import {
+  SearchToolCallsRequest,
+  SearchToolCallsSecurity,
+} from "../models/operations/searchtoolcalls.js";
+import {
+  SearchUsersRequest,
+  SearchUsersSecurity,
+} from "../models/operations/searchusers.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Telemetry extends ClientSDK {
@@ -34,10 +124,10 @@ export class Telemetry extends ClientSDK {
    * Capture a telemetry event and forward it to PostHog
    */
   async captureEvent(
-    request: operations.CaptureEventRequest,
-    security?: operations.CaptureEventSecurity | undefined,
+    request: CaptureEventRequest,
+    security?: CaptureEventSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.CaptureEventResult> {
+  ): Promise<CaptureEventResult> {
     return unwrapAsync(telemetryCaptureEvent(
       this,
       request,
@@ -53,10 +143,10 @@ export class Telemetry extends ClientSDK {
    * Get an employee's MCP data flow graph across origins, clients, servers, and tools
    */
   async getEmployeeDataFlowGraph(
-    request: operations.GetEmployeeDataFlowGraphRequest,
-    security?: operations.GetEmployeeDataFlowGraphSecurity | undefined,
+    request: GetEmployeeDataFlowGraphRequest,
+    security?: GetEmployeeDataFlowGraphSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetEmployeeDataFlowGraphResult> {
+  ): Promise<GetEmployeeDataFlowGraphResult> {
     return unwrapAsync(telemetryGetEmployeeDataFlowGraph(
       this,
       request,
@@ -72,10 +162,10 @@ export class Telemetry extends ClientSDK {
    * Get aggregated hooks metrics grouped by server
    */
   async getHooksSummary(
-    request: operations.GetHooksSummaryRequest,
-    security?: operations.GetHooksSummarySecurity | undefined,
+    request: GetHooksSummaryRequest,
+    security?: GetHooksSummarySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetHooksSummaryResult> {
+  ): Promise<GetHooksSummaryResult> {
     return unwrapAsync(telemetryGetHooksSummary(
       this,
       request,
@@ -91,10 +181,10 @@ export class Telemetry extends ClientSDK {
    * Get observability overview metrics including time series, tool breakdowns, and summary stats
    */
   async getObservabilityOverview(
-    request: operations.GetObservabilityOverviewRequest,
-    security?: operations.GetObservabilityOverviewSecurity | undefined,
+    request: GetObservabilityOverviewRequest,
+    security?: GetObservabilityOverviewSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetObservabilityOverviewResult> {
+  ): Promise<GetObservabilityOverviewResult> {
     return unwrapAsync(telemetryGetObservabilityOverview(
       this,
       request,
@@ -110,10 +200,10 @@ export class Telemetry extends ClientSDK {
    * Get aggregated metrics summary for an entire project
    */
   async getProjectMetricsSummary(
-    request: operations.GetProjectMetricsSummaryRequest,
-    security?: operations.GetProjectMetricsSummarySecurity | undefined,
+    request: GetProjectMetricsSummaryRequest,
+    security?: GetProjectMetricsSummarySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetMetricsSummaryResult> {
+  ): Promise<GetMetricsSummaryResult> {
     return unwrapAsync(telemetryGetProjectMetricsSummary(
       this,
       request,
@@ -129,10 +219,10 @@ export class Telemetry extends ClientSDK {
    * Get project-level overview including total chats, tool calls, active servers/users, and top lists
    */
   async getProjectOverview(
-    request: operations.GetProjectOverviewRequest,
-    security?: operations.GetProjectOverviewSecurity | undefined,
+    request: GetProjectOverviewRequest,
+    security?: GetProjectOverviewSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetProjectOverviewResult> {
+  ): Promise<GetProjectOverviewResult> {
     return unwrapAsync(telemetryGetProjectOverview(
       this,
       request,
@@ -148,10 +238,10 @@ export class Telemetry extends ClientSDK {
    * Get filter options for target-aware MCP and tool usage metrics
    */
   async getToolUsageFilterOptions(
-    request: operations.GetToolUsageFilterOptionsRequest,
-    security?: operations.GetToolUsageFilterOptionsSecurity | undefined,
+    request: GetToolUsageFilterOptionsRequest,
+    security?: GetToolUsageFilterOptionsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetToolUsageFilterOptionsResult> {
+  ): Promise<GetToolUsageFilterOptionsResult> {
     return unwrapAsync(telemetryGetToolUsageFilterOptions(
       this,
       request,
@@ -167,10 +257,10 @@ export class Telemetry extends ClientSDK {
    * Get target-aware MCP and tool usage metrics
    */
   async getToolUsageSummary(
-    request: operations.GetToolUsageSummaryRequest,
-    security?: operations.GetToolUsageSummarySecurity | undefined,
+    request: GetToolUsageSummaryRequest,
+    security?: GetToolUsageSummarySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetToolUsageSummaryResult> {
+  ): Promise<GetToolUsageSummaryResult> {
     return unwrapAsync(telemetryGetToolUsageSummary(
       this,
       request,
@@ -186,10 +276,10 @@ export class Telemetry extends ClientSDK {
    * Get aggregated metrics summary grouped by user
    */
   async getUserMetricsSummary(
-    request: operations.GetUserMetricsSummaryRequest,
-    security?: operations.GetUserMetricsSummarySecurity | undefined,
+    request: GetUserMetricsSummaryRequest,
+    security?: GetUserMetricsSummarySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetUserMetricsSummaryResult> {
+  ): Promise<GetUserMetricsSummaryResult> {
     return unwrapAsync(telemetryGetUserMetricsSummary(
       this,
       request,
@@ -205,10 +295,10 @@ export class Telemetry extends ClientSDK {
    * List distinct attribute keys available for filtering
    */
   async listAttributeKeys(
-    request: operations.ListAttributeKeysRequest,
-    security?: operations.ListAttributeKeysSecurity | undefined,
+    request: ListAttributeKeysRequest,
+    security?: ListAttributeKeysSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListAttributeKeysResult> {
+  ): Promise<ListAttributeKeysResult> {
     return unwrapAsync(telemetryListAttributeKeys(
       this,
       request,
@@ -224,10 +314,10 @@ export class Telemetry extends ClientSDK {
    * List available filter options (API keys or users) for the observability overview
    */
   async listFilterOptions(
-    request: operations.ListFilterOptionsRequest,
-    security?: operations.ListFilterOptionsSecurity | undefined,
+    request: ListFilterOptionsRequest,
+    security?: ListFilterOptionsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListFilterOptionsResult> {
+  ): Promise<ListFilterOptionsResult> {
     return unwrapAsync(telemetryListFilterOptions(
       this,
       request,
@@ -243,10 +333,10 @@ export class Telemetry extends ClientSDK {
    * List hook traces aggregated by trace_id with user information
    */
   async listHooksTraces(
-    request: operations.ListHooksTracesRequest,
-    security?: operations.ListHooksTracesSecurity | undefined,
+    request: ListHooksTracesRequest,
+    security?: ListHooksTracesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListHooksTracesResult> {
+  ): Promise<ListHooksTracesResult> {
     return unwrapAsync(telemetryListHooksTraces(
       this,
       request,
@@ -262,10 +352,10 @@ export class Telemetry extends ClientSDK {
    * Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.
    */
   async listSessions(
-    request: operations.ListSessionsRequest,
-    security?: operations.ListSessionsSecurity | undefined,
+    request: ListSessionsRequest,
+    security?: ListSessionsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListSessionsResult> {
+  ): Promise<ListSessionsResult> {
     return unwrapAsync(telemetryListSessions(
       this,
       request,
@@ -281,10 +371,10 @@ export class Telemetry extends ClientSDK {
    * List target-aware MCP and tool usage traces
    */
   async listToolUsageTraces(
-    request: operations.ListToolUsageTracesRequest,
-    security?: operations.ListToolUsageTracesSecurity | undefined,
+    request: ListToolUsageTracesRequest,
+    security?: ListToolUsageTracesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListToolUsageTracesResult> {
+  ): Promise<ListToolUsageTracesResult> {
     return unwrapAsync(telemetryListToolUsageTraces(
       this,
       request,
@@ -300,10 +390,10 @@ export class Telemetry extends ClientSDK {
    * Generic, org-scoped analytics query over pre-aggregated usage metrics. Returns both a grouped table and a per-group hourly timeseries for the same slice of data, supporting arbitrary allowlisted group-by dimensions and filters (e.g. group by department_name, then drill in by filtering department_name and grouping by role).
    */
   async query(
-    request: operations.QueryRequest,
-    security?: operations.QuerySecurity | undefined,
+    request: QueryRequest,
+    security?: QuerySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.QueryResult> {
+  ): Promise<QueryResult> {
     return unwrapAsync(telemetryQuery(
       this,
       request,
@@ -319,10 +409,10 @@ export class Telemetry extends ClientSDK {
    * Search and list chat session summaries that match a search filter
    */
   async searchChats(
-    request: operations.SearchChatsRequest,
-    security?: operations.SearchChatsSecurity | undefined,
+    request: SearchChatsRequest,
+    security?: SearchChatsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.SearchChatsResult> {
+  ): Promise<SearchChatsResult> {
     return unwrapAsync(telemetrySearchChats(
       this,
       request,
@@ -338,10 +428,10 @@ export class Telemetry extends ClientSDK {
    * Search and list telemetry logs that match a search filter
    */
   async searchLogs(
-    request: operations.SearchLogsRequest,
-    security?: operations.SearchLogsSecurity | undefined,
+    request: SearchLogsRequest,
+    security?: SearchLogsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.SearchLogsResult> {
+  ): Promise<SearchLogsResult> {
     return unwrapAsync(telemetrySearchLogs(
       this,
       request,
@@ -357,10 +447,10 @@ export class Telemetry extends ClientSDK {
    * Search and list tool calls that match a search filter
    */
   async searchToolCalls(
-    request: operations.SearchToolCallsRequest,
-    security?: operations.SearchToolCallsSecurity | undefined,
+    request: SearchToolCallsRequest,
+    security?: SearchToolCallsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.SearchToolCallsResult> {
+  ): Promise<SearchToolCallsResult> {
     return unwrapAsync(telemetrySearchToolCalls(
       this,
       request,
@@ -376,10 +466,10 @@ export class Telemetry extends ClientSDK {
    * Search and list user usage summaries grouped by user_id or external_user_id
    */
   async searchUsers(
-    request: operations.SearchUsersRequest,
-    security?: operations.SearchUsersSecurity | undefined,
+    request: SearchUsersRequest,
+    security?: SearchUsersSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.SearchUsersResult> {
+  ): Promise<SearchUsersResult> {
     return unwrapAsync(telemetrySearchUsers(
       this,
       request,

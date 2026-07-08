@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { riskResultsList } from "../funcs/riskResultsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListRiskResultsResult } from "../models/components/listriskresultsresult.js";
+import {
+  ListRiskResultsRequest,
+  ListRiskResultsSecurity,
+} from "../models/operations/listriskresults.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskListResultsQueryData = components.ListRiskResultsResult;
+export type RiskListResultsQueryData = ListRiskResultsResult;
 
 export function prefetchRiskListResults(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListRiskResultsRequest | undefined,
-  security?: operations.ListRiskResultsSecurity | undefined,
+  request?: ListRiskResultsRequest | undefined,
+  security?: ListRiskResultsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchRiskListResults(
 
 export function buildRiskListResultsQuery(
   client$: GramCore,
-  request?: operations.ListRiskResultsRequest | undefined,
-  security?: operations.ListRiskResultsSecurity | undefined,
+  request?: ListRiskResultsRequest | undefined,
+  security?: ListRiskResultsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

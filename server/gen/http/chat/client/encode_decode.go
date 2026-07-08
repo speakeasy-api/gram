@@ -1975,6 +1975,7 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		LastMessageTimestamp: *v.LastMessageTimestamp,
 		RiskFindingsCount:    v.RiskFindingsCount,
 		AccountType:          v.AccountType,
+		AccountEmail:         v.AccountEmail,
 	}
 
 	return res

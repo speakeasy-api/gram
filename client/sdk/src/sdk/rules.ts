@@ -4,8 +4,11 @@
 
 import { riskRulesTest } from "../funcs/riskRulesTest.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { TestDetectionRuleResult } from "../models/components/testdetectionruleresult.js";
+import {
+  TestDetectionRuleRequest,
+  TestDetectionRuleSecurity,
+} from "../models/operations/testdetectionrule.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Rules extends ClientSDK {
@@ -16,10 +19,10 @@ export class Rules extends ClientSDK {
    * Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.
    */
   async test(
-    request: operations.TestDetectionRuleRequest,
-    security?: operations.TestDetectionRuleSecurity | undefined,
+    request: TestDetectionRuleRequest,
+    security?: TestDetectionRuleSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.TestDetectionRuleResult> {
+  ): Promise<TestDetectionRuleResult> {
     return unwrapAsync(riskRulesTest(
       this,
       request,

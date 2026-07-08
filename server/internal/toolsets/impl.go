@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -42,10 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/plugins"
-	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
-	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -60,22 +56,20 @@ var validOAuthProxyAuthMethods = map[string]bool{
 }
 
 type Service struct {
-	tracer               trace.Tracer
-	logger               *slog.Logger
-	db                   *pgxpool.Pool
-	repo                 *repo.Queries
-	environmentRepo      *environmentsRepo.Queries
-	auth                 *auth.Auth
-	authz                *authz.Engine
-	toolsets             *Toolsets
-	domainsRepo          *domainsRepo.Queries
-	usageRepo            *usageRepo.Queries
-	oauthRepo            *oauthRepo.Queries
-	mcpmetadataRepo      *mcpmetadataRepo.Queries
-	toolsetCache         cache.TypedCacheObject[mv.ToolsetBaseContents]
-	audit                *audit.Logger
-	temporalEnv          *tenv.Environment
-	pluginsGitHubEnabled bool
+	tracer          trace.Tracer
+	logger          *slog.Logger
+	db              *pgxpool.Pool
+	repo            *repo.Queries
+	environmentRepo *environmentsRepo.Queries
+	auth            *auth.Auth
+	authz           *authz.Engine
+	toolsets        *Toolsets
+	domainsRepo     *domainsRepo.Queries
+	usageRepo       *usageRepo.Queries
+	oauthRepo       *oauthRepo.Queries
+	mcpmetadataRepo *mcpmetadataRepo.Queries
+	toolsetCache    cache.TypedCacheObject[mv.ToolsetBaseContents]
+	audit           *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -88,28 +82,24 @@ func NewService(
 	cacheAdapter cache.Cache,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	temporalEnv *tenv.Environment,
-	pluginsGitHubEnabled bool,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("toolsets"))
 
 	return &Service{
-		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/toolsets"),
-		logger:               logger,
-		db:                   db,
-		repo:                 repo.New(db),
-		auth:                 auth.New(logger, db, sessions, authzEngine),
-		authz:                authzEngine,
-		environmentRepo:      environmentsRepo.New(db),
-		toolsets:             NewToolsets(db),
-		domainsRepo:          domainsRepo.New(db),
-		usageRepo:            usageRepo.New(db),
-		oauthRepo:            oauthRepo.New(db),
-		mcpmetadataRepo:      mcpmetadataRepo.New(db),
-		toolsetCache:         cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
-		audit:                auditLogger,
-		temporalEnv:          temporalEnv,
-		pluginsGitHubEnabled: pluginsGitHubEnabled,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/toolsets"),
+		logger:          logger,
+		db:              db,
+		repo:            repo.New(db),
+		auth:            auth.New(logger, db, sessions, authzEngine),
+		authz:           authzEngine,
+		environmentRepo: environmentsRepo.New(db),
+		toolsets:        NewToolsets(db),
+		domainsRepo:     domainsRepo.New(db),
+		usageRepo:       usageRepo.New(db),
+		oauthRepo:       oauthRepo.New(db),
+		mcpmetadataRepo: mcpmetadataRepo.New(db),
+		toolsetCache:    cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
+		audit:           auditLogger,
 	}
 }
 
@@ -233,19 +223,9 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset creation").LogError(ctx, logger)
 	}
 
-	var pluginCreated bool
-	if createToolParams.McpEnabled {
-		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, createdToolset.ID, createdToolset.Name)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving toolset").LogError(ctx, logger)
 	}
-
-	s.triggerInitialPublishIfNeeded(ctx, authCtx, pluginCreated)
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(createdToolset.Slug), &s.toolsetCache, nil)
 	if err != nil {
@@ -253,88 +233,6 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	return toolsetDetails, nil
-}
-
-// attachToDefaultPlugin adds a newly MCP-enabled toolset to the project's
-// Default plugin so it's included in the auto-published marketplace without
-// a human visiting the Plugins page. No-op if the toolset is already
-// attached. Returns pluginCreated=true if this call lazily created the
-// Default plugin (project predates this feature) — callers should enqueue
-// an initial publish for it, but only after their own transaction commits,
-// since this runs pre-commit and the DB writes could still roll back.
-func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
-	attached, err := plugins.AttachToDefaultPlugin(ctx, pluginsrepo.New(dbtx), plugins.AttachToDefaultPluginParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
-		McpServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		DisplayName:    displayName,
-	})
-	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, s.logger)
-	}
-	if attached == nil {
-		return false, nil
-	}
-
-	if attached.PluginCreated {
-		if err := s.audit.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ProjectID:        *authCtx.ProjectID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			PluginID:         attached.PluginID,
-			PluginName:       attached.PluginName,
-			PluginSlug:       attached.PluginSlug,
-		}); err != nil {
-			return false, oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
-		}
-	}
-
-	toolsetURN := urn.NewToolset(toolsetID)
-	if err := s.audit.LogPluginServerAdd(ctx, dbtx, audit.LogPluginServerAddEvent{
-		OrganizationID:    authCtx.ActiveOrganizationID,
-		ProjectID:         *authCtx.ProjectID,
-		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:  authCtx.Email,
-		ActorSlug:         nil,
-		PluginID:          attached.PluginID,
-		PluginName:        attached.PluginName,
-		PluginSlug:        attached.PluginSlug,
-		ServerID:          attached.Server.ID,
-		ServerDisplayName: attached.Server.DisplayName,
-		ServerPolicy:      attached.Server.Policy,
-		ServerSortOrder:   attached.Server.SortOrder,
-		ToolsetURN:        &toolsetURN,
-		McpServerURN:      nil,
-	}); err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "audit log default plugin server add").LogError(ctx, s.logger)
-	}
-
-	return attached.PluginCreated, nil
-}
-
-// triggerInitialPublishIfNeeded enqueues the first-time GitHub marketplace
-// publish for a project whose Default plugin was just lazily created. Must
-// only be called after the triggering transaction has committed — enqueuing
-// before commit risks Temporal running against state that a later failure
-// in the same transaction rolls back. Best-effort: a non-cancelable ctx
-// since the request returning shouldn't drop the enqueue.
-func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *contextvalues.AuthContext, pluginCreated bool) {
-	if !pluginCreated || !s.pluginsGitHubEnabled {
-		return
-	}
-
-	enqueueCtx := context.WithoutCancel(ctx)
-	if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
-		ProjectID:       *authCtx.ProjectID,
-		CreatedByUserID: authCtx.UserID,
-		CommitMessage:   "Initial marketplace publish",
-		SkipIfUnchanged: false,
-	}); err != nil {
-		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
-	}
 }
 
 func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {
@@ -551,14 +449,6 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").LogError(ctx, logger)
 	}
 
-	var pluginCreated bool
-	if !existingToolset.McpEnabled && updatedToolset.McpEnabled {
-		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updatedToolset.ID, updatedToolset.Name)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	if payload.PromptTemplateNames != nil {
 		err = s.updatePromptTemplates(ctx, dbtx, *authCtx.ProjectID, existingToolset.ID, payload.PromptTemplateNames, logger)
 		if err != nil {
@@ -634,8 +524,6 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving updated toolset").LogError(ctx, logger)
 	}
-
-	s.triggerInitialPublishIfNeeded(ctx, authCtx, pluginCreated)
 
 	return toolsetDetails, nil
 }

@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { integrationsIntegrationsNumberGet } from "../funcs/integrationsIntegrationsNumberGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetIntegrationResult } from "../models/components/getintegrationresult.js";
+import {
+  IntegrationsNumberGetRequest,
+  IntegrationsNumberGetSecurity,
+} from "../models/operations/integrationsnumberget.js";
 import { unwrapAsync } from "../types/fp.js";
-export type IntegrationsIntegrationsNumberGetQueryData =
-  components.GetIntegrationResult;
+export type IntegrationsIntegrationsNumberGetQueryData = GetIntegrationResult;
 
 export function prefetchIntegrationsIntegrationsNumberGet(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.IntegrationsNumberGetRequest | undefined,
-  security?: operations.IntegrationsNumberGetSecurity | undefined,
+  request?: IntegrationsNumberGetRequest | undefined,
+  security?: IntegrationsNumberGetSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchIntegrationsIntegrationsNumberGet(
 
 export function buildIntegrationsIntegrationsNumberGetQuery(
   client$: GramCore,
-  request?: operations.IntegrationsNumberGetRequest | undefined,
-  security?: operations.IntegrationsNumberGetSecurity | undefined,
+  request?: IntegrationsNumberGetRequest | undefined,
+  security?: IntegrationsNumberGetSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

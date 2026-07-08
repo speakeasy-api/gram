@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListMcpServersRequest,
+  ListMcpServersSecurity,
+} from "../models/operations/listmcpservers.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type McpServersQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type McpServersQueryError =
  * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
  */
 export function useMcpServers(
-  request?: operations.ListMcpServersRequest | undefined,
-  security?: operations.ListMcpServersSecurity | undefined,
+  request?: ListMcpServersRequest | undefined,
+  security?: ListMcpServersSecurity | undefined,
   options?: QueryHookOptions<McpServersQueryData, McpServersQueryError>,
 ): UseQueryResult<McpServersQueryData, McpServersQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useMcpServers(
  * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
  */
 export function useMcpServersSuspense(
-  request?: operations.ListMcpServersRequest | undefined,
-  security?: operations.ListMcpServersSecurity | undefined,
+  request?: ListMcpServersRequest | undefined,
+  security?: ListMcpServersSecurity | undefined,
   options?: SuspenseQueryHookOptions<McpServersQueryData, McpServersQueryError>,
 ): UseSuspenseQueryResult<McpServersQueryData, McpServersQueryError> {
   const client = useGramContext();

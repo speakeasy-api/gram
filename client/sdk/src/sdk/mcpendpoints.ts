@@ -9,8 +9,32 @@ import { mcpEndpointsGet } from "../funcs/mcpEndpointsGet.js";
 import { mcpEndpointsList } from "../funcs/mcpEndpointsList.js";
 import { mcpEndpointsUpdate } from "../funcs/mcpEndpointsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListMcpEndpointsResult } from "../models/components/listmcpendpointsresult.js";
+import { McpEndpoint } from "../models/components/mcpendpoint.js";
+import {
+  CheckMcpEndpointSlugAvailabilityRequest,
+  CheckMcpEndpointSlugAvailabilitySecurity,
+} from "../models/operations/checkmcpendpointslugavailability.js";
+import {
+  CreateMcpEndpointRequest,
+  CreateMcpEndpointSecurity,
+} from "../models/operations/createmcpendpoint.js";
+import {
+  DeleteMcpEndpointRequest,
+  DeleteMcpEndpointSecurity,
+} from "../models/operations/deletemcpendpoint.js";
+import {
+  GetMcpEndpointRequest,
+  GetMcpEndpointSecurity,
+} from "../models/operations/getmcpendpoint.js";
+import {
+  ListMcpEndpointsRequest,
+  ListMcpEndpointsSecurity,
+} from "../models/operations/listmcpendpoints.js";
+import {
+  UpdateMcpEndpointRequest,
+  UpdateMcpEndpointSecurity,
+} from "../models/operations/updatemcpendpoint.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class McpEndpoints extends ClientSDK {
@@ -21,8 +45,8 @@ export class McpEndpoints extends ClientSDK {
    * Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.
    */
   async checkSlugAvailability(
-    request: operations.CheckMcpEndpointSlugAvailabilityRequest,
-    security?: operations.CheckMcpEndpointSlugAvailabilitySecurity | undefined,
+    request: CheckMcpEndpointSlugAvailabilityRequest,
+    security?: CheckMcpEndpointSlugAvailabilitySecurity | undefined,
     options?: RequestOptions,
   ): Promise<boolean> {
     return unwrapAsync(mcpEndpointsCheckSlugAvailability(
@@ -40,10 +64,10 @@ export class McpEndpoints extends ClientSDK {
    * Create a new MCP endpoint for an MCP server
    */
   async create(
-    request: operations.CreateMcpEndpointRequest,
-    security?: operations.CreateMcpEndpointSecurity | undefined,
+    request: CreateMcpEndpointRequest,
+    security?: CreateMcpEndpointSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.McpEndpoint> {
+  ): Promise<McpEndpoint> {
     return unwrapAsync(mcpEndpointsCreate(
       this,
       request,
@@ -59,8 +83,8 @@ export class McpEndpoints extends ClientSDK {
    * Delete an MCP endpoint
    */
   async delete(
-    request: operations.DeleteMcpEndpointRequest,
-    security?: operations.DeleteMcpEndpointSecurity | undefined,
+    request: DeleteMcpEndpointRequest,
+    security?: DeleteMcpEndpointSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(mcpEndpointsDelete(
@@ -78,10 +102,10 @@ export class McpEndpoints extends ClientSDK {
    * Get an MCP endpoint by id or by (custom_domain_id, slug). Provide either id, or slug with an optional custom_domain_id — not both.
    */
   async get(
-    request?: operations.GetMcpEndpointRequest | undefined,
-    security?: operations.GetMcpEndpointSecurity | undefined,
+    request?: GetMcpEndpointRequest | undefined,
+    security?: GetMcpEndpointSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.McpEndpoint> {
+  ): Promise<McpEndpoint> {
     return unwrapAsync(mcpEndpointsGet(
       this,
       request,
@@ -97,10 +121,10 @@ export class McpEndpoints extends ClientSDK {
    * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.
    */
   async list(
-    request?: operations.ListMcpEndpointsRequest | undefined,
-    security?: operations.ListMcpEndpointsSecurity | undefined,
+    request?: ListMcpEndpointsRequest | undefined,
+    security?: ListMcpEndpointsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListMcpEndpointsResult> {
+  ): Promise<ListMcpEndpointsResult> {
     return unwrapAsync(mcpEndpointsList(
       this,
       request,
@@ -116,10 +140,10 @@ export class McpEndpoints extends ClientSDK {
    * Update an MCP endpoint. This is a full-record replace: fields omitted from the request become null on the stored record. The id, mcp_server_id, and slug fields are required.
    */
   async update(
-    request: operations.UpdateMcpEndpointRequest,
-    security?: operations.UpdateMcpEndpointSecurity | undefined,
+    request: UpdateMcpEndpointRequest,
+    security?: UpdateMcpEndpointSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.McpEndpoint> {
+  ): Promise<McpEndpoint> {
     return unwrapAsync(mcpEndpointsUpdate(
       this,
       request,

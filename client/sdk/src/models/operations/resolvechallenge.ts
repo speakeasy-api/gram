@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  ResolveChallengeForm,
+  ResolveChallengeForm$Outbound,
+  ResolveChallengeForm$outboundSchema,
+} from "../components/resolvechallengeform.js";
 
 export type ResolveChallengeSecurity = {
   apikeyHeaderGramKey?: string | undefined;
@@ -20,7 +24,7 @@ export type ResolveChallengeRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  resolveChallengeForm: components.ResolveChallengeForm;
+  resolveChallengeForm: ResolveChallengeForm;
 };
 
 /** @internal */
@@ -58,7 +62,7 @@ export function resolveChallengeSecurityToJSON(
 export type ResolveChallengeRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
-  ResolveChallengeForm: components.ResolveChallengeForm$Outbound;
+  ResolveChallengeForm: ResolveChallengeForm$Outbound;
 };
 
 /** @internal */
@@ -69,7 +73,7 @@ export const ResolveChallengeRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-    resolveChallengeForm: components.ResolveChallengeForm$outboundSchema,
+    resolveChallengeForm: ResolveChallengeForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

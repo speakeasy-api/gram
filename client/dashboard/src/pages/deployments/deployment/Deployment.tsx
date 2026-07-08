@@ -10,7 +10,10 @@ import { dateTimeFormatters } from "@/lib/dates";
 import { isNotFoundError, isUuidRouteParam } from "@/lib/route-errors";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { useDeployment, useDeploymentSuspense } from "@gram/client/react-query";
+import {
+  useDeployment,
+  useDeploymentSuspense,
+} from "@gram/client/react-query/deployment.js";
 import { Button, Separator, Skeleton } from "@speakeasy-api/moonshine";
 import {
   CheckIcon,
@@ -25,7 +28,7 @@ import { useParams } from "react-router";
 import { useActiveDeployment } from "../useActiveDeployment";
 import { useRedeployDeployment } from "../useRedeployDeployment";
 import { useFailedDeploymentSources } from "@/components/sources/useFailedDeploymentSources";
-import { invalidateAllDeployment } from "@gram/client/react-query/index.js";
+import { invalidateAllDeployment } from "@gram/client/react-query/deployment.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { AssetsTabContent } from "./AssetsTabContent";
 import { FailedSourcesSection } from "./FailedSourcesSection";

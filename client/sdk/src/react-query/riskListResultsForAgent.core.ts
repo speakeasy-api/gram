@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { riskResultsListForAgent } from "../funcs/riskResultsListForAgent.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListRiskResultsForAgentResult } from "../models/components/listriskresultsforagentresult.js";
+import {
+  ListRiskResultsForAgentRequest,
+  ListRiskResultsForAgentSecurity,
+} from "../models/operations/listriskresultsforagent.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskListResultsForAgentQueryData =
-  components.ListRiskResultsForAgentResult;
+export type RiskListResultsForAgentQueryData = ListRiskResultsForAgentResult;
 
 export function prefetchRiskListResultsForAgent(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListRiskResultsForAgentRequest | undefined,
-  security?: operations.ListRiskResultsForAgentSecurity | undefined,
+  request?: ListRiskResultsForAgentRequest | undefined,
+  security?: ListRiskResultsForAgentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchRiskListResultsForAgent(
 
 export function buildRiskListResultsForAgentQuery(
   client$: GramCore,
-  request?: operations.ListRiskResultsForAgentRequest | undefined,
-  security?: operations.ListRiskResultsForAgentSecurity | undefined,
+  request?: ListRiskResultsForAgentRequest | undefined,
+  security?: ListRiskResultsForAgentSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

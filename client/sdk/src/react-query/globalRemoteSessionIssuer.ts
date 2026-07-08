@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetGlobalRemoteSessionIssuerRequest,
+  GetGlobalRemoteSessionIssuerSecurity,
+} from "../models/operations/getglobalremotesessionissuer.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GlobalRemoteSessionIssuerQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GlobalRemoteSessionIssuerQueryError =
  * Get a global remote_session_issuer by id. Requires platform admin.
  */
 export function useGlobalRemoteSessionIssuer(
-  request: operations.GetGlobalRemoteSessionIssuerRequest,
-  security?: operations.GetGlobalRemoteSessionIssuerSecurity | undefined,
+  request: GetGlobalRemoteSessionIssuerRequest,
+  security?: GetGlobalRemoteSessionIssuerSecurity | undefined,
   options?: QueryHookOptions<
     GlobalRemoteSessionIssuerQueryData,
     GlobalRemoteSessionIssuerQueryError
@@ -88,8 +91,8 @@ export function useGlobalRemoteSessionIssuer(
  * Get a global remote_session_issuer by id. Requires platform admin.
  */
 export function useGlobalRemoteSessionIssuerSuspense(
-  request: operations.GetGlobalRemoteSessionIssuerRequest,
-  security?: operations.GetGlobalRemoteSessionIssuerSecurity | undefined,
+  request: GetGlobalRemoteSessionIssuerRequest,
+  security?: GetGlobalRemoteSessionIssuerSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GlobalRemoteSessionIssuerQueryData,
     GlobalRemoteSessionIssuerQueryError

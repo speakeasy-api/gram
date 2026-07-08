@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { templatesList } from "../funcs/templatesList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListPromptTemplatesResult } from "../models/components/listprompttemplatesresult.js";
+import {
+  ListTemplatesRequest,
+  ListTemplatesSecurity,
+} from "../models/operations/listtemplates.js";
 import { unwrapAsync } from "../types/fp.js";
-export type TemplatesQueryData = components.ListPromptTemplatesResult;
+export type TemplatesQueryData = ListPromptTemplatesResult;
 
 export function prefetchTemplates(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListTemplatesRequest | undefined,
-  security?: operations.ListTemplatesSecurity | undefined,
+  request?: ListTemplatesRequest | undefined,
+  security?: ListTemplatesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchTemplates(
 
 export function buildTemplatesQuery(
   client$: GramCore,
-  request?: operations.ListTemplatesRequest | undefined,
-  security?: operations.ListTemplatesSecurity | undefined,
+  request?: ListTemplatesRequest | undefined,
+  security?: ListTemplatesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

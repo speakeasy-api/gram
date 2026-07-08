@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateKeyForm,
+  CreateKeyForm$Outbound,
+  CreateKeyForm$outboundSchema,
+} from "../components/createkeyform.js";
 
 export type CreateAPIKeySecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,7 +19,7 @@ export type CreateAPIKeyRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  createKeyForm: components.CreateKeyForm;
+  createKeyForm: CreateKeyForm;
 };
 
 /** @internal */
@@ -49,7 +53,7 @@ export function createAPIKeySecurityToJSON(
 /** @internal */
 export type CreateAPIKeyRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  CreateKeyForm: components.CreateKeyForm$Outbound;
+  CreateKeyForm: CreateKeyForm$Outbound;
 };
 
 /** @internal */
@@ -59,7 +63,7 @@ export const CreateAPIKeyRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    createKeyForm: components.CreateKeyForm$outboundSchema,
+    createKeyForm: CreateKeyForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

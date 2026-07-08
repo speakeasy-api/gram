@@ -1,11 +1,9 @@
-import {
-  invalidateAllOrganizationRemoteSessionClients,
-  invalidateAllOrganizationRemoteSessionClientSessions,
-  invalidateAllOrganizationRemoteSessionIssuers,
-  useDeleteOrganizationRemoteSessionClientMutation,
-  useOrganizationRemoteSessionClientDeletePreflight,
-  useRevokeAllOrganizationRemoteSessionClientSessionsMutation,
-} from "@gram/client/react-query/index.js";
+import { useDeleteOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/deleteOrganizationRemoteSessionClient.js";
+import { useOrganizationRemoteSessionClientDeletePreflight } from "@gram/client/react-query/organizationRemoteSessionClientDeletePreflight.js";
+import { invalidateAllOrganizationRemoteSessionClientSessions } from "@gram/client/react-query/organizationRemoteSessionClientSessions.js";
+import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
+import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
+import { useRevokeAllOrganizationRemoteSessionClientSessionsMutation } from "@gram/client/react-query/revokeAllOrganizationRemoteSessionClientSessions.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ConfirmDialog } from "./ConfirmDialog";

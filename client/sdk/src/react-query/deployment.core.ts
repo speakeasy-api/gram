@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { deploymentsGetById } from "../funcs/deploymentsGetById.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetDeploymentResult } from "../models/components/getdeploymentresult.js";
+import {
+  GetDeploymentRequest,
+  GetDeploymentSecurity,
+} from "../models/operations/getdeployment.js";
 import { unwrapAsync } from "../types/fp.js";
-export type DeploymentQueryData = components.GetDeploymentResult;
+export type DeploymentQueryData = GetDeploymentResult;
 
 export function prefetchDeployment(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetDeploymentRequest,
-  security?: operations.GetDeploymentSecurity | undefined,
+  request: GetDeploymentRequest,
+  security?: GetDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchDeployment(
 
 export function buildDeploymentQuery(
   client$: GramCore,
-  request: operations.GetDeploymentRequest,
-  security?: operations.GetDeploymentSecurity | undefined,
+  request: GetDeploymentRequest,
+  security?: GetDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

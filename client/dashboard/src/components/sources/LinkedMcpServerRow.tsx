@@ -1,6 +1,6 @@
 import { Type } from "@/components/ui/type";
-import type { McpServer } from "@gram/client/models/components";
-import { useMcpEndpoints } from "@gram/client/react-query/index.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { Badge } from "@speakeasy-api/moonshine";
 
 export function LinkedMcpServerRow({

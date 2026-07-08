@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetRemoteMcpServerRequest,
+  GetRemoteMcpServerSecurity,
+} from "../models/operations/getremotemcpserver.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetRemoteMcpServerQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetRemoteMcpServerQueryError =
  * Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
  */
 export function useGetRemoteMcpServer(
-  request?: operations.GetRemoteMcpServerRequest | undefined,
-  security?: operations.GetRemoteMcpServerSecurity | undefined,
+  request?: GetRemoteMcpServerRequest | undefined,
+  security?: GetRemoteMcpServerSecurity | undefined,
   options?: QueryHookOptions<
     GetRemoteMcpServerQueryData,
     GetRemoteMcpServerQueryError
@@ -85,8 +88,8 @@ export function useGetRemoteMcpServer(
  * Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
  */
 export function useGetRemoteMcpServerSuspense(
-  request?: operations.GetRemoteMcpServerRequest | undefined,
-  security?: operations.GetRemoteMcpServerSecurity | undefined,
+  request?: GetRemoteMcpServerRequest | undefined,
+  security?: GetRemoteMcpServerSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetRemoteMcpServerQueryData,
     GetRemoteMcpServerQueryError

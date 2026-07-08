@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListRiskResultsByChatRequest,
+  ListRiskResultsByChatSecurity,
+} from "../models/operations/listriskresultsbychat.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskListResultsByChatQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskListResultsByChatQueryError =
  * List risk results grouped by chat session for the current project.
  */
 export function useRiskListResultsByChat(
-  request?: operations.ListRiskResultsByChatRequest | undefined,
-  security?: operations.ListRiskResultsByChatSecurity | undefined,
+  request?: ListRiskResultsByChatRequest | undefined,
+  security?: ListRiskResultsByChatSecurity | undefined,
   options?: QueryHookOptions<
     RiskListResultsByChatQueryData,
     RiskListResultsByChatQueryError
@@ -88,8 +91,8 @@ export function useRiskListResultsByChat(
  * List risk results grouped by chat session for the current project.
  */
 export function useRiskListResultsByChatSuspense(
-  request?: operations.ListRiskResultsByChatRequest | undefined,
-  security?: operations.ListRiskResultsByChatSecurity | undefined,
+  request?: ListRiskResultsByChatRequest | undefined,
+  security?: ListRiskResultsByChatSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskListResultsByChatQueryData,
     RiskListResultsByChatQueryError

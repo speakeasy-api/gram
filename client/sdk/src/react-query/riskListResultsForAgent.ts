@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListRiskResultsForAgentRequest,
+  ListRiskResultsForAgentSecurity,
+} from "../models/operations/listriskresultsforagent.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskListResultsForAgentQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskListResultsForAgentQueryError =
  * List risk analysis results with the `match` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `match` value — a non-sensitive server URL or command identifier — is passed through verbatim.
  */
 export function useRiskListResultsForAgent(
-  request?: operations.ListRiskResultsForAgentRequest | undefined,
-  security?: operations.ListRiskResultsForAgentSecurity | undefined,
+  request?: ListRiskResultsForAgentRequest | undefined,
+  security?: ListRiskResultsForAgentSecurity | undefined,
   options?: QueryHookOptions<
     RiskListResultsForAgentQueryData,
     RiskListResultsForAgentQueryError
@@ -88,8 +91,8 @@ export function useRiskListResultsForAgent(
  * List risk analysis results with the `match` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `match` value — a non-sensitive server URL or command identifier — is passed through verbatim.
  */
 export function useRiskListResultsForAgentSuspense(
-  request?: operations.ListRiskResultsForAgentRequest | undefined,
-  security?: operations.ListRiskResultsForAgentSecurity | undefined,
+  request?: ListRiskResultsForAgentRequest | undefined,
+  security?: ListRiskResultsForAgentSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskListResultsForAgentQueryData,
     RiskListResultsForAgentQueryError

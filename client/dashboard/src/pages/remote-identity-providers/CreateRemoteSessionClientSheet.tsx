@@ -18,12 +18,10 @@ import { useOrganization } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
-import type { RemoteSessionIssuer } from "@gram/client/models/components";
-import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
-import {
-  invalidateAllOrganizationRemoteSessionClients,
-  useListProjects,
-} from "@gram/client/react-query/index.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import { useListProjects } from "@gram/client/react-query/listProjects.js";
+import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";

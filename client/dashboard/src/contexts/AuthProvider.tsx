@@ -39,7 +39,7 @@ import {
   usePylonInAppChat,
   useFermatPixel,
 } from "./Auth";
-import type { ProjectEntry } from "@gram/client/models/components";
+import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 
 const PREFERRED_PROJECT_KEY = "preferredProject";
 

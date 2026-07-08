@@ -5,16 +5,12 @@ import {
   resolveExternalMcpUserSessionOAuthConfig,
 } from "@/lib/externalMcpUserSessions";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
-import {
-  useDeployment,
-  useDeploymentLogs,
-  useLatestDeployment,
-  useListToolsets,
-} from "@gram/client/react-query";
-import type {
-  DeploymentLogEvent,
-  ExternalMCPRemote,
-} from "@gram/client/models/components";
+import { useDeployment } from "@gram/client/react-query/deployment.js";
+import { useDeploymentLogs } from "@gram/client/react-query/deploymentLogs.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import type { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
+import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export function generateSlug(name: string): string {

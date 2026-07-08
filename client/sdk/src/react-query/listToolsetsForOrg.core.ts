@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { toolsetsListForOrg } from "../funcs/toolsetsListForOrg.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListToolsetSummariesResult } from "../models/components/listtoolsetsummariesresult.js";
+import {
+  ListToolsetsForOrgRequest,
+  ListToolsetsForOrgSecurity,
+} from "../models/operations/listtoolsetsfororg.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListToolsetsForOrgQueryData = components.ListToolsetSummariesResult;
+export type ListToolsetsForOrgQueryData = ListToolsetSummariesResult;
 
 export function prefetchListToolsetsForOrg(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListToolsetsForOrgRequest | undefined,
-  security?: operations.ListToolsetsForOrgSecurity | undefined,
+  request?: ListToolsetsForOrgRequest | undefined,
+  security?: ListToolsetsForOrgSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListToolsetsForOrg(
 
 export function buildListToolsetsForOrgQuery(
   client$: GramCore,
-  request?: operations.ListToolsetsForOrgRequest | undefined,
-  security?: operations.ListToolsetsForOrgSecurity | undefined,
+  request?: ListToolsetsForOrgRequest | undefined,
+  security?: ListToolsetsForOrgSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

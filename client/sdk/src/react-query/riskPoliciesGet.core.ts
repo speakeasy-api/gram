@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { riskPoliciesGet } from "../funcs/riskPoliciesGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RiskPolicy } from "../models/components/riskpolicy.js";
+import {
+  GetRiskPolicyRequest,
+  GetRiskPolicySecurity,
+} from "../models/operations/getriskpolicy.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskPoliciesGetQueryData = components.RiskPolicy;
+export type RiskPoliciesGetQueryData = RiskPolicy;
 
 export function prefetchRiskPoliciesGet(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetRiskPolicyRequest,
-  security?: operations.GetRiskPolicySecurity | undefined,
+  request: GetRiskPolicyRequest,
+  security?: GetRiskPolicySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchRiskPoliciesGet(
 
 export function buildRiskPoliciesGetQuery(
   client$: GramCore,
-  request: operations.GetRiskPolicyRequest,
-  security?: operations.GetRiskPolicySecurity | undefined,
+  request: GetRiskPolicyRequest,
+  security?: GetRiskPolicySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

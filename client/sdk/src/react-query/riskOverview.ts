@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetRiskOverviewRequest,
+  GetRiskOverviewSecurity,
+} from "../models/operations/getriskoverview.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskOverviewQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskOverviewQueryError =
  * Get risk overview metrics and trend data for the current project.
  */
 export function useRiskOverview(
-  request?: operations.GetRiskOverviewRequest | undefined,
-  security?: operations.GetRiskOverviewSecurity | undefined,
+  request?: GetRiskOverviewRequest | undefined,
+  security?: GetRiskOverviewSecurity | undefined,
   options?: QueryHookOptions<RiskOverviewQueryData, RiskOverviewQueryError>,
 ): UseQueryResult<RiskOverviewQueryData, RiskOverviewQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useRiskOverview(
  * Get risk overview metrics and trend data for the current project.
  */
 export function useRiskOverviewSuspense(
-  request?: operations.GetRiskOverviewRequest | undefined,
-  security?: operations.GetRiskOverviewSecurity | undefined,
+  request?: GetRiskOverviewRequest | undefined,
+  security?: GetRiskOverviewSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskOverviewQueryData,
     RiskOverviewQueryError

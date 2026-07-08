@@ -47,15 +47,14 @@ import { useOrgRoutes } from "@/routes";
 import { type DateRangePreset } from "@gram-ai/elements";
 import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
 import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListToolUsageTraces";
-import type {
-  LogFilter,
-  TelemetryLogRecord,
-  ToolUsageTraceSummary,
-} from "@gram/client/models/components";
+import type { LogFilter } from "@gram/client/models/components/logfilter.js";
+import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
+import type { ToolUsageTraceSummary } from "@gram/client/models/components/toolusagetracesummary.js";
 import { Operator } from "@gram/client/models/components/logfilter";
 import type { ListToolUsageTracesPayloadTargetTypes } from "@gram/client/models/components/listtoolusagetracespayload";
 import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter";
-import { useGramContext, useListAttributeKeys } from "@gram/client/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useListAttributeKeys } from "@gram/client/react-query/listAttributeKeys.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import type { BadgeProps } from "@speakeasy-api/moonshine";

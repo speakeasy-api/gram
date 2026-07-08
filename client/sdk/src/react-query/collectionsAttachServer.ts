@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { collectionsAttachServer } from "../funcs/collectionsAttachServer.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { MCPCollection } from "../models/components/mcpcollection.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  AttachServerToCollectionRequest,
+  AttachServerToCollectionSecurity,
+} from "../models/operations/attachservertocollection.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CollectionsAttachServerMutationVariables = {
-  request: operations.AttachServerToCollectionRequest;
-  security?: operations.AttachServerToCollectionSecurity | undefined;
+  request: AttachServerToCollectionRequest;
+  security?: AttachServerToCollectionSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type CollectionsAttachServerMutationData = components.MCPCollection;
+export type CollectionsAttachServerMutationData = MCPCollection;
 
 export type CollectionsAttachServerMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

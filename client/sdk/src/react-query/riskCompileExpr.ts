@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CompileExprRequest,
+  CompileExprSecurity,
+} from "../models/operations/compileexpr.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskCompileExprQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskCompileExprQueryError =
  * Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).
  */
 export function useRiskCompileExpr(
-  request?: operations.CompileExprRequest | undefined,
-  security?: operations.CompileExprSecurity | undefined,
+  request?: CompileExprRequest | undefined,
+  security?: CompileExprSecurity | undefined,
   options?: QueryHookOptions<
     RiskCompileExprQueryData,
     RiskCompileExprQueryError
@@ -85,8 +88,8 @@ export function useRiskCompileExpr(
  * Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).
  */
 export function useRiskCompileExprSuspense(
-  request?: operations.CompileExprRequest | undefined,
-  security?: operations.CompileExprSecurity | undefined,
+  request?: CompileExprRequest | undefined,
+  security?: CompileExprSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskCompileExprQueryData,
     RiskCompileExprQueryError

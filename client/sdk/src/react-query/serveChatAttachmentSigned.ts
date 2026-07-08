@@ -18,10 +18,10 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import { ServeChatAttachmentSignedRequest } from "../models/operations/servechatattachmentsigned.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +42,7 @@ export {
 };
 
 export type ServeChatAttachmentSignedQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,7 +59,7 @@ export type ServeChatAttachmentSignedQueryError =
  * Serve a chat attachment using a signed URL token.
  */
 export function useServeChatAttachmentSigned(
-  request: operations.ServeChatAttachmentSignedRequest,
+  request: ServeChatAttachmentSignedRequest,
   options?: QueryHookOptions<
     ServeChatAttachmentSignedQueryData,
     ServeChatAttachmentSignedQueryError
@@ -86,7 +86,7 @@ export function useServeChatAttachmentSigned(
  * Serve a chat attachment using a signed URL token.
  */
 export function useServeChatAttachmentSignedSuspense(
-  request: operations.ServeChatAttachmentSignedRequest,
+  request: ServeChatAttachmentSignedRequest,
   options?: SuspenseQueryHookOptions<
     ServeChatAttachmentSignedQueryData,
     ServeChatAttachmentSignedQueryError

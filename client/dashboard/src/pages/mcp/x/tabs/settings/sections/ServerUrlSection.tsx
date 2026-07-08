@@ -17,16 +17,12 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useCustomDomains } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import type {
-  CustomDomain,
-  McpEndpoint,
-  McpServer,
-} from "@gram/client/models/components";
-import {
-  invalidateAllMcpEndpoints,
-  useDeleteMcpEndpointMutation,
-  useUpdateMcpEndpointMutation,
-} from "@gram/client/react-query/index.js";
+import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { useDeleteMcpEndpointMutation } from "@gram/client/react-query/deleteMcpEndpoint.js";
+import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, XIcon } from "lucide-react";

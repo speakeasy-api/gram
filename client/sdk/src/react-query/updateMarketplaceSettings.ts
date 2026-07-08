@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { pluginsUpdateMarketplaceSettings } from "../funcs/pluginsUpdateMarketplaceSettings.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { UpdateMarketplaceSettingsResult } from "../models/components/updatemarketplacesettingsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,25 +20,28 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  UpdateMarketplaceSettingsRequest,
+  UpdateMarketplaceSettingsSecurity,
+} from "../models/operations/updatemarketplacesettings.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UpdateMarketplaceSettingsMutationVariables = {
-  request: operations.UpdateMarketplaceSettingsRequest;
-  security?: operations.UpdateMarketplaceSettingsSecurity | undefined;
+  request: UpdateMarketplaceSettingsRequest;
+  security?: UpdateMarketplaceSettingsSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type UpdateMarketplaceSettingsMutationData =
-  components.UpdateMarketplaceSettingsResult;
+  UpdateMarketplaceSettingsResult;
 
 export type UpdateMarketplaceSettingsMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

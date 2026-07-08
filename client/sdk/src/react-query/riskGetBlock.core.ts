@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { riskBlocksGet } from "../funcs/riskBlocksGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RiskBlock } from "../models/components/riskblock.js";
+import {
+  GetRiskBlockRequest,
+  GetRiskBlockSecurity,
+} from "../models/operations/getriskblock.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskGetBlockQueryData = components.RiskBlock;
+export type RiskGetBlockQueryData = RiskBlock;
 
 export function prefetchRiskGetBlock(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetRiskBlockRequest,
-  security?: operations.GetRiskBlockSecurity | undefined,
+  request: GetRiskBlockRequest,
+  security?: GetRiskBlockSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchRiskGetBlock(
 
 export function buildRiskGetBlockQuery(
   client$: GramCore,
-  request: operations.GetRiskBlockRequest,
-  security?: operations.GetRiskBlockSecurity | undefined,
+  request: GetRiskBlockRequest,
+  security?: GetRiskBlockSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -11,16 +11,20 @@ import { GramCore } from "../core.js";
 import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListChallengeBucketsResult } from "../models/components/listchallengebucketsresult.js";
+import {
+  ListChallengeBucketsRequest,
+  ListChallengeBucketsSecurity,
+  Outcome,
+} from "../models/operations/listchallengebuckets.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ChallengeBucketsQueryData = components.ListChallengeBucketsResult;
+export type ChallengeBucketsQueryData = ListChallengeBucketsResult;
 
 export function prefetchChallengeBuckets(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListChallengeBucketsRequest | undefined,
-  security?: operations.ListChallengeBucketsSecurity | undefined,
+  request?: ListChallengeBucketsRequest | undefined,
+  security?: ListChallengeBucketsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +39,8 @@ export function prefetchChallengeBuckets(
 
 export function buildChallengeBucketsQuery(
   client$: GramCore,
-  request?: operations.ListChallengeBucketsRequest | undefined,
-  security?: operations.ListChallengeBucketsSecurity | undefined,
+  request?: ListChallengeBucketsRequest | undefined,
+  security?: ListChallengeBucketsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -82,7 +86,7 @@ export function buildChallengeBucketsQuery(
 
 export function queryKeyChallengeBuckets(
   parameters: {
-    outcome?: operations.Outcome | undefined;
+    outcome?: Outcome | undefined;
     principalUrn?: string | undefined;
     scope?: string | undefined;
     projectId?: string | undefined;

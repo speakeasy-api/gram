@@ -2,7 +2,7 @@ import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import type { McpServer } from "@gram/client/models/components";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { ArrowRight, Network } from "lucide-react";
 import { Link } from "react-router";
 import { Badge } from "../ui/badge";

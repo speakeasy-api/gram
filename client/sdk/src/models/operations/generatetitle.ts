@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  GenerateTitleRequestBody,
+  GenerateTitleRequestBody$Outbound,
+  GenerateTitleRequestBody$outboundSchema,
+} from "../components/generatetitlerequestbody.js";
 
 export type GenerateTitleSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -33,7 +37,7 @@ export type GenerateTitleRequest = {
    * Chat Sessions token header
    */
   gramChatSession?: string | undefined;
-  generateTitleRequestBody: components.GenerateTitleRequestBody;
+  generateTitleRequestBody: GenerateTitleRequestBody;
 };
 
 /** @internal */
@@ -140,7 +144,7 @@ export type GenerateTitleRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
-  GenerateTitleRequestBody: components.GenerateTitleRequestBody$Outbound;
+  GenerateTitleRequestBody: GenerateTitleRequestBody$Outbound;
 };
 
 /** @internal */
@@ -152,8 +156,7 @@ export const GenerateTitleRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
-    generateTitleRequestBody:
-      components.GenerateTitleRequestBody$outboundSchema,
+    generateTitleRequestBody: GenerateTitleRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

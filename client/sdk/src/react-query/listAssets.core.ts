@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { assetsListAssets } from "../funcs/assetsListAssets.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListAssetsResult } from "../models/components/listassetsresult.js";
+import {
+  ListAssetsRequest,
+  ListAssetsSecurity,
+} from "../models/operations/listassets.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListAssetsQueryData = components.ListAssetsResult;
+export type ListAssetsQueryData = ListAssetsResult;
 
 export function prefetchListAssets(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListAssetsRequest | undefined,
-  security?: operations.ListAssetsSecurity | undefined,
+  request?: ListAssetsRequest | undefined,
+  security?: ListAssetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListAssets(
 
 export function buildListAssetsQuery(
   client$: GramCore,
-  request?: operations.ListAssetsRequest | undefined,
-  security?: operations.ListAssetsSecurity | undefined,
+  request?: ListAssetsRequest | undefined,
+  security?: ListAssetsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

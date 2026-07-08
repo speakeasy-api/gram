@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { keysValidate } from "../funcs/keysValidate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ValidateKeyResult } from "../models/components/validatekeyresult.js";
+import {
+  ValidateAPIKeyRequest,
+  ValidateAPIKeySecurity,
+} from "../models/operations/validateapikey.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ValidateAPIKeyQueryData = components.ValidateKeyResult;
+export type ValidateAPIKeyQueryData = ValidateKeyResult;
 
 export function prefetchValidateAPIKey(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ValidateAPIKeyRequest | undefined,
-  security?: operations.ValidateAPIKeySecurity | undefined,
+  request?: ValidateAPIKeyRequest | undefined,
+  security?: ValidateAPIKeySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchValidateAPIKey(
 
 export function buildValidateAPIKeyQuery(
   client$: GramCore,
-  request?: operations.ValidateAPIKeyRequest | undefined,
-  security?: operations.ValidateAPIKeySecurity | undefined,
+  request?: ValidateAPIKeyRequest | undefined,
+  security?: ValidateAPIKeySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

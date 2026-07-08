@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListTunneledMcpServerConnectionsRequest,
+  ListTunneledMcpServerConnectionsSecurity,
+} from "../models/operations/listtunneledmcpserverconnections.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListTunneledMcpServerConnectionsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListTunneledMcpServerConnectionsQueryError =
  * List live tunnel connections for a tunneled MCP server
  */
 export function useListTunneledMcpServerConnections(
-  request: operations.ListTunneledMcpServerConnectionsRequest,
-  security?: operations.ListTunneledMcpServerConnectionsSecurity | undefined,
+  request: ListTunneledMcpServerConnectionsRequest,
+  security?: ListTunneledMcpServerConnectionsSecurity | undefined,
   options?: QueryHookOptions<
     ListTunneledMcpServerConnectionsQueryData,
     ListTunneledMcpServerConnectionsQueryError
@@ -88,8 +91,8 @@ export function useListTunneledMcpServerConnections(
  * List live tunnel connections for a tunneled MCP server
  */
 export function useListTunneledMcpServerConnectionsSuspense(
-  request: operations.ListTunneledMcpServerConnectionsRequest,
-  security?: operations.ListTunneledMcpServerConnectionsSecurity | undefined,
+  request: ListTunneledMcpServerConnectionsRequest,
+  security?: ListTunneledMcpServerConnectionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListTunneledMcpServerConnectionsQueryData,
     ListTunneledMcpServerConnectionsQueryError

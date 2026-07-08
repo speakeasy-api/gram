@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { telemetryGetHooksSummary } from "../funcs/telemetryGetHooksSummary.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetHooksSummaryResult } from "../models/components/gethookssummaryresult.js";
+import {
+  GetHooksSummaryRequest,
+  GetHooksSummarySecurity,
+} from "../models/operations/gethookssummary.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetHooksSummaryQueryData = components.GetHooksSummaryResult;
+export type GetHooksSummaryQueryData = GetHooksSummaryResult;
 
 export function prefetchGetHooksSummary(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetHooksSummaryRequest,
-  security?: operations.GetHooksSummarySecurity | undefined,
+  request: GetHooksSummaryRequest,
+  security?: GetHooksSummarySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGetHooksSummary(
 
 export function buildGetHooksSummaryQuery(
   client$: GramCore,
-  request: operations.GetHooksSummaryRequest,
-  security?: operations.GetHooksSummarySecurity | undefined,
+  request: GetHooksSummaryRequest,
+  security?: GetHooksSummarySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

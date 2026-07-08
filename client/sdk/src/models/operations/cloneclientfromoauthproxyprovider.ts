@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CloneClientFromOAuthProxyProviderForm,
+  CloneClientFromOAuthProxyProviderForm$Outbound,
+  CloneClientFromOAuthProxyProviderForm$outboundSchema,
+} from "../components/cloneclientfromoauthproxyproviderform.js";
 
 export type CloneClientFromOAuthProxyProviderSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,8 +38,7 @@ export type CloneClientFromOAuthProxyProviderRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  cloneClientFromOAuthProxyProviderForm:
-    components.CloneClientFromOAuthProxyProviderForm;
+  cloneClientFromOAuthProxyProviderForm: CloneClientFromOAuthProxyProviderForm;
 };
 
 /** @internal */
@@ -157,7 +160,7 @@ export type CloneClientFromOAuthProxyProviderRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   CloneClientFromOAuthProxyProviderForm:
-    components.CloneClientFromOAuthProxyProviderForm$Outbound;
+    CloneClientFromOAuthProxyProviderForm$Outbound;
 };
 
 /** @internal */
@@ -171,7 +174,7 @@ export const CloneClientFromOAuthProxyProviderRequest$outboundSchema:
       gramKey: z.optional(z.string()),
       gramProject: z.optional(z.string()),
       cloneClientFromOAuthProxyProviderForm:
-        components.CloneClientFromOAuthProxyProviderForm$outboundSchema,
+        CloneClientFromOAuthProxyProviderForm$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {

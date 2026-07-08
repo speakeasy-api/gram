@@ -11,15 +11,19 @@ import { GramCore } from "../core.js";
 import { assetsServeOpenAPIv3 } from "../funcs/assetsServeOpenAPIv3.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ServeOpenAPIv3Request,
+  ServeOpenAPIv3Response,
+  ServeOpenAPIv3Security,
+} from "../models/operations/serveopenapiv3.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ServeOpenAPIv3QueryData = operations.ServeOpenAPIv3Response;
+export type ServeOpenAPIv3QueryData = ServeOpenAPIv3Response;
 
 export function prefetchServeOpenAPIv3(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ServeOpenAPIv3Request,
-  security?: operations.ServeOpenAPIv3Security | undefined,
+  request: ServeOpenAPIv3Request,
+  security?: ServeOpenAPIv3Security | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -34,8 +38,8 @@ export function prefetchServeOpenAPIv3(
 
 export function buildServeOpenAPIv3Query(
   client$: GramCore,
-  request: operations.ServeOpenAPIv3Request,
-  security?: operations.ServeOpenAPIv3Security | undefined,
+  request: ServeOpenAPIv3Request,
+  security?: ServeOpenAPIv3Security | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

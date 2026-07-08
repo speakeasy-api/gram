@@ -6,8 +6,19 @@ import { otelForwardingDeleteConfig } from "../funcs/otelForwardingDeleteConfig.
 import { otelForwardingGetConfig } from "../funcs/otelForwardingGetConfig.js";
 import { otelForwardingUpsertConfig } from "../funcs/otelForwardingUpsertConfig.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { OtelForwardingConfig } from "../models/components/otelforwardingconfig.js";
+import {
+  DeleteOtelForwardingConfigRequest,
+  DeleteOtelForwardingConfigSecurity,
+} from "../models/operations/deleteotelforwardingconfig.js";
+import {
+  GetOtelForwardingConfigRequest,
+  GetOtelForwardingConfigSecurity,
+} from "../models/operations/getotelforwardingconfig.js";
+import {
+  UpsertOtelForwardingConfigRequest,
+  UpsertOtelForwardingConfigSecurity,
+} from "../models/operations/upsertotelforwardingconfig.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class OtelForwarding extends ClientSDK {
@@ -18,8 +29,8 @@ export class OtelForwarding extends ClientSDK {
    * Delete the org-wide OTEL forwarding config.
    */
   async deleteConfig(
-    request?: operations.DeleteOtelForwardingConfigRequest | undefined,
-    security?: operations.DeleteOtelForwardingConfigSecurity | undefined,
+    request?: DeleteOtelForwardingConfigRequest | undefined,
+    security?: DeleteOtelForwardingConfigSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(otelForwardingDeleteConfig(
@@ -37,10 +48,10 @@ export class OtelForwarding extends ClientSDK {
    * Get the org-wide OTEL forwarding config. Returns an empty config (enabled=false, no URL) when none is set.
    */
   async getConfig(
-    request?: operations.GetOtelForwardingConfigRequest | undefined,
-    security?: operations.GetOtelForwardingConfigSecurity | undefined,
+    request?: GetOtelForwardingConfigRequest | undefined,
+    security?: GetOtelForwardingConfigSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.OtelForwardingConfig> {
+  ): Promise<OtelForwardingConfig> {
     return unwrapAsync(otelForwardingGetConfig(
       this,
       request,
@@ -56,10 +67,10 @@ export class OtelForwarding extends ClientSDK {
    * Create or update the org-wide OTEL forwarding config. Replaces the full header set on each call.
    */
   async upsertConfig(
-    request: operations.UpsertOtelForwardingConfigRequest,
-    security?: operations.UpsertOtelForwardingConfigSecurity | undefined,
+    request: UpsertOtelForwardingConfigRequest,
+    security?: UpsertOtelForwardingConfigSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.OtelForwardingConfig> {
+  ): Promise<OtelForwardingConfig> {
     return unwrapAsync(otelForwardingUpsertConfig(
       this,
       request,

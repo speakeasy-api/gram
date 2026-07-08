@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpdateRemoteSessionIssuerForm,
+  UpdateRemoteSessionIssuerForm$Outbound,
+  UpdateRemoteSessionIssuerForm$outboundSchema,
+} from "../components/updateremotesessionissuerform.js";
 
 export type UpdateGlobalRemoteSessionIssuerSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,7 +19,7 @@ export type UpdateGlobalRemoteSessionIssuerRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  updateRemoteSessionIssuerForm: components.UpdateRemoteSessionIssuerForm;
+  updateRemoteSessionIssuerForm: UpdateRemoteSessionIssuerForm;
 };
 
 /** @internal */
@@ -53,8 +57,7 @@ export function updateGlobalRemoteSessionIssuerSecurityToJSON(
 /** @internal */
 export type UpdateGlobalRemoteSessionIssuerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  UpdateRemoteSessionIssuerForm:
-    components.UpdateRemoteSessionIssuerForm$Outbound;
+  UpdateRemoteSessionIssuerForm: UpdateRemoteSessionIssuerForm$Outbound;
 };
 
 /** @internal */
@@ -66,7 +69,7 @@ export const UpdateGlobalRemoteSessionIssuerRequest$outboundSchema:
     z.object({
       gramSession: z.optional(z.string()),
       updateRemoteSessionIssuerForm:
-        components.UpdateRemoteSessionIssuerForm$outboundSchema,
+        UpdateRemoteSessionIssuerForm$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {

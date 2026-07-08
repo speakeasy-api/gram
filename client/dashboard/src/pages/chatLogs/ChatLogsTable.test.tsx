@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { ChatOverview } from "@gram/client/models/components";
+import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatLogsTable } from "./ChatLogsTable";

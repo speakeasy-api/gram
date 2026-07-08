@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  RenderTemplateRequest,
+  RenderTemplateSecurity,
+} from "../models/operations/rendertemplate.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RenderTemplateQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RenderTemplateQueryError =
  * Render a prompt template directly with all template fields provided.
  */
 export function useRenderTemplate(
-  request: operations.RenderTemplateRequest,
-  security?: operations.RenderTemplateSecurity | undefined,
+  request: RenderTemplateRequest,
+  security?: RenderTemplateSecurity | undefined,
   options?: QueryHookOptions<RenderTemplateQueryData, RenderTemplateQueryError>,
 ): UseQueryResult<RenderTemplateQueryData, RenderTemplateQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useRenderTemplate(
  * Render a prompt template directly with all template fields provided.
  */
 export function useRenderTemplateSuspense(
-  request: operations.RenderTemplateRequest,
-  security?: operations.RenderTemplateSecurity | undefined,
+  request: RenderTemplateRequest,
+  security?: RenderTemplateSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RenderTemplateQueryData,
     RenderTemplateQueryError

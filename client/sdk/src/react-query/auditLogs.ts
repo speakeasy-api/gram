@@ -24,10 +24,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListAuditLogsRequest,
+  ListAuditLogsSecurity,
+} from "../models/operations/listauditlogs.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -60,7 +63,7 @@ export {
 };
 
 export type AuditLogsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -77,8 +80,8 @@ export type AuditLogsQueryError =
  * List audit logs across organization and projects.
  */
 export function useAuditLogs(
-  request?: operations.ListAuditLogsRequest | undefined,
-  security?: operations.ListAuditLogsSecurity | undefined,
+  request?: ListAuditLogsRequest | undefined,
+  security?: ListAuditLogsSecurity | undefined,
   options?: QueryHookOptions<AuditLogsQueryData, AuditLogsQueryError>,
 ): UseQueryResult<AuditLogsQueryData, AuditLogsQueryError> {
   const client = useGramContext();
@@ -100,8 +103,8 @@ export function useAuditLogs(
  * List audit logs across organization and projects.
  */
 export function useAuditLogsSuspense(
-  request?: operations.ListAuditLogsRequest | undefined,
-  security?: operations.ListAuditLogsSecurity | undefined,
+  request?: ListAuditLogsRequest | undefined,
+  security?: ListAuditLogsSecurity | undefined,
   options?: SuspenseQueryHookOptions<AuditLogsQueryData, AuditLogsQueryError>,
 ): UseSuspenseQueryResult<AuditLogsQueryData, AuditLogsQueryError> {
   const client = useGramContext();
@@ -123,8 +126,8 @@ export function useAuditLogsSuspense(
  * List audit logs across organization and projects.
  */
 export function useAuditLogsInfinite(
-  request?: operations.ListAuditLogsRequest | undefined,
-  security?: operations.ListAuditLogsSecurity | undefined,
+  request?: ListAuditLogsRequest | undefined,
+  security?: ListAuditLogsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     AuditLogsInfiniteQueryData,
     AuditLogsQueryError
@@ -160,8 +163,8 @@ export function useAuditLogsInfinite(
  * List audit logs across organization and projects.
  */
 export function useAuditLogsInfiniteSuspense(
-  request?: operations.ListAuditLogsRequest | undefined,
-  security?: operations.ListAuditLogsSecurity | undefined,
+  request?: ListAuditLogsRequest | undefined,
+  security?: ListAuditLogsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     AuditLogsInfiniteQueryData,
     AuditLogsQueryError

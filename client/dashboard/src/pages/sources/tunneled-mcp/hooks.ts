@@ -1,17 +1,13 @@
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { formatTunneledMcpDisplay } from "@/lib/sources";
 import { createDefaultMcpEndpoint } from "@/lib/mcpEndpoints";
-import type {
-  McpServer,
-  TunneledMcpServer,
-} from "@gram/client/models/components";
-import {
-  invalidateAllListTunneledMcpServerConnections,
-  invalidateAllGetTunneledMcpServer,
-  invalidateAllMcpEndpoints,
-  invalidateAllMcpServers,
-  invalidateAllTunneledMcpServers,
-} from "@gram/client/react-query/index.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
+import { invalidateAllGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
+import { invalidateAllListTunneledMcpServerConnections } from "@gram/client/react-query/listTunneledMcpServerConnections.js";
+import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import {
   useMutation,
   useQueryClient,

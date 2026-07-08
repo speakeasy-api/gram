@@ -1,7 +1,7 @@
 import { useOrganization } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
-import type { RemoteSessionIssuer } from "@gram/client/models/components";
-import { useListProjects } from "@gram/client/react-query/index.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { InfoField, InfoSection, InfoText } from "../../detailFields";

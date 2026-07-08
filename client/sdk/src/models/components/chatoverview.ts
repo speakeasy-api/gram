@@ -10,6 +10,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ChatOverview = {
   /**
+   * Email of the AI account that produced the chat, resolved from the linked AI account. May differ from the employee's work email (e.g. a personal account).
+   */
+  accountEmail?: string | undefined;
+  /**
    * Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
    */
   accountType?: string | undefined;
@@ -75,6 +79,7 @@ export type ChatOverview = {
 export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
   z.pipe(
     z.object({
+      account_email: z.optional(z.string()),
       account_type: z.optional(z.string()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
@@ -102,6 +107,7 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
     }),
     z.transform((v) => {
       return remap$(v, {
+        "account_email": "accountEmail",
         "account_type": "accountType",
         "created_at": "createdAt",
         "external_user_id": "externalUserId",

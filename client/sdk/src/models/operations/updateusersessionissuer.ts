@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpdateUserSessionIssuerForm,
+  UpdateUserSessionIssuerForm$Outbound,
+  UpdateUserSessionIssuerForm$outboundSchema,
+} from "../components/updateusersessionissuerform.js";
 
 export type UpdateUserSessionIssuerSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type UpdateUserSessionIssuerRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  updateUserSessionIssuerForm: components.UpdateUserSessionIssuerForm;
+  updateUserSessionIssuerForm: UpdateUserSessionIssuerForm;
 };
 
 /** @internal */
@@ -149,7 +153,7 @@ export type UpdateUserSessionIssuerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  UpdateUserSessionIssuerForm: components.UpdateUserSessionIssuerForm$Outbound;
+  UpdateUserSessionIssuerForm: UpdateUserSessionIssuerForm$Outbound;
 };
 
 /** @internal */
@@ -161,8 +165,7 @@ export const UpdateUserSessionIssuerRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    updateUserSessionIssuerForm:
-      components.UpdateUserSessionIssuerForm$outboundSchema,
+    updateUserSessionIssuerForm: UpdateUserSessionIssuerForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

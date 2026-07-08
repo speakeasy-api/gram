@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { templatesGet } from "../funcs/templatesGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetPromptTemplateResult } from "../models/components/getprompttemplateresult.js";
+import {
+  GetTemplateRequest,
+  GetTemplateSecurity,
+} from "../models/operations/gettemplate.js";
 import { unwrapAsync } from "../types/fp.js";
-export type TemplateQueryData = components.GetPromptTemplateResult;
+export type TemplateQueryData = GetPromptTemplateResult;
 
 export function prefetchTemplate(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetTemplateRequest | undefined,
-  security?: operations.GetTemplateSecurity | undefined,
+  request?: GetTemplateRequest | undefined,
+  security?: GetTemplateSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchTemplate(
 
 export function buildTemplateQuery(
   client$: GramCore,
-  request?: operations.GetTemplateRequest | undefined,
-  security?: operations.GetTemplateSecurity | undefined,
+  request?: GetTemplateRequest | undefined,
+  security?: GetTemplateSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

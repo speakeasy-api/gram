@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  AuthorizeRequestBody,
+  AuthorizeRequestBody$Outbound,
+  AuthorizeRequestBody$outboundSchema,
+} from "../components/authorizerequestbody.js";
 
 export type CliAuthAuthorizeSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,7 +19,7 @@ export type CliAuthAuthorizeRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  authorizeRequestBody: components.AuthorizeRequestBody;
+  authorizeRequestBody: AuthorizeRequestBody;
 };
 
 /** @internal */
@@ -49,7 +53,7 @@ export function cliAuthAuthorizeSecurityToJSON(
 /** @internal */
 export type CliAuthAuthorizeRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  AuthorizeRequestBody: components.AuthorizeRequestBody$Outbound;
+  AuthorizeRequestBody: AuthorizeRequestBody$Outbound;
 };
 
 /** @internal */
@@ -59,7 +63,7 @@ export const CliAuthAuthorizeRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    authorizeRequestBody: components.AuthorizeRequestBody$outboundSchema,
+    authorizeRequestBody: AuthorizeRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

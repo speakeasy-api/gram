@@ -10,8 +10,39 @@ import { tunneledMcpListServers } from "../funcs/tunneledMcpListServers.js";
 import { tunneledMcpRotateServerKey } from "../funcs/tunneledMcpRotateServerKey.js";
 import { tunneledMcpUpdateServer } from "../funcs/tunneledMcpUpdateServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { CreateTunneledMcpServerResult } from "../models/components/createtunneledmcpserverresult.js";
+import { ListTunneledMcpServersResult } from "../models/components/listtunneledmcpserversresult.js";
+import { RotateTunneledMcpServerKeyResult } from "../models/components/rotatetunneledmcpserverkeyresult.js";
+import { TunneledMcpServer } from "../models/components/tunneledmcpserver.js";
+import { TunneledMcpServerConnections } from "../models/components/tunneledmcpserverconnections.js";
+import {
+  CreateTunneledMcpServerRequest,
+  CreateTunneledMcpServerSecurity,
+} from "../models/operations/createtunneledmcpserver.js";
+import {
+  DeleteTunneledMcpServerRequest,
+  DeleteTunneledMcpServerSecurity,
+} from "../models/operations/deletetunneledmcpserver.js";
+import {
+  GetTunneledMcpServerRequest,
+  GetTunneledMcpServerSecurity,
+} from "../models/operations/gettunneledmcpserver.js";
+import {
+  ListTunneledMcpServerConnectionsRequest,
+  ListTunneledMcpServerConnectionsSecurity,
+} from "../models/operations/listtunneledmcpserverconnections.js";
+import {
+  ListTunneledMcpServersRequest,
+  ListTunneledMcpServersSecurity,
+} from "../models/operations/listtunneledmcpservers.js";
+import {
+  RotateTunneledMcpServerKeyRequest,
+  RotateTunneledMcpServerKeySecurity,
+} from "../models/operations/rotatetunneledmcpserverkey.js";
+import {
+  UpdateTunneledMcpServerRequest,
+  UpdateTunneledMcpServerSecurity,
+} from "../models/operations/updatetunneledmcpserver.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class TunneledMcp extends ClientSDK {
@@ -22,10 +53,10 @@ export class TunneledMcp extends ClientSDK {
    * Create a new tunneled MCP server source. Returns the tunnel key once.
    */
   async createServer(
-    request: operations.CreateTunneledMcpServerRequest,
-    security?: operations.CreateTunneledMcpServerSecurity | undefined,
+    request: CreateTunneledMcpServerRequest,
+    security?: CreateTunneledMcpServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.CreateTunneledMcpServerResult> {
+  ): Promise<CreateTunneledMcpServerResult> {
     return unwrapAsync(tunneledMcpCreateServer(
       this,
       request,
@@ -41,8 +72,8 @@ export class TunneledMcp extends ClientSDK {
    * Delete a tunneled MCP server source
    */
   async deleteServer(
-    request: operations.DeleteTunneledMcpServerRequest,
-    security?: operations.DeleteTunneledMcpServerSecurity | undefined,
+    request: DeleteTunneledMcpServerRequest,
+    security?: DeleteTunneledMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(tunneledMcpDeleteServer(
@@ -60,10 +91,10 @@ export class TunneledMcp extends ClientSDK {
    * Get a tunneled MCP server by ID
    */
   async getServer(
-    request: operations.GetTunneledMcpServerRequest,
-    security?: operations.GetTunneledMcpServerSecurity | undefined,
+    request: GetTunneledMcpServerRequest,
+    security?: GetTunneledMcpServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.TunneledMcpServer> {
+  ): Promise<TunneledMcpServer> {
     return unwrapAsync(tunneledMcpGetServer(
       this,
       request,
@@ -79,10 +110,10 @@ export class TunneledMcp extends ClientSDK {
    * List live tunnel connections for a tunneled MCP server
    */
   async listServerConnections(
-    request: operations.ListTunneledMcpServerConnectionsRequest,
-    security?: operations.ListTunneledMcpServerConnectionsSecurity | undefined,
+    request: ListTunneledMcpServerConnectionsRequest,
+    security?: ListTunneledMcpServerConnectionsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.TunneledMcpServerConnections> {
+  ): Promise<TunneledMcpServerConnections> {
     return unwrapAsync(tunneledMcpListServerConnections(
       this,
       request,
@@ -98,10 +129,10 @@ export class TunneledMcp extends ClientSDK {
    * List all tunneled MCP server sources for a project
    */
   async listServers(
-    request?: operations.ListTunneledMcpServersRequest | undefined,
-    security?: operations.ListTunneledMcpServersSecurity | undefined,
+    request?: ListTunneledMcpServersRequest | undefined,
+    security?: ListTunneledMcpServersSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListTunneledMcpServersResult> {
+  ): Promise<ListTunneledMcpServersResult> {
     return unwrapAsync(tunneledMcpListServers(
       this,
       request,
@@ -117,10 +148,10 @@ export class TunneledMcp extends ClientSDK {
    * Rotate a tunneled MCP server source key. Returns the new tunnel key once.
    */
   async rotateServerKey(
-    request: operations.RotateTunneledMcpServerKeyRequest,
-    security?: operations.RotateTunneledMcpServerKeySecurity | undefined,
+    request: RotateTunneledMcpServerKeyRequest,
+    security?: RotateTunneledMcpServerKeySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RotateTunneledMcpServerKeyResult> {
+  ): Promise<RotateTunneledMcpServerKeyResult> {
     return unwrapAsync(tunneledMcpRotateServerKey(
       this,
       request,
@@ -136,10 +167,10 @@ export class TunneledMcp extends ClientSDK {
    * Update a tunneled MCP server source
    */
   async updateServer(
-    request: operations.UpdateTunneledMcpServerRequest,
-    security?: operations.UpdateTunneledMcpServerSecurity | undefined,
+    request: UpdateTunneledMcpServerRequest,
+    security?: UpdateTunneledMcpServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.TunneledMcpServer> {
+  ): Promise<TunneledMcpServer> {
     return unwrapAsync(tunneledMcpUpdateServer(
       this,
       request,

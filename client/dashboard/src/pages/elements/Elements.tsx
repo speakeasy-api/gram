@@ -30,7 +30,7 @@ import {
 } from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
-import { useListToolsets } from "@gram/client/react-query/index.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import {
   ArrowRight,

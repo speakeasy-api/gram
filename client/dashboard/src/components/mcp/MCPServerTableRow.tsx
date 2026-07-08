@@ -2,7 +2,7 @@ import { DotRow } from "@/components/ui/dot-row";
 import { Type } from "@/components/ui/type";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import type { McpServer } from "@gram/client/models/components";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { Network } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
