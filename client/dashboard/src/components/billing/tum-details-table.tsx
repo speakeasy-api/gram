@@ -1,8 +1,6 @@
-import { telemetryQueryTumDetails } from "@gram/client/funcs/telemetryQueryTumDetails";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type TumDetailsResult } from "@gram/client/models/components/tumdetailsresult.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
 import { Info } from "lucide-react";
 import { useMemo } from "react";
@@ -10,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { isAttributionDim } from "@/pages/costs/taxonomy";
-import { type BillingCycle, cycleStaleTime } from "./billing-cycles";
+import { type BillingCycle } from "./billing-cycles";
 import {
   breakdownLabel,
   CHART_COLORS,
@@ -18,7 +16,7 @@ import {
   OTHER_COLOR,
   RISKY_COLOR,
 } from "./breakdown-options";
-import { type RiskPointsQueryInput, riskPointsQuery } from "./tum-queries";
+import { riskPointsQuery, tumDetailsQuery } from "./tum-queries";
 
 // Vercel-style usage details for the selected billing cycle: one row per
 // metric with a colored dot, a mini sparkline of the daily series, the
@@ -62,6 +60,73 @@ const TAIL_DIMENSION_SECTIONS: string[] = [
   Dimension.HookSource,
   Dimension.SkillName,
   Dimension.McpToolName,
+];
+
+// A measure carried by both the daily points and the whole-range totals.
+type MeasureField =
+  | "inputTokens"
+  | "outputTokens"
+  | "cacheReadTokens"
+  | "cacheWriteTokens"
+  | "agentSessions"
+  | "toolCalls"
+  | "activeUsers"
+  | "toolMessageTokens";
+
+type MeasureRowSpec = {
+  label: string;
+  color: string;
+  field: MeasureField;
+  kind: DetailRow["kind"];
+};
+
+const TOKEN_TYPE_ROWS: MeasureRowSpec[] = [
+  {
+    label: "Input",
+    color: CHART_COLORS[0]!,
+    field: "inputTokens",
+    kind: "tokens",
+  },
+  {
+    label: "Output",
+    color: CHART_COLORS[1]!,
+    field: "outputTokens",
+    kind: "tokens",
+  },
+  {
+    label: "Cache read",
+    color: CHART_COLORS[2]!,
+    field: "cacheReadTokens",
+    kind: "tokens",
+  },
+  {
+    label: "Cache write",
+    color: CHART_COLORS[3]!,
+    field: "cacheWriteTokens",
+    kind: "tokens",
+  },
+];
+
+const ACTIVITY_ROWS: MeasureRowSpec[] = [
+  {
+    label: "Agent sessions",
+    color: "#38bdf8",
+    field: "agentSessions",
+    kind: "count",
+  },
+  { label: "Tool calls", color: "#4ade80", field: "toolCalls", kind: "count" },
+  {
+    label: "Active users",
+    color: "#facc15",
+    field: "activeUsers",
+    kind: "count",
+  },
+  {
+    label: "Tokens from tool call messages",
+    color: "#94a3b8",
+    field: "toolMessageTokens",
+    kind: "tokens",
+  },
 ];
 
 // Row color for a dimension value — same palette walk as the chart's stacks,
@@ -222,36 +287,10 @@ export function TumDetailsTable({
   limit: number | null;
 }): JSX.Element {
   const client = useGramContext();
-  const from = cycle.start;
-  const to = cycle.end;
-
-  // The generated hooks key their cache on gramSession only, so drive
-  // useQuery directly with payload-encoding keys.
-  const { data, isFetching } = useQuery({
-    queryKey: [
-      "tum-details",
-      from.toISOString(),
-      to.toISOString(),
-      projectId ?? "all",
-    ],
-    staleTime: cycleStaleTime(cycle),
-    throwOnError: false,
-    queryFn: () =>
-      unwrapAsync(
-        telemetryQueryTumDetails(client, {
-          // The generator dedupes structurally identical payload schemas, so
-          // this request reuses the risk-tokens payload shape/name.
-          queryRiskTokensPayload: {
-            from,
-            to,
-            projectId: projectId ?? undefined,
-          },
-        }),
-      ),
-  });
+  const scope = { client, cycle, projectId };
+  const { data, isFetching } = useQuery(tumDetailsQuery(scope));
   // Same query (and key) as the chart's risk series — React Query dedupes.
-  const riskInput: RiskPointsQueryInput = { client, cycle, projectId };
-  const { data: riskData } = useQuery(riskPointsQuery(riskInput));
+  const { data: riskData } = useQuery(riskPointsQuery(scope));
 
   // The table presents BILLED tokens: the analytics aggregate supplies the
   // distribution across metrics (it has the dimensions; billing's per-session
@@ -270,11 +309,20 @@ export function TumDetailsTable({
     const totals = data?.totals;
     const riskPoints = riskData?.points ?? [];
     const riskyTotal = riskPoints.reduce((sum, p) => sum + p.riskyTokens, 0);
-    const cleanTotal = points.reduce(
-      (sum, p, i) =>
-        sum + Math.max(0, p.totalTokens - (riskPoints[i]?.riskyTokens ?? 0)),
-      0,
+    // Remainder against the same totals as the "Total tokens" row, so the two
+    // risk rows sum to it exactly (the risk endpoint's own session aggregate
+    // includes forwarded tokens that the analytics totals exclude).
+    const cleanSeries = points.map((p, i) =>
+      Math.max(0, p.totalTokens - (riskPoints[i]?.riskyTokens ?? 0)),
     );
+
+    const measureRow = (spec: MeasureRowSpec): DetailRow => ({
+      label: spec.label,
+      color: spec.color,
+      series: points.map((p) => p[spec.field]),
+      total: totals?.[spec.field] ?? 0,
+      kind: spec.kind,
+    });
 
     const raw: DetailGroup[] = [
       {
@@ -285,44 +333,12 @@ export function TumDetailsTable({
             color: CHART_COLORS[0]!,
             series: points.map((p) => p.totalTokens),
             total: totals?.totalTokens ?? 0,
-            kind: "tokens" as const,
+            kind: "tokens",
           },
         ],
       },
       ...dimensionGroups(data, LEAD_DIMENSION_SECTIONS),
-      {
-        heading: "Token type",
-        rows: [
-          {
-            label: "Input",
-            color: CHART_COLORS[0]!,
-            series: points.map((p) => p.inputTokens),
-            total: totals?.inputTokens ?? 0,
-            kind: "tokens" as const,
-          },
-          {
-            label: "Output",
-            color: CHART_COLORS[1]!,
-            series: points.map((p) => p.outputTokens),
-            total: totals?.outputTokens ?? 0,
-            kind: "tokens" as const,
-          },
-          {
-            label: "Cache read",
-            color: CHART_COLORS[2]!,
-            series: points.map((p) => p.cacheReadTokens),
-            total: totals?.cacheReadTokens ?? 0,
-            kind: "tokens" as const,
-          },
-          {
-            label: "Cache write",
-            color: CHART_COLORS[3]!,
-            series: points.map((p) => p.cacheWriteTokens),
-            total: totals?.cacheWriteTokens ?? 0,
-            kind: "tokens" as const,
-          },
-        ],
-      },
+      { heading: "Token type", rows: TOKEN_TYPE_ROWS.map(measureRow) },
       {
         heading: "Risk findings",
         rows: [
@@ -331,64 +347,26 @@ export function TumDetailsTable({
             color: RISKY_COLOR,
             series: riskPoints.map((p) => p.riskyTokens),
             total: riskyTotal,
-            kind: "tokens" as const,
+            kind: "tokens",
           },
           {
             label: "Sessions without risk findings",
             color: CLEAN_COLOR,
-            // Remainder against the same totals as the "Total tokens" row, so
-            // the two risk rows sum to it exactly (the risk endpoint's own
-            // session aggregate includes forwarded tokens that the analytics
-            // totals exclude).
-            series: points.map((p, i) =>
-              Math.max(0, p.totalTokens - (riskPoints[i]?.riskyTokens ?? 0)),
-            ),
-            total: cleanTotal,
-            kind: "tokens" as const,
+            series: cleanSeries,
+            total: cleanSeries.reduce((sum, v) => sum + v, 0),
+            kind: "tokens",
           },
           {
             label: "Messages with risk findings",
             color: "#e879f9",
             series: points.map((p) => p.riskyMessageTokens),
             total: totals?.riskyMessageTokens ?? 0,
-            kind: "tokens" as const,
+            kind: "tokens",
           },
         ],
       },
       ...dimensionGroups(data, TAIL_DIMENSION_SECTIONS),
-      {
-        heading: "Activity",
-        rows: [
-          {
-            label: "Agent sessions",
-            color: "#38bdf8",
-            series: points.map((p) => p.agentSessions),
-            total: totals?.agentSessions ?? 0,
-            kind: "count" as const,
-          },
-          {
-            label: "Tool calls",
-            color: "#4ade80",
-            series: points.map((p) => p.toolCalls),
-            total: totals?.toolCalls ?? 0,
-            kind: "count" as const,
-          },
-          {
-            label: "Active users",
-            color: "#facc15",
-            series: points.map((p) => p.activeUsers),
-            total: totals?.activeUsers ?? 0,
-            kind: "count" as const,
-          },
-          {
-            label: "Tokens from tool call messages",
-            color: "#94a3b8",
-            series: points.map((p) => p.toolMessageTokens),
-            total: totals?.toolMessageTokens ?? 0,
-            kind: "tokens" as const,
-          },
-        ],
-      },
+      { heading: "Activity", rows: ACTIVITY_ROWS.map(measureRow) },
     ];
 
     // Convert every token-denominated row into billed units (see billedScale).

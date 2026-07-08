@@ -43,41 +43,71 @@ type listSessionsCursor struct {
 	GramChatID string  `json:"gram_chat_id"`
 }
 
-// Query is a generic, org-scoped analytics query over the pre-aggregated
-// attribute_metrics_summaries view. It returns both a grouped table and a
-// matching per-group hourly timeseries for the same slice of data.
-func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*telem_gen.QueryResult, error) {
+// orgQueryScope is the resolved, authorized input shared by the org-scoped
+// analytics endpoints: the parsed time window and the organization's projects.
+type orgQueryScope struct {
+	timeStart    int64
+	timeEnd      int64
+	projectUUIDs []uuid.UUID
+	projectIDs   []string
+}
+
+// resolveOrgQueryScope authorizes the caller for org-wide telemetry reads
+// (queries span every project in the organization), requires logs to be
+// enabled, parses the time window, and resolves the org's projects —
+// optionally narrowed to one. A project id outside the caller's organization
+// simply resolves to no projects (and an all-zero result) rather than acting
+// as an existence probe.
+func (s *Service) resolveOrgQueryScope(ctx context.Context, from, to string, projectID *string) (orgQueryScope, error) {
+	var scope orgQueryScope
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return nil, oops.C(oops.CodeUnauthorized)
+		return scope, oops.C(oops.CodeUnauthorized)
 	}
-
-	// Org-scoped: the query spans every project in the organization.
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+		return scope, err
 	}
 
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+		return scope, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
 	}
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+		return scope, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
-	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	scope.timeStart, scope.timeEnd, err = parseTimeRange(&from, &to)
 	if err != nil {
-		return nil, err
+		return scope, err
 	}
 
 	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list organization projects")
+		return scope, oops.E(oops.CodeUnexpected, err, "failed to list organization projects")
 	}
-	projectIDs := make([]string, 0, len(projects))
+	scope.projectUUIDs = make([]uuid.UUID, 0, len(projects))
+	scope.projectIDs = make([]string, 0, len(projects))
 	for _, p := range projects {
-		projectIDs = append(projectIDs, p.ID.String())
+		if projectID != nil && *projectID != "" && p.ID.String() != *projectID {
+			continue
+		}
+		scope.projectUUIDs = append(scope.projectUUIDs, p.ID)
+		scope.projectIDs = append(scope.projectIDs, p.ID.String())
 	}
+
+	return scope, nil
+}
+
+// Query is a generic, org-scoped analytics query over the pre-aggregated
+// attribute_metrics_summaries view. It returns both a grouped table and a
+// matching per-group hourly timeseries for the same slice of data.
+func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*telem_gen.QueryResult, error) {
+	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, nil)
+	if err != nil {
+		return nil, err
+	}
+	timeStart, timeEnd := scope.timeStart, scope.timeEnd
 
 	groupBy := ""
 	if payload.GroupBy != nil {
@@ -109,7 +139,7 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	}
 
 	params := repo.AttributeMetricsQueryParams{
-		ProjectIDs:      projectIDs,
+		ProjectIDs:      scope.projectIDs,
 		TimeStart:       timeStart,
 		TimeEnd:         timeEnd,
 		GroupBy:         groupBy,
@@ -158,47 +188,14 @@ const riskTokensIntervalSeconds int64 = 86400
 // lives in ClickHouse, so the risky chat set is resolved first and pushed into
 // the ClickHouse aggregation.
 func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryRiskTokensPayload) (*telem_gen.QueryRiskTokensResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
-	}
-	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
-	}
-
-	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, payload.ProjectID)
 	if err != nil {
 		return nil, err
 	}
-
-	// Org projects, optionally narrowed to the requested one. A project id
-	// outside the caller's organization simply resolves to no projects (and an
-	// all-zero series) rather than acting as an existence probe.
-	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list organization projects")
-	}
-	projectUUIDs := make([]uuid.UUID, 0, len(projects))
-	projectIDs := make([]string, 0, len(projects))
-	for _, p := range projects {
-		if payload.ProjectID != nil && *payload.ProjectID != "" && p.ID.String() != *payload.ProjectID {
-			continue
-		}
-		projectUUIDs = append(projectUUIDs, p.ID)
-		projectIDs = append(projectIDs, p.ID.String())
-	}
+	timeStart, timeEnd := scope.timeStart, scope.timeEnd
 
 	riskyIDs, err := s.chatRepo.ListRiskyChatIDs(ctx, chatRepo.ListRiskyChatIDsParams{
-		ProjectIds: projectUUIDs,
+		ProjectIds: scope.projectUUIDs,
 		FromTime:   pgtype.Timestamptz{Time: time.Unix(0, timeStart).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
 		ToTime:     pgtype.Timestamptz{Time: time.Unix(0, timeEnd).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
 	})
@@ -211,7 +208,7 @@ func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryR
 	}
 
 	buckets, err := s.chRepo.GetRiskTokensByDay(ctx, repo.GetRiskTokensParams{
-		ProjectIDs:    projectIDs,
+		ProjectIDs:    scope.projectIDs,
 		RiskyChatIDs:  riskyChatIDs,
 		StartUnixNano: timeStart,
 		EndUnixNano:   timeEnd,
@@ -250,47 +247,14 @@ func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryR
 // plus message-level stats (risk findings, tool-call messages) from Postgres
 // per-message token counts. The three backing queries run concurrently.
 func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryTumDetailsPayload) (*telem_gen.TumDetailsResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
-	}
-	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
-	}
-
-	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, payload.ProjectID)
 	if err != nil {
 		return nil, err
 	}
-
-	// Org projects, optionally narrowed to the requested one. A project id
-	// outside the caller's organization simply resolves to no projects (and an
-	// all-zero series) rather than acting as an existence probe.
-	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list organization projects")
-	}
-	projectUUIDs := make([]uuid.UUID, 0, len(projects))
-	projectIDs := make([]string, 0, len(projects))
-	for _, p := range projects {
-		if payload.ProjectID != nil && *payload.ProjectID != "" && p.ID.String() != *payload.ProjectID {
-			continue
-		}
-		projectUUIDs = append(projectUUIDs, p.ID)
-		projectIDs = append(projectIDs, p.ID.String())
-	}
+	timeStart, timeEnd := scope.timeStart, scope.timeEnd
 
 	chParams := repo.GetRiskTokensParams{
-		ProjectIDs:    projectIDs,
+		ProjectIDs:    scope.projectIDs,
 		RiskyChatIDs:  nil,
 		StartUnixNano: timeStart,
 		EndUnixNano:   timeEnd,
@@ -335,7 +299,7 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	eg.Go(func() error {
 		var egErr error
 		msgRows, egErr = s.chatRepo.SumMessageTokenStatsByDay(egCtx, chatRepo.SumMessageTokenStatsByDayParams{
-			ProjectIds: projectUUIDs,
+			ProjectIds: scope.projectUUIDs,
 			FromTime:   pgtype.Timestamptz{Time: time.Unix(0, timeStart).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
 			ToTime:     pgtype.Timestamptz{Time: time.Unix(0, timeEnd).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
 		})
@@ -346,7 +310,7 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	})
 	for i, dim := range breakdownDims {
 		params := repo.AttributeMetricsQueryParams{
-			ProjectIDs:      projectIDs,
+			ProjectIDs:      scope.projectIDs,
 			TimeStart:       timeStart,
 			TimeEnd:         timeEnd,
 			GroupBy:         dim,

@@ -36,6 +36,12 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 const MAX_STACKS = 8;
 
 type Granularity = "day" | "week" | "month";
+
+const GRANULARITIES: { value: Granularity; label: string }[] = [
+  { value: "day", label: "Daily" },
+  { value: "week", label: "Weekly" },
+  { value: "month", label: "Monthly" },
+];
 // How the bars stack: by the selected dimension's groups, by token type, by
 // risk involvement, or as a single un-broken-down total. Selected via the
 // caller's unified breakdown picker.
@@ -103,6 +109,25 @@ function addTo(map: Map<number, number>, bucket: number, value: number): void {
   map.set(bucket, (map.get(bucket) ?? 0) + value);
 }
 
+// One measure of the given series, summed into granularity buckets.
+function bucketTotals(
+  series: QuerySeries[],
+  granularity: Granularity,
+  value: (m: QueryMeasures) => number,
+): Map<number, number> {
+  const byBucket = new Map<number, number>();
+  for (const s of series) {
+    for (const p of s.points) {
+      addTo(
+        byBucket,
+        floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
+        value(p.measures),
+      );
+    }
+  }
+  return byBucket;
+}
+
 // One stack per group value, ranked by total tokens; groups beyond MAX_STACKS
 // merge into "Other" (alongside any server-side "Other" roll-up row).
 function stacksByGroup(
@@ -117,35 +142,18 @@ function stacksByGroup(
     .filter((s) => s.total > 0)
     .sort((a, b) => b.total - a.total);
 
-  const keep = ranked.slice(0, MAX_STACKS);
+  const stacks: Stack[] = ranked.slice(0, MAX_STACKS).map(({ series: s }) => ({
+    label: s.groupValue === "" ? "(unset)" : s.groupValue,
+    byBucket: bucketTotals([s], granularity, (m) => m.totalTokens),
+  }));
+
   const rest = ranked.slice(MAX_STACKS);
-
-  const stacks: Stack[] = keep.map(({ series: s }) => {
-    const byBucket = new Map<number, number>();
-    for (const p of s.points) {
-      addTo(
-        byBucket,
-        floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
-        p.measures.totalTokens,
-      );
-    }
-    return {
-      label: s.groupValue === "" ? "(unset)" : s.groupValue,
-      byBucket,
-    };
-  });
-
   if (rest.length > 0) {
-    const byBucket = new Map<number, number>();
-    for (const { series: s } of rest) {
-      for (const p of s.points) {
-        addTo(
-          byBucket,
-          floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
-          p.measures.totalTokens,
-        );
-      }
-    }
+    const byBucket = bucketTotals(
+      rest.map((r) => r.series),
+      granularity,
+      (m) => m.totalTokens,
+    );
     // Fold into an existing "Other" stack (the server's top-N remainder row)
     // rather than showing two.
     const existing = stacks.find((s) => s.label === "Other");
@@ -178,18 +186,12 @@ function stacksByRisk(
       p.riskyTokens,
     );
   }
-  const totals = new Map<number, number>();
-  for (const s of series) {
-    for (const p of s.points) {
-      addTo(
-        totals,
-        floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
-        p.measures.totalTokens,
-      );
-    }
-  }
   const clean = new Map<number, number>();
-  for (const [bucket, total] of totals) {
+  for (const [bucket, total] of bucketTotals(
+    series,
+    granularity,
+    (m) => m.totalTokens,
+  )) {
     addTo(clean, bucket, Math.max(0, total - (risky.get(bucket) ?? 0)));
   }
   return [
@@ -203,16 +205,7 @@ function stacksByTotal(
   series: QuerySeries[],
   granularity: Granularity,
 ): Stack[] {
-  const byBucket = new Map<number, number>();
-  for (const s of series) {
-    for (const p of s.points) {
-      addTo(
-        byBucket,
-        floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
-        p.measures.totalTokens,
-      );
-    }
-  }
+  const byBucket = bucketTotals(series, granularity, (m) => m.totalTokens);
   if (byBucket.size === 0) return [];
   return [{ label: "Total tokens", byBucket }];
 }
@@ -222,19 +215,10 @@ function stacksByTokenType(
   series: QuerySeries[],
   granularity: Granularity,
 ): Stack[] {
-  return TOKEN_TYPES.map((t) => {
-    const byBucket = new Map<number, number>();
-    for (const s of series) {
-      for (const p of s.points) {
-        addTo(
-          byBucket,
-          floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
-          t.value(p.measures),
-        );
-      }
-    }
-    return { label: t.label, byBucket };
-  }).filter((s) => [...s.byBucket.values()].some((v) => v > 0));
+  return TOKEN_TYPES.map((t) => ({
+    label: t.label,
+    byBucket: bucketTotals(series, granularity, t.value),
+  })).filter((s) => [...s.byBucket.values()].some((v) => v > 0));
 }
 
 function ToggleButton({
@@ -464,24 +448,15 @@ export function TokenUsagePanel({
           {breakdownPicker}
           <div className="bg-border h-4 w-px" />
           <div className="flex items-center gap-1">
-            <ToggleButton
-              active={granularity === "day"}
-              onClick={() => setGranularity("day")}
-            >
-              Daily
-            </ToggleButton>
-            <ToggleButton
-              active={granularity === "week"}
-              onClick={() => setGranularity("week")}
-            >
-              Weekly
-            </ToggleButton>
-            <ToggleButton
-              active={granularity === "month"}
-              onClick={() => setGranularity("month")}
-            >
-              Monthly
-            </ToggleButton>
+            {GRANULARITIES.map((g) => (
+              <ToggleButton
+                key={g.value}
+                active={granularity === g.value}
+                onClick={() => setGranularity(g.value)}
+              >
+                {g.label}
+              </ToggleButton>
+            ))}
           </div>
           <div className="bg-border h-4 w-px" />
           <ToggleButton

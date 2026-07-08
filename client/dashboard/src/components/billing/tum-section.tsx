@@ -13,9 +13,7 @@ import {
 } from "@/components/ui/select";
 import { useOrganization } from "@/contexts/Auth";
 import { isAttributionDim } from "@/pages/costs/taxonomy";
-import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
-import { type GroupBy } from "@gram/client/models/components/querypayload.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import {
   invalidateAllGetTokensUnderManagement,
@@ -23,23 +21,17 @@ import {
 } from "@gram/client/react-query/getTokensUnderManagement.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBillingMetadata.js";
-import { unwrapAsync } from "@gram/client/types/fp";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BillingCyclePicker } from "./billing-cycle-picker";
-import {
-  type BillingCycle,
-  cycleKey,
-  cyclesFromTum,
-  cycleStaleTime,
-} from "./billing-cycles";
+import { type BillingCycle, cycleKey, cyclesFromTum } from "./billing-cycles";
 import { stackModeFor } from "./breakdown-options";
 import { BreakdownPicker } from "./breakdown-picker";
 import { TokenUsagePanel } from "./token-usage-panel";
 import { TumDetailsTable } from "./tum-details-table";
-import { riskPointsQuery } from "./tum-queries";
+import { riskPointsQuery, tumBreakdownQuery } from "./tum-queries";
 import { TumUsageCard } from "./tum-usage-card";
 
 // Org-wide token breakdown for one billing cycle: stacked daily tokens by a
@@ -49,9 +41,7 @@ import { TumUsageCard } from "./tum-usage-card";
 // pruning of the dimension list: the availability probe
 // (telemetry.listAttributeKeys) is project-scoped and this page is org-level,
 // so it would filter against the wrong project — dimensions without data
-// simply chart as "(unset)". The generated hooks key their cache on
-// gramSession only, so the queries are driven directly with payload-encoding
-// keys.
+// simply chart as "(unset)".
 function TumTokenBreakdown({
   cycle,
   projectId,
@@ -65,42 +55,11 @@ function TumTokenBreakdown({
   const [breakdown, setBreakdown] = useState<string>(Dimension.DivisionName);
   const [dimension, setDimension] = useState<Dimension>(Dimension.DivisionName);
   const stackBy = stackModeFor(breakdown);
-  const from = cycle.start;
-  const to = cycle.end;
 
-  const { data, isFetching } = useQuery({
-    queryKey: [
-      "tum-breakdown",
-      from.toISOString(),
-      to.toISOString(),
-      dimension,
-      projectId ?? "all",
-    ],
-    // Closed cycles cache forever — their telemetry is immutable.
-    staleTime: cycleStaleTime(cycle),
-    throwOnError: false,
-    queryFn: () =>
-      unwrapAsync(
-        telemetryQuery(client, {
-          queryPayload: {
-            from,
-            to,
-            groupBy: dimension as GroupBy,
-            sortBy: "total_tokens",
-            topN: 100,
-            // Daily buckets; the panel rolls up to weekly/monthly client-side.
-            granularitySeconds: 86400,
-            filters: projectId
-              ? [{ dimension: Dimension.ProjectId, values: [projectId] }]
-              : undefined,
-          },
-        }),
-      ),
-  });
+  const scope = { client, cycle, projectId };
+  const { data, isFetching } = useQuery(tumBreakdownQuery(scope, dimension));
   // Shared with the details table's risk rows (same key — one request).
-  const { data: riskData } = useQuery(
-    riskPointsQuery({ client, cycle, projectId }),
-  );
+  const { data: riskData } = useQuery(riskPointsQuery(scope));
 
   // Attribution cuts hide the "" (not-applicable) group, same as the costs page.
   const series = useMemo(() => {
@@ -165,6 +124,8 @@ export const TumUsageSection = (): JSX.Element => {
   // stays org-wide — the TUM contract is an organization-level number.
   const [projectId, setProjectId] = useState<string | null>(null);
 
+  const monthlyLimit = tum?.monthlyTokenLimit ?? null;
+
   return (
     <Page.Section>
       <Page.Section.Title>Billing</Page.Section.Title>
@@ -208,10 +169,7 @@ export const TumUsageSection = (): JSX.Element => {
                 />
               </div>
             </Stack>
-            <TumUsageCard
-              tokens={selectedCycle.tokens}
-              limit={tum.monthlyTokenLimit ?? null}
-            />
+            <TumUsageCard tokens={selectedCycle.tokens} limit={monthlyLimit} />
             <div className="mt-8">
               <TumTokenBreakdown cycle={selectedCycle} projectId={projectId} />
             </div>
@@ -219,7 +177,7 @@ export const TumUsageSection = (): JSX.Element => {
               <TumDetailsTable
                 cycle={selectedCycle}
                 projectId={projectId}
-                limit={tum.monthlyTokenLimit ?? null}
+                limit={monthlyLimit}
               />
             </div>
           </Stack>
