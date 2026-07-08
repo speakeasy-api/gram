@@ -123,6 +123,20 @@ export default defineConfig(({ command }) => {
     },
     worker: {
       format: "es",
+      // The worker bundles are pure vendor code (monaco's ts.worker map alone
+      // is ~16MB, ~28MB across all workers) that we never debug in production,
+      // so skip their sourcemaps while keeping maps for app code. This must be
+      // an outputOptions hook: Vite hard-sets `sourcemap` to build.sourcemap
+      // AFTER spreading worker.rolldownOptions.output, so the plain option is
+      // silently ignored, while plugin outputOptions hooks run last.
+      plugins: () => [
+        {
+          name: "drop-worker-sourcemaps",
+          outputOptions(options) {
+            return { ...options, sourcemap: false };
+          },
+        },
+      ],
     },
     optimizeDeps: {
       include: ["monaco-editor"],
