@@ -123,7 +123,7 @@ func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.Ingest
 	selfReported := canonicalSourceUserEmail(payload)
 	if selfReported == "" {
 		if strings.HasPrefix(authCtx.APIKeyName, auth.PluginAPIKeyNamePrefix) {
-			return canonicalActor{UserID: "", Email: ""}
+			return s.cachedSessionActor(ctx, payload, authCtx)
 		}
 		return canonicalActor{UserID: authCtx.UserID, Email: tokenEmail}
 	}
@@ -134,6 +134,27 @@ func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.Ingest
 		UserID: s.resolveUserByEmail(ctx, selfReported, authCtx.ActiveOrganizationID),
 		Email:  selfReported,
 	}
+}
+
+// cachedSessionActor recovers attribution for a shared plugin-key event with
+// no self-reported email from the session metadata cache (seeded by the OTEL
+// path or the device bridge). Resolving here — not just at persistence time in
+// canonicalSessionMetadata — keeps policy enforcement and the recorded rows on
+// the same identity: user-scoped shadow-MCP policies must see the user the
+// session is already attributed to. Only an entry seeded by the same
+// org+project is trusted (the cache is keyed by session id alone).
+func (s *Service) cachedSessionActor(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) canonicalActor {
+	sessionID := canonicalSessionID(payload)
+	if sessionID == "" {
+		return canonicalActor{UserID: "", Email: ""}
+	}
+	cached, err := s.getSessionMetadata(ctx, sessionID)
+	if err != nil ||
+		cached.GramOrgID != authCtx.ActiveOrganizationID ||
+		cached.ProjectID != authCtx.ProjectID.String() {
+		return canonicalActor{UserID: "", Email: ""}
+	}
+	return canonicalActor{UserID: cached.UserID, Email: cached.UserEmail}
 }
 
 func canonicalSourceUserEmail(payload *gen.IngestPayload) string {

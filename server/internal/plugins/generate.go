@@ -2119,7 +2119,10 @@ gram_hooks_post_authenticated() {
     && [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" != "1" ]; then
     gram_hooks_forget_auth
     gram_hooks_mark_reauth_needed
-    if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ]; then
+    # Noninteractive senders surface the reconnect nudge only when there is
+    # no org-wide key to retry through; with one baked in, the forced
+    # re-prepare below resolves to it and the event still goes out.
+    if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ] && [ -z "${gram_hooks_org_key:-}" ]; then
       GRAM_HTTP_CODE="$first_status"
       return 79
     fi

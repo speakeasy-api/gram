@@ -1517,6 +1517,77 @@ printf '{"message":"unauthorized: api_key not found"}\n401'
 	require.Equal(t, 1, strings.Count(requests, "/rpc/hooks.ingest"), "reauth-needed prompt submit must not send an unauthenticated request")
 }
 
+// TestRenderHookScriptClaudeRejectedCachedKeyRetriesOrgKey verifies the
+// stale-cache recovery path when the plugin has a baked org-wide key: the
+// rejected cached key is cleared and the event is retried through the org key
+// in the same invocation, instead of surfacing the reconnect nudge.
+func TestRenderHookScriptClaudeRejectedCachedKeyRetriesOrgKey(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_org_key_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "requests.txt")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	// 401 the stale cached key, 200 the org key.
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+config=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) config="$2"; cat "$2" >> "$GRAM_CAPTURE_REQUESTS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+cat >/dev/null
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
+if [ -n "$config" ] && grep -q "gram_local_org_key_xyz" "$config"; then
+  printf '{}\n200'
+else
+  printf '{"message":"unauthorized: api_key not found"}\n401'
+fi
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_stale_cached_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-stale-cache-org","prompt":"hi"}`)
+	cmd.Env = env
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), "stale cached key must recover through the org key: %s", stderr.String())
+	require.NotContains(t, stdout.String(), `"additionalContext"`,
+		"an event delivered through the org key must not be nudged to log in")
+
+	requests := string(requireFileBytes(t, capturePath))
+	require.Contains(t, requests, "Gram-Key: gram_stale_cached_key", "first attempt sends the cached key")
+	require.Contains(t, requests, "Gram-Key: gram_local_org_key_xyz", "retry sends the baked org key")
+	require.Equal(t, 2, strings.Count(requests, "/rpc/hooks.ingest"), "exactly one retry through the org key")
+	require.NoFileExists(t, authFile, "rejected cached key must be cleared")
+	require.FileExists(t, authFile+".established", "recovery must preserve the fail-closed ratchet marker")
+}
+
 // TestRenderHookScriptClaudeRejectedCachedKeyStillBlocksToolUse verifies that
 // stale-cache recovery is not a general bypass: after clearing the rejected
 // cached token, blocking non-prompt events still fail closed.

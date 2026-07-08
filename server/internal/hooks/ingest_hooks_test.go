@@ -139,6 +139,56 @@ func TestIngest_RejectedCredentialsUnauthorized(t *testing.T) {
 	require.Contains(t, strings.ToLower(err.Error()), "unauthorized")
 }
 
+// A shared plugins-* key carries no usable identity of its own, but the
+// session may already be attributed through the OTEL/device-bridge metadata
+// cache. User-scoped shadow-MCP policies must see that cached identity during
+// enforcement — not only at persistence time — or per-user blocking silently
+// skips every event the shared key sends without a self-reported email.
+func TestIngest_ShadowMCPPolicyUsesCachedSessionIdentityForSharedKey(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	authCtx.APIKeyName = "plugins-hooks-20260708-abc123"
+
+	cachedUserID := "user_cached_owner"
+	sessionID := "canonical-shadow-mcp-cached-identity"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID: sessionID,
+		UserID:    cachedUserID,
+		UserEmail: "cached-dev@example.com",
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}, 0))
+
+	// The policy only exists for the cached user: a deny proves enforcement
+	// resolved the actor from the session cache rather than running
+	// unattributed.
+	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: cachedUserID}
+
+	toolName := "mcp__local_server__search"
+	serverIdentity := "local-server"
+	toolCallID := "call-cached-identity"
+	payload := canonicalIngestPayload("claude", "tool.requested", sessionID)
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"query": "secret"},
+		},
+		Mcp: &gen.HookMCPData{
+			ServerIdentity: &serverIdentity,
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision)
+}
+
 func TestIngest_ShadowMCPPolicyUsesAuthenticatedTokenOwner(t *testing.T) {
 	t.Parallel()
 
