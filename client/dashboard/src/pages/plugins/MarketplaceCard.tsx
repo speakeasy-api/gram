@@ -1,6 +1,6 @@
-import { Skeleton } from "@/components/ui/skeleton";
 import { Book, ExternalLink, Settings, Users } from "lucide-react";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
+import { Badge } from "@speakeasy-api/moonshine";
 
 // The connected-state marketplace card, shared verbatim across the plugins
 // list, plugin detail page, and the onboarding setup wizard
@@ -113,6 +113,7 @@ export function MarketplaceCard({
 // since there's no real URL to show until the repo is created.
 export function UninitializedMarketplaceCard({
   publishStatus,
+  defaultName,
   onSetup,
   onAddCollaborators,
   description = "This repo will be your team's plugin marketplace. The observability plugins will already be inside, and any plugins you build in Speakeasy later will be published here too.",
@@ -121,6 +122,7 @@ export function UninitializedMarketplaceCard({
     PublishStatusResult,
     "repoOwner" | "repoName" | "repoUrl"
   >;
+  defaultName?: string;
   onSetup: () => void;
   onAddCollaborators: () => void;
   description?: string;
@@ -134,9 +136,14 @@ export function UninitializedMarketplaceCard({
         className="from-amber-50/10 via-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:via-neutral-800 dark:to-amber-900/20 absolute inset-0 bg-gradient-to-br"
       />
       <div className="relative">
-        <span className="text-muted-foreground mb-1.5 block font-mono text-xs font-medium tracking-wide uppercase">
-          Your project marketplace
-        </span>
+        <div className="mb-1.5 flex items-center gap-2">
+          <span className="text-muted-foreground font-mono text-xs font-medium tracking-wide uppercase">
+            Your project marketplace
+          </span>
+          <Badge variant="warning">
+            <Badge.Text>Not published</Badge.Text>
+          </Badge>
+        </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Book className="text-muted-foreground h-4 w-4 flex-shrink-0" />
           {hasRepo ? (
@@ -153,7 +160,9 @@ export function UninitializedMarketplaceCard({
               <span className="font-semibold">{publishStatus.repoName}</span>
             </a>
           ) : (
-            <Skeleton className="h-5 w-48" />
+            <span className="text-muted-foreground min-w-0 truncate text-base">
+              {defaultName}
+            </span>
           )}
         </div>
         <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
@@ -197,7 +206,7 @@ export function UninitializedMarketplaceCard({
                 className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 rounded-md border px-3.5 py-2 text-sm font-medium transition-colors"
               >
                 <Settings className="h-4 w-4" />
-                Setup
+                Publish now
               </button>
             )}
           </div>

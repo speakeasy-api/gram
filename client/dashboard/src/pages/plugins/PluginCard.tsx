@@ -145,7 +145,7 @@ export function PluginCard({
                     }}
                   >
                     <div className="flex flex-col">
-                      <span>Install instructions</span>
+                      <span>GitHub installation (preferred)</span>
                       {!installTarget && (
                         <span className="text-muted-foreground text-xs">
                           Requires marketplace setup

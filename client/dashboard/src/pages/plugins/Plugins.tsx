@@ -293,6 +293,7 @@ export default function Plugins(): JSX.Element {
                     <>
                       <UninitializedMarketplaceCard
                         publishStatus={publishStatus}
+                        defaultName={marketplaceSettings.defaultName}
                         onSetup={handleStartSetup}
                         onAddCollaborators={() =>
                           setIsManageCollaboratorsOpen(true)
@@ -316,6 +317,7 @@ export default function Plugins(): JSX.Element {
                   <>
                     <UninitializedMarketplaceCard
                       publishStatus={publishStatus}
+                      defaultName={marketplaceSettings.defaultName}
                       onSetup={handleStartSetup}
                       onAddCollaborators={() =>
                         setIsManageCollaboratorsOpen(true)
@@ -588,7 +590,7 @@ function ObservabilityPluginCard({
               }}
             >
               <div className="flex flex-col">
-                <span>Install instructions</span>
+                <span>GitHub installation (preferred)</span>
                 {!installTarget && (
                   <span className="text-muted-foreground text-xs">
                     Requires marketplace setup

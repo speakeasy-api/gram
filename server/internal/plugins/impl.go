@@ -26,6 +26,8 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	redisCache "github.com/go-redis/cache/v9"
+
 	srv "github.com/speakeasy-api/gram/server/gen/http/plugins/server"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -33,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
@@ -132,6 +135,7 @@ type Service struct {
 	auth      *auth.Auth
 	authz     *authz.Engine
 	audit     *audit.Logger
+	cache     cache.Cache
 	github    *GitHubConfig
 	serverURL string
 	keyPrefix string
@@ -145,6 +149,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
+	cacheImpl cache.Cache,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	github *GitHubConfig,
@@ -161,6 +166,7 @@ func NewService(
 		auth:      auth.New(logger, db, sessions, authzEngine),
 		authz:     authzEngine,
 		audit:     auditLogger,
+		cache:     cacheImpl,
 		github:    github,
 		serverURL: serverURL,
 		keyPrefix: auth.APIKeyPrefix(env),
@@ -185,6 +191,7 @@ func NewPublisher(
 		auth:      nil,
 		authz:     nil,
 		audit:     auditLogger,
+		cache:     nil,
 		github:    github,
 		serverURL: serverURL,
 		keyPrefix: auth.APIKeyPrefix(env),
@@ -1310,7 +1317,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			}
 			result.UpToDate = s.publishUpToDate(ctx, ac, conn)
 
-			hasCollaborators, err := s.github.Client.HasDirectCollaborator(ctx, s.github.InstallationID, conn.RepoOwner, conn.RepoName)
+			hasCollaborators, err := s.cachedHasDirectCollaborator(ctx, conn.RepoOwner, conn.RepoName)
 			if err != nil {
 				// Degrade rather than fail the whole status read — the
 				// dashboard treats a missing value as "unknown", not "false".
@@ -1322,6 +1329,51 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 	}
 
 	return result, nil
+}
+
+// hasCollaboratorsCacheTTL bounds how stale the collaborator flag can be.
+// GetPublishStatus is polled by the dashboard on every page load/refetch, so
+// checking GitHub live on each call burns installation rate limits for data
+// that only changes on publish or (async, outside our control) invitation
+// acceptance — a short cache absorbs that traffic while staying close enough
+// to real-time for the UI to reflect a just-added collaborator promptly.
+const hasCollaboratorsCacheTTL = 60 * time.Second
+
+// cachedHasDirectCollaborator wraps GitHubPublisher.HasDirectCollaborator
+// with a short-lived cache. Falls back to an uncached live call when no
+// cache is configured (e.g. the publish-only worker instance from
+// NewPublisher, which never serves GetPublishStatus).
+func (s *Service) cachedHasDirectCollaborator(ctx context.Context, owner, repo string) (bool, error) {
+	if s.cache == nil {
+		hasCollaborators, err := s.github.Client.HasDirectCollaborator(ctx, s.github.InstallationID, owner, repo)
+		if err != nil {
+			return false, fmt.Errorf("check repo collaborators: %w", err)
+		}
+		return hasCollaborators, nil
+	}
+
+	key := fmt.Sprintf("plugins:has-collaborator:%s/%s", owner, repo)
+
+	var cached bool
+	switch err := s.cache.Get(ctx, key, &cached); {
+	case err == nil:
+		return cached, nil
+	case errors.Is(err, redisCache.ErrCacheMiss):
+		// Fall through to the live check below.
+	default:
+		s.logger.WarnContext(ctx, "read collaborator cache", attr.SlogError(err))
+	}
+
+	hasCollaborators, err := s.github.Client.HasDirectCollaborator(ctx, s.github.InstallationID, owner, repo)
+	if err != nil {
+		return false, fmt.Errorf("check repo collaborators: %w", err)
+	}
+
+	if err := s.cache.Set(ctx, key, &hasCollaborators, hasCollaboratorsCacheTTL); err != nil {
+		s.logger.WarnContext(ctx, "write collaborator cache", attr.SlogError(err))
+	}
+
+	return hasCollaborators, nil
 }
 
 // publishUpToDate reports whether the project's current plugin state matches

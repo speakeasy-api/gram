@@ -5,6 +5,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
+import { useRoutes } from "@/routes";
 import { Plugin } from "@gram/client/models/components/plugin.js";
 import { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
@@ -20,10 +21,10 @@ import {
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
 import { Button, cn } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ChevronDown, CircleCheck } from "lucide-react";
+import { AlertTriangle, ChevronDown, CircleCheck, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { InstallInstructionsButton } from "@/pages/plugins/InstallInstructionsDialog";
+import { InstallInstructionsDialog } from "@/pages/plugins/InstallInstructionsDialog";
 import { HostedServerRef } from "./MCPOverviewTab";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -80,8 +81,10 @@ export function PluginStatusBanner({
 }: {
   server: HostedServerRef;
 }): React.JSX.Element | null {
+  const routes = useRoutes();
   const queryClient = useQueryClient();
   const { data } = usePlugins();
+  const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false);
   const { data: publishStatus } = usePublishStatus();
   const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -116,6 +119,13 @@ export function PluginStatusBanner({
     plugin.servers?.some((s) => serverMatchesRef(s, server)),
   );
   const isPublished = memberPlugins.length > 0;
+  const marketplaceReady = !!(
+    publishStatus?.repoOwner && publishStatus.repoName
+  );
+  // "Published" means a teammate can actually install it — server
+  // membership in a plugin alone isn't enough if the marketplace repo
+  // itself was never set up on GitHub.
+  const isTrulyPublished = isPublished && marketplaceReady;
   const memberIdSet = new Set(memberPlugins.map((plugin) => plugin.id));
   const selectedIdSet = new Set(selectedPluginIds);
   const hasChanges =
@@ -204,21 +214,21 @@ export function PluginStatusBanner({
         aria-hidden="true"
         className={cn(
           "absolute inset-0 bg-gradient-to-tr from-slate-50 via-slate-50 to-orange-100 transition-all duration-700 ease-in-out dark:from-slate-950 dark:via-neutral-800 dark:to-amber-900/60",
-          isPublished ? "opacity-0" : "opacity-100",
+          isTrulyPublished ? "opacity-0" : "opacity-100",
         )}
       />
       <div
         aria-hidden="true"
         className={cn(
           "absolute inset-0 bg-gradient-to-br from-slate-50/10 via-slate-50 to-emerald-100/50 transition-colors transition-opacity duration-700 ease-in-out dark:from-slate-950/60 dark:via-neutral-800 dark:to-emerald-900/30",
-          isPublished ? "opacity-100" : "opacity-0",
+          isTrulyPublished ? "opacity-100" : "opacity-0",
         )}
       />
       <div className="relative flex flex-col">
         <div className="flex items-center justify-between gap-8 p-6">
           <div className="flex max-w-md flex-col gap-3">
             <div className="flex items-center gap-2">
-              {isPublished ? (
+              {isTrulyPublished ? (
                 <CircleCheck className="text-emerald-500 h-4 w-4 shrink-0" />
               ) : (
                 <AlertTriangle className="text-warning-foreground h-4 w-4 shrink-0" />
@@ -226,19 +236,22 @@ export function PluginStatusBanner({
               <Type
                 className={cn(
                   "text-warning-foreground text-base font-semibold",
-                  isPublished && "text-emerald-500",
+                  isTrulyPublished && "text-emerald-500",
                 )}
               >
-                {isPublished
+                {isTrulyPublished
                   ? `Published to ${memberPlugins.length} plugin${
                       memberPlugins.length > 1 ? "s" : ""
                     }`
-                  : "Not published to any plugin"}
+                  : isPublished
+                    ? "Marketplace needs publishing"
+                    : "Not published to any plugin"}
               </Type>
             </div>
             <Type variant="small" className="text-muted-foreground/90">
               Plugins are the preferred way to distribute MCP servers to your
-              organization's users.
+              organization's users. Plugins are installed via marketplaces which
+              are GitHub repositories that Speakeasy hosts on your behalf.
             </Type>
             {plugins.length > 0 && (
               <div className="flex items-center gap-2">
@@ -306,7 +319,7 @@ export function PluginStatusBanner({
           <ClientIconFan />
         </div>
 
-        {isPublished && publishStatus?.repoOwner && publishStatus.repoName && (
+        {isPublished && (
           <>
             <div className="border-border border-t" />
             <div className="flex items-center justify-between gap-4 p-6">
@@ -315,20 +328,48 @@ export function PluginStatusBanner({
                   Install the plugin
                 </Type>
                 <Type variant="small" className="text-muted-foreground/90">
-                  Your team installs the plugin in their AI client to start
-                  using this server.
+                  {publishStatus?.repoOwner && publishStatus.repoName
+                    ? "Your team installs the plugin in their AI client to start using this server."
+                    : "Your project marketplace isn't set up yet, so there's no repo to install from. Set it up on the Plugins page to unlock install instructions."}
                 </Type>
               </div>
-              <InstallInstructionsButton
-                repoOwner={publishStatus.repoOwner}
-                repoName={publishStatus.repoName}
-                marketplaceUrl={publishStatus.marketplaceUrl}
-                candidatePlugins={memberPlugins.map((plugin) => ({
-                  name: plugin.name,
-                  slug: plugin.slug,
-                  description: plugin.description,
-                }))}
-              />
+              {publishStatus?.repoOwner && publishStatus.repoName ? (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => setIsInstallDialogOpen(true)}
+                  >
+                    <Button.LeftIcon>
+                      <Plus className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Install</Button.Text>
+                  </Button>
+                  <routes.plugins.Link>
+                    <Button size="sm" variant="secondary">
+                      <Button.Text>Go to plugins</Button.Text>
+                    </Button>
+                  </routes.plugins.Link>
+                  <InstallInstructionsDialog
+                    open={isInstallDialogOpen}
+                    onOpenChange={setIsInstallDialogOpen}
+                    repoOwner={publishStatus.repoOwner}
+                    repoName={publishStatus.repoName}
+                    marketplaceUrl={publishStatus.marketplaceUrl}
+                    candidatePlugins={memberPlugins.map((plugin) => ({
+                      name: plugin.name,
+                      slug: plugin.slug,
+                      description: plugin.description,
+                    }))}
+                  />
+                </div>
+              ) : (
+                <routes.plugins.Link>
+                  <Button size="sm" variant="primary">
+                    Set up marketplace
+                  </Button>
+                </routes.plugins.Link>
+              )}
             </div>
           </>
         )}

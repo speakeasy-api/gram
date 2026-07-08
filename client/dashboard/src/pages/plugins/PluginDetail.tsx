@@ -410,7 +410,7 @@ export default function PluginDetail(): JSX.Element | null {
                   }
                 >
                   <div className="flex flex-col">
-                    <span>Install instructions</span>
+                    <span>GitHub installation (preferred)</span>
                     {(!publishStatus?.connected ||
                       !publishStatus.repoOwner ||
                       !publishStatus.repoName) && (
