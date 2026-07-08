@@ -1558,9 +1558,23 @@ type ToolEnvLookupParams struct {
 	ServerEnvVar string
 }
 
-func fetchHTTPSecurityDefinitions(ctx context.Context, tx DBTX, tools []ToolEnvLookupParams) (map[string]tsr.HttpSecurity, error) {
+// SecurityDefinitionKey identifies a single http_security row by the same
+// dimensions GetHTTPSecurityDefinitions filters on. A bare security "key"
+// (e.g. "bearerAuth") is only unique within one (deployment, OpenAPI
+// document) pair — two different OpenAPI sources in the same project can
+// legitimately define a scheme with the same name backed by different
+// env vars, so resolving purely by key risks handing one tool's security
+// variable to a different tool's (and toolset's) same-named-but-different
+// scheme.
+type SecurityDefinitionKey struct {
+	DeploymentID        uuid.UUID
+	OpenAPIv3DocumentID uuid.NullUUID
+	Key                 string
+}
+
+func fetchHTTPSecurityDefinitions(ctx context.Context, tx DBTX, tools []ToolEnvLookupParams) (map[SecurityDefinitionKey]tsr.HttpSecurity, error) {
 	if len(tools) == 0 {
-		return map[string]tsr.HttpSecurity{}, nil
+		return map[SecurityDefinitionKey]tsr.HttpSecurity{}, nil
 	}
 
 	toolsetRepo := tsr.New(tx)
@@ -1598,10 +1612,15 @@ func fetchHTTPSecurityDefinitions(ctx context.Context, tx DBTX, tools []ToolEnvL
 		return nil, fmt.Errorf("read toolset security definitions: %w", err)
 	}
 
-	byKey := make(map[string]tsr.HttpSecurity, len(securityEntries))
+	byKey := make(map[SecurityDefinitionKey]tsr.HttpSecurity, len(securityEntries))
 	for _, entry := range securityEntries {
-		if _, exists := byKey[entry.Key]; !exists {
-			byKey[entry.Key] = entry
+		k := SecurityDefinitionKey{
+			DeploymentID:        entry.DeploymentID,
+			OpenAPIv3DocumentID: entry.Openapiv3DocumentID,
+			Key:                 entry.Key,
+		}
+		if _, exists := byKey[k]; !exists {
+			byKey[k] = entry
 		}
 	}
 
@@ -1617,56 +1636,64 @@ func fetchHTTPSecurityDefinitions(ctx context.Context, tx DBTX, tools []ToolEnvL
 // another toolset's map here would silently misattribute display names.
 func AssembleEnvironmentVariablesForToolset(
 	tools []ToolEnvLookupParams,
-	securityEntriesByKey map[string]tsr.HttpSecurity,
+	securityEntriesByKey map[SecurityDefinitionKey]tsr.HttpSecurity,
 	headerDisplayNames map[string]string,
 ) ([]*types.SecurityVariable, []*types.ServerVariable) {
 	if len(tools) == 0 {
 		return []*types.SecurityVariable{}, []*types.ServerVariable{}
 	}
 
-	securityKeysMap := make(map[string]bool)
 	serverEnvVarsMap := make(map[string]bool)
+	securityVarsMap := make(map[string]*types.SecurityVariable)
 	for _, tool := range tools {
 		securityKeys, _, err := security.ParseHTTPToolSecurityKeys(tool.Security)
 		if err != nil {
 			continue
 		}
 
+		// Resolve each key against THIS tool's own (deployment, document) pair
+		// — never another tool's — so a same-named security scheme defined in
+		// two different OpenAPI sources never gets cross-wired. First tool
+		// wins for a given key within this toolset (a pre-existing,
+		// intra-toolset tie-break ambiguity, unrelated to this fix).
 		for _, key := range securityKeys {
-			securityKeysMap[key] = true
+			if _, exists := securityVarsMap[key]; exists {
+				continue
+			}
+
+			entry, ok := securityEntriesByKey[SecurityDefinitionKey{
+				DeploymentID:        tool.DeploymentID,
+				OpenAPIv3DocumentID: tool.OpenAPIv3DocumentID,
+				Key:                 key,
+			}]
+			if !ok {
+				continue
+			}
+
+			var displayName *string
+			for _, envVar := range entry.EnvVariables {
+				if dn, ok := headerDisplayNames[envVar]; ok && dn != "" {
+					displayName = &dn
+					break
+				}
+			}
+
+			securityVarsMap[key] = &types.SecurityVariable{
+				ID:           entry.ID.String(),
+				Type:         conv.FromPGText[string](entry.Type),
+				Name:         entry.Name.String,
+				DisplayName:  displayName,
+				InPlacement:  entry.InPlacement.String,
+				Scheme:       entry.Scheme.String,
+				BearerFormat: conv.FromPGText[string](entry.BearerFormat),
+				OauthTypes:   entry.OauthTypes,
+				OauthFlows:   entry.OauthFlows,
+				EnvVariables: entry.EnvVariables,
+			}
 		}
 
 		if tool.ServerEnvVar != "" {
 			serverEnvVarsMap[tool.ServerEnvVar] = true
-		}
-	}
-
-	securityVarsMap := make(map[string]*types.SecurityVariable)
-	for key := range securityKeysMap {
-		entry, ok := securityEntriesByKey[key]
-		if !ok {
-			continue
-		}
-
-		var displayName *string
-		for _, envVar := range entry.EnvVariables {
-			if dn, ok := headerDisplayNames[envVar]; ok && dn != "" {
-				displayName = &dn
-				break
-			}
-		}
-
-		securityVarsMap[key] = &types.SecurityVariable{
-			ID:           entry.ID.String(),
-			Type:         conv.FromPGText[string](entry.Type),
-			Name:         entry.Name.String,
-			DisplayName:  displayName,
-			InPlacement:  entry.InPlacement.String,
-			Scheme:       entry.Scheme.String,
-			BearerFormat: conv.FromPGText[string](entry.BearerFormat),
-			OauthTypes:   entry.OauthTypes,
-			OauthFlows:   entry.OauthFlows,
-			EnvVariables: entry.EnvVariables,
 		}
 	}
 

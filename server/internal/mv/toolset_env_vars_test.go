@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -23,7 +22,7 @@ func TestAssembleEnvironmentVariablesForToolset_DistinctDisplayNamesPerToolset(t
 		Key:          "apiKey",
 		EnvVariables: []string{"API_KEY"},
 	}
-	securityEntriesByKey := map[string]tsr.HttpSecurity{"apiKey": sharedEntry}
+	securityEntriesByKey := map[mv.SecurityDefinitionKey]tsr.HttpSecurity{{Key: "apiKey"}: sharedEntry}
 
 	toolA := []mv.ToolEnvLookupParams{{Security: []byte(`[{"apiKey":[]}]`)}}
 	toolB := []mv.ToolEnvLookupParams{{Security: []byte(`[{"apiKey":[]}]`)}}
@@ -40,7 +39,7 @@ func TestAssembleEnvironmentVariablesForToolset_DistinctDisplayNamesPerToolset(t
 func TestAssembleEnvironmentVariablesForToolset_ServerVarsComputedPerToolsetNoLeak(t *testing.T) {
 	t.Parallel()
 
-	securityEntriesByKey := map[string]tsr.HttpSecurity{}
+	securityEntriesByKey := map[mv.SecurityDefinitionKey]tsr.HttpSecurity{}
 
 	toolA := []mv.ToolEnvLookupParams{{ServerEnvVar: "TOOLSET_A_SERVER_URL"}}
 	toolB := []mv.ToolEnvLookupParams{{ServerEnvVar: "TOOLSET_B_SERVER_URL"}}
@@ -54,4 +53,48 @@ func TestAssembleEnvironmentVariablesForToolset_ServerVarsComputedPerToolsetNoLe
 	require.Equal(t, []string{"TOOLSET_B_SERVER_URL"}, serverVarsB[0].EnvVariables)
 }
 
-var _ = types.SecurityVariable{} // keep import if unused by future edits
+func TestAssembleEnvironmentVariablesForToolset_DisambiguatesSameKeyAcrossDocuments(t *testing.T) {
+	t.Parallel()
+
+	// Two different OpenAPI documents (and deployments) in the same project
+	// both define a security scheme named "apiKey", but each backs a
+	// different environment variable. A bare-key lookup would let one
+	// tool's security variable win arbitrarily for both; resolving by
+	// (deployment, document, key) must always pick the entry that actually
+	// belongs to the tool being resolved.
+	depA := uuid.New()
+	depB := uuid.New()
+	docA := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	docB := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+
+	entryA := tsr.HttpSecurity{
+		ID:                  uuid.New(),
+		DeploymentID:        depA,
+		Openapiv3DocumentID: docA,
+		Key:                 "apiKey",
+		EnvVariables:        []string{"DOC_A_API_KEY"},
+	}
+	entryB := tsr.HttpSecurity{
+		ID:                  uuid.New(),
+		DeploymentID:        depB,
+		Openapiv3DocumentID: docB,
+		Key:                 "apiKey",
+		EnvVariables:        []string{"DOC_B_API_KEY"},
+	}
+
+	securityEntriesByKey := map[mv.SecurityDefinitionKey]tsr.HttpSecurity{
+		{DeploymentID: depA, OpenAPIv3DocumentID: docA, Key: "apiKey"}: entryA,
+		{DeploymentID: depB, OpenAPIv3DocumentID: docB, Key: "apiKey"}: entryB,
+	}
+
+	toolFromDocA := []mv.ToolEnvLookupParams{{
+		DeploymentID:        depA,
+		OpenAPIv3DocumentID: docA,
+		Security:            []byte(`[{"apiKey":[]}]`),
+	}}
+
+	vars, _ := mv.AssembleEnvironmentVariablesForToolset(toolFromDocA, securityEntriesByKey, nil)
+
+	require.Len(t, vars, 1)
+	require.Equal(t, []string{"DOC_A_API_KEY"}, vars[0].EnvVariables, "tool from doc A must resolve doc A's entry, never doc B's")
+}

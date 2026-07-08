@@ -269,6 +269,60 @@ func createPetstoreDeployment(t *testing.T, ctx context.Context, ti *testInstanc
 	return dep
 }
 
+// createTodoDeploymentWithDocs creates a single deployment attaching the
+// todo-valid.yaml fixture multiple times under different document slugs.
+// todo-valid.yaml (unlike petstore-valid.yaml) declares HTTP security
+// schemes (ApiKeyAuth/BearerAuth), and the env var names derived for them are
+// slug-scoped (see internal/openapi/extract_speakeasy.go). Because
+// FindHttpToolEntriesByUrn only ever resolves tools from a project's single
+// latest completed deployment, reproducing "two OpenAPI documents in the
+// same project define a same-named security scheme with different env
+// vars" requires both documents to live in ONE deployment (distinct
+// openapiv3_document_id, shared deployment_id) rather than two sequential
+// deployments.
+func createTodoDeploymentWithDocs(t *testing.T, ctx context.Context, ti *testInstance, idempotencyKey string, docSlugs ...string) *dgen.CreateDeploymentResult {
+	t.Helper()
+
+	assetForms := make([]*dgen.AddOpenAPIv3DeploymentAssetForm, 0, len(docSlugs))
+	for _, docSlug := range docSlugs {
+		bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+
+		ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+			ApikeyToken:      nil,
+			SessionToken:     nil,
+			ProjectSlugInput: nil,
+			ContentType:      "application/x-yaml",
+			ContentLength:    int64(bs.Len()),
+		}, io.NopCloser(bs))
+		require.NoError(t, err, "upload todo openapi v3 asset for slug %s", docSlug)
+
+		assetForms = append(assetForms, &dgen.AddOpenAPIv3DeploymentAssetForm{
+			AssetID: ares.Asset.ID,
+			Name:    docSlug,
+			Slug:    types.Slug(docSlug),
+		})
+	}
+
+	dep, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey:   idempotencyKey,
+		Openapiv3Assets:  assetForms,
+		Functions:        []*dgen.AddFunctionsForm{},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create todo deployment")
+	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
+
+	return dep
+}
+
 // zipManifest creates a zip file containing a manifest.json and a stub functions file.
 func zipManifest(t *testing.T, path string, runtime string) (rdr io.Reader, err error) {
 	t.Helper()

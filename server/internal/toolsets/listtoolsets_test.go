@@ -2,6 +2,7 @@ package toolsets_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -458,4 +459,107 @@ func TestToolsetsService_ListToolsets_ManyToolsetsNoCrossContamination(t *testin
 		require.Len(t, entry.ToolUrns, 1)
 		require.Equal(t, tools[i].ToolUrn.String(), entry.ToolUrns[0])
 	}
+}
+
+// TestToolsetsService_ListToolsets_SecurityVariablesNotMixedAcrossDocuments is
+// a regression test for DNO-375: http_security rows are only unique per
+// (deployment, OpenAPI document, key), not per bare key. todo-valid.yaml
+// declares an "ApiKeyAuth"/"BearerAuth" pair, so attaching that same fixture
+// twice under different document slugs within ONE deployment produces two
+// http_security rows that share the same bare keys but resolve to
+// different, document-specific env vars (the env var name is derived from
+// the document's slug, see internal/openapi/extract_speakeasy.go). Both
+// documents must live in the same deployment because
+// FindHttpToolEntriesByUrn (used by DescribeToolsetEntries) only ever
+// resolves tools from a project's single latest completed deployment. If the
+// batched lookup in mv.fetchHTTPSecurityDefinitions ever regresses to keying
+// by bare key again, one of these toolsets would end up advertising the
+// other document's environment variable.
+func TestToolsetsService_ListToolsets_SecurityVariablesNotMixedAcrossDocuments(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	dep := createTodoDeploymentWithDocs(t, ctx, ti, "test-todo-multi-doc", "todo-doc-a", "todo-doc-b")
+
+	repo := testrepo.New(ti.conn)
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment tools")
+	require.NotEmpty(t, tools, "expected tools from todo deployment")
+
+	var toolUrnsA, toolUrnsB []string
+	for _, tool := range tools {
+		urn := tool.ToolUrn.String()
+		switch {
+		case strings.Contains(urn, ":todo-doc-a:"):
+			toolUrnsA = append(toolUrnsA, urn)
+		case strings.Contains(urn, ":todo-doc-b:"):
+			toolUrnsB = append(toolUrnsB, urn)
+		}
+	}
+	require.NotEmpty(t, toolUrnsA, "expected tools from todo-doc-a")
+	require.NotEmpty(t, toolUrnsB, "expected tools from todo-doc-b")
+
+	toolsetA, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Todo Doc A Toolset",
+		Description:            new("Toolset backed by todo document A"),
+		ToolUrns:               toolUrnsA,
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	toolsetB, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Todo Doc B Toolset",
+		Description:            new("Toolset backed by todo document B"),
+		ToolUrns:               toolUrnsB,
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Toolsets, 2)
+
+	byID := make(map[string]*types.ToolsetEntry, len(result.Toolsets))
+	for _, ts := range result.Toolsets {
+		byID[ts.ID] = ts
+	}
+
+	entryA := byID[toolsetA.ID]
+	require.NotNil(t, entryA)
+	entryB := byID[toolsetB.ID]
+	require.NotNil(t, entryB)
+
+	envVarsA := collectSecurityEnvVars(entryA.SecurityVariables)
+	envVarsB := collectSecurityEnvVars(entryB.SecurityVariables)
+
+	require.Contains(t, envVarsA, "TODO_DOC_A_API_KEY_AUTH", "toolset A should surface its own document's api key env var")
+	require.Contains(t, envVarsA, "TODO_DOC_A_BEARER_AUTH", "toolset A should surface its own document's bearer env var")
+	require.NotContains(t, envVarsA, "TODO_DOC_B_API_KEY_AUTH", "toolset A must not surface document B's env var")
+	require.NotContains(t, envVarsA, "TODO_DOC_B_BEARER_AUTH", "toolset A must not surface document B's env var")
+
+	require.Contains(t, envVarsB, "TODO_DOC_B_API_KEY_AUTH", "toolset B should surface its own document's api key env var")
+	require.Contains(t, envVarsB, "TODO_DOC_B_BEARER_AUTH", "toolset B should surface its own document's bearer env var")
+	require.NotContains(t, envVarsB, "TODO_DOC_A_API_KEY_AUTH", "toolset B must not surface document A's env var")
+	require.NotContains(t, envVarsB, "TODO_DOC_A_BEARER_AUTH", "toolset B must not surface document A's env var")
+}
+
+func collectSecurityEnvVars(vars []*types.SecurityVariable) []string {
+	var out []string
+	for _, v := range vars {
+		if v == nil {
+			continue
+		}
+		out = append(out, v.EnvVariables...)
+	}
+	return out
 }
