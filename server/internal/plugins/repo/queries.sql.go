@@ -166,6 +166,19 @@ func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plu
 	return i, err
 }
 
+const deleteGitHubConnection = `-- name: DeleteGitHubConnection :exec
+DELETE FROM plugin_github_connections WHERE project_id = $1
+`
+
+// Hard-deletes a project's GitHub connection row. plugin_github_connections
+// has no soft-delete column of its own; used only to reclaim a stale row left
+// behind by a soft-deleted project (see GetGitHubConnectionOwner) so its repo
+// slot can be reused by the project that now legitimately claims it.
+func (q *Queries) DeleteGitHubConnection(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteGitHubConnection, projectID)
+	return err
+}
+
 const deletePlugin = `-- name: DeletePlugin :exec
 UPDATE plugins
 SET deleted_at = clock_timestamp(),
@@ -268,6 +281,39 @@ func (q *Queries) GetGitHubConnectionByMarketplaceToken(ctx context.Context, mar
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const getGitHubConnectionOwner = `-- name: GetGitHubConnectionOwner :one
+SELECT c.project_id, p.deleted AS project_deleted
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id
+WHERE c.installation_id = $1
+  AND LOWER(c.repo_owner) = LOWER($2)
+  AND LOWER(c.repo_name) = LOWER($3)
+`
+
+type GetGitHubConnectionOwnerParams struct {
+	InstallationID int64
+	RepoOwner      string
+	RepoName       string
+}
+
+type GetGitHubConnectionOwnerRow struct {
+	ProjectID      uuid.UUID
+	ProjectDeleted bool
+}
+
+// Resolves which project currently owns a given installation/repo pair, and
+// whether that project has since been soft-deleted. Used to self-heal a
+// plugin_github_connections_installation_repo_key conflict on
+// UpsertGitHubConnection: a soft-deleted project's repo claim is stale (soft
+// deletes never clean up this table) and can be reclaimed by whichever
+// active project computes the same repo name next.
+func (q *Queries) GetGitHubConnectionOwner(ctx context.Context, arg GetGitHubConnectionOwnerParams) (GetGitHubConnectionOwnerRow, error) {
+	row := q.db.QueryRow(ctx, getGitHubConnectionOwner, arg.InstallationID, arg.RepoOwner, arg.RepoName)
+	var i GetGitHubConnectionOwnerRow
+	err := row.Scan(&i.ProjectID, &i.ProjectDeleted)
 	return i, err
 }
 

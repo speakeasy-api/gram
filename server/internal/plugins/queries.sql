@@ -351,6 +351,27 @@ ON CONFLICT (project_id) DO UPDATE
       updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: GetGitHubConnectionOwner :one
+-- Resolves which project currently owns a given installation/repo pair, and
+-- whether that project has since been soft-deleted. Used to self-heal a
+-- plugin_github_connections_installation_repo_key conflict on
+-- UpsertGitHubConnection: a soft-deleted project's repo claim is stale (soft
+-- deletes never clean up this table) and can be reclaimed by whichever
+-- active project computes the same repo name next.
+SELECT c.project_id, p.deleted AS project_deleted
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id
+WHERE c.installation_id = @installation_id
+  AND LOWER(c.repo_owner) = LOWER(@repo_owner)
+  AND LOWER(c.repo_name) = LOWER(@repo_name);
+
+-- name: DeleteGitHubConnection :exec
+-- Hard-deletes a project's GitHub connection row. plugin_github_connections
+-- has no soft-delete column of its own; used only to reclaim a stale row left
+-- behind by a soft-deleted project (see GetGitHubConnectionOwner) so its repo
+-- slot can be reused by the project that now legitimately claims it.
+DELETE FROM plugin_github_connections WHERE project_id = @project_id;
+
 -- name: GetMarketplaceSettings :one
 SELECT *
 FROM project_marketplace_settings

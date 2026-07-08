@@ -1863,13 +1863,79 @@ func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose str
 }
 
 // ErrGitHubRepoConflict indicates the computed repo_owner/repo_name for this
-// project's publish already belongs to a different project's GitHub
-// connection (plugin_github_connections_installation_repo_key). Most often
-// this is a stale row left behind by a soft-deleted project that freed its
-// org/project slug for reuse — soft-deletes never clean up this table.
-// Callers should treat this as a non-retryable, human-actionable condition
-// rather than a transient failure.
-var ErrGitHubRepoConflict = errors.New("github repo already connected to a different project")
+// project's publish already belongs to a different, still-active project's
+// GitHub connection (plugin_github_connections_installation_repo_key) — see
+// upsertGitHubConnection, which self-heals the far more common case of a
+// stale row from a soft-deleted project and only returns this when the
+// blocking project is genuinely still active. Callers should treat this as a
+// non-retryable, human-actionable condition rather than a transient failure.
+var ErrGitHubRepoConflict = errors.New("github repo already connected to a different active project")
+
+// upsertGitHubConnection wraps UpsertGitHubConnection with a SAVEPOINT so a
+// plugin_github_connections_installation_repo_key conflict can self-heal in
+// band instead of always surfacing to the caller. repoName is derived from
+// org/project slugs (see publishProject), and projects_organization_id_slug_key
+// is a partial unique index scoped to non-deleted projects — so a
+// soft-deleted project's slug can be reused, but its plugin_github_connections
+// row is never cleaned up (soft deletes don't cascade). When that's the
+// blocking row, it's safe to reclaim: delete the stale connection and retry
+// once. A conflict against a still-active project's connection can't be
+// resolved here (its slug is legitimately still in use) and surfaces as
+// ErrGitHubRepoConflict — this should be rare to impossible given active
+// slugs are unique, but is not provably unreachable (e.g. two installations
+// mapping to the same org externally), so it's handled rather than assumed
+// away.
+//
+// Takes the raw transaction for the same reason as EnsureDefaultPlugin: a
+// Postgres transaction aborts after any failed statement, so recovering from
+// the expected unique-violation to run the reclaim + retry needs a savepoint.
+func (s *Service) upsertGitHubConnection(ctx context.Context, tx pgx.Tx, params repo.UpsertGitHubConnectionParams) (repo.PluginGithubConnection, error) {
+	q := repo.New(tx)
+
+	const savepoint = "upsert_github_connection"
+	if _, err := tx.Exec(ctx, "SAVEPOINT "+savepoint); err != nil {
+		return repo.PluginGithubConnection{}, fmt.Errorf("begin savepoint: %w", err)
+	}
+
+	conn, err := q.UpsertGitHubConnection(ctx, params)
+	if err == nil {
+		if _, err := tx.Exec(ctx, "RELEASE SAVEPOINT "+savepoint); err != nil {
+			return repo.PluginGithubConnection{}, fmt.Errorf("release savepoint: %w", err)
+		}
+		return conn, nil
+	}
+
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != pgerrcode.UniqueViolation || pgErr.ConstraintName != "plugin_github_connections_installation_repo_key" {
+		return repo.PluginGithubConnection{}, fmt.Errorf("upsert github connection: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT "+savepoint); err != nil {
+		return repo.PluginGithubConnection{}, fmt.Errorf("rollback savepoint after repo conflict: %w", err)
+	}
+
+	owner, err := q.GetGitHubConnectionOwner(ctx, repo.GetGitHubConnectionOwnerParams{
+		InstallationID: params.InstallationID,
+		RepoOwner:      params.RepoOwner,
+		RepoName:       params.RepoName,
+	})
+	if err != nil {
+		return repo.PluginGithubConnection{}, fmt.Errorf("%w: %s/%s (owner lookup failed: %w)", ErrGitHubRepoConflict, params.RepoOwner, params.RepoName, err)
+	}
+	if !owner.ProjectDeleted {
+		return repo.PluginGithubConnection{}, fmt.Errorf("%w: %s/%s", ErrGitHubRepoConflict, params.RepoOwner, params.RepoName)
+	}
+
+	if err := q.DeleteGitHubConnection(ctx, owner.ProjectID); err != nil {
+		return repo.PluginGithubConnection{}, fmt.Errorf("reclaim stale github connection: %w", err)
+	}
+
+	conn, err = q.UpsertGitHubConnection(ctx, params)
+	if err != nil {
+		return repo.PluginGithubConnection{}, fmt.Errorf("upsert github connection after reclaiming stale connection: %w", err)
+	}
+	return conn, nil
+}
 
 // persistPluginAPIKeys atomically writes one or more API keys, their audit
 // log entries, the plugin publish audit log entry, and the GitHub
@@ -1930,7 +1996,7 @@ func (s *Service) persistPluginAPIKeys(
 	if err != nil {
 		return fmt.Errorf("generate marketplace token: %w", err)
 	}
-	if _, err := s.repo.WithTx(tx).UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
+	if _, err := s.upsertGitHubConnection(ctx, tx, repo.UpsertGitHubConnectionParams{
 		ProjectID:            input.ProjectID,
 		InstallationID:       s.github.InstallationID,
 		RepoOwner:            repoOwner,
@@ -1938,11 +2004,7 @@ func (s *Service) persistPluginAPIKeys(
 		MarketplaceToken:     pgtype.Text{String: candidateToken, Valid: true},
 		PublishedFingerprint: conv.ToPGText(fingerprint),
 	}); err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "plugin_github_connections_installation_repo_key" {
-			return fmt.Errorf("%w: %s/%s already connected to a different project", ErrGitHubRepoConflict, repoOwner, repoName)
-		}
-		return fmt.Errorf("upsert github connection: %w", err)
+		return err
 	}
 
 	if err := s.audit.LogPluginPublish(ctx, tx, audit.LogPluginPublishEvent{
