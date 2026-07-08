@@ -312,6 +312,8 @@ export default function Plugins(): JSX.Element {
                           setIsManageCollaboratorsOpen(true)
                         }
                         onRename={handleOpenMarketplaceSettings}
+                        onSync={() => handlePublish([])}
+                        isSyncing={publishMutation.isPending}
                       />
                       <div className="border-border border-t" />
                     </>

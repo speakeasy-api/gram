@@ -88,6 +88,11 @@ export function PluginCard({
                   <Badge.Text>Default</Badge.Text>
                 </Badge>
               )}
+              {publishStatus?.upToDate === false && (
+                <Badge variant="warning">
+                  <Badge.Text>Needs syncing</Badge.Text>
+                </Badge>
+              )}
             </div>
             <Type
               small
