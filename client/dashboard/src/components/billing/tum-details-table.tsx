@@ -370,10 +370,25 @@ export function TumDetailsTable({
     const cycle = period.cycle;
     if (limit == null || cycle == null) return null;
     const points = data?.points ?? [];
-    const billedByDate = new Map(cycle.days.map((d) => [d.date, d.tokens]));
-    const billed = points.map(
-      (p) => billedByDate.get(bucketDate(p.bucketTimeUnixNano)) ?? 0,
-    );
+
+    // The daily series the crossing is walked on. Normally the cycle's
+    // org-wide billed days; when the TUM response didn't carry them (the
+    // synthesized active-cycle fallback has none), an all-zero walk would
+    // silently zero the whole column — instead org scope falls back to the
+    // billed-scaled analytics series, and project scope dashes out (its
+    // filtered series can't locate the org-wide crossing).
+    let billed: number[];
+    if (cycle.days.length > 0) {
+      const billedByDate = new Map(cycle.days.map((d) => [d.date, d.tokens]));
+      billed = points.map(
+        (p) => billedByDate.get(bucketDate(p.bucketTimeUnixNano)) ?? 0,
+      );
+    } else if (billedCycle) {
+      billed = points.map((p) => p.totalTokens * billedScale);
+    } else {
+      return null;
+    }
+
     const weights = billed.map(() => 0);
     let cumulative = 0;
     for (let i = 0; i < billed.length; i++) {

@@ -30,6 +30,10 @@ export function BillingCyclePicker({
   };
 
   return (
+    // The empty string is Radix's sanctioned controlled-mode "show the
+    // placeholder" value for the ROOT (its no-empty-string rule applies to
+    // Item values only); undefined would flip the Select to uncontrolled and
+    // freeze the stale cycle label.
     <Select
       value={selected ? cycleKey(selected) : ""}
       onValueChange={handleChange}

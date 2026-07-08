@@ -107,6 +107,10 @@ export function periodDisplayRange(period: BillingPeriod): {
 } {
   const last = new Date(period.end.getTime() - 1);
   if (!isUTCMidnight(period.start) || !isUTCMidnight(period.end)) {
+    // The display is date-granular, so the -1ms only shows for ends sitting
+    // exactly on a midnight — where it is what makes a range like
+    // "yesterday" (ending at today 00:00 local) read as yesterday's date
+    // instead of today's. Display-only: nothing feeds this range back.
     return { from: period.start, to: last };
   }
   return {
