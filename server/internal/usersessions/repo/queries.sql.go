@@ -195,7 +195,7 @@ VALUES (
     $3,
     $4
 )
-RETURNING id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionIssuerParams struct {
@@ -219,6 +219,7 @@ func (q *Queries) CreateUserSessionIssuer(ctx context.Context, arg CreateUserSes
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
+		&i.Classification,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -249,7 +250,7 @@ const deleteUserSessionIssuer = `-- name: DeleteUserSessionIssuer :one
 UPDATE user_session_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteUserSessionIssuerParams struct {
@@ -266,6 +267,7 @@ func (q *Queries) DeleteUserSessionIssuer(ctx context.Context, arg DeleteUserSes
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
+		&i.Classification,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -522,7 +524,7 @@ func (q *Queries) GetUserSessionConsentByID(ctx context.Context, arg GetUserSess
 }
 
 const getUserSessionIssuerByID = `-- name: GetUserSessionIssuerByID :one
-SELECT id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -541,6 +543,7 @@ func (q *Queries) GetUserSessionIssuerByID(ctx context.Context, arg GetUserSessi
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
+		&i.Classification,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -550,7 +553,7 @@ func (q *Queries) GetUserSessionIssuerByID(ctx context.Context, arg GetUserSessi
 }
 
 const getUserSessionIssuerBySlug = `-- name: GetUserSessionIssuerBySlug :one
-SELECT id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -569,6 +572,7 @@ func (q *Queries) GetUserSessionIssuerBySlug(ctx context.Context, arg GetUserSes
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
+		&i.Classification,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -754,7 +758,7 @@ func (q *Queries) ListUserSessionConsentsByProjectID(ctx context.Context, arg Li
 }
 
 const listUserSessionIssuersByProjectID = `-- name: ListUserSessionIssuersByProjectID :many
-SELECT id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -784,6 +788,7 @@ func (q *Queries) ListUserSessionIssuersByProjectID(ctx context.Context, arg Lis
 			&i.Slug,
 			&i.AuthnChallengeMode,
 			&i.SessionDuration,
+			&i.Classification,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1302,7 +1307,7 @@ SET
     session_duration = COALESCE($3::interval, session_duration),
     updated_at = clock_timestamp()
 WHERE id = $4 AND project_id = $5 AND deleted IS FALSE
-RETURNING id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateUserSessionIssuerParams struct {
@@ -1328,6 +1333,7 @@ func (q *Queries) UpdateUserSessionIssuer(ctx context.Context, arg UpdateUserSes
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
+		&i.Classification,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

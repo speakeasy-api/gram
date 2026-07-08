@@ -797,6 +797,7 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
   session_duration INTERVAL NOT NULL,
+  classification TEXT NOT NULL DEFAULT 'custom' CHECK (classification IN ('custom', 'project_default_idp')), -- 'project_default_idp' is the auto-provisioned implicit Gram issuer for private servers; 'custom' is user-configured
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -810,6 +811,11 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_slug_key
 ON user_session_issuers (project_id, slug)
 WHERE deleted IS FALSE;
+
+-- At most one auto-provisioned project-default issuer per project.
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_default_key
+ON user_session_issuers (project_id)
+WHERE classification = 'project_default_idp' AND deleted IS FALSE;
 
 -- User Session Clients are MCP Clients that have registered themselves with Gram
 -- See: https://datatracker.ietf.org/doc/html/rfc6749#section-1.1
