@@ -36,6 +36,9 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 // remainder rolls into a client-side "Other" series.
 const MAX_STACKS = 8;
 
+// Pointer movement under this many pixels counts as a click, not a drag.
+const DRAG_THRESHOLD_PX = 5;
+
 type Granularity = "day" | "week" | "month";
 
 const GRANULARITIES: { value: Granularity; label: string }[] = [
@@ -410,42 +413,50 @@ export function TokenUsagePanel({
     instance.update();
   }, [chart, hiddenLabels]);
 
-  // Dragging horizontally across the chart selects the covered buckets as a
-  // date range (a small movement stays a plain click). Pixel positions map to
-  // axis indexes through the Chart.js category scale.
-  const DRAG_THRESHOLD_PX = 5;
-
-  const relativeX = (e: React.MouseEvent<HTMLDivElement>): number =>
-    e.clientX - e.currentTarget.getBoundingClientRect().left;
-
-  const handleChartMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
-    if (!onSelectRange || e.button !== 0) return;
-    didDragRef.current = false;
-    const x = relativeX(e);
-    setDragX({ start: x, current: x });
-  };
-
-  const handleChartMouseMove = (e: React.MouseEvent<HTMLDivElement>): void => {
-    if (!dragX) return;
-    setDragX({ start: dragX.start, current: relativeX(e) });
-  };
-
-  const handleChartMouseUp = (): void => {
-    if (!dragX || !onSelectRange) return;
-    const { start: x1, current: x2 } = dragX;
-    setDragX(null);
-    if (Math.abs(x2 - x1) < DRAG_THRESHOLD_PX) return; // plain click
+  // Selects the buckets covered by [x1, x2] (container pixels) as a date
+  // range, re-bucketing daily. Pixel positions map to axis indexes through
+  // the Chart.js category scale.
+  const selectPixelRange = (x1: number, x2: number): void => {
     const scale = chartRef.current?.scales["x"];
-    if (!scale || chart.buckets.length === 0) return;
+    if (!onSelectRange || !scale || chart.buckets.length === 0) return;
     const clampIndex = (v: number | undefined): number =>
       Math.min(chart.buckets.length - 1, Math.max(0, Math.round(v ?? 0)));
     const from = clampIndex(scale.getValueForPixel(Math.min(x1, x2)));
     const to = clampIndex(scale.getValueForPixel(Math.max(x1, x2)));
-    didDragRef.current = true;
     const startMs = chart.buckets[from]!;
     const endMs = bucketEndMs(chart.buckets[to]!, granularity);
     setGranularity("day");
     onSelectRange(new Date(startMs), new Date(endMs));
+  };
+
+  // Dragging horizontally across the chart selects the covered buckets (a
+  // movement under the threshold stays a plain click). Tracking happens on
+  // window listeners installed at mousedown, so the drag survives leaving the
+  // container and completes wherever the button is released; the listeners
+  // remove themselves on mouseup.
+  const handleChartMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (!onSelectRange || e.button !== 0) return;
+    didDragRef.current = false;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clampX = (clientX: number): number =>
+      Math.min(rect.width, Math.max(0, clientX - rect.left));
+    const startX = clampX(e.clientX);
+    setDragX({ start: startX, current: startX });
+
+    const onMove = (ev: MouseEvent): void => {
+      setDragX({ start: startX, current: clampX(ev.clientX) });
+    };
+    const onUp = (ev: MouseEvent): void => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setDragX(null);
+      const endX = clampX(ev.clientX);
+      if (Math.abs(endX - startX) < DRAG_THRESHOLD_PX) return; // plain click
+      didDragRef.current = true;
+      selectPixelRange(startX, endX);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   };
 
   const toggleLabel = (label: string) => {
@@ -561,9 +572,6 @@ export function TokenUsagePanel({
               className="relative"
               style={{ height: 280 }}
               onMouseDown={handleChartMouseDown}
-              onMouseMove={handleChartMouseMove}
-              onMouseUp={handleChartMouseUp}
-              onMouseLeave={() => setDragX(null)}
             >
               <Bar ref={chartRef} data={chart.data} options={chartOptions} />
               {dragX &&

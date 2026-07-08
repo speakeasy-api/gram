@@ -241,6 +241,57 @@ function DetailRowItem({
   );
 }
 
+// One collapsible section: a clickable header band with its metric rows.
+function DetailGroupSection({
+  group,
+  collapsed,
+  onToggle,
+  overageWeights,
+}: {
+  group: DetailGroup;
+  collapsed: boolean;
+  onToggle: () => void;
+  overageWeights: number[] | null;
+}): JSX.Element {
+  return (
+    <div>
+      {/* Clicking the section band collapses/expands its rows. */}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        className="bg-muted text-muted-foreground hover:text-foreground border-border dark:border-white/20 flex w-full cursor-pointer items-center gap-1.5 border-t px-4 py-1.5 text-xs transition-colors"
+      >
+        <ChevronDown
+          className={cn(
+            "size-3 transition-transform",
+            collapsed && "-rotate-90",
+          )}
+        />
+        <span className="font-medium">{group.heading}</span>
+        {group.note && (
+          <SimpleTooltip tooltip={group.note}>
+            <Info className="size-3 cursor-help" />
+          </SimpleTooltip>
+        )}
+      </button>
+      {/* The default border token nearly vanishes on the dark canvas; lift
+          the internal dividers so rows stay separable. */}
+      {!collapsed && (
+        <div className="divide-border dark:divide-white/20 divide-y">
+          {group.rows.map((row) => (
+            <DetailRowItem
+              key={row.label}
+              row={row}
+              overageWeights={overageWeights}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Per-metric usage details for the selected period, rendered under the token
  * usage chart. Everything comes from a single telemetry.queryTumDetails
@@ -265,6 +316,21 @@ export function TumDetailsTable({
   // Same query (and key) as the chart's risk series — React Query dedupes.
   const { data: riskData } = useQuery(riskPointsQuery(scope));
 
+  // Sections collapsed via their header band, keyed by heading so the state
+  // survives period/project switches.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleGroup = (heading: string): void => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(heading)) {
+        next.delete(heading);
+      } else {
+        next.add(heading);
+      }
+      return next;
+    });
+  };
+
   // Billed normalization and overage attribution are organization-cycle
   // concepts (the TUM contract has no per-project or sub-cycle split), so
   // both switch off when a project filter or a custom range narrows the data.
@@ -286,13 +352,23 @@ export function TumDetailsTable({
   const groups = useMemo<DetailGroup[]>(() => {
     const points = data?.points ?? [];
     const totals = data?.totals;
-    const riskPoints = riskData?.points ?? [];
-    const riskyTotal = riskPoints.reduce((sum, p) => sum + p.riskyTokens, 0);
+    // The risk series comes from a separate request — align it to the main
+    // points grid by bucket timestamp rather than by array position.
+    const riskyByBucket = new Map(
+      (riskData?.points ?? []).map((p) => [
+        p.bucketTimeUnixNano,
+        p.riskyTokens,
+      ]),
+    );
+    const riskySeries = points.map(
+      (p) => riskyByBucket.get(p.bucketTimeUnixNano) ?? 0,
+    );
+    const riskyTotal = riskySeries.reduce((sum, v) => sum + v, 0);
     // Remainder against the same totals as the "Total tokens" row, so the two
     // risk rows sum to it exactly (the risk endpoint's own session aggregate
     // includes forwarded tokens that the analytics totals exclude).
     const cleanSeries = points.map((p, i) =>
-      Math.max(0, p.totalTokens - (riskPoints[i]?.riskyTokens ?? 0)),
+      Math.max(0, p.totalTokens - riskySeries[i]!),
     );
 
     const measureRow = (spec: MeasureRowSpec): DetailRow => ({
@@ -322,7 +398,7 @@ export function TumDetailsTable({
           {
             label: "Sessions with risk findings",
             color: RISKY_COLOR,
-            series: riskPoints.map((p) => p.riskyTokens),
+            series: riskySeries,
             total: riskyTotal,
           },
           {
@@ -420,21 +496,6 @@ export function TumDetailsTable({
   const loading = isFetching && !data;
   const failed = !loading && !data && isError;
 
-  // Sections collapsed via their header band, keyed by heading so the state
-  // survives period/project switches.
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const toggleGroup = (heading: string): void => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(heading)) {
-        next.delete(heading);
-      } else {
-        next.add(heading);
-      }
-      return next;
-    });
-  };
-
   const totalTooltip = billedCycle
     ? "Billed tokens under management, attributed across metrics by the analytics distribution."
     : "Tokens for the selected slice, from the analytics aggregates. Billed normalization applies to full organization billing cycles only.";
@@ -496,46 +557,15 @@ export function TumDetailsTable({
       )}
       {!loading &&
         !failed &&
-        groups.map((group) => {
-          const isCollapsed = collapsed.has(group.heading);
-          return (
-            <div key={group.heading}>
-              {/* Clicking the section band collapses/expands its rows. */}
-              <button
-                type="button"
-                onClick={() => toggleGroup(group.heading)}
-                aria-expanded={!isCollapsed}
-                className="bg-muted text-muted-foreground hover:text-foreground border-border dark:border-white/20 flex w-full cursor-pointer items-center gap-1.5 border-t px-4 py-1.5 text-xs transition-colors"
-              >
-                <ChevronDown
-                  className={cn(
-                    "size-3 transition-transform",
-                    isCollapsed && "-rotate-90",
-                  )}
-                />
-                <span className="font-medium">{group.heading}</span>
-                {group.note && (
-                  <SimpleTooltip tooltip={group.note}>
-                    <Info className="size-3 cursor-help" />
-                  </SimpleTooltip>
-                )}
-              </button>
-              {/* The default border token nearly vanishes on the dark canvas;
-                  lift the internal dividers so rows stay separable. */}
-              {!isCollapsed && (
-                <div className="divide-border dark:divide-white/20 divide-y">
-                  {group.rows.map((row) => (
-                    <DetailRowItem
-                      key={row.label}
-                      row={row}
-                      overageWeights={overageWeights}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        groups.map((group) => (
+          <DetailGroupSection
+            key={group.heading}
+            group={group}
+            collapsed={collapsed.has(group.heading)}
+            onToggle={() => toggleGroup(group.heading)}
+            overageWeights={overageWeights}
+          />
+        ))}
     </div>
   );
 }
