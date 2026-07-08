@@ -13,53 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const createDefaultUserSessionIssuer = `-- name: CreateDefaultUserSessionIssuer :one
-INSERT INTO user_session_issuers (
-    project_id,
-    slug,
-    authn_challenge_mode,
-    session_duration
-)
-VALUES (
-    $1,
-    $2,
-    $3,
-    $4
-)
-ON CONFLICT (project_id, slug) WHERE deleted IS FALSE DO NOTHING
-RETURNING id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
-`
-
-type CreateDefaultUserSessionIssuerParams struct {
-	ProjectID          uuid.UUID
-	Slug               string
-	AuthnChallengeMode string
-	SessionDuration    pgtype.Interval
-}
-
-// ON CONFLICT DO NOTHING returns no row on conflict; the caller re-reads.
-func (q *Queries) CreateDefaultUserSessionIssuer(ctx context.Context, arg CreateDefaultUserSessionIssuerParams) (UserSessionIssuer, error) {
-	row := q.db.QueryRow(ctx, createDefaultUserSessionIssuer,
-		arg.ProjectID,
-		arg.Slug,
-		arg.AuthnChallengeMode,
-		arg.SessionDuration,
-	)
-	var i UserSessionIssuer
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.Slug,
-		&i.AuthnChallengeMode,
-		&i.SessionDuration,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const createUserSession = `-- name: CreateUserSession :one
 INSERT INTO user_sessions (
     project_id,
@@ -1391,6 +1344,60 @@ func (q *Queries) UpdateUserSessionIssuer(ctx context.Context, arg UpdateUserSes
 		arg.SessionDuration,
 		arg.ID,
 		arg.ProjectID,
+	)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertDefaultUserSessionIssuer = `-- name: UpsertDefaultUserSessionIssuer :one
+INSERT INTO user_session_issuers (
+    id,
+    project_id,
+    slug,
+    authn_challenge_mode,
+    session_duration
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5
+)
+ON CONFLICT (id) DO UPDATE SET deleted_at = NULL, updated_at = clock_timestamp()
+RETURNING id, project_id, slug, authn_challenge_mode, session_duration, classification, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertDefaultUserSessionIssuerParams struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	Slug               string
+	AuthnChallengeMode string
+	SessionDuration    pgtype.Interval
+}
+
+// Keyed on the caller-supplied deterministic id (usersessions.DefaultIssuerID)
+// so it is idempotent and resurrects a soft-deleted row. Race-safe: concurrent
+// first touches both land on the same id.
+func (q *Queries) UpsertDefaultUserSessionIssuer(ctx context.Context, arg UpsertDefaultUserSessionIssuerParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, upsertDefaultUserSessionIssuer,
+		arg.ID,
+		arg.ProjectID,
+		arg.Slug,
+		arg.AuthnChallengeMode,
+		arg.SessionDuration,
 	)
 	var i UserSessionIssuer
 	err := row.Scan(

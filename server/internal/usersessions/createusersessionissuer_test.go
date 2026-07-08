@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 func TestCreateUserSessionIssuer(t *testing.T) {
@@ -53,24 +52,6 @@ func TestCreateUserSessionIssuer_BadDuration(t *testing.T) {
 		Slug:                 "bad-duration",
 		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 0,
-	})
-	requireOopsCode(t, err, oops.CodeBadRequest)
-}
-
-func TestCreateUserSessionIssuer_ReservedDefaultSlug(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	// The implicit project-default issuer resolves by this slug; letting a
-	// user create it would hijack implicit resolution for the project.
-	_, err := ti.service.CreateUserSessionIssuer(ctx, &gen.CreateUserSessionIssuerPayload{
-		SessionToken:         nil,
-		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
-		Slug:                 usersessions.DefaultIssuerSlug,
-		AuthnChallengeMode:   "interactive",
-		SessionDurationHours: 24,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }

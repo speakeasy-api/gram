@@ -173,18 +173,20 @@ func TestMintUserSessionForServerImplicitIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, got.AccessToken)
 
-	// The mint materialised the project-default issuer and bound the JWT
-	// audience to it.
-	issuer, found, err := usersessions.GetDefaultIssuer(ctx, ti.conn, *authCtx.ProjectID)
-	require.NoError(t, err)
-	require.True(t, found, "mint must materialise the default issuer")
-	require.Equal(t, usersessions.DefaultIssuerSlug, issuer.Slug)
-
+	// The JWT audience is bound to the deterministic project-default issuer,
+	// and the mint materialised its backing row.
+	issuerID := usersessions.DefaultIssuerID(*authCtx.ProjectID)
 	_, err = usersessions.NewSigner("test-jwt-secret").Validate(
 		got.AccessToken,
-		urn.NewUserSessionIssuer(issuer.ID).String(),
+		urn.NewUserSessionIssuer(issuerID).String(),
 	)
 	require.NoError(t, err)
+
+	_, err = repo.New(ti.conn).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+		ID:        issuerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err, "mint must materialise the default issuer row")
 }
 
 // createIssuerGatedMintServer creates an issuer-gated mcp_server. It's backed by

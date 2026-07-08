@@ -13,21 +13,25 @@ VALUES (
 )
 RETURNING *;
 
--- name: CreateDefaultUserSessionIssuer :one
--- ON CONFLICT DO NOTHING returns no row on conflict; the caller re-reads.
+-- name: UpsertDefaultUserSessionIssuer :one
+-- Keyed on the caller-supplied deterministic id (usersessions.DefaultIssuerID)
+-- so it is idempotent and resurrects a soft-deleted row. Race-safe: concurrent
+-- first touches both land on the same id.
 INSERT INTO user_session_issuers (
+    id,
     project_id,
     slug,
     authn_challenge_mode,
     session_duration
 )
 VALUES (
+    @id,
     @project_id,
     @slug,
     @authn_challenge_mode,
     @session_duration
 )
-ON CONFLICT (project_id, slug) WHERE deleted IS FALSE DO NOTHING
+ON CONFLICT (id) DO UPDATE SET deleted_at = NULL, updated_at = clock_timestamp()
 RETURNING *;
 
 -- name: GetUserSessionIssuerByID :one

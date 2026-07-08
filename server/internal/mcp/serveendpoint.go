@@ -314,11 +314,10 @@ func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 //   - Explicit user_session_issuer_id: used as-is, with a live-FK check
 //     that 404s if the issuer row has since been deleted.
 //   - Implicitly gated (mcpservers.EligibleForImplicitIssuer): the
-//     project-default issuer, resolved READ-ONLY. Before any OAuth flow
-//     materialises it the endpoint carries a zero issuer id — no JWT can
-//     validate against it, and the metadata/URL surface never depends on
-//     it. This helper stays write-free; materialisation belongs to
-//     LoadResolvedMcpEndpointBySlug and the dashboard mint.
+//     project-default issuer id, derived purely from the project via
+//     usersessions.DefaultIssuerID — no DB read. The backing row is
+//     materialised separately by the OAuth entry points; this helper
+//     never touches it.
 //   - Anything else: CodeNotFound.
 //
 // mcpRouteBase ("mcp" or "x/mcp") is applied to the resolved endpoint so
@@ -347,13 +346,7 @@ func (s *Service) BuildResolvedMcpEndpointForServer(
 		if !mcpservers.EligibleForImplicitIssuer(mcpServer) {
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
 		}
-		issuer, found, ierr := usersessions.GetDefaultIssuer(ctx, s.db, mcpEndpoint.ProjectID)
-		if ierr != nil {
-			return nil, oops.E(oops.CodeUnexpected, ierr, "resolve implicit user session issuer").LogError(ctx, logger)
-		}
-		if found {
-			issuerID = issuer.ID
-		}
+		issuerID = usersessions.DefaultIssuerID(mcpEndpoint.ProjectID)
 	}
 
 	resolved := NewResolvedMcpEndpointFromMcpServer(mcpEndpoint, mcpServer, project.OrganizationID, issuerID)

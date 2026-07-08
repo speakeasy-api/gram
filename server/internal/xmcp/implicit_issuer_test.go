@@ -6,7 +6,9 @@ package xmcp_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
@@ -24,8 +27,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
+
+// defaultIssuerMaterialised reports whether the project-default issuer's
+// backing row exists at its deterministic id.
+func defaultIssuerMaterialised(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) bool {
+	t.Helper()
+	_, err := usersessions_repo.New(ti.conn).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
+		ID:        usersessions.DefaultIssuerID(projectID),
+		ProjectID: projectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false
+	}
+	require.NoError(t, err)
+	return true
+}
 
 // TestServeMCP_ImplicitIssuer_UnauthChallenge asserts an unauthenticated
 // request against a private remote server with no explicit issuer 401s with
@@ -54,9 +73,8 @@ func TestServeMCP_ImplicitIssuer_UnauthChallenge(t *testing.T) {
 	)
 	require.Equal(t, wantChallenge, rr.Header().Get("WWW-Authenticate"))
 
-	_, found, err := usersessions.GetDefaultIssuer(ctx, ti.conn, *authCtx.ProjectID)
-	require.NoError(t, err)
-	require.False(t, found, "serving a challenge must not materialise the default issuer")
+	require.False(t, defaultIssuerMaterialised(t, ctx, ti, *authCtx.ProjectID),
+		"serving a challenge must not materialise the default issuer")
 }
 
 // TestWellKnown_ImplicitIssuer_MetadataWithoutMaterialising asserts both
@@ -98,9 +116,8 @@ func TestWellKnown_ImplicitIssuer_MetadataWithoutMaterialising(t *testing.T) {
 	require.Equal(t, root, prDoc.Resource)
 	require.Equal(t, []string{root}, prDoc.AuthorizationServers)
 
-	_, found, err := usersessions.GetDefaultIssuer(ctx, ti.conn, *authCtx.ProjectID)
-	require.NoError(t, err)
-	require.False(t, found, "well-known GETs must not materialise the default issuer")
+	require.False(t, defaultIssuerMaterialised(t, ctx, ti, *authCtx.ProjectID),
+		"well-known GETs must not materialise the default issuer")
 }
 
 // TestWellKnown_PublicRemoteBackend_StillNotFound pins the boundary of the
@@ -126,7 +143,7 @@ func TestWellKnown_PublicRemoteBackend_StillNotFound(t *testing.T) {
 
 // TestOAuthRegister_ImplicitIssuer_MaterialisesDefaultIssuer asserts DCR —
 // the first stateful step of the OAuth flow — materialises the
-// project-default issuer with the reserved slug.
+// project-default issuer's backing row at its deterministic id.
 func TestOAuthRegister_ImplicitIssuer_MaterialisesDefaultIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -150,10 +167,11 @@ func TestOAuthRegister_ImplicitIssuer_MaterialisesDefaultIssuer(t *testing.T) {
 	mux.ServeHTTP(regW, regReq)
 	require.Equal(t, http.StatusCreated, regW.Code, "register; body=%s", regW.Body.String())
 
-	issuer, found, err := usersessions.GetDefaultIssuer(ctx, ti.conn, *authCtx.ProjectID)
-	require.NoError(t, err)
-	require.True(t, found, "register must materialise the default issuer")
-	require.Equal(t, usersessions.DefaultIssuerSlug, issuer.Slug)
+	issuer, err := usersessions_repo.New(ti.conn).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
+		ID:        usersessions.DefaultIssuerID(*authCtx.ProjectID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err, "register must materialise the default issuer")
 	require.Equal(t, *authCtx.ProjectID, issuer.ProjectID)
 }
 

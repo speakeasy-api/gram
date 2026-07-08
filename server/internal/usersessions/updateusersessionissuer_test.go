@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 func TestUpdateUserSessionIssuer(t *testing.T) {
@@ -52,36 +51,6 @@ func TestUpdateUserSessionIssuer(t *testing.T) {
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionUserSessionIssuerUpdate)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
-}
-
-func TestUpdateUserSessionIssuer_ReservedDefaultSlug(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	created, err := ti.service.CreateUserSessionIssuer(ctx, &gen.CreateUserSessionIssuerPayload{
-		SessionToken:         nil,
-		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
-		Slug:                 "rename-attempt",
-		AuthnChallengeMode:   "chain",
-		SessionDurationHours: 24,
-	})
-	require.NoError(t, err)
-
-	// Renaming another issuer onto the implicit project-default slug would
-	// hijack implicit resolution — mirrors the create-side reservation.
-	reserved := usersessions.DefaultIssuerSlug
-	_, err = ti.service.UpdateUserSessionIssuer(ctx, &gen.UpdateUserSessionIssuerPayload{
-		SessionToken:         nil,
-		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
-		ID:                   created.ID,
-		Slug:                 &reserved,
-		AuthnChallengeMode:   nil,
-		SessionDurationHours: nil,
-	})
-	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestUpdateUserSessionIssuer_NotFound(t *testing.T) {

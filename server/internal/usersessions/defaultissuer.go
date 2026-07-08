@@ -2,60 +2,49 @@ package usersessions
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// DefaultIssuerSlug is the reserved slug of the implicit project-default
-// user_session_issuer; deterministic so at most one exists per project.
-const DefaultIssuerSlug = "gram-default"
+// defaultIssuerNamespace seeds the UUIDv5 derivation of every project's
+// implicit issuer id. Fixed forever — changing it orphans previously minted
+// tokens.
+var defaultIssuerNamespace = uuid.MustParse("6f2b9a4e-3d1c-5f8a-9b0e-1a2c3d4e5f60")
 
 const defaultIssuerSessionDuration = 30 * 24 * time.Hour
 
-// GetDefaultIssuer is the read-only resolution of the project's implicit
-// default issuer. found=false means no OAuth flow has materialised it yet;
-// runtime hot paths never write — only GetOrCreateDefaultIssuer does.
-func GetDefaultIssuer(ctx context.Context, db repo.DBTX, projectID uuid.UUID) (repo.UserSessionIssuer, bool, error) {
-	var zero repo.UserSessionIssuer
-	row, err := repo.New(db).GetUserSessionIssuerBySlug(ctx, repo.GetUserSessionIssuerBySlugParams{
-		Slug:      DefaultIssuerSlug,
-		ProjectID: projectID,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return zero, false, nil
-	case err != nil:
-		return zero, false, fmt.Errorf("get default user session issuer: %w", err)
-	}
-	return row, true, nil
+// DefaultIssuerID is the implicit project-default issuer's id — a pure
+// function of the project, so runtime resolution derives the JWT audience
+// without touching the database. The backing row (materialised lazily by
+// GetOrCreateDefaultIssuer) only exists to satisfy the NOT NULL issuer FKs
+// that OAuth writes carry; renaming or deleting it can't change what this
+// returns.
+func DefaultIssuerID(projectID uuid.UUID) uuid.UUID {
+	return uuid.NewSHA1(defaultIssuerNamespace, projectID[:])
 }
 
-// GetOrCreateDefaultIssuer returns the project's implicit default issuer,
-// creating it on first touch. Reserved for stateful entry points (DCR,
-// authorize/connect, dashboard mint) that write NOT NULL issuer FKs;
-// hot paths use the read-only GetDefaultIssuer. Read-then-insert with
-// ON CONFLICT DO NOTHING keeps concurrent first touches race-safe.
+// defaultIssuerSlug is unique per project (it embeds the derived id) so the
+// materialised row never collides with a user-created slug — no reservation
+// guard needed.
+func defaultIssuerSlug(projectID uuid.UUID) string {
+	return "gram-default-" + DefaultIssuerID(projectID).String()
+}
+
+// GetOrCreateDefaultIssuer upserts the backing row for the project's implicit
+// default issuer at its deterministic id, resurrecting it if soft-deleted.
+// Called only from the stateful OAuth entry points (DCR, authorize/connect,
+// dashboard mint) that need the row for their issuer FKs; resolution itself
+// uses DefaultIssuerID and never reads it.
 func GetOrCreateDefaultIssuer(ctx context.Context, db repo.DBTX, projectID uuid.UUID) (repo.UserSessionIssuer, error) {
-	var zero repo.UserSessionIssuer
-
-	row, found, err := GetDefaultIssuer(ctx, db, projectID)
-	if err != nil {
-		return zero, err
-	}
-	if found {
-		return row, nil
-	}
-
-	row, err = repo.New(db).CreateDefaultUserSessionIssuer(ctx, repo.CreateDefaultUserSessionIssuerParams{
+	row, err := repo.New(db).UpsertDefaultUserSessionIssuer(ctx, repo.UpsertDefaultUserSessionIssuerParams{
+		ID:                 DefaultIssuerID(projectID),
 		ProjectID:          projectID,
-		Slug:               DefaultIssuerSlug,
+		Slug:               defaultIssuerSlug(projectID),
 		AuthnChallengeMode: "interactive",
 		SessionDuration: pgtype.Interval{
 			Microseconds: defaultIssuerSessionDuration.Microseconds(),
@@ -64,21 +53,8 @@ func GetOrCreateDefaultIssuer(ctx context.Context, db repo.DBTX, projectID uuid.
 			Valid:        true,
 		},
 	})
-	if err == nil {
-		return row, nil
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return zero, fmt.Errorf("create default user session issuer: %w", err)
-	}
-
-	// Lost the create race: a concurrent request inserted the row between
-	// our read and write. Re-read it.
-	row, found, err = GetDefaultIssuer(ctx, db, projectID)
 	if err != nil {
-		return zero, err
-	}
-	if !found {
-		return zero, fmt.Errorf("default user session issuer missing after create race")
+		return repo.UserSessionIssuer{}, fmt.Errorf("upsert default user session issuer: %w", err)
 	}
 	return row, nil
 }
