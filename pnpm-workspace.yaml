@@ -17,7 +17,7 @@ packages:
 catalog:
   "@ai-sdk/react": ^3.0.211
   "@modelcontextprotocol/sdk": ^1.29.0
-  "@tailwindcss/vite": ^4.3.1
+  "@tailwindcss/vite": ^4.3.2
   "@tanstack/react-query": 5.101.1
   "@types/react": ^19.2.17
   "@types/react-dom": ^19.2.3
