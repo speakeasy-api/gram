@@ -1,19 +1,38 @@
 name: Review Bypass
 
+# ╔═══════════════════════════════════════════════════════════════════════╗
+# ║ SECURITY: LEAVE THE TRIGGER AS `pull_request`.                         ║
+# ║ NEVER SWITCH THIS WORKFLOW TO `pull_request_target`.                   ║
+# ║                                                                        ║
+# ║ `pull_request_target` hands repository secrets — including             ║
+# ║ GRAM_BOT_PRIVATE_KEY, a key that can mint tokens to approve PRs — to   ║
+# ║ runs triggered by fork PRs. One future edit that checks out or         ║
+# ║ executes PR code would let a fork exfiltrate those secrets.            ║
+# ║                                                                        ║
+# ║ With `pull_request`, secrets never reach fork-triggered runs, so that  ║
+# ║ entire class of mistake is inert. The same-repo guards on each job     ║
+# ║ below make fork PRs skip cleanly instead of failing at token minting.  ║
+# ╚═══════════════════════════════════════════════════════════════════════╝
+#
 # Allows a PR to merge without a human approval when the `review:bypass`
 # label is applied by someone with triage+ access. The gram-bot app submits
 # an approving review that satisfies the "Merge to main" ruleset's required
 # review count. Required status checks and the merge queue are unaffected —
-# CI must still pass before the PR can merge.
-#
-# Runs on pull_request_target so the label event fires with access to
-# secrets, but never checks out PR code, so untrusted code is never executed.
+# CI must still pass before the PR can merge. Removing the label dismisses
+# the bot's approval.
 
 on:
-  pull_request_target:
+  pull_request:
     types: [labeled, unlabeled]
 
 permissions: {}
+
+# Serialize runs per PR so a rapid label -> unlabel can't let the dismiss
+# job list reviews before the approve job has posted its review, which
+# would leave an orphaned approval on an unlabeled PR.
+concurrency:
+  group: review-bypass-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 env:
   BYPASS_LABEL: "review:bypass"
@@ -21,7 +40,10 @@ env:
 jobs:
   approve:
     name: Approve on bypass label
-    if: github.event.action == 'labeled' && github.event.label.name == 'review:bypass'
+    if: >
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'review:bypass' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - name: Generate gram-bot token
@@ -45,7 +67,10 @@ jobs:
 
   dismiss:
     name: Dismiss approval on label removal
-    if: github.event.action == 'unlabeled' && github.event.label.name == 'review:bypass'
+    if: >
+      github.event.action == 'unlabeled' &&
+      github.event.label.name == 'review:bypass' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - name: Generate gram-bot token
