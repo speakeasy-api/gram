@@ -34,7 +34,7 @@
   "devDependencies": {
     "@modelcontextprotocol/inspector": "^0.22.0",
     "nodemon": "^3.1.9",
-    "@types/node": "22.x",
+    "@types/node": "26.x",
     "typescript": "^5"
   }
 }
