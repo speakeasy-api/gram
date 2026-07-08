@@ -12,27 +12,27 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmjudge"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// fakePromptJudge is a stub ra.PromptJudge that returns a fixed verdict and
+// fakePromptJudge is a stub llmjudge.Evaluator that returns a fixed verdict and
 // records how many times it was invoked, so tests can assert the scanner only
 // calls the judge for messages whose type the policy applies to.
 type fakePromptJudge struct {
-	verdict *risk_analysis.JudgeVerdict
+	verdict *llmjudge.Verdict
 	calls   atomic.Int32
 	mu      sync.Mutex
-	last    risk_analysis.JudgeInput
+	last    llmjudge.Input
 }
 
-func (f *fakePromptJudge) Evaluate(_ context.Context, in risk_analysis.JudgeInput) *risk_analysis.JudgeVerdict {
+func (f *fakePromptJudge) Evaluate(_ context.Context, in llmjudge.Input) *llmjudge.Verdict {
 	f.calls.Add(1)
 	f.mu.Lock()
 	f.last = in
@@ -40,14 +40,14 @@ func (f *fakePromptJudge) Evaluate(_ context.Context, in risk_analysis.JudgeInpu
 	return f.verdict
 }
 
-func (f *fakePromptJudge) lastInput() risk_analysis.JudgeInput {
+func (f *fakePromptJudge) lastInput() llmjudge.Input {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.last
 }
 
-func matchedJudgeVerdict(confidence float64, rationale string) *risk_analysis.JudgeVerdict {
-	return &risk_analysis.JudgeVerdict{
+func matchedJudgeVerdict(confidence float64, rationale string) *llmjudge.Verdict {
+	return &llmjudge.Verdict{
 		Matched:          true,
 		Confidence:       confidence,
 		Rationale:        rationale,
@@ -120,8 +120,8 @@ func TestScanner_PromptBasedPolicyBlocksToolRequest(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Equal(t, "block", res.Action)
-	require.Equal(t, risk_analysis.SourceLLMJudge, res.Source)
-	require.Equal(t, risk_analysis.RuleLLMJudge, res.RuleID)
+	require.Equal(t, llmjudge.Source, res.Source)
+	require.Equal(t, llmjudge.Rule, res.RuleID)
 	require.Equal(t, "destructive delete", res.Description)
 }
 
@@ -241,7 +241,7 @@ func TestScanner_PromptBasedPolicyFailClosedWhenJudgeUnavailable(t *testing.T) {
 	res, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, "")
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	require.Equal(t, risk_analysis.SourceLLMJudge, res.Source)
-	require.Equal(t, risk_analysis.RuleLLMJudge, res.RuleID)
+	require.Equal(t, llmjudge.Source, res.Source)
+	require.Equal(t, llmjudge.Rule, res.RuleID)
 	require.Contains(t, res.Description, "fail-closed")
 }

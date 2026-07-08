@@ -54,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmjudge"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -117,7 +118,7 @@ type Service struct {
 	// policy-eval workbench (EvaluatePromptGuardrail). It is the same LLM judge
 	// the realtime scanner uses. Optional: when nil the eval endpoint returns
 	// un-matched verdicts (judge unavailable).
-	promptJudge ra.PromptJudge
+	promptJudge llmjudge.Evaluator
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -177,7 +178,7 @@ func NewService(
 	flags feature.Provider,
 	celEng *celenv.Engine,
 	builtinPresets *presetlib.Library,
-	promptJudge ra.PromptJudge,
+	promptJudge llmjudge.Evaluator,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -2405,7 +2406,7 @@ func (s *Service) EvaluatePromptGuardrail(ctx context.Context, payload *gen.Eval
 	if err != nil {
 		return nil, err
 	}
-	cfg := ra.ParseJudgeConfig(modelConfig)
+	cfg := llmjudge.ParseConfig(modelConfig)
 
 	return s.evaluateGuardrailForChat(
 		ctx,
@@ -2426,7 +2427,7 @@ func (s *Service) evaluateGuardrailForChat(
 	orgID string,
 	chatID uuid.UUID,
 	prompt string,
-	cfg ra.JudgeConfig,
+	cfg llmjudge.Config,
 	messageTypes []string,
 	includeCEL string,
 	exemptCEL string,

@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmjudge"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -44,7 +45,7 @@ type AnalyzeBatch struct {
 	piiScanner             PIIScanner
 	promptInjectionScanner *promptinjection.Scanner
 	shadowMCPScanner       *shadowmcpscan.Scanner
-	judge                  PromptJudge
+	judge                  llmjudge.Evaluator
 	flags                  feature.Provider
 	presidioPub            gcp.Publisher[*riskv1.PresidioAnalysis]
 	gitleaksPub            gcp.Publisher[*riskv1.GitleaksAnalysis]
@@ -65,7 +66,7 @@ func NewAnalyzeBatch(
 	promptInjectionScanner *promptinjection.Scanner,
 	shadowMCPClient *shadowmcp.Client,
 	mcpMatchLookup MCPMatchLookup,
-	judge PromptJudge,
+	judge llmjudge.Evaluator,
 	flags feature.Provider,
 	presidioPub gcp.Publisher[*riskv1.PresidioAnalysis],
 	gitleaksPub gcp.Publisher[*riskv1.GitleaksAnalysis],

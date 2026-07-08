@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
-	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 
@@ -29,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmjudge"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -103,14 +103,14 @@ func (c *syncResultsCleaner) Clean(ctx context.Context, projectID, policyID uuid
 	return nil
 }
 
-// stubJudge is a settable ra.PromptJudge for eval-endpoint tests. When evaluate
+// stubJudge is a settable llmjudge.Evaluator for eval-endpoint tests. When evaluate
 // is nil it never matches; otherwise it delegates so a test can flag messages by
 // content.
 type stubJudge struct {
-	evaluate func(in ra.JudgeInput) *ra.JudgeVerdict
+	evaluate func(in llmjudge.Input) *llmjudge.Verdict
 }
 
-func (s *stubJudge) Evaluate(_ context.Context, in ra.JudgeInput) *ra.JudgeVerdict {
+func (s *stubJudge) Evaluate(_ context.Context, in llmjudge.Input) *llmjudge.Verdict {
 	if s.evaluate == nil {
 		return nil
 	}

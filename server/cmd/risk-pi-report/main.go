@@ -25,8 +25,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
-	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	ljopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/llmjudge/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -624,13 +624,13 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 }
 
 // judgeOne issues one GetObjectCompletion shaped exactly like piopenrouter's call:
-// the structured "message" payload (riskjudge.RenderMessage), piopenrouter's system
+// the structured "message" payload (ljopenrouter.RenderMessage), piopenrouter's system
 // prompt and verdict schema, temperature 0. No copy of the prompt/schema to keep
 // in sync — it drives the production constants directly.
 func judgeOne(ctx context.Context, client openrouter.CompletionClient, model string, msg judgemessage.Message) (isAttack bool, confidence float64, err error) {
 	payload, err := json.Marshal(struct {
-		Message riskjudge.MessagePayload `json:"message"`
-	}{Message: riskjudge.RenderMessage(msg)})
+		Message ljopenrouter.MessagePayload `json:"message"`
+	}{Message: ljopenrouter.RenderMessage(msg)})
 	if err != nil {
 		return false, 0, fmt.Errorf("marshal judge payload: %w", err)
 	}

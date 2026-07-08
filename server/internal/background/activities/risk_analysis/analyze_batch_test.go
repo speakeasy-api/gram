@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmjudge"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -35,12 +36,12 @@ import (
 )
 
 type recordingPromptJudge struct {
-	inputs []risk_analysis.JudgeInput
+	inputs []llmjudge.Input
 }
 
-func (j *recordingPromptJudge) Evaluate(_ context.Context, in risk_analysis.JudgeInput) *risk_analysis.JudgeVerdict {
+func (j *recordingPromptJudge) Evaluate(_ context.Context, in llmjudge.Input) *llmjudge.Verdict {
 	j.inputs = append(j.inputs, in)
-	return &risk_analysis.JudgeVerdict{
+	return &llmjudge.Verdict{
 		Matched:          true,
 		Confidence:       0.9,
 		Rationale:        "matched tool call",
@@ -408,7 +409,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 	td.policyID = policy.ID
 	td.policyVersion = policy.Version
 
-	// An assistant message that issued two tool calls — one MCP, one native.
+	// An assistant message that issued two tool calls, one MCP and one native.
 	msgID := insertAssistantToolCallsWithArgs(t, conn, td, []struct {
 		name string
 		args map[string]any

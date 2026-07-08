@@ -12,12 +12,12 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmjudge"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -65,9 +65,9 @@ func TestEvaluatePromptGuardrail_FlagsAndIsolates(t *testing.T) {
 	)
 
 	// The judge flags any message whose body mentions "delete production".
-	ti.judge.evaluate = func(in ra.JudgeInput) *ra.JudgeVerdict {
+	ti.judge.evaluate = func(in llmjudge.Input) *llmjudge.Verdict {
 		if strings.Contains(in.Message.Body, "delete production") {
-			return &ra.JudgeVerdict{
+			return &llmjudge.Verdict{
 				Matched:          true,
 				Confidence:       0.9,
 				Rationale:        "destructive action",
@@ -77,7 +77,7 @@ func TestEvaluatePromptGuardrail_FlagsAndIsolates(t *testing.T) {
 				TotalTokens:      120,
 			}
 		}
-		return &ra.JudgeVerdict{
+		return &llmjudge.Verdict{
 			Matched:          false,
 			Confidence:       0,
 			Rationale:        "",
@@ -149,7 +149,7 @@ func TestEvaluatePromptGuardrail_MessageTypeFilter(t *testing.T) {
 	)
 
 	seen := map[string]int{}
-	ti.judge.evaluate = func(in ra.JudgeInput) *ra.JudgeVerdict {
+	ti.judge.evaluate = func(in llmjudge.Input) *llmjudge.Verdict {
 		seen[in.Message.Type]++
 		return nil
 	}
@@ -211,9 +211,9 @@ func TestEvaluatePromptGuardrail_CELScopeExemptSkipsToolCall(t *testing.T) {
 	)
 
 	seen := []judgemessage.Message{}
-	ti.judge.evaluate = func(in ra.JudgeInput) *ra.JudgeVerdict {
+	ti.judge.evaluate = func(in llmjudge.Input) *llmjudge.Verdict {
 		seen = append(seen, in.Message)
-		return &ra.JudgeVerdict{
+		return &llmjudge.Verdict{
 			Matched:          true,
 			Confidence:       0.9,
 			Rationale:        "matched",

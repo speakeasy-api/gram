@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmjudge"
 )
 
 // judgeConcurrency bounds the number of in-flight judge calls per batch.
@@ -27,12 +28,12 @@ const judgeConcurrency = 8
 // workbench replay so both drive the judge identically.
 func judgeFanout(
 	ctx context.Context,
-	judge PromptJudge,
+	judge llmjudge.Evaluator,
 	orgID, projectID, prompt string,
-	cfg JudgeConfig,
+	cfg llmjudge.Config,
 	msgs []batchMessage,
 	indices []int,
-	apply func(pos, idx int, verdict *JudgeVerdict, latency time.Duration),
+	apply func(pos, idx int, verdict *llmjudge.Verdict, latency time.Duration),
 	onChunk func(end int),
 ) {
 	for start := 0; start < len(indices); start += judgeConcurrency {
@@ -44,7 +45,7 @@ func judgeFanout(
 				defer wg.Done()
 				idx := indices[pos]
 				started := time.Now()
-				verdict := judge.Evaluate(ctx, JudgeInput{
+				verdict := judge.Evaluate(ctx, llmjudge.Input{
 					OrgID:     orgID,
 					ProjectID: projectID,
 					Prompt:    prompt,
@@ -63,7 +64,7 @@ func judgeFanout(
 
 func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, outOfPolicyScope []bool) [][]scanners.Finding {
 	out := make([][]scanners.Finding, len(messages))
-	cfg := ParseJudgeConfig(policy.ModelConfig)
+	cfg := llmjudge.ParseConfig(policy.ModelConfig)
 	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
 		return out
 	}
@@ -81,7 +82,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 
 	if a.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
 		if !cfg.FailOpen {
-			finding := JudgeFinding(JudgeVerdict{
+			finding := llmjudge.NewFinding(llmjudge.Verdict{
 				Matched:          true,
 				Confidence:       0,
 				Rationale:        "Policy judge was unavailable; flagged by fail-closed policy.",
@@ -101,12 +102,12 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		ctx, a.judge,
 		args.OrganizationID, args.ProjectID.String(), policy.Prompt.String, cfg,
 		messages, indices,
-		func(_, idx int, verdict *JudgeVerdict, _ time.Duration) {
+		func(_, idx int, verdict *llmjudge.Verdict, _ time.Duration) {
 			if verdict != nil && verdict.Matched {
-				out[idx] = []scanners.Finding{JudgeFinding(*verdict)}
+				out[idx] = []scanners.Finding{llmjudge.NewFinding(*verdict)}
 			}
 		},
-		func(end int) { activity.RecordHeartbeat(ctx, SourceLLMJudge, end) },
+		func(end int) { activity.RecordHeartbeat(ctx, llmjudge.Source, end) },
 	)
 	return out
 }
