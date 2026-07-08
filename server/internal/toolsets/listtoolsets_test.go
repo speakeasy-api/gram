@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestToolsetsService_ListToolsets_Success(t *testing.T) {
@@ -551,6 +552,43 @@ func TestToolsetsService_ListToolsets_SecurityVariablesNotMixedAcrossDocuments(t
 	require.Contains(t, envVarsB, "TODO_DOC_B_BEARER_AUTH", "toolset B should surface its own document's bearer env var")
 	require.NotContains(t, envVarsB, "TODO_DOC_A_API_KEY_AUTH", "toolset B must not surface document A's env var")
 	require.NotContains(t, envVarsB, "TODO_DOC_A_BEARER_AUTH", "toolset B must not surface document A's env var")
+}
+
+// TestToolsetsService_ListToolsets_DanglingToolURN covers the empty-slice-vs-nil
+// contract for Tools: a toolset with a tool URN that doesn't resolve to any
+// known tool (e.g. stale after a deployment change) must still get a non-nil,
+// empty Tools slice — matching the old DescribeToolsetEntry's contract, where
+// Tools was only ever nil when the toolset had zero tool URNs at all.
+func TestToolsetsService_ListToolsets_DanglingToolURN(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	danglingURN := urn.NewTool(urn.ToolKindHTTP, "does-not-exist", "does-not-exist").String()
+
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Dangling URN Toolset",
+		Description:            new("toolset with an unresolvable tool URN"),
+		ToolUrns:               []string{danglingURN},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Toolsets, 1)
+
+	entry := result.Toolsets[0]
+	require.Equal(t, created.ID, entry.ID)
+	require.Len(t, entry.ToolUrns, 1, "the dangling URN is still recorded on the toolset")
+	require.NotNil(t, entry.Tools, "Tools must be [] (not null) when the toolset has tool URNs, even if none resolve")
+	require.Empty(t, entry.Tools)
 }
 
 func collectSecurityEnvVars(vars []*types.SecurityVariable) []string {
