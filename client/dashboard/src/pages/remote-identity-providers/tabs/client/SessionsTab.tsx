@@ -141,7 +141,7 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
                             onClick={() =>
                               refresh.mutate({
                                 request: {
-                                  riskIDRequestBody: { id: session.id },
+                                  id: session.id,
                                 },
                               })
                             }
@@ -153,7 +153,7 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
                           onClick={() =>
                             revoke.mutate({
                               request: {
-                                riskIDRequestBody: { id: session.id },
+                                id: session.id,
                               },
                             })
                           }

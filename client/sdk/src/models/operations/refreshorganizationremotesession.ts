@@ -4,11 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import {
-  RiskIDRequestBody,
-  RiskIDRequestBody$Outbound,
-  RiskIDRequestBody$outboundSchema,
-} from "../components/riskidrequestbody.js";
 
 export type RefreshOrganizationRemoteSessionSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -17,6 +12,10 @@ export type RefreshOrganizationRemoteSessionSecurity = {
 
 export type RefreshOrganizationRemoteSessionRequest = {
   /**
+   * The remote_session id.
+   */
+  id: string;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -24,7 +23,6 @@ export type RefreshOrganizationRemoteSessionRequest = {
    * API Key header
    */
   gramKey?: string | undefined;
-  riskIDRequestBody: RiskIDRequestBody;
 };
 
 /** @internal */
@@ -64,9 +62,9 @@ export function refreshOrganizationRemoteSessionSecurityToJSON(
 
 /** @internal */
 export type RefreshOrganizationRemoteSessionRequest$Outbound = {
+  id: string;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
-  RiskIDRequestBody: RiskIDRequestBody$Outbound;
 };
 
 /** @internal */
@@ -76,15 +74,14 @@ export const RefreshOrganizationRemoteSessionRequest$outboundSchema:
     RefreshOrganizationRemoteSessionRequest
   > = z.pipe(
     z.object({
+      id: z.string(),
       gramSession: z.optional(z.string()),
       gramKey: z.optional(z.string()),
-      riskIDRequestBody: RiskIDRequestBody$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
-        riskIDRequestBody: "RiskIDRequestBody",
       });
     }),
   );

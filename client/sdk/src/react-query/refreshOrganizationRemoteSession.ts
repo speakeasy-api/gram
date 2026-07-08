@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersRefreshSession } from "../funcs/organizationRemoteSessionIssuersRefreshSession.js";
+import { organizationRemoteSessionsRefresh } from "../funcs/organizationRemoteSessionsRefresh.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { RemoteSession } from "../models/components/remotesession.js";
@@ -51,7 +51,7 @@ export type RefreshOrganizationRemoteSessionMutationError =
   | SDKValidationError;
 
 /**
- * refreshSession organizationRemoteSessionIssuers
+ * refreshSession organizationRemoteSessions
  *
  * @remarks
  * Force an upstream token refresh on a single remote_session in the caller's organization, regardless of current access-token expiry. Returns the updated remote_session so callers can reflect the new expiry without a refetch. Fails with a bad-request error when the session holds no refresh token. Requires org:admin.
@@ -75,7 +75,7 @@ export function useRefreshOrganizationRemoteSessionMutation(
 }
 
 export function mutationKeyRefreshOrganizationRemoteSession(): MutationKey {
-  return ["@gram/client", "organizationRemoteSessionIssuers", "refreshSession"];
+  return ["@gram/client", "organizationRemoteSessions", "refresh"];
 }
 
 export function buildRefreshOrganizationRemoteSessionMutation(
@@ -106,7 +106,7 @@ export function buildRefreshOrganizationRemoteSessionMutation(
           ),
         },
       };
-      return unwrapAsync(organizationRemoteSessionIssuersRefreshSession(
+      return unwrapAsync(organizationRemoteSessionsRefresh(
         client$,
         request,
         security,

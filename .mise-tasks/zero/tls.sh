@@ -117,7 +117,6 @@ cert_names() {
     "localhost" \
     "127.0.0.1" \
     "::1" \
-    "gram.local" \
     | awk 'NF && !seen[$0]++'
 }
 

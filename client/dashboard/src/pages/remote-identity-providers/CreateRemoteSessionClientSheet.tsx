@@ -133,7 +133,7 @@ export function CreateRemoteSessionClientSheet({
       // CIMD: the platform generates the client_id and hosts the metadata
       // document, so there are no credentials to collect.
       if (clientType === "cimd") {
-        await client.organizationRemoteSessionIssuers.createCimdClient({
+        await client.organizationRemoteSessionClients.createCimd({
           createCimdOrganizationRemoteSessionClientForm: {
             remoteSessionIssuerId: issuer.id,
             projectId: projectIdForOrg,
@@ -179,7 +179,7 @@ export function CreateRemoteSessionClientSheet({
         };
       }
 
-      await client.organizationRemoteSessionIssuers.createClient({
+      await client.organizationRemoteSessionClients.create({
         createOrganizationRemoteSessionClientForm: {
           remoteSessionIssuerId: issuer.id,
           projectId: projectIdForOrg,

@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersUpdateClient } from "../funcs/organizationRemoteSessionIssuersUpdateClient.js";
+import { organizationRemoteSessionClientsUpdate } from "../funcs/organizationRemoteSessionClientsUpdate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
@@ -52,7 +52,7 @@ export type UpdateOrganizationRemoteSessionClientMutationError =
   | SDKValidationError;
 
 /**
- * updateClient organizationRemoteSessionIssuers
+ * updateClient organizationRemoteSessionClients
  *
  * @remarks
  * Update a remote_session_client's non-secret fields in the caller's organization. Requires org:admin.
@@ -76,7 +76,7 @@ export function useUpdateOrganizationRemoteSessionClientMutation(
 }
 
 export function mutationKeyUpdateOrganizationRemoteSessionClient(): MutationKey {
-  return ["@gram/client", "organizationRemoteSessionIssuers", "updateClient"];
+  return ["@gram/client", "organizationRemoteSessionClients", "update"];
 }
 
 export function buildUpdateOrganizationRemoteSessionClientMutation(
@@ -107,7 +107,7 @@ export function buildUpdateOrganizationRemoteSessionClientMutation(
           ),
         },
       };
-      return unwrapAsync(organizationRemoteSessionIssuersUpdateClient(
+      return unwrapAsync(organizationRemoteSessionClientsUpdate(
         client$,
         request,
         security,

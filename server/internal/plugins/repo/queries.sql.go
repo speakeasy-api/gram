@@ -91,39 +91,6 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 	return i, err
 }
 
-const createDefaultPlugin = `-- name: CreateDefaultPlugin :one
-INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
-VALUES ($1, $2, 'Default', 'default', TRUE)
-RETURNING id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
-`
-
-type CreateDefaultPluginParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-}
-
-// Creates the project's fallback plugin (new servers land here absent explicit
-// routing to a named plugin). Called once, in the same transaction as project
-// creation. plugins_project_id_is_default_key enforces at most one per project.
-func (q *Queries) CreateDefaultPlugin(ctx context.Context, arg CreateDefaultPluginParams) (Plugin, error) {
-	row := q.db.QueryRow(ctx, createDefaultPlugin, arg.OrganizationID, arg.ProjectID)
-	var i Plugin
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
-		&i.Slug,
-		&i.Description,
-		&i.IsDefault,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const createPlugin = `-- name: CreatePlugin :one
 
 INSERT INTO plugins (organization_id, project_id, name, slug, description)
@@ -185,42 +152,6 @@ type DeletePluginParams struct {
 func (q *Queries) DeletePlugin(ctx context.Context, arg DeletePluginParams) error {
 	_, err := q.db.Exec(ctx, deletePlugin, arg.ID, arg.OrganizationID, arg.ProjectID)
 	return err
-}
-
-const getDefaultPlugin = `-- name: GetDefaultPlugin :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
-FROM plugins
-WHERE organization_id = $1
-  AND project_id = $2
-  AND is_default IS TRUE
-  AND deleted IS FALSE
-`
-
-type GetDefaultPluginParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-}
-
-// Used by AttachToDefaultPlugin to find the fallback plugin new servers get
-// auto-attached to. No rows is expected for projects that predate the
-// Default-plugin feature; callers treat pgx.ErrNoRows as a no-op.
-func (q *Queries) GetDefaultPlugin(ctx context.Context, arg GetDefaultPluginParams) (Plugin, error) {
-	row := q.db.QueryRow(ctx, getDefaultPlugin, arg.OrganizationID, arg.ProjectID)
-	var i Plugin
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
-		&i.Slug,
-		&i.Description,
-		&i.IsDefault,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
 }
 
 const getGitHubConnection = `-- name: GetGitHubConnection :one
@@ -472,24 +403,21 @@ func (q *Queries) ListPluginAssignments(ctx context.Context, pluginID uuid.UUID)
 
 const listPluginPublishCandidates = `-- name: ListPluginPublishCandidates :many
 SELECT
-  cp.project_id,
-  COALESCE(k.created_by_user_id, 'system') AS created_by_user_id
-FROM (
-  SELECT c.project_id FROM plugin_github_connections c WHERE c.project_id > $1
-  UNION
-  SELECT dp.project_id FROM plugins dp WHERE dp.is_default IS TRUE AND dp.deleted IS FALSE AND dp.project_id > $1
-) cp
-JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
-LEFT JOIN LATERAL (
+  c.project_id,
+  k.created_by_user_id
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+JOIN LATERAL (
   SELECT created_by_user_id
   FROM api_keys
-  WHERE project_id = cp.project_id
+  WHERE project_id = c.project_id
     AND deleted IS FALSE
     AND name LIKE 'plugins-mcp-%'
   ORDER BY created_at DESC
   LIMIT 1
 ) k ON TRUE
-ORDER BY cp.project_id ASC
+WHERE c.project_id > $1
+ORDER BY c.project_id ASC
 LIMIT $2
 `
 
@@ -503,27 +431,11 @@ type ListPluginPublishCandidatesRow struct {
 	CreatedByUserID string
 }
 
-// Lists candidates for the automated generator rollout, paginated by
-// project_id (pass the zero UUID to start): the union of (a) projects that
-// have published before (a plugin_github_connections row exists) -- the
-// original rollout population, kept so an already-connected project isn't
-// silently dropped just because it predates the Default-plugin feature and
-// has had no new attach activity since -- and (b) projects with a Default
-// plugin, published or not. (b) is the periodic safety net for the
-// best-effort initial-publish trigger fired inline by
-// CreateProject/toolsets/mcpendpoints: if that enqueue is ever lost (e.g. a
-// crash between commit and enqueue), this sweep picks it up within one tick
-// instead of leaving it stuck until a human notices. Republishing an
-// unchanged project is cheap -- SkipIfUnchanged short-circuits on the
-// fingerprint check before any GitHub/key work. Each row carries the user
-// that created the project's most recent plugins-mcp API key as the
-// publish actor, falling back to 'system' for a project that has never
-// published (no such key exists yet). This is a deliberate cross-project
-// sweep, so unlike the tenant-scoped queries it is not constrained to a
-// single project_id. The after_project_id filter is applied inside each
-// UNION branch rather than the outer query -- sqlc's analyzer can't resolve
-// an outer WHERE referencing the derived table's alias once a LATERAL join
-// follows it ("table alias does not exist").
+// Lists projects with a GitHub plugin connection for the automated generator
+// rollout, paginated by project_id (pass the zero UUID to start). Each row
+// carries the user that created the project's most recent plugins-mcp API key,
+// used as the publish actor. This is a deliberate cross-project sweep, so unlike
+// the tenant-scoped queries it is not constrained to a single project_id.
 func (q *Queries) ListPluginPublishCandidates(ctx context.Context, arg ListPluginPublishCandidatesParams) ([]ListPluginPublishCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listPluginPublishCandidates, arg.AfterProjectID, arg.ResultLimit)
 	if err != nil {

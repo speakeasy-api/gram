@@ -23,7 +23,7 @@ func TestApplyResponseHeadersStripsTunnelError(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	applyResponseHeaders(rec, upstream)
+	applyResponseHeaders(rec, upstream, "")
 
 	require.Empty(t, rec.Header().Get("X-Gram-Tunnel-Error"))
 	require.Equal(t, "application/json", rec.Header().Get("Content-Type"))

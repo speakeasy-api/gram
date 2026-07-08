@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersRevokeAllClientSessions } from "../funcs/organizationRemoteSessionIssuersRevokeAllClientSessions.js";
+import { organizationRemoteSessionsRevokeAll } from "../funcs/organizationRemoteSessionsRevokeAll.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { RevokeAllRemoteSessionsResult } from "../models/components/revokeallremotesessionsresult.js";
@@ -55,7 +55,7 @@ export type RevokeAllOrganizationRemoteSessionClientSessionsMutationError =
   | SDKValidationError;
 
 /**
- * revokeAllClientSessions organizationRemoteSessionIssuers
+ * revokeAllClientSessions organizationRemoteSessions
  *
  * @remarks
  * Revoke (soft-delete) all remote_sessions minted against a remote_session_client in the caller's organization. Requires org:admin.
@@ -82,11 +82,7 @@ export function useRevokeAllOrganizationRemoteSessionClientSessionsMutation(
 }
 
 export function mutationKeyRevokeAllOrganizationRemoteSessionClientSessions(): MutationKey {
-  return [
-    "@gram/client",
-    "organizationRemoteSessionIssuers",
-    "revokeAllClientSessions",
-  ];
+  return ["@gram/client", "organizationRemoteSessions", "revokeAll"];
 }
 
 export function buildRevokeAllOrganizationRemoteSessionClientSessionsMutation(
@@ -121,14 +117,12 @@ export function buildRevokeAllOrganizationRemoteSessionClientSessionsMutation(
             ),
           },
         };
-        return unwrapAsync(
-          organizationRemoteSessionIssuersRevokeAllClientSessions(
-            client$,
-            request,
-            security,
-            mergedOptions,
-          ),
-        );
+        return unwrapAsync(organizationRemoteSessionsRevokeAll(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ));
       },
   };
 }

@@ -4,6 +4,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/accountidentity"
 	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 )
 
 const (
@@ -21,6 +22,8 @@ const (
 	// scanners it inspects the chat's account attribution (personal-account
 	// tracking data on user_accounts), not the message text.
 	SourceAccountIdentity = accountidentity.Source
+	// SourcePromptInjection is the policy source value for prompt injection scanning.
+	SourcePromptInjection = promptinjection.Source
 	// SourceNone marks the sentinel row for an analyzed message with no findings.
 	SourceNone = "none"
 

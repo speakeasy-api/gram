@@ -18,7 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	orggen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
+	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -410,7 +410,7 @@ func TestCreateCimdClient(t *testing.T) {
 
 	issuerID := createCIMDIssuer(t, ctx, ti, "admin-cimd-create", "https://idp.example.com/authorize", "https://idp.example.com/token")
 
-	created, err := ti.service.CreateCimdClient(ctx, &orggen.CreateCimdClientPayload{
+	created, err := ti.service.CreateCimdClient(ctx, &orgclientsgen.CreateCimdClientPayload{
 		RemoteSessionIssuerID: issuerID.String(),
 	})
 	require.NoError(t, err)
@@ -432,7 +432,7 @@ func TestCreateCimdClient_RejectedWhenIssuerUnsupported(t *testing.T) {
 	// createRemoteIssuer advertises client_secret_basic and no CIMD support.
 	issuerID := createRemoteIssuer(t, ctx, ti, "admin-cimd-unsupported", "")
 
-	_, err := ti.service.CreateCimdClient(ctx, &orggen.CreateCimdClientPayload{
+	_, err := ti.service.CreateCimdClient(ctx, &orgclientsgen.CreateCimdClientPayload{
 		RemoteSessionIssuerID: issuerID,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
@@ -449,7 +449,7 @@ func TestCreateCimdClient_OrganizationalIssuerDownscope(t *testing.T) {
 
 	issuerID := createOrgLevelCIMDIssuer(t, ctx, ti, "admin-cimd-orglevel")
 
-	created, err := ti.service.CreateCimdClient(ctx, &orggen.CreateCimdClientPayload{
+	created, err := ti.service.CreateCimdClient(ctx, &orgclientsgen.CreateCimdClientPayload{
 		RemoteSessionIssuerID: issuerID.String(),
 		ProjectID:             &pid,
 	})
@@ -467,7 +467,7 @@ func TestCreateCimdClient_OrganizationalIssuerNoProjectCreatesOrgLevel(t *testin
 
 	issuerID := createOrgLevelCIMDIssuer(t, ctx, ti, "admin-cimd-orglevel-noproj")
 
-	created, err := ti.service.CreateCimdClient(ctx, &orggen.CreateCimdClientPayload{
+	created, err := ti.service.CreateCimdClient(ctx, &orgclientsgen.CreateCimdClientPayload{
 		RemoteSessionIssuerID: issuerID.String(),
 	})
 	require.NoError(t, err)

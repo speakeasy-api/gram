@@ -225,6 +225,15 @@ type Proxy struct {
 	// It is used by tunneled MCP to fail over stale gateway owners.
 	UpstreamResponseRetryer UpstreamResponseRetryer
 
+	// WWWAuthenticate is the challenge relayed to the client when the
+	// upstream rejects a request (401/403), replacing the upstream's own
+	// WWW-Authenticate — the upstream challenge names the upstream's
+	// protected-resource metadata, which misdirects a client that
+	// authenticated with this server. Empty when the endpoint has no
+	// authorization server of its own (nothing to substitute); the
+	// upstream challenge then relays verbatim.
+	WWWAuthenticate string
+
 	UserRequestInterceptors []UserRequestInterceptor
 
 	// InitializeRequestInterceptors run for inbound "initialize" JSON-RPC
@@ -328,7 +337,7 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 	upstreamStatus = upstreamResp.StatusCode
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))
 
-	n, err := writeResponse(w, upstreamResp, upstreamResp.Body)
+	n, err := writeResponse(w, upstreamResp, upstreamResp.Body, p.WWWAuthenticate)
 	responseBytes = n
 	if err != nil {
 		return err
@@ -394,7 +403,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		return nil
 	}
 
-	n, err := writeResponse(w, upstreamResp, upstreamResp.Body)
+	n, err := writeResponse(w, upstreamResp, upstreamResp.Body, p.WWWAuthenticate)
 	responseBytes = n
 	if err != nil {
 		return err
@@ -553,12 +562,38 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	switch {
 	case errors.Is(err, ErrUndecodableJSONRPCBody):
 		// The remote returned a non-SSE body that isn't a single JSON-RPC
-		// message (observed in prod as a bare heartbeat scalar from a
-		// non-spec-compliant upstream). Mirror the SSE relay path, which skips
-		// interception for undecodable events and forwards them verbatim:
-		// relay the upstream bytes and status to the client unchanged rather
-		// than manufacturing a 5xx. msg is nil, so interceptors are skipped and
-		// bodyBytes is written through below.
+		// message. Two sub-cases, split by whether the client's request
+		// expects a reply:
+		//
+		//   - The client sent a request (valid id) and upstream answered 2xx
+		//     with a non-JSON-RPC body. Observed with upstreams that reply to
+		//     an authenticated request with their backing API's raw envelope
+		//     (e.g. {"Output":…,"Version":…}) instead of a JSON-RPC result
+		//     (AIS-267). Relaying that verbatim hands the client a payload its
+		//     JSON-RPC layer can neither parse nor correlate to its outstanding
+		//     call, so the connection fails opaquely. Synthesize a JSON-RPC
+		//     error carrying the originating id so the client surfaces a clean,
+		//     correlatable failure with the upstream's actual body for
+		//     debugging.
+		//
+		//   - Everything else (no id — a notification with no reply slot; or a
+		//     non-2xx status that already signals the error) keeps the verbatim
+		//     relay, mirroring the SSE relay path's treatment of undecodable
+		//     events. This preserves the bare-heartbeat-scalar behavior. msg is
+		//     nil, so interceptors are skipped and bodyBytes is written through
+		//     below.
+		if userReqID.IsValid() && upstreamStatus >= 200 && upstreamStatus < 300 {
+			p.Logger.WarnContext(ctx, "remote mcp server returned non-json-rpc 2xx body; synthesizing json-rpc error for client",
+				attr.SlogError(err),
+				attr.SlogComponent("remotemcp.proxy"),
+				attr.SlogHTTPResponseStatusCode(upstreamStatus))
+			responseBytes = p.writeRejection(ctx, w, span, userReqID, &RejectError{
+				Code:    RejectCodeInternalError,
+				Message: "remote MCP server returned a non-JSON-RPC response",
+				Data:    nonJSONRPCUpstreamData(upstreamResp, bodyBytes),
+			})
+			return nil
+		}
 		p.Logger.WarnContext(ctx, "relaying undecodable remote mcp response to client verbatim", attr.SlogError(err))
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "invalid jsonrpc response from remote mcp server").LogError(ctx, p.Logger)
@@ -628,7 +663,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		}
 	}
 
-	n, err := writeResponse(w, upstreamResp, bytes.NewReader(bodyBytes))
+	n, err := writeResponse(w, upstreamResp, bytes.NewReader(bodyBytes), p.WWWAuthenticate)
 	responseBytes = n
 	if err != nil {
 		return err
@@ -714,6 +749,20 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 		resp.Body = &cancellingBody{ReadCloser: resp.Body, cancel: forwardCancel, timer: phaseTimer}
 	}
 
+	// Upstream auth rejections are the primary diagnostic when a stored or
+	// forwarded token is refused (e.g. audience mismatch, upstream-side
+	// revocation). The upstream's RFC 6750 challenge carries the
+	// machine-readable reason and — for issuer-gated endpoints — is
+	// replaced before relay, so this log line is its only surface.
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		p.Logger.WarnContext(ctx, "remote mcp server rejected upstream credentials",
+			attr.SlogComponent("remotemcp.proxy"),
+			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
+			attr.SlogHTTPResponseHeaderWWWAuthenticate(resp.Header.Get("WWW-Authenticate")),
+			attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
+			attr.SlogMcpServerID(p.Identity.McpServerID))
+	}
+
 	return upstreamReq, resp, nil
 }
 
@@ -772,7 +821,7 @@ func (p *Proxy) relaySSEStream(
 	resourcesReadReq *ResourcesReadRequest,
 	resourcesListReq *ResourcesListRequest,
 ) (int64, error) {
-	applyResponseHeaders(w, upstreamResp)
+	applyResponseHeaders(w, upstreamResp, p.WWWAuthenticate)
 	w.WriteHeader(upstreamResp.StatusCode)
 
 	if upstreamResp.Body == nil {
@@ -1268,6 +1317,39 @@ func (p *Proxy) dispatchInterceptorError(
 	return nil
 }
 
+// maxNonJSONRPCEchoBytes bounds how much of a non-JSON-RPC upstream body is
+// echoed back in the synthesized error's "data" field. Enough to show the
+// upstream's actual response shape for debugging without relaying an
+// unbounded payload into a JSON-RPC error envelope.
+const maxNonJSONRPCEchoBytes = 2048
+
+// nonJSONRPCUpstreamData builds the JSON-RPC error "data" payload for a
+// synthesized rejection when the upstream answered a client request with a
+// non-JSON-RPC body. It echoes the upstream status, content type, and a
+// bounded snippet of the raw body — the same bytes the client would have
+// received verbatim before this synthesis, so nothing new is exposed — so
+// operators and clients can diagnose the non-conformant upstream.
+func nonJSONRPCUpstreamData(resp *http.Response, body []byte) map[string]any {
+	snippet := body
+	truncated := false
+	if len(snippet) > maxNonJSONRPCEchoBytes {
+		snippet = snippet[:maxNonJSONRPCEchoBytes]
+		truncated = true
+	}
+
+	data := map[string]any{
+		"upstream_status": resp.StatusCode,
+		"upstream_body":   string(snippet),
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
+		data["upstream_content_type"] = ct
+	}
+	if truncated {
+		data["upstream_body_truncated"] = true
+	}
+	return data
+}
+
 // writeResponse relays status, headers, and body from the upstream response
 // back to the user. body may differ from upstreamResp.Body (POST replaces it
 // with a buffered reader after parsing JSON-RPC). Returns the number of bytes
@@ -1277,8 +1359,8 @@ func (p *Proxy) dispatchInterceptorError(
 // bounded by its internal buffer, and the body coming from a parsed POST
 // flow was already capped during [readJSONRPCBody] (upstream response) or
 // [UserRequest.ParseJSONRPCMessages] (inbound user request).
-func writeResponse(w http.ResponseWriter, upstreamResp *http.Response, body io.Reader) (int64, error) {
-	applyResponseHeaders(w, upstreamResp)
+func writeResponse(w http.ResponseWriter, upstreamResp *http.Response, body io.Reader, wwwAuthenticate string) (int64, error) {
+	applyResponseHeaders(w, upstreamResp, wwwAuthenticate)
 	w.WriteHeader(upstreamResp.StatusCode)
 
 	if body == nil {

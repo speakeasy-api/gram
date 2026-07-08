@@ -56,7 +56,7 @@ export type OrganizationRemoteSessionClientMcpServersQueryError =
   | SDKValidationError;
 
 /**
- * listClientMcpServers organizationRemoteSessionIssuers
+ * listClientMcpServers organizationRemoteSessionClients
  *
  * @remarks
  * List the MCP servers a remote_session_client is attached to (resolved through user_session_issuers) in the caller's organization. Requires org:read.
@@ -85,7 +85,7 @@ export function useOrganizationRemoteSessionClientMcpServers(
 }
 
 /**
- * listClientMcpServers organizationRemoteSessionIssuers
+ * listClientMcpServers organizationRemoteSessionClients
  *
  * @remarks
  * List the MCP servers a remote_session_client is attached to (resolved through user_session_issuers) in the caller's organization. Requires org:read.
@@ -148,8 +148,8 @@ export function invalidateOrganizationRemoteSessionClientMcpServers(
     ...filters,
     queryKey: [
       "@gram/client",
-      "organizationRemoteSessionIssuers",
-      "listClientMcpServers",
+      "organizationRemoteSessionClients",
+      "listMcpServers",
       ...queryKeyBase,
     ],
   });
@@ -163,8 +163,8 @@ export function invalidateAllOrganizationRemoteSessionClientMcpServers(
     ...filters,
     queryKey: [
       "@gram/client",
-      "organizationRemoteSessionIssuers",
-      "listClientMcpServers",
+      "organizationRemoteSessionClients",
+      "listMcpServers",
     ],
   });
 }

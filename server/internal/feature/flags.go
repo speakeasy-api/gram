@@ -7,7 +7,7 @@ const (
 	FlagClickhouseToolMetrics    Flag = "clickhouse-tool-metrics"
 	FlagAssistants               Flag = "assistants"
 	// FlagPromptInjectionUseClassifier opts an organization in to the L1
-	// LLM-judge engine (server/internal/pijudge) for prompt-injection
+	// LLM-judge engine for prompt-injection
 	// detection. When unset (the default), the scanner runs the L0 heuristic
 	// regex/keyword engine only. The engine choice is an implementation detail
 	// kept out of the policy schema; the resulting finding rule_id is always

@@ -119,7 +119,7 @@ export function RevokeAllSessionsDialog({
       }}
       onConfirm={() =>
         revokeAll.mutate({
-          request: { revokeAllClientSessionsRequestBody: { clientId } },
+          request: { clientId },
         })
       }
     />
