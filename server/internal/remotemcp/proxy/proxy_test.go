@@ -1790,6 +1790,114 @@ func TestProxy_Post_SSEResponse_RemoteMessageInterceptorRejectionSubstitutesEven
 	require.Contains(t, rr.Body.String(), `"code":-32603`, "default mapping for plain error rejections is RejectCodeInternalError")
 }
 
+func TestProxy_Post_SSENonJSONRPCReplyForRequestSynthesizesJSONRPCError(t *testing.T) {
+	t.Parallel()
+
+	// AIS-286: the upstream answered an authenticated request over
+	// text/event-stream, but the single event's data was its backing API's
+	// raw envelope ({"Output":…,"Version":…}) instead of a JSON-RPC result.
+	// Relaying that verbatim hands the client a payload its JSON-RPC layer
+	// can neither parse nor correlate (the reported reconnect failure). The
+	// proxy must suppress the non-JSON-RPC event and synthesize a JSON-RPC
+	// error carrying the originating request id, echoing the upstream body
+	// for debugging.
+	const upstreamPayload = `{"Output":"result-payload","Version":"1"}`
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, sseBody(upstreamPayload))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	// The stream must carry exactly one data event — the synthesized error —
+	// and never the raw envelope as its own event.
+	body := rr.Body.String()
+	require.Equal(t, 1, strings.Count(body, "data:"), "the raw non-JSON-RPC event must be suppressed, leaving only the synthesized error")
+
+	payload := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(body), "data:"))
+	var envelope map[string]any
+	require.NoError(t, json.Unmarshal([]byte(payload), &envelope))
+	require.Equal(t, "2.0", envelope["jsonrpc"], "synthesized event must be valid JSON-RPC 2.0")
+	require.EqualValues(t, 1, envelope["id"], "synthesized error must carry the originating request id")
+	rpcErr, ok := envelope["error"].(map[string]any)
+	require.True(t, ok, "synthesized event must be a JSON-RPC error")
+	require.EqualValues(t, proxy.RejectCodeInternalError, rpcErr["code"])
+	data, ok := rpcErr["data"].(map[string]any)
+	require.True(t, ok, "error data must carry upstream diagnostics")
+	require.EqualValues(t, http.StatusOK, data["upstream_status"])
+	echoed, ok := data["upstream_body"].(string)
+	require.True(t, ok, "upstream body must be echoed as a string")
+	require.JSONEq(t, upstreamPayload, echoed, "upstream body must be echoed for debugging")
+}
+
+func TestProxy_Post_SSENonJSONRPCEventBeforeValidReplyIsDroppedNotSynthesized(t *testing.T) {
+	t.Parallel()
+
+	// A non-JSON-RPC data event precedes a well-formed JSON-RPC reply
+	// correlated to the request id. The garbage event must be dropped (never
+	// relayed), the valid reply must reach the client, and no synthesized
+	// error must be emitted since the client got its correlatable reply.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, sseBody(
+			`{"Output":"noise","Version":"1"}`,
+			`{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"done"}]}}`,
+		))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	require.Contains(t, body, `"done"`, "the valid JSON-RPC reply must reach the client")
+	require.NotContains(t, body, "Output", "the suppressed non-JSON-RPC event must not reach the client verbatim")
+	require.NotContains(t, body, `"code":-32603`, "no error is synthesized when a correlatable reply arrived")
+}
+
+func TestProxy_Post_SSENonJSONRPCEventForNotificationRelaysVerbatim(t *testing.T) {
+	t.Parallel()
+
+	// A notification carries no id and no reply slot, so there is nothing to
+	// correlate a synthesized error against. A non-JSON-RPC data event on the
+	// stream is relayed verbatim, preserving the bare-heartbeat behavior.
+	const upstreamPayload = `{"Output":"heartbeat","Version":"1"}`
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, sseBody(upstreamPayload))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	const notificationBody = `{"jsonrpc":"2.0","method":"notifications/initialized"}`
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(notificationBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Contains(t, rr.Body.String(), upstreamPayload, "undecodable event for a notification must reach the client verbatim")
+	require.NotContains(t, rr.Body.String(), `"code":-32603`, "no error is synthesized for a notification")
+}
+
 func TestProxy_Get_SSE_FiresRemoteMessageInterceptors(t *testing.T) {
 	t.Parallel()
 
