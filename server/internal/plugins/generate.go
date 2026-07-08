@@ -1315,7 +1315,17 @@ gram_hooks_login_handle_request() {
   local state="$2"
   local probe="$3"
   local request_line="" line="" path_query="" method="" content_length=""
-  IFS= read -r -t 10 request_line || request_line=""
+  # This read is what waits for the browser to hit the callback. nc has already
+  # accepted a connection (or is about to on a reused socket), but the countdown
+  # starts the instant the serve loop iteration begins — before the user has
+  # clicked through the dashboard, minted the key, and been redirected back,
+  # which routinely takes far longer than a few seconds. A short timeout here
+  # fires first, the handler returns with no HTTP response, and the browser
+  # renders ERR_EMPTY_RESPONSE on the reused connection. Wait the full login
+  # window so the callback is actually caught. Once the first line arrives the
+  # rest of the request follows immediately, so the header/body reads below stay
+  # short.
+  IFS= read -r -t "${GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS:-240}" request_line || request_line=""
   request_line="${request_line%$'\r'}"
   if [ -z "$request_line" ]; then
     return 0

@@ -115,15 +115,16 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	finalScopes := slices.Sorted(maps.Keys(scopes))
 
 	// A hooks key only attributes a developer's own coding-agent telemetry and
-	// carries no write powers, so any org member can mint one as part of the
-	// self-serve browser sign-in the hook plugins run. Every other scope (and
-	// any mix) stays admin-only.
-	requiredScope := authz.ScopeOrgAdmin
-	if slices.Equal(finalScopes, []string{auth.APIKeyScopeHooks.String()}) {
-		requiredScope = authz.ScopeOrgRead
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: requiredScope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+	// carries no write powers, so any authenticated member of the org can mint
+	// one as part of the self-serve browser sign-in the hook plugins run — no
+	// role grant required. Directory-synced (SCIM) members frequently hold no
+	// scope grant at all, not even org:read, so gating this on any scope locks
+	// them out of hooks entirely. Every other scope (and any mix) stays
+	// admin-only.
+	if !slices.Equal(finalScopes, []string{auth.APIKeyScopeHooks.String()}) {
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+			return nil, err
+		}
 	}
 
 	token, err := s.generateToken()
