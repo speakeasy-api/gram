@@ -88,8 +88,7 @@ export function EnvironmentSwitcher({
 
   // Dropdown row indicator: a chain-link icon (with an "Attached" tooltip) on
   // the attached env, transparent spacer of the same size on the rest so
-  // labels stay aligned. Blue matches the "Attached" badge (Moonshine
-  // information variant).
+  // labels stay aligned.
   const renderAttachedIndicator = (env: Environment) => {
     const isAttachedEnv =
       mcpAttachedEnvironmentSlug != null &&
