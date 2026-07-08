@@ -223,8 +223,10 @@ func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryR
 	}
 
 	// Zero-fill so consumers get one point per day across the whole range,
-	// matching telemetry.query's gap-filled timeseries contract.
-	starts := bucketStarts(timeStart, timeEnd, riskTokensIntervalSeconds)
+	// matching telemetry.query's gap-filled timeseries contract. timeEnd is an
+	// exclusive boundary (the ClickHouse read uses <), so step just inside it —
+	// otherwise a day-aligned `to` would add one empty bucket past the range.
+	starts := bucketStarts(timeStart, timeEnd-1, riskTokensIntervalSeconds)
 	points := make([]*telem_gen.RiskTokensPoint, 0, len(starts))
 	for _, start := range starts {
 		b := byBucket[start]
@@ -310,9 +312,12 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	})
 	for i, dim := range breakdownDims {
 		params := repo.AttributeMetricsQueryParams{
-			ProjectIDs:      scope.projectIDs,
-			TimeStart:       timeStart,
-			TimeEnd:         timeEnd,
+			ProjectIDs: scope.projectIDs,
+			TimeStart:  timeStart,
+			// The attribute-metrics reads treat TimeEnd as inclusive, unlike
+			// the details/risk reads (<) — step inside the exclusive boundary
+			// so the next cycle's first hour stays out and rows match Totals.
+			TimeEnd:         timeEnd - 1,
 			GroupBy:         dim,
 			SortBy:          "total_tokens",
 			Filters:         nil,
@@ -354,8 +359,9 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	}
 
 	// Zero-fill so consumers get one point per day across the whole range,
-	// matching the other telemetry timeseries contracts.
-	starts := bucketStarts(timeStart, timeEnd, riskTokensIntervalSeconds)
+	// matching the other telemetry timeseries contracts. timeEnd is exclusive
+	// (see the same adjustment in QueryRiskTokens).
+	starts := bucketStarts(timeStart, timeEnd-1, riskTokensIntervalSeconds)
 	bucketIndex := make(map[int64]int, len(starts))
 	for i, start := range starts {
 		bucketIndex[start] = i
@@ -405,7 +411,9 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 		}
 		if len(data.table) > breakdownTopN {
 			rows = append(rows, &telem_gen.TumDetailsBreakdownRow{
-				Value:       otherGroupLabel,
+				// Suffixed when a real group value is already "Other", same as
+				// telemetry.query's rollup row.
+				Value:       uniqueOtherGroupLabel(data.table),
 				TotalTokens: otherTotal,
 				Series:      otherSeries,
 			})

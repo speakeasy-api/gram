@@ -15,12 +15,16 @@ import {
   UserRound,
   Wrench,
 } from "lucide-react";
-import { type StackMode } from "./token-usage-panel";
 
 // The token-usage panel's breakdown catalog: every group-by dimension plus the
 // two special stackings (token type, risk), organized into scannable groups
 // for the picker. Kept in a non-component module so the picker component file
 // satisfies the react-refresh "only export components" rule.
+
+// How the chart's bars stack: by the selected dimension's groups, by token
+// type, by risk involvement, or as a single un-broken-down total. Lives here
+// (not in the panel component) so this module stays import-cycle-free.
+export type StackMode = "group" | "tokenType" | "risk" | "total";
 
 // Sentinel values for the non-dimension modes. Dimension values are
 // snake_case attribute keys, so these can't collide.

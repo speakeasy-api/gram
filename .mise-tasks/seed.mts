@@ -3643,8 +3643,11 @@ async function seedObservabilityData(init: {
 
       // Stored-session evidence (chat_token_summaries counts only chats with
       // non-metrics rows toward TUM) that doubles as a tool call for the costs
-      // table's tool-call measure.
-      const toolRow = `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${toolUrn}', '${traceId}', '{"http.response.status_code": 200, "http.server.request.duration": 0.412, "gram.tool.urn": "${toolUrn}", "gen_ai.conversation.id": "${chatId}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", ${uaFrag}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', '${toolUrn}', 'gram-mcp-gateway', '${chatId}')`;
+      // table's tool-call measure. attribute_metrics_summaries only counts a
+      // tool call from a PostToolUse row carrying gram.tool.name, so both
+      // ride along with the gram.tool.urn the tool_usage path reads.
+      const toolName = toolUrn.split(":").pop() ?? toolUrn;
+      const toolRow = `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${toolUrn}', '${traceId}', '{"http.response.status_code": 200, "http.server.request.duration": 0.412, "gram.tool.urn": "${toolUrn}", "gram.tool.name": "${toolName}", "gram.hook.event": "PostToolUse", "gen_ai.conversation.id": "${chatId}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", ${uaFrag}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', '${toolUrn}', 'gram-mcp-gateway', '${chatId}')`;
 
       const sessionRows: string[] = [toolRow];
 

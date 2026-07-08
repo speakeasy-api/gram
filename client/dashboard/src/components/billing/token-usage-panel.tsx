@@ -22,6 +22,7 @@ import {
   CLEAN_COLOR,
   OTHER_COLOR,
   RISKY_COLOR,
+  type StackMode,
 } from "./breakdown-options";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
@@ -42,10 +43,6 @@ const GRANULARITIES: { value: Granularity; label: string }[] = [
   { value: "week", label: "Weekly" },
   { value: "month", label: "Monthly" },
 ];
-// How the bars stack: by the selected dimension's groups, by token type, by
-// risk involvement, or as a single un-broken-down total. Selected via the
-// caller's unified breakdown picker.
-export type StackMode = "group" | "tokenType" | "risk" | "total";
 
 const TOKEN_TYPES: { label: string; value: (m: QueryMeasures) => number }[] = [
   { label: "Input", value: (m) => m.totalInputTokens },
@@ -233,6 +230,7 @@ function ToggleButton({
   return (
     <button
       type="button"
+      aria-pressed={active}
       onClick={onClick}
       className={cn(
         "rounded px-2 py-0.5 text-xs transition-colors",
@@ -484,6 +482,8 @@ export function TokenUsagePanel({
                   <button
                     key={d.label}
                     type="button"
+                    // Pressed = series visible; unpressed = hidden.
+                    aria-pressed={!hidden}
                     onClick={() => toggleLabel(d.label)}
                     onMouseEnter={() => setFocusLabel(d.label)}
                     onMouseLeave={() => setFocusLabel(null)}

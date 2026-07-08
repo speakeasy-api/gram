@@ -50,24 +50,29 @@ function TumTokenBreakdown({
   projectId: string | null;
 }): JSX.Element {
   const client = useGramContext();
+  const organization = useOrganization();
   // The picker's selection, plus the last-picked dimension so switching to
   // token type or risk and back doesn't lose the grouping.
   const [breakdown, setBreakdown] = useState<string>(Dimension.DivisionName);
   const [dimension, setDimension] = useState<Dimension>(Dimension.DivisionName);
   const stackBy = stackModeFor(breakdown);
 
-  const scope = { client, cycle, projectId };
+  const scope = { client, orgId: organization.id, cycle, projectId };
   const { data, isFetching } = useQuery(tumBreakdownQuery(scope, dimension));
   // Shared with the details table's risk rows (same key — one request).
   const { data: riskData } = useQuery(riskPointsQuery(scope));
 
-  // Attribution cuts hide the "" (not-applicable) group, same as the costs page.
+  // Attribution cuts hide the "" (not-applicable) group, same as the costs
+  // page — but only in the grouped view. The total / token-type / risk
+  // stackings sum the whole series and must keep the unattributed slice, or
+  // they'd undercount whenever the last-picked dimension was an attribution
+  // cut.
   const series = useMemo(() => {
     const ts = data?.timeseries ?? [];
-    return isAttributionDim(dimension)
+    return stackBy === "group" && isAttributionDim(dimension)
       ? ts.filter((s) => s.groupValue !== "")
       : ts;
-  }, [data, dimension]);
+  }, [data, dimension, stackBy]);
 
   const riskPoints = riskData?.points ?? null;
 

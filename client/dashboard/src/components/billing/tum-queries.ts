@@ -20,6 +20,10 @@ import { type BillingCycle, cycleStaleTime } from "./billing-cycles";
 
 export type CycleScope = {
   client: GramCore;
+  // The active organization — part of every cache key. The requests are
+  // org-scoped server-side, and closed cycles cache forever, so without it an
+  // org switch could serve another org's cached data for the same dates.
+  orgId: string;
   cycle: BillingCycle;
   // Optional project scope; null spans the whole organization.
   projectId: string | null;
@@ -34,13 +38,14 @@ export type CycleQuery<T> = {
 
 function cycleQuery<T>(
   name: string,
-  { cycle, projectId }: CycleScope,
+  { orgId, cycle, projectId }: CycleScope,
   extraKeys: string[],
   queryFn: () => Promise<T>,
 ): CycleQuery<T> {
   return {
     queryKey: [
       name,
+      orgId,
       cycle.start.toISOString(),
       cycle.end.toISOString(),
       ...extraKeys,
@@ -100,7 +105,10 @@ export function tumBreakdownQuery(
       telemetryQuery(scope.client, {
         queryPayload: {
           from: scope.cycle.start,
-          to: scope.cycle.end,
+          // telemetry.query treats `to` as inclusive (unlike the risk/details
+          // endpoints); the cycle end is an exclusive boundary, so step just
+          // inside it to keep the next cycle's first bucket out.
+          to: new Date(scope.cycle.end.getTime() - 1),
           groupBy: dimension as GroupBy,
           sortBy: "total_tokens",
           topN: 100,

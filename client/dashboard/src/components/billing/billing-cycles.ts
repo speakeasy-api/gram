@@ -17,13 +17,14 @@ export type BillingCycle = {
 
 // The selectable cycles from a TUM response, most recent first. The active
 // cycle comes from the top-level fields when history omits it, and its token
-// count always prefers the live top-level number.
+// count always prefers the live top-level number. Which cycle is active is
+// the server's call (tum.periodStart) — the browser clock can sit outside
+// the server-reported window and must not demote the live cycle.
 export function cyclesFromTum(tum: TokensUnderManagement): BillingCycle[] {
-  const now = Date.now();
+  const activeStart = tum.periodStart.getTime();
   const byStart = new Map<number, BillingCycle>();
   for (const p of tum.history) {
-    const current =
-      p.periodStart.getTime() <= now && now < p.periodEnd.getTime();
+    const current = p.periodStart.getTime() === activeStart;
     byStart.set(p.periodStart.getTime(), {
       start: p.periodStart,
       end: p.periodEnd,
@@ -44,9 +45,12 @@ export function cyclesFromTum(tum: TokensUnderManagement): BillingCycle[] {
   );
 }
 
+// The year keeps cycles distinguishable across the 12-cycle history window
+// (the same anchored range recurs every 12 months).
 const cycleDateFormat = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
+  year: "numeric",
   timeZone: "UTC",
 });
 
@@ -60,7 +64,8 @@ export function cycleKey(cycle: BillingCycle): string {
 
 // React Query staleTime for data scoped to a cycle: closed cycles are
 // immutable (telemetry for a past window never changes), so their queries
-// never refetch; the active cycle stays reasonably fresh.
+// never refetch; the active cycle stays reasonably fresh. Keyed on the
+// server-derived current flag, not the browser clock.
 export function cycleStaleTime(cycle: BillingCycle): number {
-  return cycle.end.getTime() <= Date.now() ? Infinity : 60_000;
+  return cycle.current ? 60_000 : Infinity;
 }

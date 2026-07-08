@@ -564,14 +564,29 @@ WHERE id = ANY(@ids::uuid[])
 
 -- name: SumMessageTokenStatsByDay :many
 -- Daily message-level token stats for the billing details table
--- (telemetry.queryMessageTokenStats): tokens in messages carrying at least one
+-- (telemetry.queryTumDetails): tokens in messages carrying at least one
 -- active risk finding (same active-finding semantics as ListChats'
--- risk_counts), and tokens in tool-call messages. Bucketed by the message's
--- UTC day so the series lines up with the ClickHouse daily aggregates.
+-- risk_counts), and tokens in tool-call messages — tool results (role 'tool')
+-- plus messages carrying a non-empty tool_calls array, mirroring the
+-- getTraceEntryType classification in GetChatEntryTotals. Bucketed by the
+-- message's UTC day so the series lines up with the ClickHouse daily
+-- aggregates.
 SELECT
   (date_trunc('day', cm.created_at AT TIME ZONE 'utc'))::timestamp AS day,
   COALESCE(SUM(cm.total_tokens) FILTER (WHERE rm.chat_message_id IS NOT NULL), 0)::bigint AS risky_message_tokens,
-  COALESCE(SUM(cm.total_tokens) FILTER (WHERE cm.role = 'tool'), 0)::bigint AS tool_message_tokens
+  COALESCE(SUM(cm.total_tokens) FILTER (WHERE
+    cm.role = 'tool'
+    OR CASE
+      WHEN cm.tool_calls IS NULL THEN false
+      WHEN jsonb_typeof(cm.tool_calls) = 'array'
+        THEN jsonb_array_length(cm.tool_calls) > 0
+      -- Some rows store tool_calls double-encoded (a JSON string holding the
+      -- array); treat any non-empty/non-"[]" string as carrying tool calls.
+      WHEN jsonb_typeof(cm.tool_calls) = 'string'
+        THEN btrim(cm.tool_calls #>> '{}') NOT IN ('', '[]', 'null')
+      ELSE false
+    END
+  ), 0)::bigint AS tool_message_tokens
 FROM chat_messages cm
 LEFT JOIN (
   SELECT DISTINCT rr.chat_message_id

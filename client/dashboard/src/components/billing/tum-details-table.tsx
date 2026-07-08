@@ -1,3 +1,4 @@
+import { useOrganization } from "@/contexts/Auth";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type TumDetailsResult } from "@gram/client/models/components/tumdetailsresult.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -223,11 +224,12 @@ function DetailRowItem({
 }: {
   row: DetailRow;
   // Per-day overage fraction: 0 before the allowance was crossed, prorated on
-  // the crossing day, 1 after. A metric's overage is its tokens weighted by it.
-  overageWeights: number[];
+  // the crossing day, 1 after. A metric's overage is its tokens weighted by
+  // it. Null when overage does not apply to the current view.
+  overageWeights: number[] | null;
 }): JSX.Element {
   const overageTokens =
-    row.kind === "tokens"
+    row.kind === "tokens" && overageWeights !== null
       ? Math.round(
           row.series.reduce(
             (sum, v, i) => sum + v * (overageWeights[i] ?? 0),
@@ -287,10 +289,16 @@ export function TumDetailsTable({
   limit: number | null;
 }): JSX.Element {
   const client = useGramContext();
-  const scope = { client, cycle, projectId };
-  const { data, isFetching } = useQuery(tumDetailsQuery(scope));
+  const organization = useOrganization();
+  const scope = { client, orgId: organization.id, cycle, projectId };
+  const { data, isFetching, isError } = useQuery(tumDetailsQuery(scope));
   // Same query (and key) as the chart's risk series — React Query dedupes.
   const { data: riskData } = useQuery(riskPointsQuery(scope));
+
+  // Billed normalization and overage attribution are organization-level
+  // concepts (the TUM contract has no per-project split), so both switch off
+  // when a project filter narrows the data.
+  const orgScoped = projectId == null;
 
   // The table presents BILLED tokens: the analytics aggregate supplies the
   // distribution across metrics (it has the dimensions; billing's per-session
@@ -299,10 +307,11 @@ export function TumDetailsTable({
   // the usage card's number — exactly. The two aggregates track within a
   // fraction of a percent, so the correction is invisible per metric.
   const billedScale = useMemo(() => {
+    if (!orgScoped) return 1;
     const analyticsTotal = data?.totals?.totalTokens ?? 0;
     if (analyticsTotal === 0 || cycle.tokens === 0) return 1;
     return cycle.tokens / analyticsTotal;
-  }, [data, cycle.tokens]);
+  }, [data, cycle.tokens, orgScoped]);
 
   const groups = useMemo<DetailGroup[]>(() => {
     const points = data?.points ?? [];
@@ -393,12 +402,15 @@ export function TumDetailsTable({
   // (cycle TUM tokens − allowance) to the token — the analytics totals the
   // weights are computed from run slightly apart from the billed aggregate,
   // and the usage card's Overage stat is the number to agree with.
-  const overageWeights = useMemo<number[]>(() => {
+  //
+  // Null when overage does not apply: no contracted allowance, or a project
+  // filter is active (the allowance is an org-level number).
+  const overageWeights = useMemo<number[] | null>(() => {
+    if (limit == null || !orgScoped) return null;
     // The crossing point is found on the billed-unit series (see billedScale),
     // matching the allowance's own units.
     const totals = data?.points.map((p) => p.totalTokens * billedScale) ?? [];
     const weights = totals.map(() => 0);
-    if (limit == null) return weights;
     let cumulative = 0;
     for (let i = 0; i < totals.length; i++) {
       const before = cumulative;
@@ -415,9 +427,17 @@ export function TumDetailsTable({
     if (weightedTotal === 0) return weights.map(() => 0);
     const scale = billedOverage / weightedTotal;
     return weights.map((w) => w * scale);
-  }, [data, limit, cycle.tokens, billedScale]);
+  }, [data, limit, cycle.tokens, billedScale, orgScoped]);
 
   const loading = isFetching && !data;
+  const failed = !loading && !data && isError;
+
+  const totalTooltip = orgScoped
+    ? "Billed tokens under management, attributed across metrics by the analytics distribution."
+    : "Tokens for the selected project, from the analytics aggregates. Billed normalization applies to the whole organization only.";
+  const overageTooltip = orgScoped
+    ? "The billed overage (tokens beyond the included allowance), attributed to each metric by its tokens recorded after the allowance ran out. The crossing day is prorated."
+    : "The token allowance is an organization-level number; select All projects to see the overage.";
 
   return (
     <div className="border-border overflow-hidden rounded-lg border">
@@ -429,20 +449,27 @@ export function TumDetailsTable({
       </div>
       <div className="text-muted-foreground flex items-center px-4 py-2 text-xs font-medium">
         <span className="flex-1">Metric</span>
-        <SimpleTooltip tooltip="Billed tokens under management, attributed across metrics by the analytics distribution.">
+        <SimpleTooltip tooltip={totalTooltip}>
           <span className="w-24 cursor-help text-right">Total</span>
         </SimpleTooltip>
-        <SimpleTooltip tooltip="The billed overage (tokens beyond the included allowance), attributed to each metric by its tokens recorded after the allowance ran out. The crossing day is prorated.">
+        <SimpleTooltip tooltip={overageTooltip}>
           <span className="w-24 cursor-help text-right">Overage</span>
         </SimpleTooltip>
       </div>
-      {loading ? (
+      {loading && (
         <div className="space-y-3 p-4">
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-2/3" />
         </div>
-      ) : (
+      )}
+      {failed && (
+        <div className="text-muted-foreground border-border border-t px-4 py-8 text-center text-sm">
+          Couldn't load usage details for this cycle. Try again shortly.
+        </div>
+      )}
+      {!loading &&
+        !failed &&
         groups.map((group) => (
           <div key={group.heading}>
             <div className="bg-muted/50 text-muted-foreground border-border flex items-center gap-1.5 border-t px-4 py-1.5 text-xs">
@@ -463,8 +490,7 @@ export function TumDetailsTable({
               ))}
             </div>
           </div>
-        ))
-      )}
+        ))}
     </div>
   );
 }
