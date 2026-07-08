@@ -398,7 +398,7 @@ func TestService_ListShadowMCPInventoryUsers_InvalidURLIsBadRequest(t *testing.T
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
-func TestService_UpsertShadowMCPInventoryAllowRule_ReplacesURLGrantsWithPolicyAudience(t *testing.T) {
+func TestService_UpsertShadowMCPInventoryPolicyBypass_ReplacesURLGrantsWithPolicyAudience(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -424,7 +424,7 @@ func TestService_UpsertShadowMCPInventoryAllowRule_ReplacesURLGrantsWithPolicyAu
 	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, newPolicy.ID.String(), rolePrincipal)
 	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, oldPolicy.ID.String(), "https://mcp.example.com/mcp")
 
-	result, err := ti.service.UpsertShadowMCPInventoryAllowRule(ctx, &gen.UpsertShadowMCPInventoryAllowRulePayload{
+	result, err := ti.service.UpsertShadowMCPInventoryPolicyBypass(ctx, &gen.UpsertShadowMCPInventoryPolicyBypassPayload{
 		ProjectID: projectID,
 		ServerURL: "HTTPS://MCP.EXAMPLE.COM:443/mcp?token=ignored#frag",
 		PolicyIds: []string{
@@ -538,7 +538,7 @@ func TestService_ResolveShadowMCPInventoryRequest_DeniesURLAndResolvesPendingReq
 	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://mcp.example.com/mcp"))
 }
 
-func TestService_DeleteShadowMCPInventoryAllowRule_RemovesURLGrants(t *testing.T) {
+func TestService_DeleteShadowMCPInventoryPolicyBypass_RemovesURLGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -555,7 +555,7 @@ func TestService_DeleteShadowMCPInventoryAllowRule_RemovesURLGrants(t *testing.T
 	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), authz.AllUsersPrincipal())
 	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://mcp.example.com/mcp")
 
-	result, err := ti.service.DeleteShadowMCPInventoryAllowRule(ctx, &gen.DeleteShadowMCPInventoryAllowRulePayload{
+	result, err := ti.service.DeleteShadowMCPInventoryPolicyBypass(ctx, &gen.DeleteShadowMCPInventoryPolicyBypassPayload{
 		ProjectID: projectID,
 		ServerURL: "https://mcp.example.com/mcp",
 	})

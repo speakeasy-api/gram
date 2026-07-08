@@ -173,7 +173,7 @@ func (s *Service) ListShadowMCPInventoryUsers(ctx context.Context, payload *gen.
 	}, nil
 }
 
-func (s *Service) UpsertShadowMCPInventoryAllowRule(ctx context.Context, payload *gen.UpsertShadowMCPInventoryAllowRulePayload) (*gen.ShadowMCPInventoryURLState, error) {
+func (s *Service) UpsertShadowMCPInventoryPolicyBypass(ctx context.Context, payload *gen.UpsertShadowMCPInventoryPolicyBypassPayload) (*gen.ShadowMCPInventoryURLState, error) {
 	ac, projectID, inventoryURL, err := s.shadowMCPInventoryMutationContext(ctx, payload.ProjectID, payload.ServerURL)
 	if err != nil {
 		return nil, err
@@ -185,7 +185,7 @@ func (s *Service) UpsertShadowMCPInventoryAllowRule(ctx context.Context, payload
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin shadow mcp inventory allow rule upsert").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin shadow mcp inventory policy bypass upsert").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -194,13 +194,13 @@ func (s *Service) UpsertShadowMCPInventoryAllowRule(ctx context.Context, payload
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit shadow mcp inventory allow rule upsert").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit shadow mcp inventory policy bypass upsert").LogError(ctx, s.logger)
 	}
 
 	return s.shadowMCPInventoryURLState(ctx, ac.ActiveOrganizationID, projectID, inventoryURL.CanonicalURL)
 }
 
-func (s *Service) DeleteShadowMCPInventoryAllowRule(ctx context.Context, payload *gen.DeleteShadowMCPInventoryAllowRulePayload) (*gen.ShadowMCPInventoryURLState, error) {
+func (s *Service) DeleteShadowMCPInventoryPolicyBypass(ctx context.Context, payload *gen.DeleteShadowMCPInventoryPolicyBypassPayload) (*gen.ShadowMCPInventoryURLState, error) {
 	ac, projectID, inventoryURL, err := s.shadowMCPInventoryMutationContext(ctx, payload.ProjectID, payload.ServerURL)
 	if err != nil {
 		return nil, err
@@ -208,7 +208,7 @@ func (s *Service) DeleteShadowMCPInventoryAllowRule(ctx context.Context, payload
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin shadow mcp inventory allow rule delete").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin shadow mcp inventory policy bypass delete").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -217,7 +217,7 @@ func (s *Service) DeleteShadowMCPInventoryAllowRule(ctx context.Context, payload
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit shadow mcp inventory allow rule delete").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit shadow mcp inventory policy bypass delete").LogError(ctx, s.logger)
 	}
 
 	return s.shadowMCPInventoryURLState(ctx, ac.ActiveOrganizationID, projectID, inventoryURL.CanonicalURL)

@@ -3803,14 +3803,14 @@ func DecodeListShadowMCPInventoryUsersResponse(decoder func(*http.Response) goah
 	}
 }
 
-// BuildUpsertShadowMCPInventoryAllowRuleRequest instantiates a HTTP request
+// BuildUpsertShadowMCPInventoryPolicyBypassRequest instantiates a HTTP request
 // object with method and path set to call the "access" service
-// "upsertShadowMCPInventoryAllowRule" endpoint
-func (c *Client) BuildUpsertShadowMCPInventoryAllowRuleRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpsertShadowMCPInventoryAllowRuleAccessPath()}
+// "upsertShadowMCPInventoryPolicyBypass" endpoint
+func (c *Client) BuildUpsertShadowMCPInventoryPolicyBypassRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpsertShadowMCPInventoryPolicyBypassAccessPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("access", "upsertShadowMCPInventoryAllowRule", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("access", "upsertShadowMCPInventoryPolicyBypass", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -3819,31 +3819,31 @@ func (c *Client) BuildUpsertShadowMCPInventoryAllowRuleRequest(ctx context.Conte
 	return req, nil
 }
 
-// EncodeUpsertShadowMCPInventoryAllowRuleRequest returns an encoder for
-// requests sent to the access upsertShadowMCPInventoryAllowRule server.
-func EncodeUpsertShadowMCPInventoryAllowRuleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeUpsertShadowMCPInventoryPolicyBypassRequest returns an encoder for
+// requests sent to the access upsertShadowMCPInventoryPolicyBypass server.
+func EncodeUpsertShadowMCPInventoryPolicyBypassRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*access.UpsertShadowMCPInventoryAllowRulePayload)
+		p, ok := v.(*access.UpsertShadowMCPInventoryPolicyBypassPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("access", "upsertShadowMCPInventoryAllowRule", "*access.UpsertShadowMCPInventoryAllowRulePayload", v)
+			return goahttp.ErrInvalidType("access", "upsertShadowMCPInventoryPolicyBypass", "*access.UpsertShadowMCPInventoryPolicyBypassPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		body := NewUpsertShadowMCPInventoryAllowRuleRequestBody(p)
+		body := NewUpsertShadowMCPInventoryPolicyBypassRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("access", "upsertShadowMCPInventoryAllowRule", err)
+			return goahttp.ErrEncodingError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 		}
 		return nil
 	}
 }
 
-// DecodeUpsertShadowMCPInventoryAllowRuleResponse returns a decoder for
-// responses returned by the access upsertShadowMCPInventoryAllowRule endpoint.
-// restoreBody controls whether the response body should be restored after
-// having been read.
-// DecodeUpsertShadowMCPInventoryAllowRuleResponse may return the following
+// DecodeUpsertShadowMCPInventoryPolicyBypassResponse returns a decoder for
+// responses returned by the access upsertShadowMCPInventoryPolicyBypass
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeUpsertShadowMCPInventoryPolicyBypassResponse may return the following
 // errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
@@ -3856,7 +3856,7 @@ func EncodeUpsertShadowMCPInventoryAllowRuleRequest(encoder func(*http.Request) 
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeUpsertShadowMCPInventoryAllowRuleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeUpsertShadowMCPInventoryPolicyBypassResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -3873,181 +3873,181 @@ func DecodeUpsertShadowMCPInventoryAllowRuleResponse(decoder func(*http.Response
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body UpsertShadowMCPInventoryAllowRuleResponseBody
+				body UpsertShadowMCPInventoryPolicyBypassResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateUpsertShadowMCPInventoryAllowRuleResponseBody(&body)
+			err = ValidateUpsertShadowMCPInventoryPolicyBypassResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			res := NewUpsertShadowMCPInventoryAllowRuleShadowMCPInventoryURLStateOK(&body)
+			res := NewUpsertShadowMCPInventoryPolicyBypassShadowMCPInventoryURLStateOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body UpsertShadowMCPInventoryAllowRuleUnauthorizedResponseBody
+				body UpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateUpsertShadowMCPInventoryAllowRuleUnauthorizedResponseBody(&body)
+			err = ValidateUpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewUpsertShadowMCPInventoryAllowRuleUnauthorized(&body)
+			return nil, NewUpsertShadowMCPInventoryPolicyBypassUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body UpsertShadowMCPInventoryAllowRuleForbiddenResponseBody
+				body UpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateUpsertShadowMCPInventoryAllowRuleForbiddenResponseBody(&body)
+			err = ValidateUpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewUpsertShadowMCPInventoryAllowRuleForbidden(&body)
+			return nil, NewUpsertShadowMCPInventoryPolicyBypassForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body UpsertShadowMCPInventoryAllowRuleBadRequestResponseBody
+				body UpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateUpsertShadowMCPInventoryAllowRuleBadRequestResponseBody(&body)
+			err = ValidateUpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewUpsertShadowMCPInventoryAllowRuleBadRequest(&body)
+			return nil, NewUpsertShadowMCPInventoryPolicyBypassBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body UpsertShadowMCPInventoryAllowRuleNotFoundResponseBody
+				body UpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateUpsertShadowMCPInventoryAllowRuleNotFoundResponseBody(&body)
+			err = ValidateUpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewUpsertShadowMCPInventoryAllowRuleNotFound(&body)
+			return nil, NewUpsertShadowMCPInventoryPolicyBypassNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body UpsertShadowMCPInventoryAllowRuleConflictResponseBody
+				body UpsertShadowMCPInventoryPolicyBypassConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateUpsertShadowMCPInventoryAllowRuleConflictResponseBody(&body)
+			err = ValidateUpsertShadowMCPInventoryPolicyBypassConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewUpsertShadowMCPInventoryAllowRuleConflict(&body)
+			return nil, NewUpsertShadowMCPInventoryPolicyBypassConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body UpsertShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody
+				body UpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateUpsertShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody(&body)
+			err = ValidateUpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewUpsertShadowMCPInventoryAllowRuleUnsupportedMedia(&body)
+			return nil, NewUpsertShadowMCPInventoryPolicyBypassUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body UpsertShadowMCPInventoryAllowRuleInvalidResponseBody
+				body UpsertShadowMCPInventoryPolicyBypassInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateUpsertShadowMCPInventoryAllowRuleInvalidResponseBody(&body)
+			err = ValidateUpsertShadowMCPInventoryPolicyBypassInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewUpsertShadowMCPInventoryAllowRuleInvalid(&body)
+			return nil, NewUpsertShadowMCPInventoryPolicyBypassInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body UpsertShadowMCPInventoryAllowRuleInvariantViolationResponseBody
+					body UpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryAllowRule", err)
+					return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 				}
-				err = ValidateUpsertShadowMCPInventoryAllowRuleInvariantViolationResponseBody(&body)
+				err = ValidateUpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryAllowRule", err)
+					return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 				}
-				return nil, NewUpsertShadowMCPInventoryAllowRuleInvariantViolation(&body)
+				return nil, NewUpsertShadowMCPInventoryPolicyBypassInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body UpsertShadowMCPInventoryAllowRuleUnexpectedResponseBody
+					body UpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryAllowRule", err)
+					return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 				}
-				err = ValidateUpsertShadowMCPInventoryAllowRuleUnexpectedResponseBody(&body)
+				err = ValidateUpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryAllowRule", err)
+					return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 				}
-				return nil, NewUpsertShadowMCPInventoryAllowRuleUnexpected(&body)
+				return nil, NewUpsertShadowMCPInventoryPolicyBypassUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("access", "upsertShadowMCPInventoryAllowRule", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("access", "upsertShadowMCPInventoryPolicyBypass", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body UpsertShadowMCPInventoryAllowRuleGatewayErrorResponseBody
+				body UpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateUpsertShadowMCPInventoryAllowRuleGatewayErrorResponseBody(&body)
+			err = ValidateUpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewUpsertShadowMCPInventoryAllowRuleGatewayError(&body)
+			return nil, NewUpsertShadowMCPInventoryPolicyBypassGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("access", "upsertShadowMCPInventoryAllowRule", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("access", "upsertShadowMCPInventoryPolicyBypass", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildDeleteShadowMCPInventoryAllowRuleRequest instantiates a HTTP request
+// BuildDeleteShadowMCPInventoryPolicyBypassRequest instantiates a HTTP request
 // object with method and path set to call the "access" service
-// "deleteShadowMCPInventoryAllowRule" endpoint
-func (c *Client) BuildDeleteShadowMCPInventoryAllowRuleRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteShadowMCPInventoryAllowRuleAccessPath()}
+// "deleteShadowMCPInventoryPolicyBypass" endpoint
+func (c *Client) BuildDeleteShadowMCPInventoryPolicyBypassRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteShadowMCPInventoryPolicyBypassAccessPath()}
 	req, err := http.NewRequest("DELETE", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("access", "deleteShadowMCPInventoryAllowRule", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("access", "deleteShadowMCPInventoryPolicyBypass", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -4056,13 +4056,13 @@ func (c *Client) BuildDeleteShadowMCPInventoryAllowRuleRequest(ctx context.Conte
 	return req, nil
 }
 
-// EncodeDeleteShadowMCPInventoryAllowRuleRequest returns an encoder for
-// requests sent to the access deleteShadowMCPInventoryAllowRule server.
-func EncodeDeleteShadowMCPInventoryAllowRuleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeDeleteShadowMCPInventoryPolicyBypassRequest returns an encoder for
+// requests sent to the access deleteShadowMCPInventoryPolicyBypass server.
+func EncodeDeleteShadowMCPInventoryPolicyBypassRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*access.DeleteShadowMCPInventoryAllowRulePayload)
+		p, ok := v.(*access.DeleteShadowMCPInventoryPolicyBypassPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("access", "deleteShadowMCPInventoryAllowRule", "*access.DeleteShadowMCPInventoryAllowRulePayload", v)
+			return goahttp.ErrInvalidType("access", "deleteShadowMCPInventoryPolicyBypass", "*access.DeleteShadowMCPInventoryPolicyBypassPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -4076,11 +4076,11 @@ func EncodeDeleteShadowMCPInventoryAllowRuleRequest(encoder func(*http.Request) 
 	}
 }
 
-// DecodeDeleteShadowMCPInventoryAllowRuleResponse returns a decoder for
-// responses returned by the access deleteShadowMCPInventoryAllowRule endpoint.
-// restoreBody controls whether the response body should be restored after
-// having been read.
-// DecodeDeleteShadowMCPInventoryAllowRuleResponse may return the following
+// DecodeDeleteShadowMCPInventoryPolicyBypassResponse returns a decoder for
+// responses returned by the access deleteShadowMCPInventoryPolicyBypass
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeDeleteShadowMCPInventoryPolicyBypassResponse may return the following
 // errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
@@ -4093,7 +4093,7 @@ func EncodeDeleteShadowMCPInventoryAllowRuleRequest(encoder func(*http.Request) 
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeDeleteShadowMCPInventoryAllowRuleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeDeleteShadowMCPInventoryPolicyBypassResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -4110,169 +4110,169 @@ func DecodeDeleteShadowMCPInventoryAllowRuleResponse(decoder func(*http.Response
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body DeleteShadowMCPInventoryAllowRuleResponseBody
+				body DeleteShadowMCPInventoryPolicyBypassResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateDeleteShadowMCPInventoryAllowRuleResponseBody(&body)
+			err = ValidateDeleteShadowMCPInventoryPolicyBypassResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			res := NewDeleteShadowMCPInventoryAllowRuleShadowMCPInventoryURLStateOK(&body)
+			res := NewDeleteShadowMCPInventoryPolicyBypassShadowMCPInventoryURLStateOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body DeleteShadowMCPInventoryAllowRuleUnauthorizedResponseBody
+				body DeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateDeleteShadowMCPInventoryAllowRuleUnauthorizedResponseBody(&body)
+			err = ValidateDeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewDeleteShadowMCPInventoryAllowRuleUnauthorized(&body)
+			return nil, NewDeleteShadowMCPInventoryPolicyBypassUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body DeleteShadowMCPInventoryAllowRuleForbiddenResponseBody
+				body DeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateDeleteShadowMCPInventoryAllowRuleForbiddenResponseBody(&body)
+			err = ValidateDeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewDeleteShadowMCPInventoryAllowRuleForbidden(&body)
+			return nil, NewDeleteShadowMCPInventoryPolicyBypassForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body DeleteShadowMCPInventoryAllowRuleBadRequestResponseBody
+				body DeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateDeleteShadowMCPInventoryAllowRuleBadRequestResponseBody(&body)
+			err = ValidateDeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewDeleteShadowMCPInventoryAllowRuleBadRequest(&body)
+			return nil, NewDeleteShadowMCPInventoryPolicyBypassBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body DeleteShadowMCPInventoryAllowRuleNotFoundResponseBody
+				body DeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateDeleteShadowMCPInventoryAllowRuleNotFoundResponseBody(&body)
+			err = ValidateDeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewDeleteShadowMCPInventoryAllowRuleNotFound(&body)
+			return nil, NewDeleteShadowMCPInventoryPolicyBypassNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body DeleteShadowMCPInventoryAllowRuleConflictResponseBody
+				body DeleteShadowMCPInventoryPolicyBypassConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateDeleteShadowMCPInventoryAllowRuleConflictResponseBody(&body)
+			err = ValidateDeleteShadowMCPInventoryPolicyBypassConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewDeleteShadowMCPInventoryAllowRuleConflict(&body)
+			return nil, NewDeleteShadowMCPInventoryPolicyBypassConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body DeleteShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody
+				body DeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateDeleteShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody(&body)
+			err = ValidateDeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewDeleteShadowMCPInventoryAllowRuleUnsupportedMedia(&body)
+			return nil, NewDeleteShadowMCPInventoryPolicyBypassUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body DeleteShadowMCPInventoryAllowRuleInvalidResponseBody
+				body DeleteShadowMCPInventoryPolicyBypassInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateDeleteShadowMCPInventoryAllowRuleInvalidResponseBody(&body)
+			err = ValidateDeleteShadowMCPInventoryPolicyBypassInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewDeleteShadowMCPInventoryAllowRuleInvalid(&body)
+			return nil, NewDeleteShadowMCPInventoryPolicyBypassInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body DeleteShadowMCPInventoryAllowRuleInvariantViolationResponseBody
+					body DeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryAllowRule", err)
+					return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 				}
-				err = ValidateDeleteShadowMCPInventoryAllowRuleInvariantViolationResponseBody(&body)
+				err = ValidateDeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryAllowRule", err)
+					return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 				}
-				return nil, NewDeleteShadowMCPInventoryAllowRuleInvariantViolation(&body)
+				return nil, NewDeleteShadowMCPInventoryPolicyBypassInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body DeleteShadowMCPInventoryAllowRuleUnexpectedResponseBody
+					body DeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryAllowRule", err)
+					return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 				}
-				err = ValidateDeleteShadowMCPInventoryAllowRuleUnexpectedResponseBody(&body)
+				err = ValidateDeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryAllowRule", err)
+					return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 				}
-				return nil, NewDeleteShadowMCPInventoryAllowRuleUnexpected(&body)
+				return nil, NewDeleteShadowMCPInventoryPolicyBypassUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("access", "deleteShadowMCPInventoryAllowRule", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("access", "deleteShadowMCPInventoryPolicyBypass", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body DeleteShadowMCPInventoryAllowRuleGatewayErrorResponseBody
+				body DeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrDecodingError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			err = ValidateDeleteShadowMCPInventoryAllowRuleGatewayErrorResponseBody(&body)
+			err = ValidateDeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryAllowRule", err)
+				return nil, goahttp.ErrValidationError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 			}
-			return nil, NewDeleteShadowMCPInventoryAllowRuleGatewayError(&body)
+			return nil, NewDeleteShadowMCPInventoryPolicyBypassGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("access", "deleteShadowMCPInventoryAllowRule", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("access", "deleteShadowMCPInventoryPolicyBypass", resp.StatusCode, string(body))
 		}
 	}
 }

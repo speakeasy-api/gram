@@ -2189,10 +2189,10 @@ paths:
       x-speakeasy-name-override: resolveChallenge
       x-speakeasy-react-hook:
         name: ResolveChallenge
-  /rpc/access.shadowMcp.inventory.allowRule.delete:
+  /rpc/access.shadowMcp.inventory.policyBypass.delete:
     delete:
       description: Remove a Shadow MCP URL allow decision.
-      operationId: deleteShadowMCPInventoryAllowRule
+      operationId: deleteShadowMCPInventoryPolicyBypass
       parameters:
         - allowEmptyValue: true
           in: query
@@ -2279,17 +2279,17 @@ paths:
       security:
         - session_header_Gram-Session: []
         - {}
-      summary: deleteShadowMCPInventoryAllowRule access
+      summary: deleteShadowMCPInventoryPolicyBypass access
       tags:
         - access
-      x-speakeasy-name-override: deleteShadowMCPInventoryAllowRule
+      x-speakeasy-name-override: deleteShadowMCPInventoryPolicyBypass
       x-speakeasy-react-hook:
-        name: DeleteShadowMCPInventoryAllowRule
+        name: DeleteShadowMCPInventoryPolicyBypass
         type: mutation
-  /rpc/access.shadowMcp.inventory.allowRule.upsert:
+  /rpc/access.shadowMcp.inventory.policyBypass.upsert:
     post:
       description: Create or modify a Shadow MCP URL allow decision for selected blocking policies.
-      operationId: upsertShadowMCPInventoryAllowRule
+      operationId: upsertShadowMCPInventoryPolicyBypass
       parameters:
         - allowEmptyValue: true
           description: Session header
@@ -2302,7 +2302,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ShadowMCPInventoryAllowRuleForm'
+              $ref: '#/components/schemas/ShadowMCPInventoryPolicyBypassForm'
         required: true
       responses:
         "200":
@@ -2368,12 +2368,12 @@ paths:
       security:
         - session_header_Gram-Session: []
         - {}
-      summary: upsertShadowMCPInventoryAllowRule access
+      summary: upsertShadowMCPInventoryPolicyBypass access
       tags:
         - access
-      x-speakeasy-name-override: upsertShadowMCPInventoryAllowRule
+      x-speakeasy-name-override: upsertShadowMCPInventoryPolicyBypass
       x-speakeasy-react-hook:
-        name: UpsertShadowMCPInventoryAllowRule
+        name: UpsertShadowMCPInventoryPolicyBypass
         type: mutation
   /rpc/access.shadowMcp.inventory.request.resolve:
     post:
@@ -53133,7 +53133,7 @@ components:
         - requested_at
         - created_at
         - updated_at
-    ShadowMCPInventoryAllowRuleForm:
+    ShadowMCPInventoryPolicyBypassForm:
       type: object
       properties:
         policy_ids:

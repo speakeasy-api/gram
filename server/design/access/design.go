@@ -469,29 +469,29 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryUsers"}`)
 	})
 
-	Method("upsertShadowMCPInventoryAllowRule", func() {
+	Method("upsertShadowMCPInventoryPolicyBypass", func() {
 		Description("Create or modify a Shadow MCP URL allow decision for selected blocking policies.")
 		Security(security.Session)
 
 		Payload(func() {
-			Extend(ShadowMCPInventoryAllowRuleForm)
+			Extend(ShadowMCPInventoryPolicyBypassForm)
 			security.SessionPayload()
 		})
 
 		Result(ShadowMCPInventoryURLStateModel)
 
 		HTTP(func() {
-			POST("/rpc/access.shadowMcp.inventory.allowRule.upsert")
+			POST("/rpc/access.shadowMcp.inventory.policyBypass.upsert")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "upsertShadowMCPInventoryAllowRule")
-		Meta("openapi:extension:x-speakeasy-name-override", "upsertShadowMCPInventoryAllowRule")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertShadowMCPInventoryAllowRule", "type": "mutation"}`)
+		Meta("openapi:operationId", "upsertShadowMCPInventoryPolicyBypass")
+		Meta("openapi:extension:x-speakeasy-name-override", "upsertShadowMCPInventoryPolicyBypass")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertShadowMCPInventoryPolicyBypass", "type": "mutation"}`)
 	})
 
-	Method("deleteShadowMCPInventoryAllowRule", func() {
+	Method("deleteShadowMCPInventoryPolicyBypass", func() {
 		Description("Remove a Shadow MCP URL allow decision.")
 		Security(security.Session)
 
@@ -509,16 +509,16 @@ var _ = Service("access", func() {
 		Result(ShadowMCPInventoryURLStateModel)
 
 		HTTP(func() {
-			DELETE("/rpc/access.shadowMcp.inventory.allowRule.delete")
+			DELETE("/rpc/access.shadowMcp.inventory.policyBypass.delete")
 			Param("project_id")
 			Param("server_url")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "deleteShadowMCPInventoryAllowRule")
-		Meta("openapi:extension:x-speakeasy-name-override", "deleteShadowMCPInventoryAllowRule")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteShadowMCPInventoryAllowRule", "type": "mutation"}`)
+		Meta("openapi:operationId", "deleteShadowMCPInventoryPolicyBypass")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteShadowMCPInventoryPolicyBypass")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteShadowMCPInventoryPolicyBypass", "type": "mutation"}`)
 	})
 
 	Method("resolveShadowMCPInventoryRequest", func() {
@@ -1148,7 +1148,7 @@ var ShadowMCPInventoryURLStateModel = Type("ShadowMCPInventoryURLState", func() 
 	Attribute("allowed_policy_ids", ArrayOf(String))
 })
 
-var ShadowMCPInventoryAllowRuleForm = Type("ShadowMCPInventoryAllowRuleForm", func() {
+var ShadowMCPInventoryPolicyBypassForm = Type("ShadowMCPInventoryPolicyBypassForm", func() {
 	Required("project_id", "server_url", "policy_ids")
 
 	Attribute("project_id", String, func() {

@@ -3531,25 +3531,26 @@ func EncodeListShadowMCPInventoryUsersError(encoder func(context.Context, http.R
 	}
 }
 
-// EncodeUpsertShadowMCPInventoryAllowRuleResponse returns an encoder for
-// responses returned by the access upsertShadowMCPInventoryAllowRule endpoint.
-func EncodeUpsertShadowMCPInventoryAllowRuleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeUpsertShadowMCPInventoryPolicyBypassResponse returns an encoder for
+// responses returned by the access upsertShadowMCPInventoryPolicyBypass
+// endpoint.
+func EncodeUpsertShadowMCPInventoryPolicyBypassResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*access.ShadowMCPInventoryURLState)
 		enc := encoder(ctx, w)
-		body := NewUpsertShadowMCPInventoryAllowRuleResponseBody(res)
+		body := NewUpsertShadowMCPInventoryPolicyBypassResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeUpsertShadowMCPInventoryAllowRuleRequest returns a decoder for
-// requests sent to the access upsertShadowMCPInventoryAllowRule endpoint.
-func DecodeUpsertShadowMCPInventoryAllowRuleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.UpsertShadowMCPInventoryAllowRulePayload, error) {
-	return func(r *http.Request) (*access.UpsertShadowMCPInventoryAllowRulePayload, error) {
-		var payload *access.UpsertShadowMCPInventoryAllowRulePayload
+// DecodeUpsertShadowMCPInventoryPolicyBypassRequest returns a decoder for
+// requests sent to the access upsertShadowMCPInventoryPolicyBypass endpoint.
+func DecodeUpsertShadowMCPInventoryPolicyBypassRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.UpsertShadowMCPInventoryPolicyBypassPayload, error) {
+	return func(r *http.Request) (*access.UpsertShadowMCPInventoryPolicyBypassPayload, error) {
+		var payload *access.UpsertShadowMCPInventoryPolicyBypassPayload
 		var (
-			body UpsertShadowMCPInventoryAllowRuleRequestBody
+			body UpsertShadowMCPInventoryPolicyBypassRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -3563,7 +3564,7 @@ func DecodeUpsertShadowMCPInventoryAllowRuleRequest(mux goahttp.Muxer, decoder f
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateUpsertShadowMCPInventoryAllowRuleRequestBody(&body)
+		err = ValidateUpsertShadowMCPInventoryPolicyBypassRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
@@ -3575,7 +3576,7 @@ func DecodeUpsertShadowMCPInventoryAllowRuleRequest(mux goahttp.Muxer, decoder f
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewUpsertShadowMCPInventoryAllowRulePayload(&body, sessionToken)
+		payload = NewUpsertShadowMCPInventoryPolicyBypassPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3588,9 +3589,9 @@ func DecodeUpsertShadowMCPInventoryAllowRuleRequest(mux goahttp.Muxer, decoder f
 	}
 }
 
-// EncodeUpsertShadowMCPInventoryAllowRuleError returns an encoder for errors
-// returned by the upsertShadowMCPInventoryAllowRule access endpoint.
-func EncodeUpsertShadowMCPInventoryAllowRuleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeUpsertShadowMCPInventoryPolicyBypassError returns an encoder for
+// errors returned by the upsertShadowMCPInventoryPolicyBypass access endpoint.
+func EncodeUpsertShadowMCPInventoryPolicyBypassError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -3607,7 +3608,7 @@ func EncodeUpsertShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertShadowMCPInventoryAllowRuleUnauthorizedResponseBody(res)
+				body = NewUpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -3621,7 +3622,7 @@ func EncodeUpsertShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertShadowMCPInventoryAllowRuleForbiddenResponseBody(res)
+				body = NewUpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -3635,7 +3636,7 @@ func EncodeUpsertShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertShadowMCPInventoryAllowRuleBadRequestResponseBody(res)
+				body = NewUpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -3649,7 +3650,7 @@ func EncodeUpsertShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertShadowMCPInventoryAllowRuleNotFoundResponseBody(res)
+				body = NewUpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -3663,7 +3664,7 @@ func EncodeUpsertShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertShadowMCPInventoryAllowRuleConflictResponseBody(res)
+				body = NewUpsertShadowMCPInventoryPolicyBypassConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -3677,7 +3678,7 @@ func EncodeUpsertShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody(res)
+				body = NewUpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -3691,7 +3692,7 @@ func EncodeUpsertShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertShadowMCPInventoryAllowRuleInvalidResponseBody(res)
+				body = NewUpsertShadowMCPInventoryPolicyBypassInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -3705,7 +3706,7 @@ func EncodeUpsertShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertShadowMCPInventoryAllowRuleInvariantViolationResponseBody(res)
+				body = NewUpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3719,7 +3720,7 @@ func EncodeUpsertShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertShadowMCPInventoryAllowRuleUnexpectedResponseBody(res)
+				body = NewUpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3733,7 +3734,7 @@ func EncodeUpsertShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertShadowMCPInventoryAllowRuleGatewayErrorResponseBody(res)
+				body = NewUpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -3744,23 +3745,24 @@ func EncodeUpsertShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 	}
 }
 
-// EncodeDeleteShadowMCPInventoryAllowRuleResponse returns an encoder for
-// responses returned by the access deleteShadowMCPInventoryAllowRule endpoint.
-func EncodeDeleteShadowMCPInventoryAllowRuleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeDeleteShadowMCPInventoryPolicyBypassResponse returns an encoder for
+// responses returned by the access deleteShadowMCPInventoryPolicyBypass
+// endpoint.
+func EncodeDeleteShadowMCPInventoryPolicyBypassResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*access.ShadowMCPInventoryURLState)
 		enc := encoder(ctx, w)
-		body := NewDeleteShadowMCPInventoryAllowRuleResponseBody(res)
+		body := NewDeleteShadowMCPInventoryPolicyBypassResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeDeleteShadowMCPInventoryAllowRuleRequest returns a decoder for
-// requests sent to the access deleteShadowMCPInventoryAllowRule endpoint.
-func DecodeDeleteShadowMCPInventoryAllowRuleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.DeleteShadowMCPInventoryAllowRulePayload, error) {
-	return func(r *http.Request) (*access.DeleteShadowMCPInventoryAllowRulePayload, error) {
-		var payload *access.DeleteShadowMCPInventoryAllowRulePayload
+// DecodeDeleteShadowMCPInventoryPolicyBypassRequest returns a decoder for
+// requests sent to the access deleteShadowMCPInventoryPolicyBypass endpoint.
+func DecodeDeleteShadowMCPInventoryPolicyBypassRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.DeleteShadowMCPInventoryPolicyBypassPayload, error) {
+	return func(r *http.Request) (*access.DeleteShadowMCPInventoryPolicyBypassPayload, error) {
+		var payload *access.DeleteShadowMCPInventoryPolicyBypassPayload
 		var (
 			projectID    string
 			serverURL    string
@@ -3785,7 +3787,7 @@ func DecodeDeleteShadowMCPInventoryAllowRuleRequest(mux goahttp.Muxer, decoder f
 		if err != nil {
 			return payload, err
 		}
-		payload = NewDeleteShadowMCPInventoryAllowRulePayload(projectID, serverURL, sessionToken)
+		payload = NewDeleteShadowMCPInventoryPolicyBypassPayload(projectID, serverURL, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3798,9 +3800,9 @@ func DecodeDeleteShadowMCPInventoryAllowRuleRequest(mux goahttp.Muxer, decoder f
 	}
 }
 
-// EncodeDeleteShadowMCPInventoryAllowRuleError returns an encoder for errors
-// returned by the deleteShadowMCPInventoryAllowRule access endpoint.
-func EncodeDeleteShadowMCPInventoryAllowRuleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeDeleteShadowMCPInventoryPolicyBypassError returns an encoder for
+// errors returned by the deleteShadowMCPInventoryPolicyBypass access endpoint.
+func EncodeDeleteShadowMCPInventoryPolicyBypassError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -3817,7 +3819,7 @@ func EncodeDeleteShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryAllowRuleUnauthorizedResponseBody(res)
+				body = NewDeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -3831,7 +3833,7 @@ func EncodeDeleteShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryAllowRuleForbiddenResponseBody(res)
+				body = NewDeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -3845,7 +3847,7 @@ func EncodeDeleteShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryAllowRuleBadRequestResponseBody(res)
+				body = NewDeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -3859,7 +3861,7 @@ func EncodeDeleteShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryAllowRuleNotFoundResponseBody(res)
+				body = NewDeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -3873,7 +3875,7 @@ func EncodeDeleteShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryAllowRuleConflictResponseBody(res)
+				body = NewDeleteShadowMCPInventoryPolicyBypassConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -3887,7 +3889,7 @@ func EncodeDeleteShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody(res)
+				body = NewDeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -3901,7 +3903,7 @@ func EncodeDeleteShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryAllowRuleInvalidResponseBody(res)
+				body = NewDeleteShadowMCPInventoryPolicyBypassInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -3915,7 +3917,7 @@ func EncodeDeleteShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryAllowRuleInvariantViolationResponseBody(res)
+				body = NewDeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3929,7 +3931,7 @@ func EncodeDeleteShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryAllowRuleUnexpectedResponseBody(res)
+				body = NewDeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3943,7 +3945,7 @@ func EncodeDeleteShadowMCPInventoryAllowRuleError(encoder func(context.Context, 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryAllowRuleGatewayErrorResponseBody(res)
+				body = NewDeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

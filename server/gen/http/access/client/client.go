@@ -81,13 +81,13 @@ type Client struct {
 	// the listShadowMCPInventoryUsers endpoint.
 	ListShadowMCPInventoryUsersDoer goahttp.Doer
 
-	// UpsertShadowMCPInventoryAllowRule Doer is the HTTP client used to make
-	// requests to the upsertShadowMCPInventoryAllowRule endpoint.
-	UpsertShadowMCPInventoryAllowRuleDoer goahttp.Doer
+	// UpsertShadowMCPInventoryPolicyBypass Doer is the HTTP client used to make
+	// requests to the upsertShadowMCPInventoryPolicyBypass endpoint.
+	UpsertShadowMCPInventoryPolicyBypassDoer goahttp.Doer
 
-	// DeleteShadowMCPInventoryAllowRule Doer is the HTTP client used to make
-	// requests to the deleteShadowMCPInventoryAllowRule endpoint.
-	DeleteShadowMCPInventoryAllowRuleDoer goahttp.Doer
+	// DeleteShadowMCPInventoryPolicyBypass Doer is the HTTP client used to make
+	// requests to the deleteShadowMCPInventoryPolicyBypass endpoint.
+	DeleteShadowMCPInventoryPolicyBypassDoer goahttp.Doer
 
 	// ResolveShadowMCPInventoryRequest Doer is the HTTP client used to make
 	// requests to the resolveShadowMCPInventoryRequest endpoint.
@@ -149,39 +149,39 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListRolesDoer:                         doer,
-		GetRoleDoer:                           doer,
-		CreateRoleDoer:                        doer,
-		UpdateRoleDoer:                        doer,
-		DeleteRoleDoer:                        doer,
-		ListScopesDoer:                        doer,
-		ListMembersDoer:                       doer,
-		ListGrantsDoer:                        doer,
-		UpdateMemberRolesDoer:                 doer,
-		ListShadowMCPApprovalRequestsDoer:     doer,
-		CreateShadowMCPApprovalRequestDoer:    doer,
-		ApproveShadowMCPApprovalRequestDoer:   doer,
-		DenyShadowMCPApprovalRequestDoer:      doer,
-		ListShadowMCPAccessRulesDoer:          doer,
-		ListShadowMCPInventoryDoer:            doer,
-		ListShadowMCPInventoryUsersDoer:       doer,
-		UpsertShadowMCPInventoryAllowRuleDoer: doer,
-		DeleteShadowMCPInventoryAllowRuleDoer: doer,
-		ResolveShadowMCPInventoryRequestDoer:  doer,
-		CreateShadowMCPAccessRuleDoer:         doer,
-		UpdateShadowMCPAccessRuleDoer:         doer,
-		DeleteShadowMCPAccessRuleDoer:         doer,
-		GetRBACStatusDoer:                     doer,
-		EnableRBACDoer:                        doer,
-		DisableRBACDoer:                       doer,
-		ListChallengesDoer:                    doer,
-		ListChallengeBucketsDoer:              doer,
-		ResolveChallengeDoer:                  doer,
-		RestoreResponseBody:                   restoreBody,
-		scheme:                                scheme,
-		host:                                  host,
-		decoder:                               dec,
-		encoder:                               enc,
+		ListRolesDoer:                            doer,
+		GetRoleDoer:                              doer,
+		CreateRoleDoer:                           doer,
+		UpdateRoleDoer:                           doer,
+		DeleteRoleDoer:                           doer,
+		ListScopesDoer:                           doer,
+		ListMembersDoer:                          doer,
+		ListGrantsDoer:                           doer,
+		UpdateMemberRolesDoer:                    doer,
+		ListShadowMCPApprovalRequestsDoer:        doer,
+		CreateShadowMCPApprovalRequestDoer:       doer,
+		ApproveShadowMCPApprovalRequestDoer:      doer,
+		DenyShadowMCPApprovalRequestDoer:         doer,
+		ListShadowMCPAccessRulesDoer:             doer,
+		ListShadowMCPInventoryDoer:               doer,
+		ListShadowMCPInventoryUsersDoer:          doer,
+		UpsertShadowMCPInventoryPolicyBypassDoer: doer,
+		DeleteShadowMCPInventoryPolicyBypassDoer: doer,
+		ResolveShadowMCPInventoryRequestDoer:     doer,
+		CreateShadowMCPAccessRuleDoer:            doer,
+		UpdateShadowMCPAccessRuleDoer:            doer,
+		DeleteShadowMCPAccessRuleDoer:            doer,
+		GetRBACStatusDoer:                        doer,
+		EnableRBACDoer:                           doer,
+		DisableRBACDoer:                          doer,
+		ListChallengesDoer:                       doer,
+		ListChallengeBucketsDoer:                 doer,
+		ResolveChallengeDoer:                     doer,
+		RestoreResponseBody:                      restoreBody,
+		scheme:                                   scheme,
+		host:                                     host,
+		decoder:                                  dec,
+		encoder:                                  enc,
 	}
 }
 
@@ -569,15 +569,15 @@ func (c *Client) ListShadowMCPInventoryUsers() goa.Endpoint {
 	}
 }
 
-// UpsertShadowMCPInventoryAllowRule returns an endpoint that makes HTTP
-// requests to the access service upsertShadowMCPInventoryAllowRule server.
-func (c *Client) UpsertShadowMCPInventoryAllowRule() goa.Endpoint {
+// UpsertShadowMCPInventoryPolicyBypass returns an endpoint that makes HTTP
+// requests to the access service upsertShadowMCPInventoryPolicyBypass server.
+func (c *Client) UpsertShadowMCPInventoryPolicyBypass() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeUpsertShadowMCPInventoryAllowRuleRequest(c.encoder)
-		decodeResponse = DecodeUpsertShadowMCPInventoryAllowRuleResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeUpsertShadowMCPInventoryPolicyBypassRequest(c.encoder)
+		decodeResponse = DecodeUpsertShadowMCPInventoryPolicyBypassResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildUpsertShadowMCPInventoryAllowRuleRequest(ctx, v)
+		req, err := c.BuildUpsertShadowMCPInventoryPolicyBypassRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -585,23 +585,23 @@ func (c *Client) UpsertShadowMCPInventoryAllowRule() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.UpsertShadowMCPInventoryAllowRuleDoer.Do(req)
+		resp, err := c.UpsertShadowMCPInventoryPolicyBypassDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "upsertShadowMCPInventoryAllowRule", err)
+			return nil, goahttp.ErrRequestError("access", "upsertShadowMCPInventoryPolicyBypass", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// DeleteShadowMCPInventoryAllowRule returns an endpoint that makes HTTP
-// requests to the access service deleteShadowMCPInventoryAllowRule server.
-func (c *Client) DeleteShadowMCPInventoryAllowRule() goa.Endpoint {
+// DeleteShadowMCPInventoryPolicyBypass returns an endpoint that makes HTTP
+// requests to the access service deleteShadowMCPInventoryPolicyBypass server.
+func (c *Client) DeleteShadowMCPInventoryPolicyBypass() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeDeleteShadowMCPInventoryAllowRuleRequest(c.encoder)
-		decodeResponse = DecodeDeleteShadowMCPInventoryAllowRuleResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeDeleteShadowMCPInventoryPolicyBypassRequest(c.encoder)
+		decodeResponse = DecodeDeleteShadowMCPInventoryPolicyBypassResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildDeleteShadowMCPInventoryAllowRuleRequest(ctx, v)
+		req, err := c.BuildDeleteShadowMCPInventoryPolicyBypassRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -609,9 +609,9 @@ func (c *Client) DeleteShadowMCPInventoryAllowRule() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.DeleteShadowMCPInventoryAllowRuleDoer.Do(req)
+		resp, err := c.DeleteShadowMCPInventoryPolicyBypassDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "deleteShadowMCPInventoryAllowRule", err)
+			return nil, goahttp.ErrRequestError("access", "deleteShadowMCPInventoryPolicyBypass", err)
 		}
 		return decodeResponse(resp)
 	}

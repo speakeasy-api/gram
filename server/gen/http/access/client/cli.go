@@ -731,13 +731,13 @@ func BuildListShadowMCPInventoryUsersPayload(accessListShadowMCPInventoryUsersPr
 	return v, nil
 }
 
-// BuildUpsertShadowMCPInventoryAllowRulePayload builds the payload for the
-// access upsertShadowMCPInventoryAllowRule endpoint from CLI flags.
-func BuildUpsertShadowMCPInventoryAllowRulePayload(accessUpsertShadowMCPInventoryAllowRuleBody string, accessUpsertShadowMCPInventoryAllowRuleSessionToken string) (*access.UpsertShadowMCPInventoryAllowRulePayload, error) {
+// BuildUpsertShadowMCPInventoryPolicyBypassPayload builds the payload for the
+// access upsertShadowMCPInventoryPolicyBypass endpoint from CLI flags.
+func BuildUpsertShadowMCPInventoryPolicyBypassPayload(accessUpsertShadowMCPInventoryPolicyBypassBody string, accessUpsertShadowMCPInventoryPolicyBypassSessionToken string) (*access.UpsertShadowMCPInventoryPolicyBypassPayload, error) {
 	var err error
-	var body UpsertShadowMCPInventoryAllowRuleRequestBody
+	var body UpsertShadowMCPInventoryPolicyBypassRequestBody
 	{
-		err = json.Unmarshal([]byte(accessUpsertShadowMCPInventoryAllowRuleBody), &body)
+		err = json.Unmarshal([]byte(accessUpsertShadowMCPInventoryPolicyBypassBody), &body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
 		}
@@ -755,11 +755,11 @@ func BuildUpsertShadowMCPInventoryAllowRulePayload(accessUpsertShadowMCPInventor
 	}
 	var sessionToken *string
 	{
-		if accessUpsertShadowMCPInventoryAllowRuleSessionToken != "" {
-			sessionToken = &accessUpsertShadowMCPInventoryAllowRuleSessionToken
+		if accessUpsertShadowMCPInventoryPolicyBypassSessionToken != "" {
+			sessionToken = &accessUpsertShadowMCPInventoryPolicyBypassSessionToken
 		}
 	}
-	v := &access.UpsertShadowMCPInventoryAllowRulePayload{
+	v := &access.UpsertShadowMCPInventoryPolicyBypassPayload{
 		ProjectID: body.ProjectID,
 		ServerURL: body.ServerURL,
 	}
@@ -776,13 +776,13 @@ func BuildUpsertShadowMCPInventoryAllowRulePayload(accessUpsertShadowMCPInventor
 	return v, nil
 }
 
-// BuildDeleteShadowMCPInventoryAllowRulePayload builds the payload for the
-// access deleteShadowMCPInventoryAllowRule endpoint from CLI flags.
-func BuildDeleteShadowMCPInventoryAllowRulePayload(accessDeleteShadowMCPInventoryAllowRuleProjectID string, accessDeleteShadowMCPInventoryAllowRuleServerURL string, accessDeleteShadowMCPInventoryAllowRuleSessionToken string) (*access.DeleteShadowMCPInventoryAllowRulePayload, error) {
+// BuildDeleteShadowMCPInventoryPolicyBypassPayload builds the payload for the
+// access deleteShadowMCPInventoryPolicyBypass endpoint from CLI flags.
+func BuildDeleteShadowMCPInventoryPolicyBypassPayload(accessDeleteShadowMCPInventoryPolicyBypassProjectID string, accessDeleteShadowMCPInventoryPolicyBypassServerURL string, accessDeleteShadowMCPInventoryPolicyBypassSessionToken string) (*access.DeleteShadowMCPInventoryPolicyBypassPayload, error) {
 	var err error
 	var projectID string
 	{
-		projectID = accessDeleteShadowMCPInventoryAllowRuleProjectID
+		projectID = accessDeleteShadowMCPInventoryPolicyBypassProjectID
 		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
@@ -790,7 +790,7 @@ func BuildDeleteShadowMCPInventoryAllowRulePayload(accessDeleteShadowMCPInventor
 	}
 	var serverURL string
 	{
-		serverURL = accessDeleteShadowMCPInventoryAllowRuleServerURL
+		serverURL = accessDeleteShadowMCPInventoryPolicyBypassServerURL
 		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
 		if err != nil {
 			return nil, err
@@ -798,11 +798,11 @@ func BuildDeleteShadowMCPInventoryAllowRulePayload(accessDeleteShadowMCPInventor
 	}
 	var sessionToken *string
 	{
-		if accessDeleteShadowMCPInventoryAllowRuleSessionToken != "" {
-			sessionToken = &accessDeleteShadowMCPInventoryAllowRuleSessionToken
+		if accessDeleteShadowMCPInventoryPolicyBypassSessionToken != "" {
+			sessionToken = &accessDeleteShadowMCPInventoryPolicyBypassSessionToken
 		}
 	}
-	v := &access.DeleteShadowMCPInventoryAllowRulePayload{}
+	v := &access.DeleteShadowMCPInventoryPolicyBypassPayload{}
 	v.ProjectID = projectID
 	v.ServerURL = serverURL
 	v.SessionToken = sessionToken

@@ -55,9 +55,9 @@ type Service interface {
 	ListShadowMCPInventoryUsers(context.Context, *ListShadowMCPInventoryUsersPayload) (res *ListShadowMCPInventoryUsersResult, err error)
 	// Create or modify a Shadow MCP URL allow decision for selected blocking
 	// policies.
-	UpsertShadowMCPInventoryAllowRule(context.Context, *UpsertShadowMCPInventoryAllowRulePayload) (res *ShadowMCPInventoryURLState, err error)
+	UpsertShadowMCPInventoryPolicyBypass(context.Context, *UpsertShadowMCPInventoryPolicyBypassPayload) (res *ShadowMCPInventoryURLState, err error)
 	// Remove a Shadow MCP URL allow decision.
-	DeleteShadowMCPInventoryAllowRule(context.Context, *DeleteShadowMCPInventoryAllowRulePayload) (res *ShadowMCPInventoryURLState, err error)
+	DeleteShadowMCPInventoryPolicyBypass(context.Context, *DeleteShadowMCPInventoryPolicyBypassPayload) (res *ShadowMCPInventoryURLState, err error)
 	// Review the latest pending Shadow MCP URL request and resolve all pending
 	// requests for that URL.
 	ResolveShadowMCPInventoryRequest(context.Context, *ResolveShadowMCPInventoryRequestPayload) (res *ShadowMCPInventoryURLState, err error)
@@ -106,7 +106,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [28]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPApprovalRequests", "createShadowMCPApprovalRequest", "approveShadowMCPApprovalRequest", "denyShadowMCPApprovalRequest", "listShadowMCPAccessRules", "listShadowMCPInventory", "listShadowMCPInventoryUsers", "upsertShadowMCPInventoryAllowRule", "deleteShadowMCPInventoryAllowRule", "resolveShadowMCPInventoryRequest", "createShadowMCPAccessRule", "updateShadowMCPAccessRule", "deleteShadowMCPAccessRule", "getRBACStatus", "enableRBAC", "disableRBAC", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [28]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPApprovalRequests", "createShadowMCPApprovalRequest", "approveShadowMCPApprovalRequest", "denyShadowMCPApprovalRequest", "listShadowMCPAccessRules", "listShadowMCPInventory", "listShadowMCPInventoryUsers", "upsertShadowMCPInventoryPolicyBypass", "deleteShadowMCPInventoryPolicyBypass", "resolveShadowMCPInventoryRequest", "createShadowMCPAccessRule", "updateShadowMCPAccessRule", "deleteShadowMCPAccessRule", "getRBACStatus", "enableRBAC", "disableRBAC", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
 // AccessMember is the result type of the access service updateMemberRoles
 // method.
@@ -324,9 +324,9 @@ type DeleteShadowMCPAccessRulePayload struct {
 	SessionToken *string
 }
 
-// DeleteShadowMCPInventoryAllowRulePayload is the payload type of the access
-// service deleteShadowMCPInventoryAllowRule method.
-type DeleteShadowMCPInventoryAllowRulePayload struct {
+// DeleteShadowMCPInventoryPolicyBypassPayload is the payload type of the
+// access service deleteShadowMCPInventoryPolicyBypass method.
+type DeleteShadowMCPInventoryPolicyBypassPayload struct {
 	ProjectID    string
 	ServerURL    string
 	SessionToken *string
@@ -770,7 +770,7 @@ type ShadowMCPInventoryServer struct {
 }
 
 // ShadowMCPInventoryURLState is the result type of the access service
-// upsertShadowMCPInventoryAllowRule method.
+// upsertShadowMCPInventoryPolicyBypass method.
 type ShadowMCPInventoryURLState struct {
 	Access           string
 	RequestCount     int
@@ -834,9 +834,9 @@ type UpdateShadowMCPAccessRulePayload struct {
 	Reason                 *string
 }
 
-// UpsertShadowMCPInventoryAllowRulePayload is the payload type of the access
-// service upsertShadowMCPInventoryAllowRule method.
-type UpsertShadowMCPInventoryAllowRulePayload struct {
+// UpsertShadowMCPInventoryPolicyBypassPayload is the payload type of the
+// access service upsertShadowMCPInventoryPolicyBypass method.
+type UpsertShadowMCPInventoryPolicyBypassPayload struct {
 	SessionToken *string
 	ProjectID    string
 	ServerURL    string

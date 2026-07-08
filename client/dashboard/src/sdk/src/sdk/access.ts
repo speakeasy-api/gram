@@ -8,7 +8,7 @@ import { accessCreateShadowMCPAccessRule } from "../funcs/accessCreateShadowMCPA
 import { accessCreateShadowMCPApprovalRequest } from "../funcs/accessCreateShadowMCPApprovalRequest.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
 import { accessDeleteShadowMCPAccessRule } from "../funcs/accessDeleteShadowMCPAccessRule.js";
-import { accessDeleteShadowMCPInventoryAllowRule } from "../funcs/accessDeleteShadowMCPInventoryAllowRule.js";
+import { accessDeleteShadowMCPInventoryPolicyBypass } from "../funcs/accessDeleteShadowMCPInventoryPolicyBypass.js";
 import { accessDenyShadowMCPApprovalRequest } from "../funcs/accessDenyShadowMCPApprovalRequest.js";
 import { accessDisableRBAC } from "../funcs/accessDisableRBAC.js";
 import { accessEnableRBAC } from "../funcs/accessEnableRBAC.js";
@@ -29,7 +29,7 @@ import { accessResolveShadowMCPInventoryRequest } from "../funcs/accessResolveSh
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
 import { accessUpdateShadowMCPAccessRule } from "../funcs/accessUpdateShadowMCPAccessRule.js";
-import { accessUpsertShadowMCPInventoryAllowRule } from "../funcs/accessUpsertShadowMCPInventoryAllowRule.js";
+import { accessUpsertShadowMCPInventoryPolicyBypass } from "../funcs/accessUpsertShadowMCPInventoryPolicyBypass.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AccessMember } from "../models/components/accessmember.js";
 import { CreateShadowMCPAccessRuleResult } from "../models/components/createshadowmcpaccessruleresult.js";
@@ -75,9 +75,9 @@ import {
   DeleteShadowMCPAccessRuleSecurity,
 } from "../models/operations/deleteshadowmcpaccessrule.js";
 import {
-  DeleteShadowMCPInventoryAllowRuleRequest,
-  DeleteShadowMCPInventoryAllowRuleSecurity,
-} from "../models/operations/deleteshadowmcpinventoryallowrule.js";
+  DeleteShadowMCPInventoryPolicyBypassRequest,
+  DeleteShadowMCPInventoryPolicyBypassSecurity,
+} from "../models/operations/deleteshadowmcpinventorypolicybypass.js";
 import {
   DenyShadowMCPApprovalRequestRequest,
   DenyShadowMCPApprovalRequestSecurity,
@@ -159,9 +159,9 @@ import {
   UpdateShadowMCPAccessRuleSecurity,
 } from "../models/operations/updateshadowmcpaccessrule.js";
 import {
-  UpsertShadowMCPInventoryAllowRuleRequest,
-  UpsertShadowMCPInventoryAllowRuleSecurity,
-} from "../models/operations/upsertshadowmcpinventoryallowrule.js";
+  UpsertShadowMCPInventoryPolicyBypassRequest,
+  UpsertShadowMCPInventoryPolicyBypassSecurity,
+} from "../models/operations/upsertshadowmcpinventorypolicybypass.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Access extends ClientSDK {
@@ -584,17 +584,17 @@ export class Access extends ClientSDK {
   }
 
   /**
-   * deleteShadowMCPInventoryAllowRule access
+   * deleteShadowMCPInventoryPolicyBypass access
    *
    * @remarks
    * Remove a Shadow MCP URL allow decision.
    */
-  async deleteShadowMCPInventoryAllowRule(
-    request: DeleteShadowMCPInventoryAllowRuleRequest,
-    security?: DeleteShadowMCPInventoryAllowRuleSecurity | undefined,
+  async deleteShadowMCPInventoryPolicyBypass(
+    request: DeleteShadowMCPInventoryPolicyBypassRequest,
+    security?: DeleteShadowMCPInventoryPolicyBypassSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ShadowMCPInventoryURLState> {
-    return unwrapAsync(accessDeleteShadowMCPInventoryAllowRule(
+    return unwrapAsync(accessDeleteShadowMCPInventoryPolicyBypass(
       this,
       request,
       security,
@@ -603,17 +603,17 @@ export class Access extends ClientSDK {
   }
 
   /**
-   * upsertShadowMCPInventoryAllowRule access
+   * upsertShadowMCPInventoryPolicyBypass access
    *
    * @remarks
    * Create or modify a Shadow MCP URL allow decision for selected blocking policies.
    */
-  async upsertShadowMCPInventoryAllowRule(
-    request: UpsertShadowMCPInventoryAllowRuleRequest,
-    security?: UpsertShadowMCPInventoryAllowRuleSecurity | undefined,
+  async upsertShadowMCPInventoryPolicyBypass(
+    request: UpsertShadowMCPInventoryPolicyBypassRequest,
+    security?: UpsertShadowMCPInventoryPolicyBypassSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ShadowMCPInventoryURLState> {
-    return unwrapAsync(accessUpsertShadowMCPInventoryAllowRule(
+    return unwrapAsync(accessUpsertShadowMCPInventoryPolicyBypass(
       this,
       request,
       security,

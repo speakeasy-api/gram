@@ -93,9 +93,9 @@ type DenyShadowMCPApprovalRequestRequestBody struct {
 	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
-// UpsertShadowMCPInventoryAllowRuleRequestBody is the type of the "access"
-// service "upsertShadowMCPInventoryAllowRule" endpoint HTTP request body.
-type UpsertShadowMCPInventoryAllowRuleRequestBody struct {
+// UpsertShadowMCPInventoryPolicyBypassRequestBody is the type of the "access"
+// service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP request body.
+type UpsertShadowMCPInventoryPolicyBypassRequestBody struct {
 	ProjectID *string  `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	ServerURL *string  `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
 	PolicyIds []string `form:"policy_ids,omitempty" json:"policy_ids,omitempty" xml:"policy_ids,omitempty"`
@@ -358,18 +358,18 @@ type ListShadowMCPInventoryUsersResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
-// UpsertShadowMCPInventoryAllowRuleResponseBody is the type of the "access"
-// service "upsertShadowMCPInventoryAllowRule" endpoint HTTP response body.
-type UpsertShadowMCPInventoryAllowRuleResponseBody struct {
+// UpsertShadowMCPInventoryPolicyBypassResponseBody is the type of the "access"
+// service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP response body.
+type UpsertShadowMCPInventoryPolicyBypassResponseBody struct {
 	Access           string                                        `form:"access" json:"access" xml:"access"`
 	RequestCount     int                                           `form:"request_count" json:"request_count" xml:"request_count"`
 	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
 	AllowedPolicyIds []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
 }
 
-// DeleteShadowMCPInventoryAllowRuleResponseBody is the type of the "access"
-// service "deleteShadowMCPInventoryAllowRule" endpoint HTTP response body.
-type DeleteShadowMCPInventoryAllowRuleResponseBody struct {
+// DeleteShadowMCPInventoryPolicyBypassResponseBody is the type of the "access"
+// service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP response body.
+type DeleteShadowMCPInventoryPolicyBypassResponseBody struct {
 	Access           string                                        `form:"access" json:"access" xml:"access"`
 	RequestCount     int                                           `form:"request_count" json:"request_count" xml:"request_count"`
 	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
@@ -3401,10 +3401,10 @@ type ListShadowMCPInventoryUsersGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertShadowMCPInventoryAllowRuleUnauthorizedResponseBody is the type of the
-// "access" service "upsertShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "unauthorized" error.
-type UpsertShadowMCPInventoryAllowRuleUnauthorizedResponseBody struct {
+// UpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody is the type of
+// the "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "unauthorized" error.
+type UpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3420,10 +3420,10 @@ type UpsertShadowMCPInventoryAllowRuleUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertShadowMCPInventoryAllowRuleForbiddenResponseBody is the type of the
-// "access" service "upsertShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "forbidden" error.
-type UpsertShadowMCPInventoryAllowRuleForbiddenResponseBody struct {
+// UpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody is the type of the
+// "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "forbidden" error.
+type UpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3439,10 +3439,10 @@ type UpsertShadowMCPInventoryAllowRuleForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertShadowMCPInventoryAllowRuleBadRequestResponseBody is the type of the
-// "access" service "upsertShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "bad_request" error.
-type UpsertShadowMCPInventoryAllowRuleBadRequestResponseBody struct {
+// UpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody is the type of
+// the "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "bad_request" error.
+type UpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3458,10 +3458,10 @@ type UpsertShadowMCPInventoryAllowRuleBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertShadowMCPInventoryAllowRuleNotFoundResponseBody is the type of the
-// "access" service "upsertShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "not_found" error.
-type UpsertShadowMCPInventoryAllowRuleNotFoundResponseBody struct {
+// UpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody is the type of the
+// "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "not_found" error.
+type UpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3477,10 +3477,10 @@ type UpsertShadowMCPInventoryAllowRuleNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertShadowMCPInventoryAllowRuleConflictResponseBody is the type of the
-// "access" service "upsertShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "conflict" error.
-type UpsertShadowMCPInventoryAllowRuleConflictResponseBody struct {
+// UpsertShadowMCPInventoryPolicyBypassConflictResponseBody is the type of the
+// "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "conflict" error.
+type UpsertShadowMCPInventoryPolicyBypassConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3496,10 +3496,10 @@ type UpsertShadowMCPInventoryAllowRuleConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody is the type of
-// the "access" service "upsertShadowMCPInventoryAllowRule" endpoint HTTP
+// UpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody is the type
+// of the "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
 // response body for the "unsupported_media" error.
-type UpsertShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody struct {
+type UpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3515,10 +3515,10 @@ type UpsertShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertShadowMCPInventoryAllowRuleInvalidResponseBody is the type of the
-// "access" service "upsertShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "invalid" error.
-type UpsertShadowMCPInventoryAllowRuleInvalidResponseBody struct {
+// UpsertShadowMCPInventoryPolicyBypassInvalidResponseBody is the type of the
+// "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "invalid" error.
+type UpsertShadowMCPInventoryPolicyBypassInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3534,10 +3534,10 @@ type UpsertShadowMCPInventoryAllowRuleInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertShadowMCPInventoryAllowRuleInvariantViolationResponseBody is the type
-// of the "access" service "upsertShadowMCPInventoryAllowRule" endpoint HTTP
-// response body for the "invariant_violation" error.
-type UpsertShadowMCPInventoryAllowRuleInvariantViolationResponseBody struct {
+// UpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody is the
+// type of the "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint
+// HTTP response body for the "invariant_violation" error.
+type UpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3553,10 +3553,10 @@ type UpsertShadowMCPInventoryAllowRuleInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertShadowMCPInventoryAllowRuleUnexpectedResponseBody is the type of the
-// "access" service "upsertShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "unexpected" error.
-type UpsertShadowMCPInventoryAllowRuleUnexpectedResponseBody struct {
+// UpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody is the type of
+// the "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "unexpected" error.
+type UpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3572,10 +3572,10 @@ type UpsertShadowMCPInventoryAllowRuleUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertShadowMCPInventoryAllowRuleGatewayErrorResponseBody is the type of the
-// "access" service "upsertShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "gateway_error" error.
-type UpsertShadowMCPInventoryAllowRuleGatewayErrorResponseBody struct {
+// UpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody is the type of
+// the "access" service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "gateway_error" error.
+type UpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3591,10 +3591,10 @@ type UpsertShadowMCPInventoryAllowRuleGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteShadowMCPInventoryAllowRuleUnauthorizedResponseBody is the type of the
-// "access" service "deleteShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "unauthorized" error.
-type DeleteShadowMCPInventoryAllowRuleUnauthorizedResponseBody struct {
+// DeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody is the type of
+// the "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "unauthorized" error.
+type DeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3610,10 +3610,10 @@ type DeleteShadowMCPInventoryAllowRuleUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteShadowMCPInventoryAllowRuleForbiddenResponseBody is the type of the
-// "access" service "deleteShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "forbidden" error.
-type DeleteShadowMCPInventoryAllowRuleForbiddenResponseBody struct {
+// DeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody is the type of the
+// "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "forbidden" error.
+type DeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3629,10 +3629,10 @@ type DeleteShadowMCPInventoryAllowRuleForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteShadowMCPInventoryAllowRuleBadRequestResponseBody is the type of the
-// "access" service "deleteShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "bad_request" error.
-type DeleteShadowMCPInventoryAllowRuleBadRequestResponseBody struct {
+// DeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody is the type of
+// the "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "bad_request" error.
+type DeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3648,10 +3648,10 @@ type DeleteShadowMCPInventoryAllowRuleBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteShadowMCPInventoryAllowRuleNotFoundResponseBody is the type of the
-// "access" service "deleteShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "not_found" error.
-type DeleteShadowMCPInventoryAllowRuleNotFoundResponseBody struct {
+// DeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody is the type of the
+// "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "not_found" error.
+type DeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3667,10 +3667,10 @@ type DeleteShadowMCPInventoryAllowRuleNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteShadowMCPInventoryAllowRuleConflictResponseBody is the type of the
-// "access" service "deleteShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "conflict" error.
-type DeleteShadowMCPInventoryAllowRuleConflictResponseBody struct {
+// DeleteShadowMCPInventoryPolicyBypassConflictResponseBody is the type of the
+// "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "conflict" error.
+type DeleteShadowMCPInventoryPolicyBypassConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3686,10 +3686,10 @@ type DeleteShadowMCPInventoryAllowRuleConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody is the type of
-// the "access" service "deleteShadowMCPInventoryAllowRule" endpoint HTTP
+// DeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody is the type
+// of the "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
 // response body for the "unsupported_media" error.
-type DeleteShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody struct {
+type DeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3705,10 +3705,10 @@ type DeleteShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteShadowMCPInventoryAllowRuleInvalidResponseBody is the type of the
-// "access" service "deleteShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "invalid" error.
-type DeleteShadowMCPInventoryAllowRuleInvalidResponseBody struct {
+// DeleteShadowMCPInventoryPolicyBypassInvalidResponseBody is the type of the
+// "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "invalid" error.
+type DeleteShadowMCPInventoryPolicyBypassInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3724,10 +3724,10 @@ type DeleteShadowMCPInventoryAllowRuleInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteShadowMCPInventoryAllowRuleInvariantViolationResponseBody is the type
-// of the "access" service "deleteShadowMCPInventoryAllowRule" endpoint HTTP
-// response body for the "invariant_violation" error.
-type DeleteShadowMCPInventoryAllowRuleInvariantViolationResponseBody struct {
+// DeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody is the
+// type of the "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint
+// HTTP response body for the "invariant_violation" error.
+type DeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3743,10 +3743,10 @@ type DeleteShadowMCPInventoryAllowRuleInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteShadowMCPInventoryAllowRuleUnexpectedResponseBody is the type of the
-// "access" service "deleteShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "unexpected" error.
-type DeleteShadowMCPInventoryAllowRuleUnexpectedResponseBody struct {
+// DeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody is the type of
+// the "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "unexpected" error.
+type DeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3762,10 +3762,10 @@ type DeleteShadowMCPInventoryAllowRuleUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteShadowMCPInventoryAllowRuleGatewayErrorResponseBody is the type of the
-// "access" service "deleteShadowMCPInventoryAllowRule" endpoint HTTP response
-// body for the "gateway_error" error.
-type DeleteShadowMCPInventoryAllowRuleGatewayErrorResponseBody struct {
+// DeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody is the type of
+// the "access" service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP
+// response body for the "gateway_error" error.
+type DeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -6320,11 +6320,11 @@ func NewListShadowMCPInventoryUsersResponseBody(res *access.ListShadowMCPInvento
 	return body
 }
 
-// NewUpsertShadowMCPInventoryAllowRuleResponseBody builds the HTTP response
-// body from the result of the "upsertShadowMCPInventoryAllowRule" endpoint of
-// the "access" service.
-func NewUpsertShadowMCPInventoryAllowRuleResponseBody(res *access.ShadowMCPInventoryURLState) *UpsertShadowMCPInventoryAllowRuleResponseBody {
-	body := &UpsertShadowMCPInventoryAllowRuleResponseBody{
+// NewUpsertShadowMCPInventoryPolicyBypassResponseBody builds the HTTP response
+// body from the result of the "upsertShadowMCPInventoryPolicyBypass" endpoint
+// of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassResponseBody(res *access.ShadowMCPInventoryURLState) *UpsertShadowMCPInventoryPolicyBypassResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassResponseBody{
 		Access:       res.Access,
 		RequestCount: res.RequestCount,
 	}
@@ -6342,11 +6342,11 @@ func NewUpsertShadowMCPInventoryAllowRuleResponseBody(res *access.ShadowMCPInven
 	return body
 }
 
-// NewDeleteShadowMCPInventoryAllowRuleResponseBody builds the HTTP response
-// body from the result of the "deleteShadowMCPInventoryAllowRule" endpoint of
-// the "access" service.
-func NewDeleteShadowMCPInventoryAllowRuleResponseBody(res *access.ShadowMCPInventoryURLState) *DeleteShadowMCPInventoryAllowRuleResponseBody {
-	body := &DeleteShadowMCPInventoryAllowRuleResponseBody{
+// NewDeleteShadowMCPInventoryPolicyBypassResponseBody builds the HTTP response
+// body from the result of the "deleteShadowMCPInventoryPolicyBypass" endpoint
+// of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassResponseBody(res *access.ShadowMCPInventoryURLState) *DeleteShadowMCPInventoryPolicyBypassResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassResponseBody{
 		Access:       res.Access,
 		RequestCount: res.RequestCount,
 	}
@@ -8815,86 +8815,11 @@ func NewListShadowMCPInventoryUsersGatewayErrorResponseBody(res *goa.ServiceErro
 	return body
 }
 
-// NewUpsertShadowMCPInventoryAllowRuleUnauthorizedResponseBody builds the HTTP
-// response body from the result of the "upsertShadowMCPInventoryAllowRule"
-// endpoint of the "access" service.
-func NewUpsertShadowMCPInventoryAllowRuleUnauthorizedResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryAllowRuleUnauthorizedResponseBody {
-	body := &UpsertShadowMCPInventoryAllowRuleUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpsertShadowMCPInventoryAllowRuleForbiddenResponseBody builds the HTTP
-// response body from the result of the "upsertShadowMCPInventoryAllowRule"
-// endpoint of the "access" service.
-func NewUpsertShadowMCPInventoryAllowRuleForbiddenResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryAllowRuleForbiddenResponseBody {
-	body := &UpsertShadowMCPInventoryAllowRuleForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpsertShadowMCPInventoryAllowRuleBadRequestResponseBody builds the HTTP
-// response body from the result of the "upsertShadowMCPInventoryAllowRule"
-// endpoint of the "access" service.
-func NewUpsertShadowMCPInventoryAllowRuleBadRequestResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryAllowRuleBadRequestResponseBody {
-	body := &UpsertShadowMCPInventoryAllowRuleBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpsertShadowMCPInventoryAllowRuleNotFoundResponseBody builds the HTTP
-// response body from the result of the "upsertShadowMCPInventoryAllowRule"
-// endpoint of the "access" service.
-func NewUpsertShadowMCPInventoryAllowRuleNotFoundResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryAllowRuleNotFoundResponseBody {
-	body := &UpsertShadowMCPInventoryAllowRuleNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpsertShadowMCPInventoryAllowRuleConflictResponseBody builds the HTTP
-// response body from the result of the "upsertShadowMCPInventoryAllowRule"
-// endpoint of the "access" service.
-func NewUpsertShadowMCPInventoryAllowRuleConflictResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryAllowRuleConflictResponseBody {
-	body := &UpsertShadowMCPInventoryAllowRuleConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpsertShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody builds the
+// NewUpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody builds the
 // HTTP response body from the result of the
-// "upsertShadowMCPInventoryAllowRule" endpoint of the "access" service.
-func NewUpsertShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody {
-	body := &UpsertShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody{
+// "upsertShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8905,11 +8830,11 @@ func NewUpsertShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody(res *goa.S
 	return body
 }
 
-// NewUpsertShadowMCPInventoryAllowRuleInvalidResponseBody builds the HTTP
-// response body from the result of the "upsertShadowMCPInventoryAllowRule"
+// NewUpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody builds the HTTP
+// response body from the result of the "upsertShadowMCPInventoryPolicyBypass"
 // endpoint of the "access" service.
-func NewUpsertShadowMCPInventoryAllowRuleInvalidResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryAllowRuleInvalidResponseBody {
-	body := &UpsertShadowMCPInventoryAllowRuleInvalidResponseBody{
+func NewUpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8920,131 +8845,11 @@ func NewUpsertShadowMCPInventoryAllowRuleInvalidResponseBody(res *goa.ServiceErr
 	return body
 }
 
-// NewUpsertShadowMCPInventoryAllowRuleInvariantViolationResponseBody builds
-// the HTTP response body from the result of the
-// "upsertShadowMCPInventoryAllowRule" endpoint of the "access" service.
-func NewUpsertShadowMCPInventoryAllowRuleInvariantViolationResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryAllowRuleInvariantViolationResponseBody {
-	body := &UpsertShadowMCPInventoryAllowRuleInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpsertShadowMCPInventoryAllowRuleUnexpectedResponseBody builds the HTTP
-// response body from the result of the "upsertShadowMCPInventoryAllowRule"
-// endpoint of the "access" service.
-func NewUpsertShadowMCPInventoryAllowRuleUnexpectedResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryAllowRuleUnexpectedResponseBody {
-	body := &UpsertShadowMCPInventoryAllowRuleUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpsertShadowMCPInventoryAllowRuleGatewayErrorResponseBody builds the HTTP
-// response body from the result of the "upsertShadowMCPInventoryAllowRule"
-// endpoint of the "access" service.
-func NewUpsertShadowMCPInventoryAllowRuleGatewayErrorResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryAllowRuleGatewayErrorResponseBody {
-	body := &UpsertShadowMCPInventoryAllowRuleGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteShadowMCPInventoryAllowRuleUnauthorizedResponseBody builds the HTTP
-// response body from the result of the "deleteShadowMCPInventoryAllowRule"
-// endpoint of the "access" service.
-func NewDeleteShadowMCPInventoryAllowRuleUnauthorizedResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryAllowRuleUnauthorizedResponseBody {
-	body := &DeleteShadowMCPInventoryAllowRuleUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteShadowMCPInventoryAllowRuleForbiddenResponseBody builds the HTTP
-// response body from the result of the "deleteShadowMCPInventoryAllowRule"
-// endpoint of the "access" service.
-func NewDeleteShadowMCPInventoryAllowRuleForbiddenResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryAllowRuleForbiddenResponseBody {
-	body := &DeleteShadowMCPInventoryAllowRuleForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteShadowMCPInventoryAllowRuleBadRequestResponseBody builds the HTTP
-// response body from the result of the "deleteShadowMCPInventoryAllowRule"
-// endpoint of the "access" service.
-func NewDeleteShadowMCPInventoryAllowRuleBadRequestResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryAllowRuleBadRequestResponseBody {
-	body := &DeleteShadowMCPInventoryAllowRuleBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteShadowMCPInventoryAllowRuleNotFoundResponseBody builds the HTTP
-// response body from the result of the "deleteShadowMCPInventoryAllowRule"
-// endpoint of the "access" service.
-func NewDeleteShadowMCPInventoryAllowRuleNotFoundResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryAllowRuleNotFoundResponseBody {
-	body := &DeleteShadowMCPInventoryAllowRuleNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteShadowMCPInventoryAllowRuleConflictResponseBody builds the HTTP
-// response body from the result of the "deleteShadowMCPInventoryAllowRule"
-// endpoint of the "access" service.
-func NewDeleteShadowMCPInventoryAllowRuleConflictResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryAllowRuleConflictResponseBody {
-	body := &DeleteShadowMCPInventoryAllowRuleConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody builds the
+// NewUpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody builds the
 // HTTP response body from the result of the
-// "deleteShadowMCPInventoryAllowRule" endpoint of the "access" service.
-func NewDeleteShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody {
-	body := &DeleteShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody{
+// "upsertShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -9055,11 +8860,11 @@ func NewDeleteShadowMCPInventoryAllowRuleUnsupportedMediaResponseBody(res *goa.S
 	return body
 }
 
-// NewDeleteShadowMCPInventoryAllowRuleInvalidResponseBody builds the HTTP
-// response body from the result of the "deleteShadowMCPInventoryAllowRule"
+// NewUpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody builds the HTTP
+// response body from the result of the "upsertShadowMCPInventoryPolicyBypass"
 // endpoint of the "access" service.
-func NewDeleteShadowMCPInventoryAllowRuleInvalidResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryAllowRuleInvalidResponseBody {
-	body := &DeleteShadowMCPInventoryAllowRuleInvalidResponseBody{
+func NewUpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -9070,11 +8875,26 @@ func NewDeleteShadowMCPInventoryAllowRuleInvalidResponseBody(res *goa.ServiceErr
 	return body
 }
 
-// NewDeleteShadowMCPInventoryAllowRuleInvariantViolationResponseBody builds
+// NewUpsertShadowMCPInventoryPolicyBypassConflictResponseBody builds the HTTP
+// response body from the result of the "upsertShadowMCPInventoryPolicyBypass"
+// endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassConflictResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassConflictResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody builds
 // the HTTP response body from the result of the
-// "deleteShadowMCPInventoryAllowRule" endpoint of the "access" service.
-func NewDeleteShadowMCPInventoryAllowRuleInvariantViolationResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryAllowRuleInvariantViolationResponseBody {
-	body := &DeleteShadowMCPInventoryAllowRuleInvariantViolationResponseBody{
+// "upsertShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -9085,11 +8905,11 @@ func NewDeleteShadowMCPInventoryAllowRuleInvariantViolationResponseBody(res *goa
 	return body
 }
 
-// NewDeleteShadowMCPInventoryAllowRuleUnexpectedResponseBody builds the HTTP
-// response body from the result of the "deleteShadowMCPInventoryAllowRule"
+// NewUpsertShadowMCPInventoryPolicyBypassInvalidResponseBody builds the HTTP
+// response body from the result of the "upsertShadowMCPInventoryPolicyBypass"
 // endpoint of the "access" service.
-func NewDeleteShadowMCPInventoryAllowRuleUnexpectedResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryAllowRuleUnexpectedResponseBody {
-	body := &DeleteShadowMCPInventoryAllowRuleUnexpectedResponseBody{
+func NewUpsertShadowMCPInventoryPolicyBypassInvalidResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassInvalidResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -9100,11 +8920,191 @@ func NewDeleteShadowMCPInventoryAllowRuleUnexpectedResponseBody(res *goa.Service
 	return body
 }
 
-// NewDeleteShadowMCPInventoryAllowRuleGatewayErrorResponseBody builds the HTTP
-// response body from the result of the "deleteShadowMCPInventoryAllowRule"
+// NewUpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "upsertShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody builds the
+// HTTP response body from the result of the
+// "upsertShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "upsertShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewUpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody(res *goa.ServiceError) *UpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody {
+	body := &UpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody builds the
+// HTTP response body from the result of the
+// "deleteShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody builds the HTTP
+// response body from the result of the "deleteShadowMCPInventoryPolicyBypass"
 // endpoint of the "access" service.
-func NewDeleteShadowMCPInventoryAllowRuleGatewayErrorResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryAllowRuleGatewayErrorResponseBody {
-	body := &DeleteShadowMCPInventoryAllowRuleGatewayErrorResponseBody{
+func NewDeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody builds the
+// HTTP response body from the result of the
+// "deleteShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody builds the HTTP
+// response body from the result of the "deleteShadowMCPInventoryPolicyBypass"
+// endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassConflictResponseBody builds the HTTP
+// response body from the result of the "deleteShadowMCPInventoryPolicyBypass"
+// endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassConflictResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassConflictResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody builds
+// the HTTP response body from the result of the
+// "deleteShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassInvalidResponseBody builds the HTTP
+// response body from the result of the "deleteShadowMCPInventoryPolicyBypass"
+// endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassInvalidResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassInvalidResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "deleteShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody builds the
+// HTTP response body from the result of the
+// "deleteShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "deleteShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
+func NewDeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody(res *goa.ServiceError) *DeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody {
+	body := &DeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -10818,10 +10818,10 @@ func NewListShadowMCPInventoryUsersPayload(projectID string, serverURL string, l
 	return v
 }
 
-// NewUpsertShadowMCPInventoryAllowRulePayload builds a access service
-// upsertShadowMCPInventoryAllowRule endpoint payload.
-func NewUpsertShadowMCPInventoryAllowRulePayload(body *UpsertShadowMCPInventoryAllowRuleRequestBody, sessionToken *string) *access.UpsertShadowMCPInventoryAllowRulePayload {
-	v := &access.UpsertShadowMCPInventoryAllowRulePayload{
+// NewUpsertShadowMCPInventoryPolicyBypassPayload builds a access service
+// upsertShadowMCPInventoryPolicyBypass endpoint payload.
+func NewUpsertShadowMCPInventoryPolicyBypassPayload(body *UpsertShadowMCPInventoryPolicyBypassRequestBody, sessionToken *string) *access.UpsertShadowMCPInventoryPolicyBypassPayload {
+	v := &access.UpsertShadowMCPInventoryPolicyBypassPayload{
 		ProjectID: *body.ProjectID,
 		ServerURL: *body.ServerURL,
 	}
@@ -10834,10 +10834,10 @@ func NewUpsertShadowMCPInventoryAllowRulePayload(body *UpsertShadowMCPInventoryA
 	return v
 }
 
-// NewDeleteShadowMCPInventoryAllowRulePayload builds a access service
-// deleteShadowMCPInventoryAllowRule endpoint payload.
-func NewDeleteShadowMCPInventoryAllowRulePayload(projectID string, serverURL string, sessionToken *string) *access.DeleteShadowMCPInventoryAllowRulePayload {
-	v := &access.DeleteShadowMCPInventoryAllowRulePayload{}
+// NewDeleteShadowMCPInventoryPolicyBypassPayload builds a access service
+// deleteShadowMCPInventoryPolicyBypass endpoint payload.
+func NewDeleteShadowMCPInventoryPolicyBypassPayload(projectID string, serverURL string, sessionToken *string) *access.DeleteShadowMCPInventoryPolicyBypassPayload {
+	v := &access.DeleteShadowMCPInventoryPolicyBypassPayload{}
 	v.ProjectID = projectID
 	v.ServerURL = serverURL
 	v.SessionToken = sessionToken
@@ -11122,9 +11122,9 @@ func ValidateDenyShadowMCPApprovalRequestRequestBody(body *DenyShadowMCPApproval
 	return
 }
 
-// ValidateUpsertShadowMCPInventoryAllowRuleRequestBody runs the validations
-// defined on UpsertShadowMCPInventoryAllowRuleRequestBody
-func ValidateUpsertShadowMCPInventoryAllowRuleRequestBody(body *UpsertShadowMCPInventoryAllowRuleRequestBody) (err error) {
+// ValidateUpsertShadowMCPInventoryPolicyBypassRequestBody runs the validations
+// defined on UpsertShadowMCPInventoryPolicyBypassRequestBody
+func ValidateUpsertShadowMCPInventoryPolicyBypassRequestBody(body *UpsertShadowMCPInventoryPolicyBypassRequestBody) (err error) {
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
