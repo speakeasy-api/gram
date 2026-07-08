@@ -25,6 +25,7 @@ import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
+import { Link } from "react-router";
 
 type RemoteMcpToolsSectionProps = {
   /** The Gram-proxied MCP URL to connect to; undefined while endpoints load. */
@@ -37,6 +38,11 @@ type RemoteMcpToolsSectionProps = {
   isIssuerGated: boolean;
   /** Disabled servers cannot serve MCP requests. */
   isDisabled: boolean;
+  /**
+   * Deep link to the server's Authentication settings section. Surfaced when a
+   * server with no authentication configured fails to list its tools.
+   */
+  authSettingsHref?: string;
 };
 
 /**
@@ -69,7 +75,13 @@ export function RemoteMcpToolsSection(
       {({ reset }) => (
         <ErrorBoundary
           onReset={reset}
-          FallbackComponent={RemoteMcpToolsErrorFallback}
+          FallbackComponent={(fallbackProps) => (
+            <RemoteMcpToolsErrorFallback
+              {...fallbackProps}
+              isIssuerGated={props.isIssuerGated}
+              authSettingsHref={props.authSettingsHref}
+            />
+          )}
         >
           <RemoteMcpToolsSectionInner {...props} />
         </ErrorBoundary>
@@ -96,9 +108,33 @@ function ToolsSectionShell({ children }: { children: ReactNode }): JSX.Element {
 function RemoteMcpToolsErrorFallback({
   error: rawError,
   resetErrorBoundary,
-}: FallbackProps): JSX.Element {
+  isIssuerGated,
+  authSettingsHref,
+}: FallbackProps & {
+  isIssuerGated: boolean;
+  authSettingsHref?: string;
+}): JSX.Element {
   const error = toError(rawError);
   handleError(error, { silent: true });
+
+  // A server with no authentication configured can't list its tools — the
+  // connection is rejected upstream before any tools come back. Rather than a
+  // generic failure, guide the user to set up authentication first.
+  if (!isIssuerGated) {
+    return (
+      <ToolsSectionShell>
+        <EmptyState message="This server has no authentication configured yet. Set up an identity provider so its tools can be listed.">
+          {authSettingsHref ? (
+            <Button variant="secondary" asChild>
+              <Link to={authSettingsHref}>
+                <Button.Text>Configure authentication</Button.Text>
+              </Link>
+            </Button>
+          ) : null}
+        </EmptyState>
+      </ToolsSectionShell>
+    );
+  }
 
   return (
     <ToolsSectionShell>
