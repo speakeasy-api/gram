@@ -505,7 +505,7 @@ export function TumDetailsTable({
       "The billed overage (tokens beyond the included allowance), attributed to each metric by its tokens recorded after the allowance ran out. The crossing day is prorated.";
   } else if (period.cycle) {
     overageTooltip =
-      "This project's share of the organization's billed overage: its tokens recorded after the organization's usage crossed the included allowance. The crossing day is prorated.";
+      "This project's tokens recorded after the organization's usage crossed the included allowance (its share of the overage, measured in the project's analytics tokens). The crossing day is prorated.";
   } else {
     overageTooltip =
       "The token allowance is an organization-per-cycle number; select a full billing cycle to see the overage.";
