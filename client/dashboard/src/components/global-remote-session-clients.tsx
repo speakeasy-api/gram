@@ -174,15 +174,34 @@ export function GlobalRSCsModal({
   const selectedIssuer = issuers.find((i) => i.id === selectedIssuerId) ?? null;
   const showForm = creating || selectedIssuer != null;
 
-  // Re-derive the draft when the selection (issuer or its primary client) changes.
-  // Keyed on the ids only, so unrelated refetches don't clobber in-progress edits;
-  // when a freshly-selected issuer's clients load, primaryClient.id flips from
-  // undefined to a real id and the client fields fill in.
+  // Re-derive the whole draft when the selected issuer changes. Keyed on the id
+  // only, so unrelated refetches don't clobber in-progress edits. selectIssuer
+  // seeds the same draft synchronously; this also covers selections made by the
+  // create/orphan flows, which resolve only after the issuer list refetches.
   useEffect(() => {
     if (creating || !selectedIssuer) return;
     setDraft(draftFrom(selectedIssuer, primaryClient));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIssuerId, primaryClient?.id, creating]);
+  }, [selectedIssuerId, creating]);
+
+  // When the selected issuer's clients finish loading, merge in the client
+  // fields only: the form flips from "add client" to "edit client" mode, so
+  // real client data must win there, but issuer-field edits typed while the
+  // fetch was in flight must survive. The secret is left alone — it's
+  // write-only, so the fetch carries no value to reflect.
+  useEffect(() => {
+    if (creating || !primaryClient) return;
+    setDraft((d) => ({
+      ...d,
+      clientId: primaryClient.clientId,
+      authMethod:
+        (primaryClient.tokenEndpointAuthMethod as AuthMethod) ??
+        ClientSecretBasic,
+      scopeText: (primaryClient.scope ?? []).join(", "),
+      audience: primaryClient.audience ?? "",
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primaryClient?.id, creating]);
 
   const createIssuer = useCreateGlobalRemoteSessionIssuerMutation();
   const updateIssuer = useUpdateGlobalRemoteSessionIssuerMutation();
