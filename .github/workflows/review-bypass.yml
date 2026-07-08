@@ -5,21 +5,27 @@ name: Review Bypass
 # ║ NEVER SWITCH THIS WORKFLOW TO `pull_request_target`.                   ║
 # ║                                                                        ║
 # ║ `pull_request_target` hands repository secrets — including             ║
-# ║ GRAM_BOT_PRIVATE_KEY, a key that can mint tokens to approve PRs — to   ║
+# ║ BOT_REPO_TOKEN, a PAT with write access that can approve PRs — to      ║
 # ║ runs triggered by fork PRs. One future edit that checks out or         ║
 # ║ executes PR code would let a fork exfiltrate those secrets.            ║
 # ║                                                                        ║
 # ║ With `pull_request`, secrets never reach fork-triggered runs, so that  ║
 # ║ entire class of mistake is inert. The same-repo guard on the job       ║
-# ║ below makes fork PRs skip cleanly instead of failing at token minting. ║
+# ║ below makes fork PRs skip cleanly.                                     ║
 # ╚═══════════════════════════════════════════════════════════════════════╝
 #
 # Allows a PR to merge without a human approval when the `review:bypass`
-# label is applied by someone with triage+ access. The gram-bot app submits
-# an approving review that satisfies the "Merge to main" ruleset's required
-# review count. Required status checks and the merge queue are unaffected —
-# CI must still pass before the PR can merge. Removing the label dismisses
-# the bot's approval.
+# label is applied by someone with triage+ access. A machine-user PAT
+# (BOT_REPO_TOKEN) submits an approving review that satisfies the "Merge to
+# main" ruleset's required review count. Required status checks and the
+# merge queue are unaffected — CI must still pass before the PR can merge.
+# Removing the label dismisses the bot's approval.
+#
+# The approval MUST come from a machine *user* with write access, not a
+# GitHub App: ruleset required-approval counting only honors reviewers
+# with write permission, and app identities (gram-bot[bot]) resolve to no
+# permission — their approvals render in the UI but never count
+# (observed empirically on PR #3975; see AGE-2901).
 #
 # The job reconciles state rather than reacting to individual label events:
 # it re-reads the PR's current labels and reviews, then approves or
@@ -49,36 +55,52 @@ jobs:
       (github.event.action == 'synchronize' || github.event.label.name == 'review:bypass')
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
-      - name: Generate gram-bot token
-        id: generate-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ vars.GRAM_BOT_APP_ID }}
-          private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
-          permission-pull-requests: write
-
       - name: Approve or dismiss to match label state
         env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.BOT_REPO_TOKEN }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           FALLBACK_ACTOR: ${{ github.actor }}
         run: |
           set -euo pipefail
 
+          bot_login=$(gh api user --jq '.login')
+
           has_label=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/labels" \
             --jq '[.[].name] | index("review:bypass") != null')
 
-          approval_ids=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
-            --paginate \
-            --jq '.[] | select(.user.login == "gram-bot[bot]" and .state == "APPROVED") | .id')
+          reviews=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/reviews" --paginate)
 
-          if [[ "$has_label" == "true" && -z "$approval_ids" ]]; then
+          approval_ids=$(jq -r --arg login "$bot_login" \
+            '.[] | select(.user.login == $login and .state == "APPROVED") | .id' <<<"$reviews")
+
+          # Approvals from the retired gram-bot app identity never counted
+          # toward the ruleset; sweep them up whenever we touch a PR.
+          legacy_ids=$(jq -r \
+            '.[] | select(.user.login == "gram-bot[bot]" and .state == "APPROVED") | .id' <<<"$reviews")
+
+          dismiss() {
+            gh api \
+              --method PUT \
+              "repos/${REPO}/pulls/${PR_NUMBER}/reviews/${1}/dismissals" \
+              -f message="$2" \
+              -f event=DISMISS
+          }
+
+          for id in $legacy_ids; do
+            echo "Dismissing legacy gram-bot approval ${id} (app approvals do not count)."
+            dismiss "$id" "Superseded: approvals from the gram-bot app do not count toward required reviews."
+          done
+
+          if [[ "$has_label" == "true" && "$PR_AUTHOR" == "$bot_login" ]]; then
+            echo "PR author is ${bot_login}; cannot self-approve. A human review is required here."
+          elif [[ "$has_label" == "true" && -z "$approval_ids" ]]; then
             labeled_by=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/events" --paginate \
               --jq '[.[] | select(.event == "labeled" and .label.name == "review:bypass") | .actor.login] | last // empty' \
               | tail -1)
             labeled_by="${labeled_by:-$FALLBACK_ACTOR}"
-            echo "Label present, no gram-bot approval: approving (label applied by ${labeled_by})."
+            echo "Label present, no ${bot_login} approval: approving (label applied by ${labeled_by})."
             gh api \
               "repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
               -f event=APPROVE \
@@ -89,12 +111,8 @@ jobs:
               | tail -1)
             unlabeled_by="${unlabeled_by:-$FALLBACK_ACTOR}"
             for id in $approval_ids; do
-              echo "Label absent, dismissing gram-bot approval ${id}."
-              gh api \
-                --method PUT \
-                "repos/${REPO}/pulls/${PR_NUMBER}/reviews/${id}/dismissals" \
-                -f message="\`review:bypass\` label removed by @${unlabeled_by}." \
-                -f event=DISMISS
+              echo "Label absent, dismissing ${bot_login} approval ${id}."
+              dismiss "$id" "\`review:bypass\` label removed by @${unlabeled_by}."
             done
           else
             echo "State already consistent (label present: ${has_label}); nothing to do."
