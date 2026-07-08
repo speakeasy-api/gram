@@ -18,7 +18,9 @@
         "@playwright/mcp@latest",
         "--browser=chromium",
         "--viewport-size",
-        "1920x1080"
+        "1920x1080",
+        "--config",
+        ".playwright-mcp.config.json"
       ],
       "env": {}
     }
