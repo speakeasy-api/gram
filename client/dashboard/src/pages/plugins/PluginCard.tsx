@@ -119,7 +119,16 @@ export function PluginCard({
           </Type>
         )}
         <Type small className="text-muted-foreground/60 mt-2 mb-3">
-          Updated <HumanizeDateTime date={plugin.updatedAt} />
+          {publishStatus?.lastPublishedAt ? (
+            <>
+              Published{" "}
+              <HumanizeDateTime date={publishStatus.lastPublishedAt} />
+            </>
+          ) : (
+            <>
+              Updated <HumanizeDateTime date={plugin.updatedAt} />
+            </>
+          )}
         </Type>
 
         <div className="mt-auto flex items-center justify-end gap-2 pt-2">
