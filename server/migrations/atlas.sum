@@ -1,4 +1,4 @@
-h1:uVu/Y7oMmCdo8JXr5/Ql2nH1RMYrsR1oYZBbuqnowWw=
+h1:gYOFuZrjCAtkYrSAxvC9uYCSluDdobVO/Jpj6eXy7p8=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -250,5 +250,5 @@ h1:uVu/Y7oMmCdo8JXr5/Ql2nH1RMYrsR1oYZBbuqnowWw=
 20260707200235_add-billing-cycle-usage.sql h1:Oma/fS74ZRIZnopKrTdKwxYxtoEO+fPYATfmqeDiudc=
 20260707204416_billing-cycle-usage-tum-tokens-check.sql h1:e0oVX1jZavibZRbsR6pHqmhApLYK0fLjohgqx/kN65g=
 20260708203242_chats-add-project-id-index.sql h1:6mzOm6Z7RUHSx94M5JH93IOTSM5MmtVdgcCbM//86Io=
-20260708215023_add-user-session-issuer-classification.sql h1:oF7ySYINgvnoWDPcTEVhCqyKlMGbbMhyEnOkBqfGHt4=
-20260708221138_comment-users-admin-platform-admin.sql h1:5WP2zqBeHuLpvarInfNHfzj45qwgqwwlCbfFJlhKTwM=
+20260708221138_comment-users-admin-platform-admin.sql h1:OWKP0Byie6YS9Ji7I3NlK7ik2b6NF6C9T2HyUH/5p7k=
+20260708232901_add-user-session-issuer-classification.sql h1:vs+5d/Qj35hGa90mEysuL1tFakAUOWmuqTUDUVuz118=
