@@ -1091,7 +1091,9 @@ func renderHookRuntimeSourceSnippet() string {
 // environment.
 func orgHintAssignment(cfg GenerateConfig) string {
 	if cfg.OrgID != "" {
-		return fmt.Sprintf("gram_hooks_org_hint=%q", cfg.OrgID)
+		// Single-quote for the shell: %q would double-quote, and bash expands
+		// $ and backticks inside double quotes.
+		return "gram_hooks_org_hint='" + strings.ReplaceAll(cfg.OrgID, "'", `'\''`) + "'"
 	}
 	return `gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-}"`
 }

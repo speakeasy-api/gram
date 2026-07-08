@@ -2002,8 +2002,8 @@ func TestRenderLoginScriptsPinOrganization(t *testing.T) {
 		ProjectSlug: "acme-prod",
 		OrgID:       "org_12345",
 	}
-	require.Contains(t, string(renderLoginScript(cfg)), `gram_hooks_org_hint="org_12345"`)
-	require.Contains(t, string(renderAuthPreflightScript(cfg)), `gram_hooks_org_hint="org_12345"`)
+	require.Contains(t, string(renderLoginScript(cfg)), `gram_hooks_org_hint='org_12345'`)
+	require.Contains(t, string(renderAuthPreflightScript(cfg)), `gram_hooks_org_hint='org_12345'`)
 	require.Contains(t, string(renderSharedAuthScript()), "organization_id=${gram_hooks_org_hint}")
 }
 
