@@ -899,7 +899,7 @@ trackedFiles:
   src/models/components/shadowmcpaccessrule.ts: {}
   src/models/components/shadowmcpapprovaldecisionresult.ts: {}
   src/models/components/shadowmcpapprovalrequest.ts: {}
-  src/models/components/shadowmcpinventoryaccessrulematch.ts: {}
+  src/models/components/shadowmcpinventoryrequestsummary.ts: {}
   src/models/components/shadowmcpinventoryserver.ts: {}
   src/models/components/skillbreakdownrow.ts: {}
   src/models/components/skillsummary.ts: {}

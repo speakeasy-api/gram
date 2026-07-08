@@ -527,7 +527,7 @@ export class Access extends ClientSDK {
    * listShadowMCPInventory access
    *
    * @remarks
-   * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and access-rule state.
+   * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.
    */
   async listShadowMCPInventory(
     request: ListShadowMCPInventoryRequest,

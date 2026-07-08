@@ -5948,33 +5948,36 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 		ObservedUseCount:   *v.ObservedUseCount,
 		UserCount:          *v.UserCount,
 		Access:             *v.Access,
+		RequestCount:       *v.RequestCount,
 	}
 	res.TopUsers = make([]string, len(v.TopUsers))
 	for i, val := range v.TopUsers {
 		res.TopUsers[i] = val
 	}
-	if v.Rule != nil {
-		res.Rule = unmarshalShadowMCPInventoryAccessRuleMatchResponseBodyToAccessShadowMCPInventoryAccessRuleMatch(v.Rule)
+	if v.LatestRequest != nil {
+		res.LatestRequest = unmarshalShadowMCPInventoryRequestSummaryResponseBodyToAccessShadowMCPInventoryRequestSummary(v.LatestRequest)
+	}
+	res.AllowedPolicyIds = make([]string, len(v.AllowedPolicyIds))
+	for i, val := range v.AllowedPolicyIds {
+		res.AllowedPolicyIds[i] = val
 	}
 
 	return res
 }
 
-// unmarshalShadowMCPInventoryAccessRuleMatchResponseBodyToAccessShadowMCPInventoryAccessRuleMatch
-// builds a value of type *access.ShadowMCPInventoryAccessRuleMatch from a
-// value of type *ShadowMCPInventoryAccessRuleMatchResponseBody.
-func unmarshalShadowMCPInventoryAccessRuleMatchResponseBodyToAccessShadowMCPInventoryAccessRuleMatch(v *ShadowMCPInventoryAccessRuleMatchResponseBody) *access.ShadowMCPInventoryAccessRuleMatch {
+// unmarshalShadowMCPInventoryRequestSummaryResponseBodyToAccessShadowMCPInventoryRequestSummary
+// builds a value of type *access.ShadowMCPInventoryRequestSummary from a value
+// of type *ShadowMCPInventoryRequestSummaryResponseBody.
+func unmarshalShadowMCPInventoryRequestSummaryResponseBodyToAccessShadowMCPInventoryRequestSummary(v *ShadowMCPInventoryRequestSummaryResponseBody) *access.ShadowMCPInventoryRequestSummary {
 	if v == nil {
 		return nil
 	}
-	res := &access.ShadowMCPInventoryAccessRuleMatch{
-		ID:           *v.ID,
-		ProjectID:    v.ProjectID,
-		AccessScope:  *v.AccessScope,
-		Disposition:  *v.Disposition,
-		MatchBreadth: *v.MatchBreadth,
-		MatchValue:   *v.MatchValue,
-		DisplayName:  *v.DisplayName,
+	res := &access.ShadowMCPInventoryRequestSummary{
+		ID:              *v.ID,
+		PolicyID:        *v.PolicyID,
+		RequesterUserID: *v.RequesterUserID,
+		RequesterEmail:  *v.RequesterEmail,
+		RequestedAt:     *v.RequestedAt,
 	}
 
 	return res

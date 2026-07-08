@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listShadowMCPInventory access
  *
  * @remarks
- * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and access-rule state.
+ * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.
  */
 export function accessListShadowMCPInventory(
   client: GramCore,

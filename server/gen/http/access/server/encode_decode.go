@@ -5532,6 +5532,7 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 		ObservedUseCount:   v.ObservedUseCount,
 		UserCount:          v.UserCount,
 		Access:             v.Access,
+		RequestCount:       v.RequestCount,
 	}
 	if v.TopUsers != nil {
 		res.TopUsers = make([]string, len(v.TopUsers))
@@ -5541,28 +5542,34 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 	} else {
 		res.TopUsers = []string{}
 	}
-	if v.Rule != nil {
-		res.Rule = marshalAccessShadowMCPInventoryAccessRuleMatchToShadowMCPInventoryAccessRuleMatchResponseBody(v.Rule)
+	if v.LatestRequest != nil {
+		res.LatestRequest = marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(v.LatestRequest)
+	}
+	if v.AllowedPolicyIds != nil {
+		res.AllowedPolicyIds = make([]string, len(v.AllowedPolicyIds))
+		for i, val := range v.AllowedPolicyIds {
+			res.AllowedPolicyIds[i] = val
+		}
+	} else {
+		res.AllowedPolicyIds = []string{}
 	}
 
 	return res
 }
 
-// marshalAccessShadowMCPInventoryAccessRuleMatchToShadowMCPInventoryAccessRuleMatchResponseBody
-// builds a value of type *ShadowMCPInventoryAccessRuleMatchResponseBody from a
-// value of type *access.ShadowMCPInventoryAccessRuleMatch.
-func marshalAccessShadowMCPInventoryAccessRuleMatchToShadowMCPInventoryAccessRuleMatchResponseBody(v *access.ShadowMCPInventoryAccessRuleMatch) *ShadowMCPInventoryAccessRuleMatchResponseBody {
+// marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody
+// builds a value of type *ShadowMCPInventoryRequestSummaryResponseBody from a
+// value of type *access.ShadowMCPInventoryRequestSummary.
+func marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(v *access.ShadowMCPInventoryRequestSummary) *ShadowMCPInventoryRequestSummaryResponseBody {
 	if v == nil {
 		return nil
 	}
-	res := &ShadowMCPInventoryAccessRuleMatchResponseBody{
-		ID:           v.ID,
-		ProjectID:    v.ProjectID,
-		AccessScope:  v.AccessScope,
-		Disposition:  v.Disposition,
-		MatchBreadth: v.MatchBreadth,
-		MatchValue:   v.MatchValue,
-		DisplayName:  v.DisplayName,
+	res := &ShadowMCPInventoryRequestSummaryResponseBody{
+		ID:              v.ID,
+		PolicyID:        v.PolicyID,
+		RequesterUserID: v.RequesterUserID,
+		RequesterEmail:  v.RequesterEmail,
+		RequestedAt:     v.RequestedAt,
 	}
 
 	return res

@@ -9,25 +9,27 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  ShadowMCPInventoryAccessRuleMatch,
-  ShadowMCPInventoryAccessRuleMatch$inboundSchema,
-} from "./shadowmcpinventoryaccessrulematch.js";
+  ShadowMCPInventoryRequestSummary,
+  ShadowMCPInventoryRequestSummary$inboundSchema,
+} from "./shadowmcpinventoryrequestsummary.js";
 
 export const Access = {
   None: "none",
   Allowed: "allowed",
-  Denied: "denied",
+  Blocked: "blocked",
 } as const;
 export type Access = ClosedEnum<typeof Access>;
 
 export type ShadowMCPInventoryServer = {
   access: Access;
+  allowedPolicyIds: Array<string>;
   canonicalServerUrl: string;
   firstSeen: Date;
   lastCalled?: Date | undefined;
   lastSeen: Date;
+  latestRequest?: ShadowMCPInventoryRequestSummary | undefined;
   observedUseCount: number;
-  rule?: ShadowMCPInventoryAccessRuleMatch | undefined;
+  requestCount: number;
   serverName?: string | undefined;
   topUsers: Array<string>;
   urlHost: string;
@@ -46,6 +48,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     access: Access$inboundSchema,
+    allowed_policy_ids: z.array(z.string()),
     canonical_server_url: z.string(),
     first_seen: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -58,8 +61,9 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    latest_request: z.optional(ShadowMCPInventoryRequestSummary$inboundSchema),
     observed_use_count: z.int(),
-    rule: z.optional(ShadowMCPInventoryAccessRuleMatch$inboundSchema),
+    request_count: z.int(),
     server_name: z.optional(z.string()),
     top_users: z.array(z.string()),
     url_host: z.string(),
@@ -67,11 +71,14 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "allowed_policy_ids": "allowedPolicyIds",
       "canonical_server_url": "canonicalServerUrl",
       "first_seen": "firstSeen",
       "last_called": "lastCalled",
       "last_seen": "lastSeen",
+      "latest_request": "latestRequest",
       "observed_use_count": "observedUseCount",
+      "request_count": "requestCount",
       "server_name": "serverName",
       "top_users": "topUsers",
       "url_host": "urlHost",

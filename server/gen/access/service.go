@@ -48,7 +48,7 @@ type Service interface {
 	// List managed Shadow MCP allow and deny rules.
 	ListShadowMCPAccessRules(context.Context, *ListShadowMCPAccessRulesPayload) (res *ListShadowMCPAccessRulesResult, err error)
 	// List project-scoped Shadow MCP server inventory composed from observed URLs,
-	// telemetry usage, and access-rule state.
+	// telemetry usage, and policy-bypass state.
 	ListShadowMCPInventory(context.Context, *ListShadowMCPInventoryPayload) (res *ListShadowMCPInventoryResult, err error)
 	// Create a managed Shadow MCP access rule.
 	CreateShadowMCPAccessRule(context.Context, *CreateShadowMCPAccessRulePayload) (res *CreateShadowMCPAccessRuleResult, err error)
@@ -696,14 +696,12 @@ type ShadowMCPApprovalRequest struct {
 	UpdatedAt              string
 }
 
-type ShadowMCPInventoryAccessRuleMatch struct {
-	ID           string
-	ProjectID    *string
-	AccessScope  string
-	Disposition  string
-	MatchBreadth string
-	MatchValue   string
-	DisplayName  string
+type ShadowMCPInventoryRequestSummary struct {
+	ID              string
+	PolicyID        string
+	RequesterUserID string
+	RequesterEmail  string
+	RequestedAt     string
 }
 
 type ShadowMCPInventoryServer struct {
@@ -717,7 +715,9 @@ type ShadowMCPInventoryServer struct {
 	UserCount          int
 	TopUsers           []string
 	Access             string
-	Rule               *ShadowMCPInventoryAccessRuleMatch
+	RequestCount       int
+	LatestRequest      *ShadowMCPInventoryRequestSummary
+	AllowedPolicyIds   []string
 }
 
 // UpdateMemberRolesPayload is the payload type of the access service

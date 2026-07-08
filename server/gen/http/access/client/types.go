@@ -4997,29 +4997,29 @@ type ShadowMCPAccessRuleResponseBody struct {
 // ShadowMCPInventoryServerResponseBody is used to define fields on response
 // body types.
 type ShadowMCPInventoryServerResponseBody struct {
-	CanonicalServerURL *string                                        `form:"canonical_server_url,omitempty" json:"canonical_server_url,omitempty" xml:"canonical_server_url,omitempty"`
-	URLHost            *string                                        `form:"url_host,omitempty" json:"url_host,omitempty" xml:"url_host,omitempty"`
-	ServerName         *string                                        `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
-	FirstSeen          *string                                        `form:"first_seen,omitempty" json:"first_seen,omitempty" xml:"first_seen,omitempty"`
-	LastSeen           *string                                        `form:"last_seen,omitempty" json:"last_seen,omitempty" xml:"last_seen,omitempty"`
-	LastCalled         *string                                        `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
-	ObservedUseCount   *int                                           `form:"observed_use_count,omitempty" json:"observed_use_count,omitempty" xml:"observed_use_count,omitempty"`
-	UserCount          *int                                           `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
-	TopUsers           []string                                       `form:"top_users,omitempty" json:"top_users,omitempty" xml:"top_users,omitempty"`
-	Access             *string                                        `form:"access,omitempty" json:"access,omitempty" xml:"access,omitempty"`
-	Rule               *ShadowMCPInventoryAccessRuleMatchResponseBody `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
+	CanonicalServerURL *string                                       `form:"canonical_server_url,omitempty" json:"canonical_server_url,omitempty" xml:"canonical_server_url,omitempty"`
+	URLHost            *string                                       `form:"url_host,omitempty" json:"url_host,omitempty" xml:"url_host,omitempty"`
+	ServerName         *string                                       `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	FirstSeen          *string                                       `form:"first_seen,omitempty" json:"first_seen,omitempty" xml:"first_seen,omitempty"`
+	LastSeen           *string                                       `form:"last_seen,omitempty" json:"last_seen,omitempty" xml:"last_seen,omitempty"`
+	LastCalled         *string                                       `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
+	ObservedUseCount   *int                                          `form:"observed_use_count,omitempty" json:"observed_use_count,omitempty" xml:"observed_use_count,omitempty"`
+	UserCount          *int                                          `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
+	TopUsers           []string                                      `form:"top_users,omitempty" json:"top_users,omitempty" xml:"top_users,omitempty"`
+	Access             *string                                       `form:"access,omitempty" json:"access,omitempty" xml:"access,omitempty"`
+	RequestCount       *int                                          `form:"request_count,omitempty" json:"request_count,omitempty" xml:"request_count,omitempty"`
+	LatestRequest      *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	AllowedPolicyIds   []string                                      `form:"allowed_policy_ids,omitempty" json:"allowed_policy_ids,omitempty" xml:"allowed_policy_ids,omitempty"`
 }
 
-// ShadowMCPInventoryAccessRuleMatchResponseBody is used to define fields on
+// ShadowMCPInventoryRequestSummaryResponseBody is used to define fields on
 // response body types.
-type ShadowMCPInventoryAccessRuleMatchResponseBody struct {
-	ID           *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	ProjectID    *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	AccessScope  *string `form:"access_scope,omitempty" json:"access_scope,omitempty" xml:"access_scope,omitempty"`
-	Disposition  *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
-	MatchBreadth *string `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
-	MatchValue   *string `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
-	DisplayName  *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+type ShadowMCPInventoryRequestSummaryResponseBody struct {
+	ID              *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	PolicyID        *string `form:"policy_id,omitempty" json:"policy_id,omitempty" xml:"policy_id,omitempty"`
+	RequesterUserID *string `form:"requester_user_id,omitempty" json:"requester_user_id,omitempty" xml:"requester_user_id,omitempty"`
+	RequesterEmail  *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
+	RequestedAt     *string `form:"requested_at,omitempty" json:"requested_at,omitempty" xml:"requested_at,omitempty"`
 }
 
 // AuthzChallengeResponseBody is used to define fields on response body types.
@@ -16067,6 +16067,12 @@ func ValidateShadowMCPInventoryServerResponseBody(body *ShadowMCPInventoryServer
 	if body.Access == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("access", "body"))
 	}
+	if body.RequestCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_count", "body"))
+	}
+	if body.AllowedPolicyIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("allowed_policy_ids", "body"))
+	}
 	if body.FirstSeen != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_seen", *body.FirstSeen, goa.FormatDateTime))
 	}
@@ -16077,59 +16083,44 @@ func ValidateShadowMCPInventoryServerResponseBody(body *ShadowMCPInventoryServer
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_called", *body.LastCalled, goa.FormatDateTime))
 	}
 	if body.Access != nil {
-		if !(*body.Access == "none" || *body.Access == "allowed" || *body.Access == "denied") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access", *body.Access, []any{"none", "allowed", "denied"}))
+		if !(*body.Access == "none" || *body.Access == "allowed" || *body.Access == "blocked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access", *body.Access, []any{"none", "allowed", "blocked"}))
 		}
 	}
-	if body.Rule != nil {
-		if err2 := ValidateShadowMCPInventoryAccessRuleMatchResponseBody(body.Rule); err2 != nil {
+	if body.LatestRequest != nil {
+		if err2 := ValidateShadowMCPInventoryRequestSummaryResponseBody(body.LatestRequest); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
 }
 
-// ValidateShadowMCPInventoryAccessRuleMatchResponseBody runs the validations
-// defined on ShadowMCPInventoryAccessRuleMatchResponseBody
-func ValidateShadowMCPInventoryAccessRuleMatchResponseBody(body *ShadowMCPInventoryAccessRuleMatchResponseBody) (err error) {
+// ValidateShadowMCPInventoryRequestSummaryResponseBody runs the validations
+// defined on ShadowMCPInventoryRequestSummaryResponseBody
+func ValidateShadowMCPInventoryRequestSummaryResponseBody(body *ShadowMCPInventoryRequestSummaryResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.AccessScope == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("access_scope", "body"))
+	if body.PolicyID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_id", "body"))
 	}
-	if body.Disposition == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("disposition", "body"))
+	if body.RequesterUserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requester_user_id", "body"))
 	}
-	if body.MatchBreadth == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("match_breadth", "body"))
+	if body.RequesterEmail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requester_email", "body"))
 	}
-	if body.MatchValue == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("match_value", "body"))
-	}
-	if body.DisplayName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
+	if body.RequestedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requested_at", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	if body.PolicyID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", *body.PolicyID, goa.FormatUUID))
 	}
-	if body.AccessScope != nil {
-		if !(*body.AccessScope == "project") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", *body.AccessScope, []any{"project"}))
-		}
-	}
-	if body.Disposition != nil {
-		if !(*body.Disposition == "allowed" || *body.Disposition == "denied") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"allowed", "denied"}))
-		}
-	}
-	if body.MatchBreadth != nil {
-		if !(*body.MatchBreadth == "full_url") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url"}))
-		}
+	if body.RequestedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_at", *body.RequestedAt, goa.FormatDateTime))
 	}
 	return
 }

@@ -2730,7 +2730,7 @@ paths:
                 name: ResolveChallenge
     /rpc/access.shadowMcp.inventory.list:
         get:
-            description: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and access-rule state.
+            description: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.
             operationId: listShadowMCPInventory
             parameters:
                 - allowEmptyValue: true
@@ -53090,39 +53090,28 @@ components:
                 - requested_at
                 - created_at
                 - updated_at
-        ShadowMCPInventoryAccessRuleMatch:
+        ShadowMCPInventoryRequestSummary:
             type: object
             properties:
-                access_scope:
-                    type: string
-                    enum:
-                        - project
-                display_name:
-                    type: string
-                disposition:
-                    type: string
-                    enum:
-                        - allowed
-                        - denied
                 id:
                     type: string
                     format: uuid
-                match_breadth:
-                    type: string
-                    enum:
-                        - full_url
-                match_value:
-                    type: string
-                project_id:
+                policy_id:
                     type: string
                     format: uuid
+                requested_at:
+                    type: string
+                    format: date-time
+                requester_email:
+                    type: string
+                requester_user_id:
+                    type: string
             required:
                 - id
-                - access_scope
-                - disposition
-                - match_breadth
-                - match_value
-                - display_name
+                - policy_id
+                - requester_user_id
+                - requester_email
+                - requested_at
         ShadowMCPInventoryServer:
             type: object
             properties:
@@ -53131,7 +53120,11 @@ components:
                     enum:
                         - none
                         - allowed
-                        - denied
+                        - blocked
+                allowed_policy_ids:
+                    type: array
+                    items:
+                        type: string
                 canonical_server_url:
                     type: string
                 first_seen:
@@ -53143,11 +53136,14 @@ components:
                 last_seen:
                     type: string
                     format: date-time
+                latest_request:
+                    $ref: '#/components/schemas/ShadowMCPInventoryRequestSummary'
                 observed_use_count:
                     type: integer
                     format: int64
-                rule:
-                    $ref: '#/components/schemas/ShadowMCPInventoryAccessRuleMatch'
+                request_count:
+                    type: integer
+                    format: int64
                 server_name:
                     type: string
                 top_users:
@@ -53168,6 +53164,8 @@ components:
                 - user_count
                 - top_users
                 - access
+                - request_count
+                - allowed_policy_ids
         SkillBreakdownRow:
             type: object
             properties:

@@ -4971,29 +4971,29 @@ type ShadowMCPAccessRuleResponseBody struct {
 // ShadowMCPInventoryServerResponseBody is used to define fields on response
 // body types.
 type ShadowMCPInventoryServerResponseBody struct {
-	CanonicalServerURL string                                         `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
-	URLHost            string                                         `form:"url_host" json:"url_host" xml:"url_host"`
-	ServerName         *string                                        `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
-	FirstSeen          string                                         `form:"first_seen" json:"first_seen" xml:"first_seen"`
-	LastSeen           string                                         `form:"last_seen" json:"last_seen" xml:"last_seen"`
-	LastCalled         *string                                        `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
-	ObservedUseCount   int                                            `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
-	UserCount          int                                            `form:"user_count" json:"user_count" xml:"user_count"`
-	TopUsers           []string                                       `form:"top_users" json:"top_users" xml:"top_users"`
-	Access             string                                         `form:"access" json:"access" xml:"access"`
-	Rule               *ShadowMCPInventoryAccessRuleMatchResponseBody `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
+	CanonicalServerURL string                                        `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
+	URLHost            string                                        `form:"url_host" json:"url_host" xml:"url_host"`
+	ServerName         *string                                       `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	FirstSeen          string                                        `form:"first_seen" json:"first_seen" xml:"first_seen"`
+	LastSeen           string                                        `form:"last_seen" json:"last_seen" xml:"last_seen"`
+	LastCalled         *string                                       `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
+	ObservedUseCount   int                                           `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
+	UserCount          int                                           `form:"user_count" json:"user_count" xml:"user_count"`
+	TopUsers           []string                                      `form:"top_users" json:"top_users" xml:"top_users"`
+	Access             string                                        `form:"access" json:"access" xml:"access"`
+	RequestCount       int                                           `form:"request_count" json:"request_count" xml:"request_count"`
+	LatestRequest      *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	AllowedPolicyIds   []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
 }
 
-// ShadowMCPInventoryAccessRuleMatchResponseBody is used to define fields on
+// ShadowMCPInventoryRequestSummaryResponseBody is used to define fields on
 // response body types.
-type ShadowMCPInventoryAccessRuleMatchResponseBody struct {
-	ID           string  `form:"id" json:"id" xml:"id"`
-	ProjectID    *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	AccessScope  string  `form:"access_scope" json:"access_scope" xml:"access_scope"`
-	Disposition  string  `form:"disposition" json:"disposition" xml:"disposition"`
-	MatchBreadth string  `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
-	MatchValue   string  `form:"match_value" json:"match_value" xml:"match_value"`
-	DisplayName  string  `form:"display_name" json:"display_name" xml:"display_name"`
+type ShadowMCPInventoryRequestSummaryResponseBody struct {
+	ID              string `form:"id" json:"id" xml:"id"`
+	PolicyID        string `form:"policy_id" json:"policy_id" xml:"policy_id"`
+	RequesterUserID string `form:"requester_user_id" json:"requester_user_id" xml:"requester_user_id"`
+	RequesterEmail  string `form:"requester_email" json:"requester_email" xml:"requester_email"`
+	RequestedAt     string `form:"requested_at" json:"requested_at" xml:"requested_at"`
 }
 
 // AuthzChallengeResponseBody is used to define fields on response body types.

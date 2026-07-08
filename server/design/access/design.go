@@ -398,7 +398,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("listShadowMCPInventory", func() {
-		Description("List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and access-rule state.")
+		Description("List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.")
 		Security(security.Session)
 
 		Payload(func() {
@@ -961,30 +961,24 @@ var ListShadowMCPAccessRulesResult = Type("ListShadowMCPAccessRulesResult", func
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 
-var ShadowMCPInventoryAccessRuleMatchModel = Type("ShadowMCPInventoryAccessRuleMatch", func() {
-	Required("id", "access_scope", "disposition", "match_breadth", "match_value", "display_name")
+var ShadowMCPInventoryRequestSummaryModel = Type("ShadowMCPInventoryRequestSummary", func() {
+	Required("id", "policy_id", "requester_user_id", "requester_email", "requested_at")
 
 	Attribute("id", String, func() {
 		Format(FormatUUID)
 	})
-	Attribute("project_id", String, func() {
+	Attribute("policy_id", String, func() {
 		Format(FormatUUID)
 	})
-	Attribute("access_scope", String, func() {
-		Enum("project")
+	Attribute("requester_user_id", String)
+	Attribute("requester_email", String)
+	Attribute("requested_at", String, func() {
+		Format(FormatDateTime)
 	})
-	Attribute("disposition", String, func() {
-		Enum("allowed", "denied")
-	})
-	Attribute("match_breadth", String, func() {
-		Enum("full_url")
-	})
-	Attribute("match_value", String)
-	Attribute("display_name", String)
 })
 
 var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
-	Required("canonical_server_url", "url_host", "first_seen", "last_seen", "observed_use_count", "user_count", "top_users", "access")
+	Required("canonical_server_url", "url_host", "first_seen", "last_seen", "observed_use_count", "user_count", "top_users", "access", "request_count", "allowed_policy_ids")
 
 	Attribute("canonical_server_url", String)
 	Attribute("url_host", String)
@@ -1002,9 +996,11 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("user_count", Int)
 	Attribute("top_users", ArrayOf(String))
 	Attribute("access", String, func() {
-		Enum("none", "allowed", "denied")
+		Enum("none", "allowed", "blocked")
 	})
-	Attribute("rule", ShadowMCPInventoryAccessRuleMatchModel)
+	Attribute("request_count", Int)
+	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)
+	Attribute("allowed_policy_ids", ArrayOf(String))
 })
 
 var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {
