@@ -125,7 +125,7 @@ export function PluginCard({
                 onOpenChange={setIsDownloadMenuOpen}
               >
                 <DropdownMenuTrigger asChild>
-                  <Button variant="primary" size="sm" disabled={!installTarget}>
+                  <Button variant="primary" size="sm">
                     <Button.Text>Install</Button.Text>
                     <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
                     <Button.RightIcon>
@@ -135,6 +135,7 @@ export function PluginCard({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
+                    disabled={!installTarget}
                     onClick={() => {
                       // Defer until after the dropdown has fully closed to
                       // avoid a Radix focus-trap/body-lock conflict between
@@ -143,7 +144,14 @@ export function PluginCard({
                       setTimeout(() => setIsInstallOpen(true), 0);
                     }}
                   >
-                    Install instructions
+                    <div className="flex flex-col">
+                      <span>Install instructions</span>
+                      {!installTarget && (
+                        <span className="text-muted-foreground text-xs">
+                          Requires marketplace setup
+                        </span>
+                      )}
+                    </div>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem

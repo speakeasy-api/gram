@@ -30,6 +30,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   Icon,
   Stack,
@@ -191,7 +192,7 @@ export default function Plugins(): JSX.Element {
   );
 
   const [marketplaceNameInput, setMarketplaceNameInput] = useState(
-    marketplaceSettings.marketplaceName ?? "",
+    marketplaceSettings.marketplaceName ?? marketplaceSettings.defaultName,
   );
   const updateMarketplaceSettingsMutation =
     useUpdateMarketplaceSettingsMutation({
@@ -226,8 +227,13 @@ export default function Plugins(): JSX.Element {
     trimmedMarketplaceName !== currentMarketplaceName.trim();
 
   const handleOpenMarketplaceSettings = () => {
-    // Reset the input to the persisted value so reopening discards unsaved edits.
-    setMarketplaceNameInput(marketplaceSettings.marketplaceName ?? "");
+    // Reset the input to the persisted value so reopening discards unsaved
+    // edits. Falls back to the computed default name (not "") when unset —
+    // otherwise the field shows only ghost placeholder text with nothing to
+    // actually save, which is a dead end once naming is required (Setup).
+    setMarketplaceNameInput(
+      marketplaceSettings.marketplaceName ?? marketplaceSettings.defaultName,
+    );
     setIsMarketplaceSettingsDialogOpen(true);
   };
 
@@ -425,9 +431,7 @@ export default function Plugins(): JSX.Element {
               <Dialog.Description>
                 The marketplace name is the identifier your team types after the
                 plugin slug ({"<plugin>@<marketplace>"}) when installing from
-                Claude Code or Codex. Leave blank to use the default (
-                <code>{marketplaceSettings.defaultName}</code>
-                ). Applies to all plugins in this project.
+                Claude Code or Codex. Applies to all plugins in this project.
               </Dialog.Description>
             </Dialog.Header>
             <form
@@ -554,59 +558,65 @@ function ObservabilityPluginCard({
             ? "Included in your marketplace"
             : "Available as a direct download"}
         </Type>
-        {/* Split button (GitHub "Merge pull request" style): primary click
-            launches the install sheet, the attached caret opens the zip
-            download's platform picker. */}
-        <div className="flex items-stretch">
-          <Button
-            variant="primary"
-            size="sm"
-            className="rounded-r-none"
-            disabled={!installTarget}
-            onClick={() => setIsInstallSheetOpen(true)}
-          >
-            <Button.Text>Install</Button.Text>
-          </Button>
-          <DropdownMenu
-            open={isDownloadMenuOpen}
-            onOpenChange={onDownloadMenuOpenChange}
-          >
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="primary"
-                size="sm"
-                className="border-primary-foreground/25 -ml-px rounded-l-none border-l px-1.5"
-                disabled={isDownloading}
-                aria-label="Download as zip"
-              >
+        <DropdownMenu
+          open={isDownloadMenuOpen}
+          onOpenChange={onDownloadMenuOpenChange}
+        >
+          <DropdownMenuTrigger asChild>
+            <Button variant="primary" size="sm">
+              <Button.Text>Install</Button.Text>
+              <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
+              <Button.RightIcon>
                 <Icon name="chevron-down" className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => {
-                  onDownload("claude");
-                }}
-              >
-                Download as zip — Claude
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  onDownload("cursor");
-                }}
-              >
-                Download as zip — Cursor
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  onDownload("codex");
-                }}
-              >
-                Download as zip — Codex
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+              </Button.RightIcon>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              disabled={!installTarget}
+              onClick={() => {
+                // Defer until after the dropdown has fully closed to avoid a
+                // Radix focus-trap/body-lock conflict between the closing
+                // menu and the opening sheet (same pattern as MCPDetails.tsx).
+                setTimeout(() => setIsInstallSheetOpen(true), 0);
+              }}
+            >
+              <div className="flex flex-col">
+                <span>Install instructions</span>
+                {!installTarget && (
+                  <span className="text-muted-foreground text-xs">
+                    Requires marketplace setup
+                  </span>
+                )}
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={isDownloading}
+              onClick={() => {
+                onDownload("claude");
+              }}
+            >
+              Download as zip — Claude
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={isDownloading}
+              onClick={() => {
+                onDownload("cursor");
+              }}
+            >
+              Download as zip — Cursor
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={isDownloading}
+              onClick={() => {
+                onDownload("codex");
+              }}
+            >
+              Download as zip — Codex
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Reuses the onboarding wizard's platform-by-platform setup sheet

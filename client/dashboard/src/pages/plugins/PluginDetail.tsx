@@ -409,7 +409,16 @@ export default function PluginDetail(): JSX.Element | null {
                     !publishStatus.repoName
                   }
                 >
-                  Install instructions
+                  <div className="flex flex-col">
+                    <span>Install instructions</span>
+                    {(!publishStatus?.connected ||
+                      !publishStatus.repoOwner ||
+                      !publishStatus.repoName) && (
+                      <span className="text-muted-foreground text-xs">
+                        Requires marketplace setup
+                      </span>
+                    )}
+                  </div>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
