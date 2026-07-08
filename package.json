@@ -20,7 +20,7 @@
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
     "@clack/prompts": "1.6.0",
-    "@datadog/datadog-ci": "^5.19.0",
+    "@datadog/datadog-ci": "^5.20.1",
     "@gram/client": "workspace:*",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^24.13.2",

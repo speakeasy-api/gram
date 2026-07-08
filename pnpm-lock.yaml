@@ -59,8 +59,8 @@ importers:
         specifier: 1.6.0
         version: 1.6.0
       '@datadog/datadog-ci':
-        specifier: ^5.19.0
-        version: 5.19.0
+        specifier: ^5.20.1
+        version: 5.20.1
       '@gram/client':
         specifier: workspace:*
         version: link:client/sdk
@@ -1637,8 +1637,8 @@ packages:
       '@datadog/browser-logs':
         optional: true
 
-  '@datadog/datadog-ci@5.19.0':
-    resolution: {integrity: sha512-Jo9mWw8CInOZaf0r6wdegDG/UtmQAeMSCJoNdFO2ifhyvLFJ30wvf+e4z0k7FdlsF8cko64mpdzqO0vHGUmqTA==}
+  '@datadog/datadog-ci@5.20.1':
+    resolution: {integrity: sha512-4ZKbTcO+dR16mzhLyT6e47Ld0QdwRT5pBmhbmJK/xo1kOHpcJxOY7xd36CA2mGvN7ileXi7zOTouPnU/LxAB6A==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -10238,7 +10238,7 @@ snapshots:
       '@datadog/browser-core': 6.33.0
       '@datadog/browser-rum-core': 6.33.0
 
-  '@datadog/datadog-ci@5.19.0': {}
+  '@datadog/datadog-ci@5.20.1': {}
 
   '@date-fns/tz@1.4.1': {}
 
