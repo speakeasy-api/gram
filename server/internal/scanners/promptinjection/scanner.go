@@ -34,21 +34,32 @@ type Result struct {
 
 type Engine func(ctx context.Context, req Request) ([]Result, error)
 
+func NoopEngine(_ context.Context, req Request) ([]Result, error) {
+	results := make([]Result, len(req.Messages))
+	for i := range results {
+		results[i] = Result{Label: LabelSafe, Score: 0, Rationale: ""}
+	}
+	return results, nil
+}
+
 func Describe() (string, string) {
 	return scanners.GuardRuleID(Rule), "Detected a prompt injection attempt."
 }
 
 type Scanner struct {
-	classify Engine // nil => L1 disabled (L0 heuristics only)
+	classify Engine
 	logger   *slog.Logger
 }
 
 func NewScanner(logger *slog.Logger, classify Engine) *Scanner {
+	if classify == nil {
+		classify = NoopEngine
+	}
 	return &Scanner{classify: classify, logger: logger}
 }
 
 func (s *Scanner) l1Active(l1Enabled bool) bool {
-	return s.classify != nil && l1Enabled
+	return l1Enabled
 }
 
 func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID string, msg judgemessage.Message, l1Enabled bool) ([]scanners.Finding, error) {

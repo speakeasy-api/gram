@@ -80,7 +80,7 @@ func NewAnalyzeBatch(
 		piiScanner = &StubPIIScanner{}
 	}
 	if promptInjectionScanner == nil {
-		promptInjectionScanner = promptinjection.NewScanner(logger, nil)
+		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopEngine)
 	}
 
 	return &AnalyzeBatch{
