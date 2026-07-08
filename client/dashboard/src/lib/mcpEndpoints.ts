@@ -1,6 +1,6 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import { randomSlugSuffix } from "@/lib/slug";
-import type { McpServer } from "@gram/client/models/components";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { toast } from "sonner";
 
 type SdkClient = ReturnType<typeof useSdkClient>;

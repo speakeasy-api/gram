@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@gram/client/models/components";
+import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import {
   getTraceEntryType,
   parseToolCalls,

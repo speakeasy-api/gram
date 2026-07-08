@@ -14,10 +14,8 @@ import {
   mcpServerTabHref,
 } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { useRoutes } from "@/routes";
-import {
-  useGetMcpServer,
-  useMcpEndpoints,
-} from "@gram/client/react-query/index.js";
+import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import {
   ArrowRight,
   ExternalLink,

@@ -8,8 +8,31 @@ import { variationsListGlobal } from "../funcs/variationsListGlobal.js";
 import { variationsListGroups } from "../funcs/variationsListGroups.js";
 import { variationsUpsertGlobal } from "../funcs/variationsUpsertGlobal.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { DeleteGlobalToolVariationResult } from "../models/components/deleteglobaltoolvariationresult.js";
+import { ListToolVariationGroupsResult } from "../models/components/listtoolvariationgroupsresult.js";
+import { ListVariationsResult } from "../models/components/listvariationsresult.js";
+import { ToolVariationGroupResult } from "../models/components/toolvariationgroupresult.js";
+import { UpsertGlobalToolVariationResult } from "../models/components/upsertglobaltoolvariationresult.js";
+import {
+  CreateGlobalToolVariationGroupRequest,
+  CreateGlobalToolVariationGroupSecurity,
+} from "../models/operations/createglobaltoolvariationgroup.js";
+import {
+  DeleteGlobalVariationRequest,
+  DeleteGlobalVariationSecurity,
+} from "../models/operations/deleteglobalvariation.js";
+import {
+  ListGlobalVariationsRequest,
+  ListGlobalVariationsSecurity,
+} from "../models/operations/listglobalvariations.js";
+import {
+  ListToolVariationGroupsRequest,
+  ListToolVariationGroupsSecurity,
+} from "../models/operations/listtoolvariationgroups.js";
+import {
+  UpsertGlobalVariationRequest,
+  UpsertGlobalVariationSecurity,
+} from "../models/operations/upsertglobalvariation.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Variations extends ClientSDK {
@@ -20,10 +43,10 @@ export class Variations extends ClientSDK {
    * Ensure the project-default (global) tool variation group exists, returning it. Idempotent: returns the existing group unchanged when present, otherwise creates it. Takes no parameters and only manages the single project-default group.
    */
   async createGlobal(
-    request?: operations.CreateGlobalToolVariationGroupRequest | undefined,
-    security?: operations.CreateGlobalToolVariationGroupSecurity | undefined,
+    request?: CreateGlobalToolVariationGroupRequest | undefined,
+    security?: CreateGlobalToolVariationGroupSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ToolVariationGroupResult> {
+  ): Promise<ToolVariationGroupResult> {
     return unwrapAsync(variationsCreateGlobal(
       this,
       request,
@@ -39,10 +62,10 @@ export class Variations extends ClientSDK {
    * Create or update a globally defined tool variation.
    */
   async deleteGlobal(
-    request: operations.DeleteGlobalVariationRequest,
-    security?: operations.DeleteGlobalVariationSecurity | undefined,
+    request: DeleteGlobalVariationRequest,
+    security?: DeleteGlobalVariationSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.DeleteGlobalToolVariationResult> {
+  ): Promise<DeleteGlobalToolVariationResult> {
     return unwrapAsync(variationsDeleteGlobal(
       this,
       request,
@@ -58,10 +81,10 @@ export class Variations extends ClientSDK {
    * List globally defined tool variations.
    */
   async listGlobal(
-    request?: operations.ListGlobalVariationsRequest | undefined,
-    security?: operations.ListGlobalVariationsSecurity | undefined,
+    request?: ListGlobalVariationsRequest | undefined,
+    security?: ListGlobalVariationsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListVariationsResult> {
+  ): Promise<ListVariationsResult> {
     return unwrapAsync(variationsListGlobal(
       this,
       request,
@@ -77,10 +100,10 @@ export class Variations extends ClientSDK {
    * List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.
    */
   async listGroups(
-    request?: operations.ListToolVariationGroupsRequest | undefined,
-    security?: operations.ListToolVariationGroupsSecurity | undefined,
+    request?: ListToolVariationGroupsRequest | undefined,
+    security?: ListToolVariationGroupsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListToolVariationGroupsResult> {
+  ): Promise<ListToolVariationGroupsResult> {
     return unwrapAsync(variationsListGroups(
       this,
       request,
@@ -96,10 +119,10 @@ export class Variations extends ClientSDK {
    * Create or update a globally defined tool variation.
    */
   async upsertGlobal(
-    request: operations.UpsertGlobalVariationRequest,
-    security?: operations.UpsertGlobalVariationSecurity | undefined,
+    request: UpsertGlobalVariationRequest,
+    security?: UpsertGlobalVariationSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.UpsertGlobalToolVariationResult> {
+  ): Promise<UpsertGlobalToolVariationResult> {
     return unwrapAsync(variationsUpsertGlobal(
       this,
       request,

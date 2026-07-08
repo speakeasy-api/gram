@@ -24,10 +24,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListUserSessionConsentsRequest,
+  ListUserSessionConsentsSecurity,
+} from "../models/operations/listusersessionconsents.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -60,7 +63,7 @@ export {
 };
 
 export type UserSessionConsentsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -77,8 +80,8 @@ export type UserSessionConsentsQueryError =
  * List consent records for the caller's project.
  */
 export function useUserSessionConsents(
-  request?: operations.ListUserSessionConsentsRequest | undefined,
-  security?: operations.ListUserSessionConsentsSecurity | undefined,
+  request?: ListUserSessionConsentsRequest | undefined,
+  security?: ListUserSessionConsentsSecurity | undefined,
   options?: QueryHookOptions<
     UserSessionConsentsQueryData,
     UserSessionConsentsQueryError
@@ -103,8 +106,8 @@ export function useUserSessionConsents(
  * List consent records for the caller's project.
  */
 export function useUserSessionConsentsSuspense(
-  request?: operations.ListUserSessionConsentsRequest | undefined,
-  security?: operations.ListUserSessionConsentsSecurity | undefined,
+  request?: ListUserSessionConsentsRequest | undefined,
+  security?: ListUserSessionConsentsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     UserSessionConsentsQueryData,
     UserSessionConsentsQueryError
@@ -132,8 +135,8 @@ export function useUserSessionConsentsSuspense(
  * List consent records for the caller's project.
  */
 export function useUserSessionConsentsInfinite(
-  request?: operations.ListUserSessionConsentsRequest | undefined,
-  security?: operations.ListUserSessionConsentsSecurity | undefined,
+  request?: ListUserSessionConsentsRequest | undefined,
+  security?: ListUserSessionConsentsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     UserSessionConsentsInfiniteQueryData,
     UserSessionConsentsQueryError
@@ -175,8 +178,8 @@ export function useUserSessionConsentsInfinite(
  * List consent records for the caller's project.
  */
 export function useUserSessionConsentsInfiniteSuspense(
-  request?: operations.ListUserSessionConsentsRequest | undefined,
-  security?: operations.ListUserSessionConsentsSecurity | undefined,
+  request?: ListUserSessionConsentsRequest | undefined,
+  security?: ListUserSessionConsentsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     UserSessionConsentsInfiniteQueryData,
     UserSessionConsentsQueryError

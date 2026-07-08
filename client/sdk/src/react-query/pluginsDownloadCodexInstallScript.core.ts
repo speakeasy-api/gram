@@ -11,16 +11,20 @@ import { GramCore } from "../core.js";
 import { pluginsDownloadCodexInstallScript } from "../funcs/pluginsDownloadCodexInstallScript.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  DownloadCodexInstallScriptRequest,
+  DownloadCodexInstallScriptResponse,
+  DownloadCodexInstallScriptSecurity,
+} from "../models/operations/downloadcodexinstallscript.js";
 import { unwrapAsync } from "../types/fp.js";
 export type PluginsDownloadCodexInstallScriptQueryData =
-  operations.DownloadCodexInstallScriptResponse;
+  DownloadCodexInstallScriptResponse;
 
 export function prefetchPluginsDownloadCodexInstallScript(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.DownloadCodexInstallScriptRequest | undefined,
-  security?: operations.DownloadCodexInstallScriptSecurity | undefined,
+  request?: DownloadCodexInstallScriptRequest | undefined,
+  security?: DownloadCodexInstallScriptSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +39,8 @@ export function prefetchPluginsDownloadCodexInstallScript(
 
 export function buildPluginsDownloadCodexInstallScriptQuery(
   client$: GramCore,
-  request?: operations.DownloadCodexInstallScriptRequest | undefined,
-  security?: operations.DownloadCodexInstallScriptSecurity | undefined,
+  request?: DownloadCodexInstallScriptRequest | undefined,
+  security?: DownloadCodexInstallScriptSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

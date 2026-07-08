@@ -1,10 +1,10 @@
+import { useRiskCreateCustomDetectionRuleMutation } from "@gram/client/react-query/riskCreateCustomDetectionRule.js";
+import { useRiskDeleteCustomDetectionRuleMutation } from "@gram/client/react-query/riskDeleteCustomDetectionRule.js";
 import {
   invalidateAllRiskListCustomDetectionRules,
-  useRiskCreateCustomDetectionRuleMutation,
-  useRiskDeleteCustomDetectionRuleMutation,
   useRiskListCustomDetectionRules,
-  useRiskUpdateCustomDetectionRuleMutation,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/riskListCustomDetectionRules.js";
+import { useRiskUpdateCustomDetectionRuleMutation } from "@gram/client/react-query/riskUpdateCustomDetectionRule.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { DETECTION_RULES, type RuleCategory } from "./policy-data";
 

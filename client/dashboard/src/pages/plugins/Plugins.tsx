@@ -7,8 +7,8 @@ import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useRoutes } from "@/routes";
-import type { PublishStatusResult } from "@gram/client/models/components";
-import { Plugin } from "@gram/client/models/components";
+import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
+import { Plugin } from "@gram/client/models/components/plugin.js";
 import { useCreatePluginMutation } from "@gram/client/react-query/createPlugin";
 import {
   invalidateAllPlugins,

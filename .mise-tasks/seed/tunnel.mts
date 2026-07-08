@@ -24,6 +24,23 @@ export async function seedTunnel() {
   const dbUser = process.env.DB_USER || "gram";
   const dbName = process.env.DB_NAME || "gram";
   const sql = `
+-- The seed key is a well-known constant, so any live row holding its hash under
+-- another project is a stale fixture from a previous seed run; retire it so the
+-- global key_hash unique index does not reject the upsert below.
+UPDATE tunneled_mcp_servers
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE key_hash = :'key_hash'
+  AND deleted IS FALSE
+  AND NOT (
+    name = :'source_name'
+    AND project_id = (
+      SELECT id FROM projects
+      WHERE slug = :'project_slug' AND deleted IS FALSE
+      ORDER BY created_at DESC
+      LIMIT 1
+    )
+  );
+
 WITH project AS (
   SELECT id, slug
   FROM projects
@@ -102,7 +119,7 @@ FROM source, endpoint, mcp_server;
 
   const result = await $({
     input: sql,
-  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v project_slug=${SEEDED_PROJECT_SLUG} -v source_name=${SEEDED_TUNNEL_SOURCE_NAME} -v key_hash=${SEEDED_TUNNEL_KEY_HASH} -v key_prefix=${SEEDED_TUNNEL_KEY_PREFIX} -tA -f -`.quiet();
+  })`docker compose exec -T gram-db psql -q -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v project_slug=${SEEDED_PROJECT_SLUG} -v source_name=${SEEDED_TUNNEL_SOURCE_NAME} -v key_hash=${SEEDED_TUNNEL_KEY_HASH} -v key_prefix=${SEEDED_TUNNEL_KEY_PREFIX} -tA -f -`.quiet();
 
   const output = result.stdout.trim();
   if (!output) {

@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { mcpRegistriesListRegistries } from "../funcs/mcpRegistriesListRegistries.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListRegistriesResponseBody } from "../models/components/listregistriesresponsebody.js";
+import {
+  ListMCPRegistriesRequest,
+  ListMCPRegistriesSecurity,
+} from "../models/operations/listmcpregistries.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListMCPRegistriesQueryData = components.ListRegistriesResponseBody;
+export type ListMCPRegistriesQueryData = ListRegistriesResponseBody;
 
 export function prefetchListMCPRegistries(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListMCPRegistriesRequest | undefined,
-  security?: operations.ListMCPRegistriesSecurity | undefined,
+  request?: ListMCPRegistriesRequest | undefined,
+  security?: ListMCPRegistriesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListMCPRegistries(
 
 export function buildListMCPRegistriesQuery(
   client$: GramCore,
-  request?: operations.ListMCPRegistriesRequest | undefined,
-  security?: operations.ListMCPRegistriesSecurity | undefined,
+  request?: ListMCPRegistriesRequest | undefined,
+  security?: ListMCPRegistriesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

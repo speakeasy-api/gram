@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { accessListScopes } from "../funcs/accessListScopes.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListScopesResult } from "../models/components/listscopesresult.js";
+import {
+  ListScopesRequest,
+  ListScopesSecurity,
+} from "../models/operations/listscopes.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListScopesQueryData = components.ListScopesResult;
+export type ListScopesQueryData = ListScopesResult;
 
 export function prefetchListScopes(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListScopesRequest | undefined,
-  security?: operations.ListScopesSecurity | undefined,
+  request?: ListScopesRequest | undefined,
+  security?: ListScopesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListScopes(
 
 export function buildListScopesQuery(
   client$: GramCore,
-  request?: operations.ListScopesRequest | undefined,
-  security?: operations.ListScopesSecurity | undefined,
+  request?: ListScopesRequest | undefined,
+  security?: ListScopesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -11,15 +11,18 @@ import { GramCore } from "../core.js";
 import { assetsServeChatAttachmentSigned } from "../funcs/assetsServeChatAttachmentSigned.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ServeChatAttachmentSignedRequest,
+  ServeChatAttachmentSignedResponse,
+} from "../models/operations/servechatattachmentsigned.js";
 import { unwrapAsync } from "../types/fp.js";
 export type ServeChatAttachmentSignedQueryData =
-  operations.ServeChatAttachmentSignedResponse;
+  ServeChatAttachmentSignedResponse;
 
 export function prefetchServeChatAttachmentSigned(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ServeChatAttachmentSignedRequest,
+  request: ServeChatAttachmentSignedRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -33,7 +36,7 @@ export function prefetchServeChatAttachmentSigned(
 
 export function buildServeChatAttachmentSignedQuery(
   client$: GramCore,
-  request: operations.ServeChatAttachmentSignedRequest,
+  request: ServeChatAttachmentSignedRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

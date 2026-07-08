@@ -1,5 +1,5 @@
 import { slugify } from "@/lib/constants";
-import { useLatestDeployment } from "@gram/client/react-query";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { Button, Input, Stack } from "@speakeasy-api/moonshine";
 import React from "react";
 import { Type } from "../ui/type";

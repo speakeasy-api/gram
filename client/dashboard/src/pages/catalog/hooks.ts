@@ -1,9 +1,7 @@
 import { useSdkClient } from "@/contexts/Sdk";
-import {
-  ExternalMCPServerEntry,
-  ExternalMCPTool,
-} from "@gram/client/models/components";
-import { queryKeyListMCPCatalog } from "@gram/client/react-query";
+import { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
+import { ExternalMCPTool } from "@gram/client/models/components/externalmcptool.js";
+import { queryKeyListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
 import { useQuery } from "@tanstack/react-query";
 
 interface ServerMeta {

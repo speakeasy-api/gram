@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ServeChatAttachmentRequest,
+  ServeChatAttachmentSecurity,
+} from "../models/operations/servechatattachment.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ServeChatAttachmentQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ServeChatAttachmentQueryError =
  * Serve a chat attachment from Gram.
  */
 export function useServeChatAttachment(
-  request: operations.ServeChatAttachmentRequest,
-  security?: operations.ServeChatAttachmentSecurity | undefined,
+  request: ServeChatAttachmentRequest,
+  security?: ServeChatAttachmentSecurity | undefined,
   options?: QueryHookOptions<
     ServeChatAttachmentQueryData,
     ServeChatAttachmentQueryError
@@ -85,8 +88,8 @@ export function useServeChatAttachment(
  * Serve a chat attachment from Gram.
  */
 export function useServeChatAttachmentSuspense(
-  request: operations.ServeChatAttachmentRequest,
-  security?: operations.ServeChatAttachmentSecurity | undefined,
+  request: ServeChatAttachmentRequest,
+  security?: ServeChatAttachmentSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ServeChatAttachmentQueryData,
     ServeChatAttachmentQueryError

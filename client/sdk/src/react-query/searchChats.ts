@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  SearchChatsRequest,
+  SearchChatsSecurity,
+} from "../models/operations/searchchats.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type SearchChatsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type SearchChatsQueryError =
  * Search and list chat session summaries that match a search filter
  */
 export function useSearchChats(
-  request: operations.SearchChatsRequest,
-  security?: operations.SearchChatsSecurity | undefined,
+  request: SearchChatsRequest,
+  security?: SearchChatsSecurity | undefined,
   options?: QueryHookOptions<SearchChatsQueryData, SearchChatsQueryError>,
 ): UseQueryResult<SearchChatsQueryData, SearchChatsQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useSearchChats(
  * Search and list chat session summaries that match a search filter
  */
 export function useSearchChatsSuspense(
-  request: operations.SearchChatsRequest,
-  security?: operations.SearchChatsSecurity | undefined,
+  request: SearchChatsRequest,
+  security?: SearchChatsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     SearchChatsQueryData,
     SearchChatsQueryError

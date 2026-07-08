@@ -1,19 +1,15 @@
 import type { Gram } from "@gram/client";
-import {
-  CreateRemoteSessionClientFormTokenEndpointAuthMethod,
-  type RemoteSessionClient,
-  type RemoteSessionIssuer,
-  type UserSessionIssuer,
-} from "@gram/client/models/components";
-import {
-  buildCloneClientFromOAuthProxyProviderMutation,
-  buildCreateRemoteSessionClientMutation,
-  buildCreateRemoteSessionIssuerMutation,
-  buildCreateUserSessionIssuerMutation,
-  buildDiscoverRemoteSessionIssuerMutation,
-  buildMigrateLegacyGramRegistrationsMutation,
-  buildSetToolsetUserSessionIssuerMutation,
-} from "@gram/client/react-query";
+import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import { type RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import { type RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { type UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import { buildCloneClientFromOAuthProxyProviderMutation } from "@gram/client/react-query/cloneClientFromOAuthProxyProvider.js";
+import { buildCreateRemoteSessionClientMutation } from "@gram/client/react-query/createRemoteSessionClient.js";
+import { buildCreateRemoteSessionIssuerMutation } from "@gram/client/react-query/createRemoteSessionIssuer.js";
+import { buildCreateUserSessionIssuerMutation } from "@gram/client/react-query/createUserSessionIssuer.js";
+import { buildDiscoverRemoteSessionIssuerMutation } from "@gram/client/react-query/discoverRemoteSessionIssuer.js";
+import { buildMigrateLegacyGramRegistrationsMutation } from "@gram/client/react-query/migrateLegacyGramRegistrations.js";
+import { buildSetToolsetUserSessionIssuerMutation } from "@gram/client/react-query/setToolsetUserSessionIssuer.js";
 import { fromPromise } from "xstate";
 
 import {

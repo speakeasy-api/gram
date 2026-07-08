@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  SearchUsersRequest,
+  SearchUsersSecurity,
+} from "../models/operations/searchusers.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type SearchUsersQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type SearchUsersQueryError =
  * Search and list user usage summaries grouped by user_id or external_user_id
  */
 export function useSearchUsers(
-  request: operations.SearchUsersRequest,
-  security?: operations.SearchUsersSecurity | undefined,
+  request: SearchUsersRequest,
+  security?: SearchUsersSecurity | undefined,
   options?: QueryHookOptions<SearchUsersQueryData, SearchUsersQueryError>,
 ): UseQueryResult<SearchUsersQueryData, SearchUsersQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useSearchUsers(
  * Search and list user usage summaries grouped by user_id or external_user_id
  */
 export function useSearchUsersSuspense(
-  request: operations.SearchUsersRequest,
-  security?: operations.SearchUsersSecurity | undefined,
+  request: SearchUsersRequest,
+  security?: SearchUsersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     SearchUsersQueryData,
     SearchUsersQueryError

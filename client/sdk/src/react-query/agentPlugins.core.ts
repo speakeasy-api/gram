@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { agentGetPlugins } from "../funcs/agentGetPlugins.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetPluginsResult } from "../models/components/getpluginsresult.js";
+import {
+  GetAgentPluginsRequest,
+  GetAgentPluginsSecurity,
+} from "../models/operations/getagentplugins.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AgentPluginsQueryData = components.GetPluginsResult;
+export type AgentPluginsQueryData = GetPluginsResult;
 
 export function prefetchAgentPlugins(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetAgentPluginsRequest,
-  security?: operations.GetAgentPluginsSecurity | undefined,
+  request: GetAgentPluginsRequest,
+  security?: GetAgentPluginsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchAgentPlugins(
 
 export function buildAgentPluginsQuery(
   client$: GramCore,
-  request: operations.GetAgentPluginsRequest,
-  security?: operations.GetAgentPluginsSecurity | undefined,
+  request: GetAgentPluginsRequest,
+  security?: GetAgentPluginsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

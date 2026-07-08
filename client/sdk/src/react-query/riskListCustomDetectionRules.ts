@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListCustomDetectionRulesRequest,
+  ListCustomDetectionRulesSecurity,
+} from "../models/operations/listcustomdetectionrules.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskListCustomDetectionRulesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskListCustomDetectionRulesQueryError =
  * List custom detection rules for the current project.
  */
 export function useRiskListCustomDetectionRules(
-  request?: operations.ListCustomDetectionRulesRequest | undefined,
-  security?: operations.ListCustomDetectionRulesSecurity | undefined,
+  request?: ListCustomDetectionRulesRequest | undefined,
+  security?: ListCustomDetectionRulesSecurity | undefined,
   options?: QueryHookOptions<
     RiskListCustomDetectionRulesQueryData,
     RiskListCustomDetectionRulesQueryError
@@ -88,8 +91,8 @@ export function useRiskListCustomDetectionRules(
  * List custom detection rules for the current project.
  */
 export function useRiskListCustomDetectionRulesSuspense(
-  request?: operations.ListCustomDetectionRulesRequest | undefined,
-  security?: operations.ListCustomDetectionRulesSecurity | undefined,
+  request?: ListCustomDetectionRulesRequest | undefined,
+  security?: ListCustomDetectionRulesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskListCustomDetectionRulesQueryData,
     RiskListCustomDetectionRulesQueryError

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  EvolveForm,
+  EvolveForm$Outbound,
+  EvolveForm$outboundSchema,
+} from "../components/evolveform.js";
 
 export type EvolveDeploymentSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type EvolveDeploymentRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  evolveForm: components.EvolveForm;
+  evolveForm: EvolveForm;
 };
 
 /** @internal */
@@ -143,7 +147,7 @@ export type EvolveDeploymentRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  EvolveForm: components.EvolveForm$Outbound;
+  EvolveForm: EvolveForm$Outbound;
 };
 
 /** @internal */
@@ -155,7 +159,7 @@ export const EvolveDeploymentRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    evolveForm: components.EvolveForm$outboundSchema,
+    evolveForm: EvolveForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

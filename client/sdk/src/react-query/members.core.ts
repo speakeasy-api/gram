@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { accessListMembers } from "../funcs/accessListMembers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListMembersResult } from "../models/components/listmembersresult.js";
+import {
+  ListMembersRequest,
+  ListMembersSecurity,
+} from "../models/operations/listmembers.js";
 import { unwrapAsync } from "../types/fp.js";
-export type MembersQueryData = components.ListMembersResult;
+export type MembersQueryData = ListMembersResult;
 
 export function prefetchMembers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListMembersRequest | undefined,
-  security?: operations.ListMembersSecurity | undefined,
+  request?: ListMembersRequest | undefined,
+  security?: ListMembersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchMembers(
 
 export function buildMembersQuery(
   client$: GramCore,
-  request?: operations.ListMembersRequest | undefined,
-  security?: operations.ListMembersSecurity | undefined,
+  request?: ListMembersRequest | undefined,
+  security?: ListMembersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

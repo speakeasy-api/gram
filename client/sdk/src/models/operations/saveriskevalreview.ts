@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SaveRiskEvalReviewRequestBody,
+  SaveRiskEvalReviewRequestBody$Outbound,
+  SaveRiskEvalReviewRequestBody$outboundSchema,
+} from "../components/saveriskevalreviewrequestbody.js";
 
 export type SaveRiskEvalReviewSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type SaveRiskEvalReviewRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  saveRiskEvalReviewRequestBody: components.SaveRiskEvalReviewRequestBody;
+  saveRiskEvalReviewRequestBody: SaveRiskEvalReviewRequestBody;
 };
 
 /** @internal */
@@ -143,8 +147,7 @@ export type SaveRiskEvalReviewRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  SaveRiskEvalReviewRequestBody:
-    components.SaveRiskEvalReviewRequestBody$Outbound;
+  SaveRiskEvalReviewRequestBody: SaveRiskEvalReviewRequestBody$Outbound;
 };
 
 /** @internal */
@@ -156,8 +159,7 @@ export const SaveRiskEvalReviewRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    saveRiskEvalReviewRequestBody:
-      components.SaveRiskEvalReviewRequestBody$outboundSchema,
+    saveRiskEvalReviewRequestBody: SaveRiskEvalReviewRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

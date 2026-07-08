@@ -11,17 +11,20 @@ import { GramCore } from "../core.js";
 import { domainsListMcpEndpoints } from "../funcs/domainsListMcpEndpoints.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListCustomDomainMcpEndpointsResult } from "../models/components/listcustomdomainmcpendpointsresult.js";
+import {
+  ListCustomDomainMcpEndpointsRequest,
+  ListCustomDomainMcpEndpointsSecurity,
+} from "../models/operations/listcustomdomainmcpendpoints.js";
 import { unwrapAsync } from "../types/fp.js";
 export type CustomDomainMcpEndpointsQueryData =
-  components.ListCustomDomainMcpEndpointsResult;
+  ListCustomDomainMcpEndpointsResult;
 
 export function prefetchCustomDomainMcpEndpoints(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListCustomDomainMcpEndpointsRequest | undefined,
-  security?: operations.ListCustomDomainMcpEndpointsSecurity | undefined,
+  request?: ListCustomDomainMcpEndpointsRequest | undefined,
+  security?: ListCustomDomainMcpEndpointsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +39,8 @@ export function prefetchCustomDomainMcpEndpoints(
 
 export function buildCustomDomainMcpEndpointsQuery(
   client$: GramCore,
-  request?: operations.ListCustomDomainMcpEndpointsRequest | undefined,
-  security?: operations.ListCustomDomainMcpEndpointsSecurity | undefined,
+  request?: ListCustomDomainMcpEndpointsRequest | undefined,
+  security?: ListCustomDomainMcpEndpointsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

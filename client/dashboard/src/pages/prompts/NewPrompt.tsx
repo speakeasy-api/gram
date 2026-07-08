@@ -1,9 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { useRoutes } from "@/routes";
-import {
-  invalidateAllTemplates,
-  useCreateTemplateMutation,
-} from "@gram/client/react-query";
+import { useCreateTemplateMutation } from "@gram/client/react-query/createTemplate.js";
+import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { PromptEditor } from "./PromptEditor";
 

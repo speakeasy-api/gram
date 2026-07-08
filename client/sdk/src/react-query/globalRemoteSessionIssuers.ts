@@ -24,10 +24,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListGlobalRemoteSessionIssuersRequest,
+  ListGlobalRemoteSessionIssuersSecurity,
+} from "../models/operations/listglobalremotesessionissuers.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -60,7 +63,7 @@ export {
 };
 
 export type GlobalRemoteSessionIssuersQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -77,8 +80,8 @@ export type GlobalRemoteSessionIssuersQueryError =
  * List global remote_session_issuers. Requires platform admin.
  */
 export function useGlobalRemoteSessionIssuers(
-  request?: operations.ListGlobalRemoteSessionIssuersRequest | undefined,
-  security?: operations.ListGlobalRemoteSessionIssuersSecurity | undefined,
+  request?: ListGlobalRemoteSessionIssuersRequest | undefined,
+  security?: ListGlobalRemoteSessionIssuersSecurity | undefined,
   options?: QueryHookOptions<
     GlobalRemoteSessionIssuersQueryData,
     GlobalRemoteSessionIssuersQueryError
@@ -106,8 +109,8 @@ export function useGlobalRemoteSessionIssuers(
  * List global remote_session_issuers. Requires platform admin.
  */
 export function useGlobalRemoteSessionIssuersSuspense(
-  request?: operations.ListGlobalRemoteSessionIssuersRequest | undefined,
-  security?: operations.ListGlobalRemoteSessionIssuersSecurity | undefined,
+  request?: ListGlobalRemoteSessionIssuersRequest | undefined,
+  security?: ListGlobalRemoteSessionIssuersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GlobalRemoteSessionIssuersQueryData,
     GlobalRemoteSessionIssuersQueryError
@@ -135,8 +138,8 @@ export function useGlobalRemoteSessionIssuersSuspense(
  * List global remote_session_issuers. Requires platform admin.
  */
 export function useGlobalRemoteSessionIssuersInfinite(
-  request?: operations.ListGlobalRemoteSessionIssuersRequest | undefined,
-  security?: operations.ListGlobalRemoteSessionIssuersSecurity | undefined,
+  request?: ListGlobalRemoteSessionIssuersRequest | undefined,
+  security?: ListGlobalRemoteSessionIssuersSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     GlobalRemoteSessionIssuersInfiniteQueryData,
     GlobalRemoteSessionIssuersQueryError
@@ -178,8 +181,8 @@ export function useGlobalRemoteSessionIssuersInfinite(
  * List global remote_session_issuers. Requires platform admin.
  */
 export function useGlobalRemoteSessionIssuersInfiniteSuspense(
-  request?: operations.ListGlobalRemoteSessionIssuersRequest | undefined,
-  security?: operations.ListGlobalRemoteSessionIssuersSecurity | undefined,
+  request?: ListGlobalRemoteSessionIssuersRequest | undefined,
+  security?: ListGlobalRemoteSessionIssuersSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     GlobalRemoteSessionIssuersInfiniteQueryData,
     GlobalRemoteSessionIssuersQueryError

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  ListSessionsPayload,
+  ListSessionsPayload$Outbound,
+  ListSessionsPayload$outboundSchema,
+} from "../components/listsessionspayload.js";
 
 export type ListSessionsSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,7 +19,7 @@ export type ListSessionsRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  listSessionsPayload: components.ListSessionsPayload;
+  listSessionsPayload: ListSessionsPayload;
 };
 
 /** @internal */
@@ -49,7 +53,7 @@ export function listSessionsSecurityToJSON(
 /** @internal */
 export type ListSessionsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  ListSessionsPayload: components.ListSessionsPayload$Outbound;
+  ListSessionsPayload: ListSessionsPayload$Outbound;
 };
 
 /** @internal */
@@ -59,7 +63,7 @@ export const ListSessionsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    listSessionsPayload: components.ListSessionsPayload$outboundSchema,
+    listSessionsPayload: ListSessionsPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

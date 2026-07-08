@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListAssistantsRequest,
+  ListAssistantsSecurity,
+} from "../models/operations/listassistants.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type AssistantsListQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type AssistantsListQueryError =
  * List assistants for the current project.
  */
 export function useAssistantsList(
-  request?: operations.ListAssistantsRequest | undefined,
-  security?: operations.ListAssistantsSecurity | undefined,
+  request?: ListAssistantsRequest | undefined,
+  security?: ListAssistantsSecurity | undefined,
   options?: QueryHookOptions<AssistantsListQueryData, AssistantsListQueryError>,
 ): UseQueryResult<AssistantsListQueryData, AssistantsListQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useAssistantsList(
  * List assistants for the current project.
  */
 export function useAssistantsListSuspense(
-  request?: operations.ListAssistantsRequest | undefined,
-  security?: operations.ListAssistantsSecurity | undefined,
+  request?: ListAssistantsRequest | undefined,
+  security?: ListAssistantsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     AssistantsListQueryData,
     AssistantsListQueryError

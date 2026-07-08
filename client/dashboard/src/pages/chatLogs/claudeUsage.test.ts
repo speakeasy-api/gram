@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type {
-  ChatMessage,
-  ClaudeToolUsage,
-  ClaudeTurnUsage,
-} from "@gram/client/models/components";
+import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
+import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
+import type { ClaudeTurnUsage } from "@gram/client/models/components/claudeturnusage.js";
 import {
   buildClaudeToolUsageByToolUseId,
   buildClaudeUsageByMessageId,

@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { CaptureEventResult } from "../models/components/captureeventresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CaptureEventRequest,
+  CaptureEventSecurity,
+} from "../models/operations/captureevent.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type TelemetryCaptureEventMutationVariables = {
-  request: operations.CaptureEventRequest;
-  security?: operations.CaptureEventSecurity | undefined;
+  request: CaptureEventRequest;
+  security?: CaptureEventSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type TelemetryCaptureEventMutationData = components.CaptureEventResult;
+export type TelemetryCaptureEventMutationData = CaptureEventResult;
 
 export type TelemetryCaptureEventMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

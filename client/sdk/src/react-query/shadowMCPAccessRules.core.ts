@@ -11,17 +11,21 @@ import { GramCore } from "../core.js";
 import { accessListShadowMCPAccessRules } from "../funcs/accessListShadowMCPAccessRules.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListShadowMCPAccessRulesResult } from "../models/components/listshadowmcpaccessrulesresult.js";
+import {
+  AccessScope,
+  Disposition,
+  ListShadowMCPAccessRulesRequest,
+  ListShadowMCPAccessRulesSecurity,
+} from "../models/operations/listshadowmcpaccessrules.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ShadowMCPAccessRulesQueryData =
-  components.ListShadowMCPAccessRulesResult;
+export type ShadowMCPAccessRulesQueryData = ListShadowMCPAccessRulesResult;
 
 export function prefetchShadowMCPAccessRules(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListShadowMCPAccessRulesRequest | undefined,
-  security?: operations.ListShadowMCPAccessRulesSecurity | undefined,
+  request?: ListShadowMCPAccessRulesRequest | undefined,
+  security?: ListShadowMCPAccessRulesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +40,8 @@ export function prefetchShadowMCPAccessRules(
 
 export function buildShadowMCPAccessRulesQuery(
   client$: GramCore,
-  request?: operations.ListShadowMCPAccessRulesRequest | undefined,
-  security?: operations.ListShadowMCPAccessRulesSecurity | undefined,
+  request?: ListShadowMCPAccessRulesRequest | undefined,
+  security?: ListShadowMCPAccessRulesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -80,8 +84,8 @@ export function buildShadowMCPAccessRulesQuery(
 
 export function queryKeyShadowMCPAccessRules(
   parameters: {
-    disposition?: operations.Disposition | undefined;
-    accessScope?: operations.AccessScope | undefined;
+    disposition?: Disposition | undefined;
+    accessScope?: AccessScope | undefined;
     projectId?: string | undefined;
     limit?: number | undefined;
     cursor?: string | undefined;

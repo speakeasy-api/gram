@@ -136,14 +136,18 @@ type SessionSummary struct {
 
 // applySessionFilters restricts the session aggregation to chats matching the
 // requested dimension filters. project_id stays a row-level WHERE because it is
-// present on every row and prunes partitions. Every other dimension is matched
+// present on every row and prunes partitions. Identity dimensions are matched
 // per-chat via HAVING: a chat qualifies when ANY of its rows carries the
-// requested value. This is required because the attributes are stamped on
-// different physical rows within the same chat — user-directory attributes
-// (department_name, email, job_title, …) live on gateway-enriched rows, while
-// cost/hook_source/model live on the usage rows — so a row-level AND of those
-// filters would wrongly return nothing even when each filter matches data.
+// requested value. This is required because those attributes can be stamped on
+// different physical rows within the same chat.
+//
+// Claude attribution dimensions are different: the aggregate summary treats
+// query_source/skill/agent/MCP values as a single api_request-row tuple. Keep
+// those filters co-located inside one countIf so drilling from the aggregate
+// table finds chats that have a row matching the same tuple.
 func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFilter) (squirrel.SelectBuilder, error) {
+	var coLocatedPredicates []squirrel.Sqlizer
+
 	for _, f := range filters {
 		if len(f.Values) == 0 {
 			continue
@@ -156,6 +160,10 @@ func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFi
 		case attributeDimProject:
 			sb = sb.Where(squirrel.Eq{dim.column: f.Values})
 		case attributeDimScalar:
+			if dim.coLocateSessionFilters {
+				coLocatedPredicates = append(coLocatedPredicates, sessionScalarRowPredicate(dim.column, f.Values))
+				continue
+			}
 			sb = sb.Having(sessionScalarHaving(dim.column, f.Values))
 		case attributeDimArray:
 			inner, args, err := arrayDimFilter(dim.column, f.Values).ToSql()
@@ -167,7 +175,45 @@ func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFi
 			return sb, fmt.Errorf("unhandled dimension kind for filter %q", f.Dimension)
 		}
 	}
+	if len(coLocatedPredicates) > 0 {
+		inner, args, err := squirrel.And(coLocatedPredicates).ToSql()
+		if err != nil {
+			return sb, fmt.Errorf("building co-located session filters: %w", err)
+		}
+		sb = sb.Having(squirrel.Expr("countIf("+inner+") > 0", args...))
+	}
 	return sb, nil
+}
+
+// sessionScalarRowPredicate matches a single telemetry row against one scalar
+// dimension filter. Unlike sessionScalarHaving, a requested "" means "this row
+// has an empty value", not "the whole chat has no value anywhere".
+func sessionScalarRowPredicate(expr string, values []string) squirrel.Sqlizer {
+	hasEmpty := false
+	nonEmpty := make([]string, 0, len(values))
+	for _, v := range values {
+		if v == "" {
+			hasEmpty = true
+			continue
+		}
+		nonEmpty = append(nonEmpty, v)
+	}
+
+	emptyPred := squirrel.Expr(expr + " = ''")
+	if len(nonEmpty) == 0 {
+		return emptyPred
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(nonEmpty)), ",")
+	args := make([]any, len(nonEmpty))
+	for i, v := range nonEmpty {
+		args[i] = v
+	}
+	nonEmptyPred := squirrel.Expr(expr+" IN ("+placeholders+")", args...)
+	if !hasEmpty {
+		return nonEmptyPred
+	}
+	return squirrel.Or{nonEmptyPred, emptyPred}
 }
 
 // sessionScalarHaving matches a chat when any of its rows carries one of the

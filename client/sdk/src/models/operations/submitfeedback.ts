@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SubmitFeedbackRequestBody,
+  SubmitFeedbackRequestBody$Outbound,
+  SubmitFeedbackRequestBody$outboundSchema,
+} from "../components/submitfeedbackrequestbody.js";
 
 export type SubmitFeedbackSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -33,7 +37,7 @@ export type SubmitFeedbackRequest = {
    * Chat Sessions token header
    */
   gramChatSession?: string | undefined;
-  submitFeedbackRequestBody: components.SubmitFeedbackRequestBody;
+  submitFeedbackRequestBody: SubmitFeedbackRequestBody;
 };
 
 /** @internal */
@@ -140,7 +144,7 @@ export type SubmitFeedbackRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
-  SubmitFeedbackRequestBody: components.SubmitFeedbackRequestBody$Outbound;
+  SubmitFeedbackRequestBody: SubmitFeedbackRequestBody$Outbound;
 };
 
 /** @internal */
@@ -152,8 +156,7 @@ export const SubmitFeedbackRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
-    submitFeedbackRequestBody:
-      components.SubmitFeedbackRequestBody$outboundSchema,
+    submitFeedbackRequestBody: SubmitFeedbackRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

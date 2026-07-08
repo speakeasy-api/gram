@@ -3,11 +3,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
-import type { RemoteSessionIssuer } from "@gram/client/models/components";
-import {
-  invalidateAllOrganizationRemoteSessionIssuer,
-  useUpdateOrganizationRemoteSessionIssuerMutation,
-} from "@gram/client/react-query/index.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
+import { useUpdateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionIssuer.js";
 import { Alert, Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";

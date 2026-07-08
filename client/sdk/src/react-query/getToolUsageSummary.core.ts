@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { telemetryGetToolUsageSummary } from "../funcs/telemetryGetToolUsageSummary.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetToolUsageSummaryResult } from "../models/components/gettoolusagesummaryresult.js";
+import {
+  GetToolUsageSummaryRequest,
+  GetToolUsageSummarySecurity,
+} from "../models/operations/gettoolusagesummary.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetToolUsageSummaryQueryData = components.GetToolUsageSummaryResult;
+export type GetToolUsageSummaryQueryData = GetToolUsageSummaryResult;
 
 export function prefetchGetToolUsageSummary(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetToolUsageSummaryRequest,
-  security?: operations.GetToolUsageSummarySecurity | undefined,
+  request: GetToolUsageSummaryRequest,
+  security?: GetToolUsageSummarySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGetToolUsageSummary(
 
 export function buildGetToolUsageSummaryQuery(
   client$: GramCore,
-  request: operations.GetToolUsageSummaryRequest,
-  security?: operations.GetToolUsageSummarySecurity | undefined,
+  request: GetToolUsageSummaryRequest,
+  security?: GetToolUsageSummarySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

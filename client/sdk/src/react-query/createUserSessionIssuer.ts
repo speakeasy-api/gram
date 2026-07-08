@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { userSessionIssuersCreate } from "../funcs/userSessionIssuersCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { UserSessionIssuer } from "../models/components/usersessionissuer.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CreateUserSessionIssuerRequest,
+  CreateUserSessionIssuerSecurity,
+} from "../models/operations/createusersessionissuer.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateUserSessionIssuerMutationVariables = {
-  request: operations.CreateUserSessionIssuerRequest;
-  security?: operations.CreateUserSessionIssuerSecurity | undefined;
+  request: CreateUserSessionIssuerRequest;
+  security?: CreateUserSessionIssuerSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type CreateUserSessionIssuerMutationData = components.UserSessionIssuer;
+export type CreateUserSessionIssuerMutationData = UserSessionIssuer;
 
 export type CreateUserSessionIssuerMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

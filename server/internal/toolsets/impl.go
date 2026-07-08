@@ -262,7 +262,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 // an initial publish for it, but only after their own transaction commits,
 // since this runs pre-commit and the DB writes could still roll back.
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
-	attached, err := plugins.AttachToDefaultPlugin(ctx, dbtx, plugins.AttachToDefaultPluginParams{
+	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
@@ -272,46 +272,8 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, s.logger)
 	}
-	if attached == nil {
-		return false, nil
-	}
 
-	if attached.PluginCreated {
-		if err := s.audit.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ProjectID:        *authCtx.ProjectID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			PluginID:         attached.PluginID,
-			PluginName:       attached.PluginName,
-			PluginSlug:       attached.PluginSlug,
-		}); err != nil {
-			return false, oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
-		}
-	}
-
-	toolsetURN := urn.NewToolset(toolsetID)
-	if err := s.audit.LogPluginServerAdd(ctx, dbtx, audit.LogPluginServerAddEvent{
-		OrganizationID:    authCtx.ActiveOrganizationID,
-		ProjectID:         *authCtx.ProjectID,
-		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:  authCtx.Email,
-		ActorSlug:         nil,
-		PluginID:          attached.PluginID,
-		PluginName:        attached.PluginName,
-		PluginSlug:        attached.PluginSlug,
-		ServerID:          attached.Server.ID,
-		ServerDisplayName: attached.Server.DisplayName,
-		ServerPolicy:      attached.Server.Policy,
-		ServerSortOrder:   attached.Server.SortOrder,
-		ToolsetURN:        &toolsetURN,
-		McpServerURN:      nil,
-	}); err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "audit log default plugin server add").LogError(ctx, s.logger)
-	}
-
-	return attached.PluginCreated, nil
+	return pluginCreated, nil
 }
 
 // triggerInitialPublishIfNeeded enqueues the first-time GitHub marketplace

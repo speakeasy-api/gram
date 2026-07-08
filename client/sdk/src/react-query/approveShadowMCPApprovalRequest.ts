@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { accessApproveShadowMCPApprovalRequest } from "../funcs/accessApproveShadowMCPApprovalRequest.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { ShadowMCPApprovalDecisionResult } from "../models/components/shadowmcpapprovaldecisionresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,25 +20,28 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ApproveShadowMCPApprovalRequestRequest,
+  ApproveShadowMCPApprovalRequestSecurity,
+} from "../models/operations/approveshadowmcpapprovalrequest.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type ApproveShadowMCPApprovalRequestMutationVariables = {
-  request: operations.ApproveShadowMCPApprovalRequestRequest;
-  security?: operations.ApproveShadowMCPApprovalRequestSecurity | undefined;
+  request: ApproveShadowMCPApprovalRequestRequest;
+  security?: ApproveShadowMCPApprovalRequestSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type ApproveShadowMCPApprovalRequestMutationData =
-  components.ShadowMCPApprovalDecisionResult;
+  ShadowMCPApprovalDecisionResult;
 
 export type ApproveShadowMCPApprovalRequestMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

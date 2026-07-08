@@ -10,8 +10,37 @@ import { riskPoliciesStatus } from "../funcs/riskPoliciesStatus.js";
 import { riskPoliciesTrigger } from "../funcs/riskPoliciesTrigger.js";
 import { riskPoliciesUpdate } from "../funcs/riskPoliciesUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListRiskPoliciesResult } from "../models/components/listriskpoliciesresult.js";
+import { RiskPolicy } from "../models/components/riskpolicy.js";
+import { RiskPolicyStatus } from "../models/components/riskpolicystatus.js";
+import {
+  CreateRiskPolicyRequest,
+  CreateRiskPolicySecurity,
+} from "../models/operations/createriskpolicy.js";
+import {
+  DeleteRiskPolicyRequest,
+  DeleteRiskPolicySecurity,
+} from "../models/operations/deleteriskpolicy.js";
+import {
+  GetRiskPolicyRequest,
+  GetRiskPolicySecurity,
+} from "../models/operations/getriskpolicy.js";
+import {
+  GetRiskPolicyStatusRequest,
+  GetRiskPolicyStatusSecurity,
+} from "../models/operations/getriskpolicystatus.js";
+import {
+  ListRiskPoliciesRequest,
+  ListRiskPoliciesSecurity,
+} from "../models/operations/listriskpolicies.js";
+import {
+  TriggerRiskAnalysisRequest,
+  TriggerRiskAnalysisSecurity,
+} from "../models/operations/triggerriskanalysis.js";
+import {
+  UpdateRiskPolicyRequest,
+  UpdateRiskPolicySecurity,
+} from "../models/operations/updateriskpolicy.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Policies extends ClientSDK {
@@ -22,10 +51,10 @@ export class Policies extends ClientSDK {
    * Create a new risk analysis policy for the current project.
    */
   async create(
-    request: operations.CreateRiskPolicyRequest,
-    security?: operations.CreateRiskPolicySecurity | undefined,
+    request: CreateRiskPolicyRequest,
+    security?: CreateRiskPolicySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskPolicy> {
+  ): Promise<RiskPolicy> {
     return unwrapAsync(riskPoliciesCreate(
       this,
       request,
@@ -41,8 +70,8 @@ export class Policies extends ClientSDK {
    * Delete a risk analysis policy.
    */
   async delete(
-    request: operations.DeleteRiskPolicyRequest,
-    security?: operations.DeleteRiskPolicySecurity | undefined,
+    request: DeleteRiskPolicyRequest,
+    security?: DeleteRiskPolicySecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(riskPoliciesDelete(
@@ -60,10 +89,10 @@ export class Policies extends ClientSDK {
    * Get a risk analysis policy by ID.
    */
   async get(
-    request: operations.GetRiskPolicyRequest,
-    security?: operations.GetRiskPolicySecurity | undefined,
+    request: GetRiskPolicyRequest,
+    security?: GetRiskPolicySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskPolicy> {
+  ): Promise<RiskPolicy> {
     return unwrapAsync(riskPoliciesGet(
       this,
       request,
@@ -79,10 +108,10 @@ export class Policies extends ClientSDK {
    * Get the analysis status of a risk policy including progress and workflow state.
    */
   async status(
-    request: operations.GetRiskPolicyStatusRequest,
-    security?: operations.GetRiskPolicyStatusSecurity | undefined,
+    request: GetRiskPolicyStatusRequest,
+    security?: GetRiskPolicyStatusSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskPolicyStatus> {
+  ): Promise<RiskPolicyStatus> {
     return unwrapAsync(riskPoliciesStatus(
       this,
       request,
@@ -98,10 +127,10 @@ export class Policies extends ClientSDK {
    * List all risk analysis policies for the current project.
    */
   async list(
-    request?: operations.ListRiskPoliciesRequest | undefined,
-    security?: operations.ListRiskPoliciesSecurity | undefined,
+    request?: ListRiskPoliciesRequest | undefined,
+    security?: ListRiskPoliciesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListRiskPoliciesResult> {
+  ): Promise<ListRiskPoliciesResult> {
     return unwrapAsync(riskPoliciesList(
       this,
       request,
@@ -117,8 +146,8 @@ export class Policies extends ClientSDK {
    * Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to the most recent 100 unanalyzed messages; pass `limit=0` to backfill every unanalyzed message.
    */
   async trigger(
-    request: operations.TriggerRiskAnalysisRequest,
-    security?: operations.TriggerRiskAnalysisSecurity | undefined,
+    request: TriggerRiskAnalysisRequest,
+    security?: TriggerRiskAnalysisSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(riskPoliciesTrigger(
@@ -136,10 +165,10 @@ export class Policies extends ClientSDK {
    * Update a risk analysis policy.
    */
   async update(
-    request: operations.UpdateRiskPolicyRequest,
-    security?: operations.UpdateRiskPolicySecurity | undefined,
+    request: UpdateRiskPolicyRequest,
+    security?: UpdateRiskPolicySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskPolicy> {
+  ): Promise<RiskPolicy> {
     return unwrapAsync(riskPoliciesUpdate(
       this,
       request,

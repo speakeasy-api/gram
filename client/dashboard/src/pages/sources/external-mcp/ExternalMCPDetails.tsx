@@ -8,11 +8,9 @@ import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { attachmentToURNPrefix } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import {
-  useLatestDeployment,
-  useListToolsets,
-} from "@gram/client/react-query/index.js";
-import { ToolsetEntry } from "@gram/client/models/components";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { RequireScope } from "@/components/require-scope";
 import { Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { ChevronRight, Globe, Lock, Power, Server, Trash2 } from "lucide-react";

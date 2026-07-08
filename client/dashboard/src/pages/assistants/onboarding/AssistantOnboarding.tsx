@@ -10,7 +10,7 @@ import {
   useThreadId,
   type MCPServerEntry,
 } from "@gram-ai/elements";
-import { useListToolsets } from "@gram/client/react-query";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Loader2 } from "lucide-react";

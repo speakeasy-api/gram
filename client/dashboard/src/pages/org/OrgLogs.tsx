@@ -3,14 +3,14 @@ import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
-import { FeatureName } from "@gram/client/models/components";
+import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Eye, FileText, Monitor, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
-import { useProductFeatures } from "@gram/client/react-query";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
 export default function OrgLogs(): JSX.Element {
   return (

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateUserSessionIssuerForm,
+  CreateUserSessionIssuerForm$Outbound,
+  CreateUserSessionIssuerForm$outboundSchema,
+} from "../components/createusersessionissuerform.js";
 
 export type CreateUserSessionIssuerSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type CreateUserSessionIssuerRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  createUserSessionIssuerForm: components.CreateUserSessionIssuerForm;
+  createUserSessionIssuerForm: CreateUserSessionIssuerForm;
 };
 
 /** @internal */
@@ -149,7 +153,7 @@ export type CreateUserSessionIssuerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  CreateUserSessionIssuerForm: components.CreateUserSessionIssuerForm$Outbound;
+  CreateUserSessionIssuerForm: CreateUserSessionIssuerForm$Outbound;
 };
 
 /** @internal */
@@ -161,8 +165,7 @@ export const CreateUserSessionIssuerRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    createUserSessionIssuerForm:
-      components.CreateUserSessionIssuerForm$outboundSchema,
+    createUserSessionIssuerForm: CreateUserSessionIssuerForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

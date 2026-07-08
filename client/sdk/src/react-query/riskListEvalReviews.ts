@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListRiskEvalReviewsRequest,
+  ListRiskEvalReviewsSecurity,
+} from "../models/operations/listriskevalreviews.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskListEvalReviewsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskListEvalReviewsQueryError =
  * List the active regression set for a prompt-based policy: every reviewer's current ground-truth verdicts.
  */
 export function useRiskListEvalReviews(
-  request: operations.ListRiskEvalReviewsRequest,
-  security?: operations.ListRiskEvalReviewsSecurity | undefined,
+  request: ListRiskEvalReviewsRequest,
+  security?: ListRiskEvalReviewsSecurity | undefined,
   options?: QueryHookOptions<
     RiskListEvalReviewsQueryData,
     RiskListEvalReviewsQueryError
@@ -85,8 +88,8 @@ export function useRiskListEvalReviews(
  * List the active regression set for a prompt-based policy: every reviewer's current ground-truth verdicts.
  */
 export function useRiskListEvalReviewsSuspense(
-  request: operations.ListRiskEvalReviewsRequest,
-  security?: operations.ListRiskEvalReviewsSecurity | undefined,
+  request: ListRiskEvalReviewsRequest,
+  security?: ListRiskEvalReviewsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskListEvalReviewsQueryData,
     RiskListEvalReviewsQueryError

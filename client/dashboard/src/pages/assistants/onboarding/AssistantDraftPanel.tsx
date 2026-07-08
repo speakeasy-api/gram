@@ -12,11 +12,9 @@ import {
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
-import {
-  invalidateAllAssistantsList,
-  useAssistantsDeleteMutation,
-  useTriggers,
-} from "@gram/client/react-query/index.js";
+import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
+import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
+import { useTriggers } from "@gram/client/react-query/triggers.js";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";

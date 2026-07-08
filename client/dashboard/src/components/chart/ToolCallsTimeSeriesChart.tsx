@@ -5,7 +5,7 @@ import {
   unixNanoToDate,
 } from "@/components/chart/chartUtils";
 import { formatCompact } from "@/lib/format";
-import type { TimeSeriesBucket } from "@gram/client/models/components";
+import type { TimeSeriesBucket } from "@gram/client/models/components/timeseriesbucket.js";
 import {
   BarElement,
   CategoryScale,

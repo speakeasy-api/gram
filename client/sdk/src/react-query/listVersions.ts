@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListVersionsRequest,
+  ListVersionsSecurity,
+} from "../models/operations/listversions.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListVersionsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListVersionsQueryError =
  * List published versions of a package.
  */
 export function useListVersions(
-  request: operations.ListVersionsRequest,
-  security?: operations.ListVersionsSecurity | undefined,
+  request: ListVersionsRequest,
+  security?: ListVersionsSecurity | undefined,
   options?: QueryHookOptions<ListVersionsQueryData, ListVersionsQueryError>,
 ): UseQueryResult<ListVersionsQueryData, ListVersionsQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useListVersions(
  * List published versions of a package.
  */
 export function useListVersionsSuspense(
-  request: operations.ListVersionsRequest,
-  security?: operations.ListVersionsSecurity | undefined,
+  request: ListVersionsRequest,
+  security?: ListVersionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListVersionsQueryData,
     ListVersionsQueryError

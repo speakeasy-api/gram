@@ -7,7 +7,7 @@ import { FullWidthUpload } from "@/components/upload";
 import { Spinner } from "@/components/ui/spinner";
 import { useMutation } from "@tanstack/react-query";
 import { useSdkClient } from "@/contexts/Sdk";
-import { UploadOpenAPIv3Result } from "@gram/client/models/components";
+import { UploadOpenAPIv3Result } from "@gram/client/models/components/uploadopenapiv3result.js";
 import { CodeBlock } from "@/components/code";
 
 interface OpenApiSourceInputProps {

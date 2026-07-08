@@ -1,6 +1,6 @@
 import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
 import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
-import type { TypesToInclude } from "@gram/client/models/components";
+import type { TypesToInclude } from "@gram/client/models/components/gethookssummarypayload.js";
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import type { FilterChip } from "@/components/observe/ObserveFilterBar";
@@ -16,7 +16,7 @@ import { DEFAULT_HOOK_TYPES, VALID_HOOK_TYPES } from "./observeFilterConstants";
 import type { ObserveTypeFilterValue } from "@/components/observe/ObserveFilterBar";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { useGramContext } from "@gram/client/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
 

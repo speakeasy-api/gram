@@ -24,10 +24,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListRemoteSessionIssuersRequest,
+  ListRemoteSessionIssuersSecurity,
+} from "../models/operations/listremotesessionissuers.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -60,7 +63,7 @@ export {
 };
 
 export type RemoteSessionIssuersQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -77,8 +80,8 @@ export type RemoteSessionIssuersQueryError =
  * List remote_session_issuers in the caller's project.
  */
 export function useRemoteSessionIssuers(
-  request?: operations.ListRemoteSessionIssuersRequest | undefined,
-  security?: operations.ListRemoteSessionIssuersSecurity | undefined,
+  request?: ListRemoteSessionIssuersRequest | undefined,
+  security?: ListRemoteSessionIssuersSecurity | undefined,
   options?: QueryHookOptions<
     RemoteSessionIssuersQueryData,
     RemoteSessionIssuersQueryError
@@ -106,8 +109,8 @@ export function useRemoteSessionIssuers(
  * List remote_session_issuers in the caller's project.
  */
 export function useRemoteSessionIssuersSuspense(
-  request?: operations.ListRemoteSessionIssuersRequest | undefined,
-  security?: operations.ListRemoteSessionIssuersSecurity | undefined,
+  request?: ListRemoteSessionIssuersRequest | undefined,
+  security?: ListRemoteSessionIssuersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RemoteSessionIssuersQueryData,
     RemoteSessionIssuersQueryError
@@ -135,8 +138,8 @@ export function useRemoteSessionIssuersSuspense(
  * List remote_session_issuers in the caller's project.
  */
 export function useRemoteSessionIssuersInfinite(
-  request?: operations.ListRemoteSessionIssuersRequest | undefined,
-  security?: operations.ListRemoteSessionIssuersSecurity | undefined,
+  request?: ListRemoteSessionIssuersRequest | undefined,
+  security?: ListRemoteSessionIssuersSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     RemoteSessionIssuersInfiniteQueryData,
     RemoteSessionIssuersQueryError
@@ -178,8 +181,8 @@ export function useRemoteSessionIssuersInfinite(
  * List remote_session_issuers in the caller's project.
  */
 export function useRemoteSessionIssuersInfiniteSuspense(
-  request?: operations.ListRemoteSessionIssuersRequest | undefined,
-  security?: operations.ListRemoteSessionIssuersSecurity | undefined,
+  request?: ListRemoteSessionIssuersRequest | undefined,
+  security?: ListRemoteSessionIssuersSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     RemoteSessionIssuersInfiniteQueryData,
     RemoteSessionIssuersQueryError

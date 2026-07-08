@@ -8,14 +8,14 @@ import { useRoutes } from "@/routes";
 import type {
   McpServer,
   McpServerVisibility,
-} from "@gram/client/models/components";
+} from "@gram/client/models/components/mcpserver.js";
 import {
   invalidateAllGetMcpServer,
-  invalidateAllMcpServers,
   useGetMcpServer,
-  useMcpEndpoints,
-  useUpdateMcpServerMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/getMcpServer.js";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import {
   DropdownMenu,
   DropdownMenuContent,

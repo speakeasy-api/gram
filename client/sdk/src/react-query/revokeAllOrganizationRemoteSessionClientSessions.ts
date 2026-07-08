@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { organizationRemoteSessionIssuersRevokeAllClientSessions } from "../funcs/organizationRemoteSessionIssuersRevokeAllClientSessions.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { RevokeAllRemoteSessionsResult } from "../models/components/revokeallremotesessionsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,28 +20,31 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  RevokeAllOrganizationRemoteSessionClientSessionsRequest,
+  RevokeAllOrganizationRemoteSessionClientSessionsSecurity,
+} from "../models/operations/revokeallorganizationremotesessionclientsessions.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RevokeAllOrganizationRemoteSessionClientSessionsMutationVariables =
   {
-    request: operations.RevokeAllOrganizationRemoteSessionClientSessionsRequest;
+    request: RevokeAllOrganizationRemoteSessionClientSessionsRequest;
     security?:
-      | operations.RevokeAllOrganizationRemoteSessionClientSessionsSecurity
+      | RevokeAllOrganizationRemoteSessionClientSessionsSecurity
       | undefined;
     options?: RequestOptions;
   };
 
 export type RevokeAllOrganizationRemoteSessionClientSessionsMutationData =
-  components.RevokeAllRemoteSessionsResult;
+  RevokeAllRemoteSessionsResult;
 
 export type RevokeAllOrganizationRemoteSessionClientSessionsMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

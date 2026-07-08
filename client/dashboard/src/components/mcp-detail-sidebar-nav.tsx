@@ -19,10 +19,8 @@ import {
   mcpDetailTabHref,
 } from "@/pages/mcp/MCPDetailsRouting";
 import { useRoutes } from "@/routes";
-import {
-  useGetMcpMetadata,
-  useListEnvironments,
-} from "@gram/client/react-query";
+import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
+import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import {
   AlertTriangle,
   ArrowRight,

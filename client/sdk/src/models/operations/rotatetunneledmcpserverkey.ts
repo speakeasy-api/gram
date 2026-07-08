@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  RotateTunneledMcpServerKeyForm,
+  RotateTunneledMcpServerKeyForm$Outbound,
+  RotateTunneledMcpServerKeyForm$outboundSchema,
+} from "../components/rotatetunneledmcpserverkeyform.js";
 
 export type RotateTunneledMcpServerKeySecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type RotateTunneledMcpServerKeyRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  rotateTunneledMcpServerKeyForm: components.RotateTunneledMcpServerKeyForm;
+  rotateTunneledMcpServerKeyForm: RotateTunneledMcpServerKeyForm;
 };
 
 /** @internal */
@@ -149,8 +153,7 @@ export type RotateTunneledMcpServerKeyRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  RotateTunneledMcpServerKeyForm:
-    components.RotateTunneledMcpServerKeyForm$Outbound;
+  RotateTunneledMcpServerKeyForm: RotateTunneledMcpServerKeyForm$Outbound;
 };
 
 /** @internal */
@@ -163,7 +166,7 @@ export const RotateTunneledMcpServerKeyRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     rotateTunneledMcpServerKeyForm:
-      components.RotateTunneledMcpServerKeyForm$outboundSchema,
+      RotateTunneledMcpServerKeyForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

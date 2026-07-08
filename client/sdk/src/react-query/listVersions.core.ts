@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { packagesListVersions } from "../funcs/packagesListVersions.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListVersionsResult } from "../models/components/listversionsresult.js";
+import {
+  ListVersionsRequest,
+  ListVersionsSecurity,
+} from "../models/operations/listversions.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListVersionsQueryData = components.ListVersionsResult;
+export type ListVersionsQueryData = ListVersionsResult;
 
 export function prefetchListVersions(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListVersionsRequest,
-  security?: operations.ListVersionsSecurity | undefined,
+  request: ListVersionsRequest,
+  security?: ListVersionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListVersions(
 
 export function buildListVersionsQuery(
   client$: GramCore,
-  request: operations.ListVersionsRequest,
-  security?: operations.ListVersionsSecurity | undefined,
+  request: ListVersionsRequest,
+  security?: ListVersionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

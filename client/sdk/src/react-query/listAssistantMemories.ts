@@ -24,10 +24,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListAssistantMemoriesRequest,
+  ListAssistantMemoriesSecurity,
+} from "../models/operations/listassistantmemories.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -60,7 +63,7 @@ export {
 };
 
 export type ListAssistantMemoriesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -77,8 +80,8 @@ export type ListAssistantMemoriesQueryError =
  * List assistant memories for an assistant.
  */
 export function useListAssistantMemories(
-  request: operations.ListAssistantMemoriesRequest,
-  security?: operations.ListAssistantMemoriesSecurity | undefined,
+  request: ListAssistantMemoriesRequest,
+  security?: ListAssistantMemoriesSecurity | undefined,
   options?: QueryHookOptions<
     ListAssistantMemoriesQueryData,
     ListAssistantMemoriesQueryError
@@ -106,8 +109,8 @@ export function useListAssistantMemories(
  * List assistant memories for an assistant.
  */
 export function useListAssistantMemoriesSuspense(
-  request: operations.ListAssistantMemoriesRequest,
-  security?: operations.ListAssistantMemoriesSecurity | undefined,
+  request: ListAssistantMemoriesRequest,
+  security?: ListAssistantMemoriesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListAssistantMemoriesQueryData,
     ListAssistantMemoriesQueryError
@@ -135,8 +138,8 @@ export function useListAssistantMemoriesSuspense(
  * List assistant memories for an assistant.
  */
 export function useListAssistantMemoriesInfinite(
-  request: operations.ListAssistantMemoriesRequest,
-  security?: operations.ListAssistantMemoriesSecurity | undefined,
+  request: ListAssistantMemoriesRequest,
+  security?: ListAssistantMemoriesSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     ListAssistantMemoriesInfiniteQueryData,
     ListAssistantMemoriesQueryError
@@ -178,8 +181,8 @@ export function useListAssistantMemoriesInfinite(
  * List assistant memories for an assistant.
  */
 export function useListAssistantMemoriesInfiniteSuspense(
-  request: operations.ListAssistantMemoriesRequest,
-  security?: operations.ListAssistantMemoriesSecurity | undefined,
+  request: ListAssistantMemoriesRequest,
+  security?: ListAssistantMemoriesSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     ListAssistantMemoriesInfiniteQueryData,
     ListAssistantMemoriesQueryError

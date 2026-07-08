@@ -4,7 +4,7 @@ import { Button } from "@speakeasy-api/moonshine";
 import { Label } from "@/components/ui/label";
 import { MUSTACHE_VAR_REGEX, PROMPT_NAME_PATTERN } from "@/lib/constants";
 import { assert, cn } from "@/lib/utils";
-import { PromptTemplate } from "@gram/client/models/components";
+import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
 import { MutationStatus } from "@tanstack/react-query";
 import { Fullscreen, Loader2, X } from "lucide-react";
 import { useCallback, useState } from "react";

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SetMcpMetadataRequestBody,
+  SetMcpMetadataRequestBody$Outbound,
+  SetMcpMetadataRequestBody$outboundSchema,
+} from "../components/setmcpmetadatarequestbody.js";
 
 export type SetMcpMetadataSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type SetMcpMetadataRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  setMcpMetadataRequestBody: components.SetMcpMetadataRequestBody;
+  setMcpMetadataRequestBody: SetMcpMetadataRequestBody;
 };
 
 /** @internal */
@@ -143,7 +147,7 @@ export type SetMcpMetadataRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  SetMcpMetadataRequestBody: components.SetMcpMetadataRequestBody$Outbound;
+  SetMcpMetadataRequestBody: SetMcpMetadataRequestBody$Outbound;
 };
 
 /** @internal */
@@ -155,8 +159,7 @@ export const SetMcpMetadataRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    setMcpMetadataRequestBody:
-      components.SetMcpMetadataRequestBody$outboundSchema,
+    setMcpMetadataRequestBody: SetMcpMetadataRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

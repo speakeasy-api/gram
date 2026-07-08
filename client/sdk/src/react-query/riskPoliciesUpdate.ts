@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { riskPoliciesUpdate } from "../funcs/riskPoliciesUpdate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { RiskPolicy } from "../models/components/riskpolicy.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  UpdateRiskPolicyRequest,
+  UpdateRiskPolicySecurity,
+} from "../models/operations/updateriskpolicy.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RiskPoliciesUpdateMutationVariables = {
-  request: operations.UpdateRiskPolicyRequest;
-  security?: operations.UpdateRiskPolicySecurity | undefined;
+  request: UpdateRiskPolicyRequest;
+  security?: UpdateRiskPolicySecurity | undefined;
   options?: RequestOptions;
 };
 
-export type RiskPoliciesUpdateMutationData = components.RiskPolicy;
+export type RiskPoliciesUpdateMutationData = RiskPolicy;
 
 export type RiskPoliciesUpdateMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

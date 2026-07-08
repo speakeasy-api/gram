@@ -5,12 +5,12 @@ import { Type } from "@/components/ui/type";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
-import type { OrganizationMcpServer } from "@gram/client/models/components";
+import type { OrganizationMcpServer } from "@gram/client/models/components/organizationmcpserver.js";
 import {
   invalidateAllOrganizationRemoteSessionClientMcpServers,
   useOrganizationRemoteSessionClientMcpServers,
-  useRemoveOrganizationRemoteSessionClientFromMcpServerMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/organizationRemoteSessionClientMcpServers.js";
+import { useRemoveOrganizationRemoteSessionClientFromMcpServerMutation } from "@gram/client/react-query/removeOrganizationRemoteSessionClientFromMcpServer.js";
 import {
   Button,
   DropdownMenu,

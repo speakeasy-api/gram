@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateEnvironmentForm,
+  CreateEnvironmentForm$Outbound,
+  CreateEnvironmentForm$outboundSchema,
+} from "../components/createenvironmentform.js";
 
 export type CreateEnvironmentSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -20,7 +24,7 @@ export type CreateEnvironmentRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  createEnvironmentForm: components.CreateEnvironmentForm;
+  createEnvironmentForm: CreateEnvironmentForm;
 };
 
 /** @internal */
@@ -58,7 +62,7 @@ export function createEnvironmentSecurityToJSON(
 export type CreateEnvironmentRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  CreateEnvironmentForm: components.CreateEnvironmentForm$Outbound;
+  CreateEnvironmentForm: CreateEnvironmentForm$Outbound;
 };
 
 /** @internal */
@@ -69,7 +73,7 @@ export const CreateEnvironmentRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    createEnvironmentForm: components.CreateEnvironmentForm$outboundSchema,
+    createEnvironmentForm: CreateEnvironmentForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

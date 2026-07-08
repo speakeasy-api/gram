@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateToolsetRequestBody,
+  CreateToolsetRequestBody$Outbound,
+  CreateToolsetRequestBody$outboundSchema,
+} from "../components/createtoolsetrequestbody.js";
 
 export type CreateToolsetSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type CreateToolsetRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  createToolsetRequestBody: components.CreateToolsetRequestBody;
+  createToolsetRequestBody: CreateToolsetRequestBody;
 };
 
 /** @internal */
@@ -143,7 +147,7 @@ export type CreateToolsetRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  CreateToolsetRequestBody: components.CreateToolsetRequestBody$Outbound;
+  CreateToolsetRequestBody: CreateToolsetRequestBody$Outbound;
 };
 
 /** @internal */
@@ -155,8 +159,7 @@ export const CreateToolsetRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    createToolsetRequestBody:
-      components.CreateToolsetRequestBody$outboundSchema,
+    createToolsetRequestBody: CreateToolsetRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

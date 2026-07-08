@@ -13,16 +13,20 @@ import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
 import { remoteLoginCallbackURL } from "@/lib/externalMcpUserSessions";
 import { Toolset } from "@/lib/toolTypes";
-import type { RemoteSessionIssuer } from "@gram/client/models/components";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import {
   invalidateAllRemoteSessionClients,
-  invalidateAllRemoteSessionIssuers,
-  invalidateAllToolset,
-  invalidateAllUserSessionIssuers,
   useRemoteSessionClients,
+} from "@gram/client/react-query/remoteSessionClients.js";
+import {
+  invalidateAllRemoteSessionIssuers,
   useRemoteSessionIssuers,
+} from "@gram/client/react-query/remoteSessionIssuers.js";
+import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
+import {
+  invalidateAllUserSessionIssuers,
   useUserSessionIssuers,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/userSessionIssuers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";

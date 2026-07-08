@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListAuditLogFacetsRequest,
+  ListAuditLogFacetsSecurity,
+} from "../models/operations/listauditlogfacets.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type AuditLogFacetsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type AuditLogFacetsQueryError =
  * List available audit log facet values across organization and projects.
  */
 export function useAuditLogFacets(
-  request?: operations.ListAuditLogFacetsRequest | undefined,
-  security?: operations.ListAuditLogFacetsSecurity | undefined,
+  request?: ListAuditLogFacetsRequest | undefined,
+  security?: ListAuditLogFacetsSecurity | undefined,
   options?: QueryHookOptions<AuditLogFacetsQueryData, AuditLogFacetsQueryError>,
 ): UseQueryResult<AuditLogFacetsQueryData, AuditLogFacetsQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useAuditLogFacets(
  * List available audit log facet values across organization and projects.
  */
 export function useAuditLogFacetsSuspense(
-  request?: operations.ListAuditLogFacetsRequest | undefined,
-  security?: operations.ListAuditLogFacetsSecurity | undefined,
+  request?: ListAuditLogFacetsRequest | undefined,
+  security?: ListAuditLogFacetsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     AuditLogFacetsQueryData,
     AuditLogFacetsQueryError

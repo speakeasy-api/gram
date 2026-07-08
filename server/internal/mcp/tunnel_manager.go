@@ -44,6 +44,7 @@ func (m *tunnelManager) buildProxy(
 	endpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
 	upstreamAuth string,
+	wwwAuthenticate string,
 ) (*proxy.Proxy, error) {
 	if m == nil || m.proxyManager == nil {
 		return nil, oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
@@ -81,6 +82,7 @@ func (m *tunnelManager) buildProxy(
 		mcpServer.Visibility,
 		endpoint.ProjectID.String(),
 		upstreamAuth,
+		wwwAuthenticate,
 	)
 	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
 	if len(m.gatewayCIDRs) > 0 {

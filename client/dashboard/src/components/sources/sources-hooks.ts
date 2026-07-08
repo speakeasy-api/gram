@@ -5,7 +5,7 @@ import {
   extractAuthType,
   isPulseMcpServer,
 } from "@/pages/catalog/hooks/serverMetadata";
-import { useLatestDeployment } from "@gram/client/react-query/index.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useMemo } from "react";
 
 export const useCatalogIconMap = (): Map<string, string> => {

@@ -5,8 +5,8 @@ import { Type } from "@/components/ui/type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
-import { ToolsetEntry } from "@gram/client/models/components";
-import { useLatestDeployment } from "@gram/client/react-query";
+import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { AlertTriangleIcon, Link2, Network, Package } from "lucide-react";
 import { useMemo } from "react";
 import {

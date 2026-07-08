@@ -4,10 +4,8 @@ import type {
 } from "@/components/observe/ObserveFilterBar";
 import type { MultiSelectGroup } from "@/components/ui/multi-select";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
-import type {
-  ToolUsageHostedServerFilterOption,
-  ToolUsageShadowServerFilterOption,
-} from "@gram/client/models/components";
+import type { ToolUsageHostedServerFilterOption } from "@gram/client/models/components/toolusagehostedserverfilteroption.js";
+import type { ToolUsageShadowServerFilterOption } from "@gram/client/models/components/toolusageshadowserverfilteroption.js";
 import type { TargetTypes } from "@gram/client/models/components/gettoolusagesummarypayload";
 import { normalizeUserEmailFilter } from "./observeUserFilters";
 

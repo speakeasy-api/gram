@@ -3,13 +3,11 @@ import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
-import {
-  useCreatePortalSessionMutation,
-  useDisableWebhooksMutation,
-  useEnableWebhooksMutation,
-  useOrganization,
-  useProductFeatures,
-} from "@gram/client/react-query";
+import { useCreatePortalSessionMutation } from "@gram/client/react-query/createPortalSession.js";
+import { useDisableWebhooksMutation } from "@gram/client/react-query/disableWebhooks.js";
+import { useEnableWebhooksMutation } from "@gram/client/react-query/enableWebhooks.js";
+import { useOrganization } from "@gram/client/react-query/organization.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import {
   Button as MoonshineButton,
   Stack,

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SendMessageRequestBody,
+  SendMessageRequestBody$Outbound,
+  SendMessageRequestBody$outboundSchema,
+} from "../components/sendmessagerequestbody.js";
 
 export type SendAssistantMessageSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -20,7 +24,7 @@ export type SendAssistantMessageRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  sendMessageRequestBody: components.SendMessageRequestBody;
+  sendMessageRequestBody: SendMessageRequestBody;
 };
 
 /** @internal */
@@ -60,7 +64,7 @@ export function sendAssistantMessageSecurityToJSON(
 export type SendAssistantMessageRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  SendMessageRequestBody: components.SendMessageRequestBody$Outbound;
+  SendMessageRequestBody: SendMessageRequestBody$Outbound;
 };
 
 /** @internal */
@@ -71,7 +75,7 @@ export const SendAssistantMessageRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    sendMessageRequestBody: components.SendMessageRequestBody$outboundSchema,
+    sendMessageRequestBody: SendMessageRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

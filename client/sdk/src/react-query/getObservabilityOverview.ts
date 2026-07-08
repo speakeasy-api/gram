@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetObservabilityOverviewRequest,
+  GetObservabilityOverviewSecurity,
+} from "../models/operations/getobservabilityoverview.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetObservabilityOverviewQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetObservabilityOverviewQueryError =
  * Get observability overview metrics including time series, tool breakdowns, and summary stats
  */
 export function useGetObservabilityOverview(
-  request: operations.GetObservabilityOverviewRequest,
-  security?: operations.GetObservabilityOverviewSecurity | undefined,
+  request: GetObservabilityOverviewRequest,
+  security?: GetObservabilityOverviewSecurity | undefined,
   options?: QueryHookOptions<
     GetObservabilityOverviewQueryData,
     GetObservabilityOverviewQueryError
@@ -88,8 +91,8 @@ export function useGetObservabilityOverview(
  * Get observability overview metrics including time series, tool breakdowns, and summary stats
  */
 export function useGetObservabilityOverviewSuspense(
-  request: operations.GetObservabilityOverviewRequest,
-  security?: operations.GetObservabilityOverviewSecurity | undefined,
+  request: GetObservabilityOverviewRequest,
+  security?: GetObservabilityOverviewSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetObservabilityOverviewQueryData,
     GetObservabilityOverviewQueryError

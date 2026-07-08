@@ -1,4 +1,5 @@
-import type { McpServer, ToolsetEntry } from "@gram/client/models/components";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import {
   defineFilters,
   type FilterValues,

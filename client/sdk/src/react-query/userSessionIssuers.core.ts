@@ -11,28 +11,31 @@ import { GramCore } from "../core.js";
 import { userSessionIssuersList } from "../funcs/userSessionIssuersList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ListUserSessionIssuersRequest,
+  ListUserSessionIssuersResponse,
+  ListUserSessionIssuersSecurity,
+} from "../models/operations/listusersessionissuers.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 import { pageIteratorToJSON } from "./_types.js";
-export type UserSessionIssuersQueryData =
-  operations.ListUserSessionIssuersResponse;
+export type UserSessionIssuersQueryData = ListUserSessionIssuersResponse;
 
 export type UserSessionIssuersInfiniteQueryData = PageIterator<
-  operations.ListUserSessionIssuersResponse,
+  ListUserSessionIssuersResponse,
   { cursor: string }
 >;
 
 export type UserSessionIssuersPageParams = PageIterator<
-  operations.ListUserSessionIssuersResponse,
+  ListUserSessionIssuersResponse,
   { cursor: string }
 >["~next"];
 
 export function prefetchUserSessionIssuers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListUserSessionIssuersRequest | undefined,
-  security?: operations.ListUserSessionIssuersSecurity | undefined,
+  request?: ListUserSessionIssuersRequest | undefined,
+  security?: ListUserSessionIssuersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -48,8 +51,8 @@ export function prefetchUserSessionIssuers(
 export function prefetchUserSessionIssuersInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListUserSessionIssuersRequest | undefined,
-  security?: operations.ListUserSessionIssuersSecurity | undefined,
+  request?: ListUserSessionIssuersRequest | undefined,
+  security?: ListUserSessionIssuersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -67,8 +70,8 @@ export function prefetchUserSessionIssuersInfinite(
 
 export function buildUserSessionIssuersQuery(
   client$: GramCore,
-  request?: operations.ListUserSessionIssuersRequest | undefined,
-  security?: operations.ListUserSessionIssuersSecurity | undefined,
+  request?: ListUserSessionIssuersRequest | undefined,
+  security?: ListUserSessionIssuersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -110,8 +113,8 @@ export function buildUserSessionIssuersQuery(
 
 export function buildUserSessionIssuersInfiniteQuery(
   client$: GramCore,
-  request?: operations.ListUserSessionIssuersRequest | undefined,
-  security?: operations.ListUserSessionIssuersSecurity | undefined,
+  request?: ListUserSessionIssuersRequest | undefined,
+  security?: ListUserSessionIssuersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -11,15 +11,18 @@ import { GramCore } from "../core.js";
 import { mcpEndpointsCheckSlugAvailability } from "../funcs/mcpEndpointsCheckSlugAvailability.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  CheckMcpEndpointSlugAvailabilityRequest,
+  CheckMcpEndpointSlugAvailabilitySecurity,
+} from "../models/operations/checkmcpendpointslugavailability.js";
 import { unwrapAsync } from "../types/fp.js";
 export type CheckMcpEndpointSlugAvailabilityQueryData = boolean;
 
 export function prefetchCheckMcpEndpointSlugAvailability(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.CheckMcpEndpointSlugAvailabilityRequest,
-  security?: operations.CheckMcpEndpointSlugAvailabilitySecurity | undefined,
+  request: CheckMcpEndpointSlugAvailabilityRequest,
+  security?: CheckMcpEndpointSlugAvailabilitySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -34,8 +37,8 @@ export function prefetchCheckMcpEndpointSlugAvailability(
 
 export function buildCheckMcpEndpointSlugAvailabilityQuery(
   client$: GramCore,
-  request: operations.CheckMcpEndpointSlugAvailabilityRequest,
-  security?: operations.CheckMcpEndpointSlugAvailabilitySecurity | undefined,
+  request: CheckMcpEndpointSlugAvailabilityRequest,
+  security?: CheckMcpEndpointSlugAvailabilitySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

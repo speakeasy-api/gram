@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  useAssistantsGetManaged,
-  useEnsureManagedAssistantMutation,
-  useGramContext,
-} from "@gram/client/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useAssistantsGetManaged } from "@gram/client/react-query/assistantsGetManaged.js";
+import { useEnsureManagedAssistantMutation } from "@gram/client/react-query/ensureManagedAssistant.js";
 import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { isNotFoundError } from "@/lib/route-errors";

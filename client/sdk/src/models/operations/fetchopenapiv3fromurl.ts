@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  FetchOpenAPIv3FromURLForm2,
+  FetchOpenAPIv3FromURLForm2$Outbound,
+  FetchOpenAPIv3FromURLForm2$outboundSchema,
+} from "../components/fetchopenapiv3fromurlform2.js";
 
 export type FetchOpenAPIv3FromURLSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type FetchOpenAPIv3FromURLRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  fetchOpenAPIv3FromURLForm2: components.FetchOpenAPIv3FromURLForm2;
+  fetchOpenAPIv3FromURLForm2: FetchOpenAPIv3FromURLForm2;
 };
 
 /** @internal */
@@ -145,7 +149,7 @@ export type FetchOpenAPIv3FromURLRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Session"?: string | undefined;
-  FetchOpenAPIv3FromURLForm2: components.FetchOpenAPIv3FromURLForm2$Outbound;
+  FetchOpenAPIv3FromURLForm2: FetchOpenAPIv3FromURLForm2$Outbound;
 };
 
 /** @internal */
@@ -157,8 +161,7 @@ export const FetchOpenAPIv3FromURLRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-    fetchOpenAPIv3FromURLForm2:
-      components.FetchOpenAPIv3FromURLForm2$outboundSchema,
+    fetchOpenAPIv3FromURLForm2: FetchOpenAPIv3FromURLForm2$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

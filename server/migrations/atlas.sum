@@ -1,4 +1,4 @@
-h1:KjkDqLFE15cYj9Lg+RbH9oljM1ijoSzuqM99PTrzyQc=
+h1:Uodszq0ITn1QQZq1qg2xR5vP5lb9O2ymmlivpk6WD+U=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -247,3 +247,5 @@ h1:KjkDqLFE15cYj9Lg+RbH9oljM1ijoSzuqM99PTrzyQc=
 20260706233448_drop-session-capture-exclusions.sql h1:CZfr4NqnLrq4r4Av+m/KVY39PEEH6TrBHe8sz61y4Co=
 20260707070702_risk-policy-eval-reviews.sql h1:RjhJvs0KrFmEk9tuNDI9slvcm1uGbnyEf44mDlZ8/MI=
 20260707120239_assistant-mcp-servers.sql h1:bDNWbd/16MXwFmJBGKVMmnLcxgdiDCCpizKI/ftevrY=
+20260707200235_add-billing-cycle-usage.sql h1:Oma/fS74ZRIZnopKrTdKwxYxtoEO+fPYATfmqeDiudc=
+20260707204416_billing-cycle-usage-tum-tokens-check.sql h1:e0oVX1jZavibZRbsR6pHqmhApLYK0fLjohgqx/kN65g=

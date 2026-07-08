@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DeleteOtelForwardingConfigRequest,
+  DeleteOtelForwardingConfigSecurity,
+} from "../models/operations/deleteotelforwardingconfig.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type DeleteOtelForwardingConfigMutationVariables = {
-  request?: operations.DeleteOtelForwardingConfigRequest | undefined;
-  security?: operations.DeleteOtelForwardingConfigSecurity | undefined;
+  request?: DeleteOtelForwardingConfigRequest | undefined;
+  security?: DeleteOtelForwardingConfigSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type DeleteOtelForwardingConfigMutationData = void;
 
 export type DeleteOtelForwardingConfigMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

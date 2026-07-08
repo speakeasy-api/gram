@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateCimdOrganizationRemoteSessionClientForm,
+  CreateCimdOrganizationRemoteSessionClientForm$Outbound,
+  CreateCimdOrganizationRemoteSessionClientForm$outboundSchema,
+} from "../components/createcimdorganizationremotesessionclientform.js";
 
 export type CreateCimdOrganizationRemoteSessionClientSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -21,7 +25,7 @@ export type CreateCimdOrganizationRemoteSessionClientRequest = {
    */
   gramKey?: string | undefined;
   createCimdOrganizationRemoteSessionClientForm:
-    components.CreateCimdOrganizationRemoteSessionClientForm;
+    CreateCimdOrganizationRemoteSessionClientForm;
 };
 
 /** @internal */
@@ -64,7 +68,7 @@ export type CreateCimdOrganizationRemoteSessionClientRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   CreateCimdOrganizationRemoteSessionClientForm:
-    components.CreateCimdOrganizationRemoteSessionClientForm$Outbound;
+    CreateCimdOrganizationRemoteSessionClientForm$Outbound;
 };
 
 /** @internal */
@@ -77,7 +81,7 @@ export const CreateCimdOrganizationRemoteSessionClientRequest$outboundSchema:
       gramSession: z.optional(z.string()),
       gramKey: z.optional(z.string()),
       createCimdOrganizationRemoteSessionClientForm:
-        components.CreateCimdOrganizationRemoteSessionClientForm$outboundSchema,
+        CreateCimdOrganizationRemoteSessionClientForm$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {

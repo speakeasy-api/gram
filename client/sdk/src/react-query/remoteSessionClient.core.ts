@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { remoteSessionClientsGet } from "../funcs/remoteSessionClientsGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
+import {
+  GetRemoteSessionClientRequest,
+  GetRemoteSessionClientSecurity,
+} from "../models/operations/getremotesessionclient.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RemoteSessionClientQueryData = components.RemoteSessionClient;
+export type RemoteSessionClientQueryData = RemoteSessionClient;
 
 export function prefetchRemoteSessionClient(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetRemoteSessionClientRequest,
-  security?: operations.GetRemoteSessionClientSecurity | undefined,
+  request: GetRemoteSessionClientRequest,
+  security?: GetRemoteSessionClientSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchRemoteSessionClient(
 
 export function buildRemoteSessionClientQuery(
   client$: GramCore,
-  request: operations.GetRemoteSessionClientRequest,
-  security?: operations.GetRemoteSessionClientSecurity | undefined,
+  request: GetRemoteSessionClientRequest,
+  security?: GetRemoteSessionClientSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

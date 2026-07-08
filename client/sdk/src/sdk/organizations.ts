@@ -17,8 +17,71 @@ import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
 import { organizationsUpdateInviteRole } from "../funcs/organizationsUpdateInviteRole.js";
 import { organizationsVerifyOnboardingHooksSetup } from "../funcs/organizationsVerifyOnboardingHooksSetup.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { CreatePortalSessionResult } from "../models/components/createportalsessionresult.js";
+import { GenerateWorkOSAdminPortalLinkResult } from "../models/components/generateworkosadminportallinkresult.js";
+import { ListInvitesResult } from "../models/components/listinvitesresult.js";
+import { ListUsersResult } from "../models/components/listusersresult.js";
+import { OnboardingStatusResult } from "../models/components/onboardingstatusresult.js";
+import { Organization } from "../models/components/organization.js";
+import { OrganizationInvitation } from "../models/components/organizationinvitation.js";
+import { SendEnterpriseAdminOnboardingEmailResult } from "../models/components/sendenterpriseadminonboardingemailresult.js";
+import { VerifyOnboardingHooksSetupResult } from "../models/components/verifyonboardinghookssetupresult.js";
+import {
+  CreatePortalSessionRequest,
+  CreatePortalSessionSecurity,
+} from "../models/operations/createportalsession.js";
+import {
+  DisableWebhooksRequest,
+  DisableWebhooksSecurity,
+} from "../models/operations/disablewebhooks.js";
+import {
+  EnableWebhooksRequest,
+  EnableWebhooksSecurity,
+} from "../models/operations/enablewebhooks.js";
+import {
+  GenerateWorkOSAdminPortalLinkRequest,
+  GenerateWorkOSAdminPortalLinkSecurity,
+} from "../models/operations/generateworkosadminportallink.js";
+import {
+  GetOnboardingStatusRequest,
+  GetOnboardingStatusSecurity,
+} from "../models/operations/getonboardingstatus.js";
+import {
+  GetOrganizationRequest,
+  GetOrganizationSecurity,
+} from "../models/operations/getorganization.js";
+import {
+  ListInvitesRequest,
+  ListInvitesSecurity,
+} from "../models/operations/listinvites.js";
+import {
+  ListOrganizationUsersRequest,
+  ListOrganizationUsersSecurity,
+} from "../models/operations/listorganizationusers.js";
+import {
+  RemoveOrganizationUserRequest,
+  RemoveOrganizationUserSecurity,
+} from "../models/operations/removeorganizationuser.js";
+import {
+  RevokeInviteRequest,
+  RevokeInviteSecurity,
+} from "../models/operations/revokeinvite.js";
+import {
+  SendEnterpriseAdminOnboardingEmailRequest,
+  SendEnterpriseAdminOnboardingEmailSecurity,
+} from "../models/operations/sendenterpriseadminonboardingemail.js";
+import {
+  SendInviteRequest,
+  SendInviteSecurity,
+} from "../models/operations/sendinvite.js";
+import {
+  UpdateInviteRoleRequest,
+  UpdateInviteRoleSecurity,
+} from "../models/operations/updateinviterole.js";
+import {
+  VerifyOnboardingHooksSetupRequest,
+  VerifyOnboardingHooksSetupSecurity,
+} from "../models/operations/verifyonboardinghookssetup.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Organizations extends ClientSDK {
@@ -29,10 +92,10 @@ export class Organizations extends ClientSDK {
    * Create a webhook portal session.
    */
   async createPortalSession(
-    request?: operations.CreatePortalSessionRequest | undefined,
-    security?: operations.CreatePortalSessionSecurity | undefined,
+    request?: CreatePortalSessionRequest | undefined,
+    security?: CreatePortalSessionSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.CreatePortalSessionResult> {
+  ): Promise<CreatePortalSessionResult> {
     return unwrapAsync(organizationsCreatePortalSession(
       this,
       request,
@@ -48,8 +111,8 @@ export class Organizations extends ClientSDK {
    * Disable  webhooks for the active organization.
    */
   async disableWebhooks(
-    request?: operations.DisableWebhooksRequest | undefined,
-    security?: operations.DisableWebhooksSecurity | undefined,
+    request?: DisableWebhooksRequest | undefined,
+    security?: DisableWebhooksSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationsDisableWebhooks(
@@ -67,8 +130,8 @@ export class Organizations extends ClientSDK {
    * Enable  webhooks for the active organization.
    */
   async enableWebhooks(
-    request?: operations.EnableWebhooksRequest | undefined,
-    security?: operations.EnableWebhooksSecurity | undefined,
+    request?: EnableWebhooksRequest | undefined,
+    security?: EnableWebhooksSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationsEnableWebhooks(
@@ -86,10 +149,10 @@ export class Organizations extends ClientSDK {
    * Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).
    */
   async generateWorkOSAdminPortalLink(
-    request: operations.GenerateWorkOSAdminPortalLinkRequest,
-    security?: operations.GenerateWorkOSAdminPortalLinkSecurity | undefined,
+    request: GenerateWorkOSAdminPortalLinkRequest,
+    security?: GenerateWorkOSAdminPortalLinkSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GenerateWorkOSAdminPortalLinkResult> {
+  ): Promise<GenerateWorkOSAdminPortalLinkResult> {
     return unwrapAsync(organizationsGenerateWorkOSAdminPortalLink(
       this,
       request,
@@ -105,10 +168,10 @@ export class Organizations extends ClientSDK {
    * Get the active organization from the session.
    */
   async get(
-    request?: operations.GetOrganizationRequest | undefined,
-    security?: operations.GetOrganizationSecurity | undefined,
+    request?: GetOrganizationRequest | undefined,
+    security?: GetOrganizationSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Organization> {
+  ): Promise<Organization> {
     return unwrapAsync(organizationsGet(
       this,
       request,
@@ -124,10 +187,10 @@ export class Organizations extends ClientSDK {
    * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
    */
   async getOnboardingStatus(
-    request?: operations.GetOnboardingStatusRequest | undefined,
-    security?: operations.GetOnboardingStatusSecurity | undefined,
+    request?: GetOnboardingStatusRequest | undefined,
+    security?: GetOnboardingStatusSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.OnboardingStatusResult> {
+  ): Promise<OnboardingStatusResult> {
     return unwrapAsync(organizationsGetOnboardingStatus(
       this,
       request,
@@ -143,10 +206,10 @@ export class Organizations extends ClientSDK {
    * List pending WorkOS invitations for the active organization.
    */
   async listInvites(
-    request?: operations.ListInvitesRequest | undefined,
-    security?: operations.ListInvitesSecurity | undefined,
+    request?: ListInvitesRequest | undefined,
+    security?: ListInvitesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListInvitesResult> {
+  ): Promise<ListInvitesResult> {
     return unwrapAsync(organizationsListInvites(
       this,
       request,
@@ -162,10 +225,10 @@ export class Organizations extends ClientSDK {
    * List users in the active organization from Gram organization_user_relationships.
    */
   async listUsers(
-    request?: operations.ListOrganizationUsersRequest | undefined,
-    security?: operations.ListOrganizationUsersSecurity | undefined,
+    request?: ListOrganizationUsersRequest | undefined,
+    security?: ListOrganizationUsersSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListUsersResult> {
+  ): Promise<ListUsersResult> {
     return unwrapAsync(organizationsListUsers(
       this,
       request,
@@ -181,8 +244,8 @@ export class Organizations extends ClientSDK {
    * Remove a user from the active organization in Gram and delete their WorkOS organization membership.
    */
   async removeUser(
-    request: operations.RemoveOrganizationUserRequest,
-    security?: operations.RemoveOrganizationUserSecurity | undefined,
+    request: RemoveOrganizationUserRequest,
+    security?: RemoveOrganizationUserSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationsRemoveUser(
@@ -200,8 +263,8 @@ export class Organizations extends ClientSDK {
    * Revoke a pending WorkOS invitation.
    */
   async revokeInvite(
-    request: operations.RevokeInviteRequest,
-    security?: operations.RevokeInviteSecurity | undefined,
+    request: RevokeInviteRequest,
+    security?: RevokeInviteSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationsRevokeInvite(
@@ -219,12 +282,10 @@ export class Organizations extends ClientSDK {
    * Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the Platform Admin onboarding tools.
    */
   async sendEnterpriseAdminOnboardingEmail(
-    request: operations.SendEnterpriseAdminOnboardingEmailRequest,
-    security?:
-      | operations.SendEnterpriseAdminOnboardingEmailSecurity
-      | undefined,
+    request: SendEnterpriseAdminOnboardingEmailRequest,
+    security?: SendEnterpriseAdminOnboardingEmailSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.SendEnterpriseAdminOnboardingEmailResult> {
+  ): Promise<SendEnterpriseAdminOnboardingEmailResult> {
     return unwrapAsync(organizationsSendEnterpriseAdminOnboardingEmail(
       this,
       request,
@@ -240,10 +301,10 @@ export class Organizations extends ClientSDK {
    * Send a WorkOS invitation for the active organization.
    */
   async sendInvite(
-    request: operations.SendInviteRequest,
-    security?: operations.SendInviteSecurity | undefined,
+    request: SendInviteRequest,
+    security?: SendInviteSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.OrganizationInvitation> {
+  ): Promise<OrganizationInvitation> {
     return unwrapAsync(organizationsSendInvite(
       this,
       request,
@@ -259,10 +320,10 @@ export class Organizations extends ClientSDK {
    * Change the role assigned to a pending WorkOS invitation.
    */
   async updateInviteRole(
-    request: operations.UpdateInviteRoleRequest,
-    security?: operations.UpdateInviteRoleSecurity | undefined,
+    request: UpdateInviteRoleRequest,
+    security?: UpdateInviteRoleSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.OrganizationInvitation> {
+  ): Promise<OrganizationInvitation> {
     return unwrapAsync(organizationsUpdateInviteRole(
       this,
       request,
@@ -278,10 +339,10 @@ export class Organizations extends ClientSDK {
    * Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
    */
   async verifyOnboardingHooksSetup(
-    request?: operations.VerifyOnboardingHooksSetupRequest | undefined,
-    security?: operations.VerifyOnboardingHooksSetupSecurity | undefined,
+    request?: VerifyOnboardingHooksSetupRequest | undefined,
+    security?: VerifyOnboardingHooksSetupSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.VerifyOnboardingHooksSetupResult> {
+  ): Promise<VerifyOnboardingHooksSetupResult> {
     return unwrapAsync(organizationsVerifyOnboardingHooksSetup(
       this,
       request,

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  GenerateWorkOSAdminPortalLinkRequestBody,
+  GenerateWorkOSAdminPortalLinkRequestBody$Outbound,
+  GenerateWorkOSAdminPortalLinkRequestBody$outboundSchema,
+} from "../components/generateworkosadminportallinkrequestbody.js";
 
 export type GenerateWorkOSAdminPortalLinkSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -16,7 +20,7 @@ export type GenerateWorkOSAdminPortalLinkRequest = {
    */
   gramSession?: string | undefined;
   generateWorkOSAdminPortalLinkRequestBody:
-    components.GenerateWorkOSAdminPortalLinkRequestBody;
+    GenerateWorkOSAdminPortalLinkRequestBody;
 };
 
 /** @internal */
@@ -54,7 +58,7 @@ export function generateWorkOSAdminPortalLinkSecurityToJSON(
 export type GenerateWorkOSAdminPortalLinkRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   GenerateWorkOSAdminPortalLinkRequestBody:
-    components.GenerateWorkOSAdminPortalLinkRequestBody$Outbound;
+    GenerateWorkOSAdminPortalLinkRequestBody$Outbound;
 };
 
 /** @internal */
@@ -65,7 +69,7 @@ export const GenerateWorkOSAdminPortalLinkRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     generateWorkOSAdminPortalLinkRequestBody:
-      components.GenerateWorkOSAdminPortalLinkRequestBody$outboundSchema,
+      GenerateWorkOSAdminPortalLinkRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

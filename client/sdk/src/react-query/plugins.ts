@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListPluginsRequest,
+  ListPluginsSecurity,
+} from "../models/operations/listplugins.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type PluginsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type PluginsQueryError =
  * List all plugins for the current project.
  */
 export function usePlugins(
-  request?: operations.ListPluginsRequest | undefined,
-  security?: operations.ListPluginsSecurity | undefined,
+  request?: ListPluginsRequest | undefined,
+  security?: ListPluginsSecurity | undefined,
   options?: QueryHookOptions<PluginsQueryData, PluginsQueryError>,
 ): UseQueryResult<PluginsQueryData, PluginsQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function usePlugins(
  * List all plugins for the current project.
  */
 export function usePluginsSuspense(
-  request?: operations.ListPluginsRequest | undefined,
-  security?: operations.ListPluginsSecurity | undefined,
+  request?: ListPluginsRequest | undefined,
+  security?: ListPluginsSecurity | undefined,
   options?: SuspenseQueryHookOptions<PluginsQueryData, PluginsQueryError>,
 ): UseSuspenseQueryResult<PluginsQueryData, PluginsQueryError> {
   const client = useGramContext();

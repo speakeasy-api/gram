@@ -5,7 +5,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
-import { Plugin, PluginServer } from "@gram/client/models/components";
+import { Plugin } from "@gram/client/models/components/plugin.js";
+import { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import {
   invalidateAllPlugins,

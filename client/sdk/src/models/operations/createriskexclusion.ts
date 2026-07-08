@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateRiskExclusionRequestBody,
+  CreateRiskExclusionRequestBody$Outbound,
+  CreateRiskExclusionRequestBody$outboundSchema,
+} from "../components/createriskexclusionrequestbody.js";
 
 export type CreateRiskExclusionSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type CreateRiskExclusionRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  createRiskExclusionRequestBody: components.CreateRiskExclusionRequestBody;
+  createRiskExclusionRequestBody: CreateRiskExclusionRequestBody;
 };
 
 /** @internal */
@@ -145,8 +149,7 @@ export type CreateRiskExclusionRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  CreateRiskExclusionRequestBody:
-    components.CreateRiskExclusionRequestBody$Outbound;
+  CreateRiskExclusionRequestBody: CreateRiskExclusionRequestBody$Outbound;
 };
 
 /** @internal */
@@ -159,7 +162,7 @@ export const CreateRiskExclusionRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     createRiskExclusionRequestBody:
-      components.CreateRiskExclusionRequestBody$outboundSchema,
+      CreateRiskExclusionRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

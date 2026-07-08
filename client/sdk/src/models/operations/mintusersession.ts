@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  MintUserSessionRequestBody,
+  MintUserSessionRequestBody$Outbound,
+  MintUserSessionRequestBody$outboundSchema,
+} from "../components/mintusersessionrequestbody.js";
 
 export type MintUserSessionSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -20,7 +24,7 @@ export type MintUserSessionRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  mintUserSessionRequestBody: components.MintUserSessionRequestBody;
+  mintUserSessionRequestBody: MintUserSessionRequestBody;
 };
 
 /** @internal */
@@ -58,7 +62,7 @@ export function mintUserSessionSecurityToJSON(
 export type MintUserSessionRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  MintUserSessionRequestBody: components.MintUserSessionRequestBody$Outbound;
+  MintUserSessionRequestBody: MintUserSessionRequestBody$Outbound;
 };
 
 /** @internal */
@@ -69,8 +73,7 @@ export const MintUserSessionRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    mintUserSessionRequestBody:
-      components.MintUserSessionRequestBody$outboundSchema,
+    mintUserSessionRequestBody: MintUserSessionRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

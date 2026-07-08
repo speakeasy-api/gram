@@ -7,10 +7,8 @@ import { Type } from "@/components/ui/type";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { getPresetRange } from "@gram-ai/elements";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
-import type {
-  GetObservabilityOverviewResult,
-  ObservabilitySummary,
-} from "@gram/client/models/components";
+import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
+import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Stack } from "@speakeasy-api/moonshine";

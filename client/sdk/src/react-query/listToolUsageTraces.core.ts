@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { telemetryListToolUsageTraces } from "../funcs/telemetryListToolUsageTraces.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListToolUsageTracesResult } from "../models/components/listtoolusagetracesresult.js";
+import {
+  ListToolUsageTracesRequest,
+  ListToolUsageTracesSecurity,
+} from "../models/operations/listtoolusagetraces.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListToolUsageTracesQueryData = components.ListToolUsageTracesResult;
+export type ListToolUsageTracesQueryData = ListToolUsageTracesResult;
 
 export function prefetchListToolUsageTraces(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListToolUsageTracesRequest,
-  security?: operations.ListToolUsageTracesSecurity | undefined,
+  request: ListToolUsageTracesRequest,
+  security?: ListToolUsageTracesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListToolUsageTraces(
 
 export function buildListToolUsageTracesQuery(
   client$: GramCore,
-  request: operations.ListToolUsageTracesRequest,
-  security?: operations.ListToolUsageTracesSecurity | undefined,
+  request: ListToolUsageTracesRequest,
+  security?: ListToolUsageTracesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

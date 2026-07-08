@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListMembersRequest,
+  ListMembersSecurity,
+} from "../models/operations/listmembers.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type MembersQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type MembersQueryError =
  * List all team members with their role assignments.
  */
 export function useMembers(
-  request?: operations.ListMembersRequest | undefined,
-  security?: operations.ListMembersSecurity | undefined,
+  request?: ListMembersRequest | undefined,
+  security?: ListMembersSecurity | undefined,
   options?: QueryHookOptions<MembersQueryData, MembersQueryError>,
 ): UseQueryResult<MembersQueryData, MembersQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useMembers(
  * List all team members with their role assignments.
  */
 export function useMembersSuspense(
-  request?: operations.ListMembersRequest | undefined,
-  security?: operations.ListMembersSecurity | undefined,
+  request?: ListMembersRequest | undefined,
+  security?: ListMembersSecurity | undefined,
   options?: SuspenseQueryHookOptions<MembersQueryData, MembersQueryError>,
 ): UseSuspenseQueryResult<MembersQueryData, MembersQueryError> {
   const client = useGramContext();

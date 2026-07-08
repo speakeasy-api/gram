@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetOtelForwardingConfigRequest,
+  GetOtelForwardingConfigSecurity,
+} from "../models/operations/getotelforwardingconfig.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type OtelForwardingConfigQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type OtelForwardingConfigQueryError =
  * Get the org-wide OTEL forwarding config. Returns an empty config (enabled=false, no URL) when none is set.
  */
 export function useOtelForwardingConfig(
-  request?: operations.GetOtelForwardingConfigRequest | undefined,
-  security?: operations.GetOtelForwardingConfigSecurity | undefined,
+  request?: GetOtelForwardingConfigRequest | undefined,
+  security?: GetOtelForwardingConfigSecurity | undefined,
   options?: QueryHookOptions<
     OtelForwardingConfigQueryData,
     OtelForwardingConfigQueryError
@@ -88,8 +91,8 @@ export function useOtelForwardingConfig(
  * Get the org-wide OTEL forwarding config. Returns an empty config (enabled=false, no URL) when none is set.
  */
 export function useOtelForwardingConfigSuspense(
-  request?: operations.GetOtelForwardingConfigRequest | undefined,
-  security?: operations.GetOtelForwardingConfigSecurity | undefined,
+  request?: GetOtelForwardingConfigRequest | undefined,
+  security?: GetOtelForwardingConfigSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     OtelForwardingConfigQueryData,
     OtelForwardingConfigQueryError

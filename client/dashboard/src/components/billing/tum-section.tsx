@@ -6,15 +6,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import {
-  TokensUnderManagement,
-  TUMPeriod,
-} from "@gram/client/models/components";
+import { TokensUnderManagement } from "@gram/client/models/components/tokensundermanagement.js";
+import { TUMPeriod } from "@gram/client/models/components/tumperiod.js";
 import {
   invalidateAllGetTokensUnderManagement,
   useGetTokensUnderManagement,
-  useSetBillingMetadataMutation,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/getTokensUnderManagement.js";
+import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBillingMetadata.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {

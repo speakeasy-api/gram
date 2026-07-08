@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListGrantsRequest,
+  ListGrantsSecurity,
+} from "../models/operations/listgrants.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GrantsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GrantsQueryError =
  * List the current user's effective grants, including inherited role grants.
  */
 export function useGrants(
-  request?: operations.ListGrantsRequest | undefined,
-  security?: operations.ListGrantsSecurity | undefined,
+  request?: ListGrantsRequest | undefined,
+  security?: ListGrantsSecurity | undefined,
   options?: QueryHookOptions<GrantsQueryData, GrantsQueryError>,
 ): UseQueryResult<GrantsQueryData, GrantsQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useGrants(
  * List the current user's effective grants, including inherited role grants.
  */
 export function useGrantsSuspense(
-  request?: operations.ListGrantsRequest | undefined,
-  security?: operations.ListGrantsSecurity | undefined,
+  request?: ListGrantsRequest | undefined,
+  security?: ListGrantsSecurity | undefined,
   options?: SuspenseQueryHookOptions<GrantsQueryData, GrantsQueryError>,
 ): UseSuspenseQueryResult<GrantsQueryData, GrantsQueryError> {
   const client = useGramContext();

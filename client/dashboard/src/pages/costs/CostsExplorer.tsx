@@ -3,15 +3,13 @@ import { telemetryListSessions } from "@gram/client/funcs/telemetryListSessions"
 import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
 import {
   Dimension,
-  type GroupBy,
   type QueryFilter,
-  type QueryRow,
-} from "@gram/client/models/components";
-import {
-  invalidateAllListChats,
-  useChatDeleteMutation,
-  useGramContext,
-} from "@gram/client/react-query";
+} from "@gram/client/models/components/queryfilter.js";
+import { type GroupBy } from "@gram/client/models/components/querypayload.js";
+import { type QueryRow } from "@gram/client/models/components/queryrow.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useChatDeleteMutation } from "@gram/client/react-query/chatDelete.js";
+import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -295,10 +293,13 @@ export function CostsExplorer(): JSX.Element {
   // of an empty "no data" flash before the project-scoped queries enable.
   const loadingSlice = (!projectReady || isFetching) && !data;
 
-  // The current entity's own attributes: a no-group_by query over the same
-  // filters returns a single aggregate row whose dimension_values are this
-  // entity's distinct division/department/job_title/roles/etc. Only meaningful
-  // once we've drilled into something.
+  // A no-group_by query over the same filters returns a single aggregate row for
+  // the whole slice. Two things come off it:
+  //   • its dimension_values are the current entity's distinct division/
+  //     department/job_title/roles/etc (only meaningful once drilled in), and
+  //   • its measures are the TRUE slice totals — critically the distinct session
+  //     count, which cannot be recovered by summing the per-group breakdown rows
+  //     (see `stats`). Runs at every level so the root headline is correct too.
   const { data: detailData } = useQuery({
     queryKey: [
       "costs-explorer-detail",
@@ -306,7 +307,7 @@ export function CostsExplorer(): JSX.Element {
       to.toISOString(),
       filters,
     ],
-    enabled: projectReady && path.length > 0,
+    enabled: projectReady,
     throwOnError: false,
     queryFn: () =>
       unwrapAsync(
@@ -320,7 +321,11 @@ export function CostsExplorer(): JSX.Element {
         }),
       ),
   });
-  const attributes = detailData?.table?.[0]?.dimensionValues;
+  const detailRow = detailData?.table?.[0];
+  // Attribute grid + pivot pruning only apply once drilled into an entity; at the
+  // root, keep this undefined so those consumers still fail open (show every
+  // pivot). The row's measures, by contrast, are used at every level.
+  const attributes = path.length > 0 ? detailRow?.dimensionValues : undefined;
 
   // Previous equal-length period (immediately before [from, to]) — for the
   // per-group % change column.
@@ -347,6 +352,29 @@ export function CostsExplorer(): JSX.Element {
             groupBy: groupBy as GroupBy,
             sortBy: "total_cost",
             topN: 100,
+            filters: filters.length ? filters : undefined,
+          },
+        }),
+      ),
+  });
+  // Previous-period slice totals (un-grouped), for a session delta that uses the
+  // same distinct-count basis as the current headline (see `stats`).
+  const { data: prevDetailData } = useQuery({
+    queryKey: [
+      "costs-explorer-prev-detail",
+      prevFrom.toISOString(),
+      prevTo.toISOString(),
+      filters,
+    ],
+    enabled: projectReady,
+    throwOnError: false,
+    queryFn: () =>
+      unwrapAsync(
+        telemetryQuery(client, {
+          queryPayload: {
+            from: prevFrom,
+            to: prevTo,
+            topN: 1,
             filters: filters.length ? filters : undefined,
           },
         }),
@@ -438,12 +466,22 @@ export function CostsExplorer(): JSX.Element {
       ? groupBy
       : null;
 
-  // Roll the child rows up into the current entity's headline stats.
+  // Roll the child rows up into the current entity's headline stats. Cost,
+  // tokens, tool calls and cache tokens are additive, so summing the breakdown
+  // rows gives the correct slice total. Sessions (total_chats) are NOT: it's a
+  // distinct count (uniqExact over conversation ids), so summing it across groups
+  // double-counts any session that spans more than one group (e.g. a chat that
+  // used two models, or hit two agents). That inflated the "Agent sessions" stat
+  // — and every "per session" cost — the moment you drilled or re-pivoted, and
+  // made a user's session count disagree with the parent breakdown's Sessions
+  // column (DNO-390). Take the true distinct count from the un-grouped slice
+  // aggregate instead. Skipped for the root "collection" view, whose hero is
+  // deliberately the attributed-rows-only subtotal, not the whole slice.
   const stats: Measures = useMemo(() => {
     const table = data?.table ?? [];
     const statsRows =
       collectionDim != null ? table.filter((r) => r.groupValue !== "") : table;
-    return statsRows.reduce<Measures>(
+    const summed = statsRows.reduce<Measures>(
       (acc, r) => ({
         cost: acc.cost + (r.measures.totalCost ?? 0),
         sessions: acc.sessions + (r.measures.totalChats ?? 0),
@@ -454,7 +492,10 @@ export function CostsExplorer(): JSX.Element {
       }),
       { ...EMPTY_MEASURES },
     );
-  }, [data, collectionDim]);
+    const trueSessions =
+      collectionDim == null ? detailRow?.measures.totalChats : undefined;
+    return { ...summed, sessions: trueSessions ?? summed.sessions };
+  }, [data, collectionDim, detailRow]);
 
   // Per-group daily cost series for the trend sparklines, keyed by group value.
   const seriesByGroup = useMemo(() => {
@@ -468,12 +509,13 @@ export function CostsExplorer(): JSX.Element {
     return map;
   }, [data]);
 
-  // Previous-period totals per measure (for the KPI deltas).
+  // Previous-period totals per measure (for the KPI deltas). Sessions use the
+  // un-grouped distinct count on the same basis as `stats` (see above).
   const prevTotals: Measures = useMemo(() => {
     const table = prevData?.table ?? [];
     const statsRows =
       collectionDim != null ? table.filter((r) => r.groupValue !== "") : table;
-    return statsRows.reduce<Measures>(
+    const summed = statsRows.reduce<Measures>(
       (acc, r) => ({
         cost: acc.cost + (r.measures.totalCost ?? 0),
         sessions: acc.sessions + (r.measures.totalChats ?? 0),
@@ -484,7 +526,12 @@ export function CostsExplorer(): JSX.Element {
       }),
       { ...EMPTY_MEASURES },
     );
-  }, [prevData, collectionDim]);
+    const trueSessions =
+      collectionDim == null
+        ? prevDetailData?.table?.[0]?.measures.totalChats
+        : undefined;
+    return { ...summed, sessions: trueSessions ?? summed.sessions };
+  }, [prevData, prevDetailData, collectionDim]);
 
   // Each measure summed across groups per time bucket — drives the hero trend
   // chart and the KPI sparklines.

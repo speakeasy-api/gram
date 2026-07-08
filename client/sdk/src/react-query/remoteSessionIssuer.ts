@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetRemoteSessionIssuerRequest,
+  GetRemoteSessionIssuerSecurity,
+} from "../models/operations/getremotesessionissuer.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RemoteSessionIssuerQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RemoteSessionIssuerQueryError =
  * Get a remote_session_issuer by id or by slug. Provide exactly one.
  */
 export function useRemoteSessionIssuer(
-  request?: operations.GetRemoteSessionIssuerRequest | undefined,
-  security?: operations.GetRemoteSessionIssuerSecurity | undefined,
+  request?: GetRemoteSessionIssuerRequest | undefined,
+  security?: GetRemoteSessionIssuerSecurity | undefined,
   options?: QueryHookOptions<
     RemoteSessionIssuerQueryData,
     RemoteSessionIssuerQueryError
@@ -85,8 +88,8 @@ export function useRemoteSessionIssuer(
  * Get a remote_session_issuer by id or by slug. Provide exactly one.
  */
 export function useRemoteSessionIssuerSuspense(
-  request?: operations.GetRemoteSessionIssuerRequest | undefined,
-  security?: operations.GetRemoteSessionIssuerSecurity | undefined,
+  request?: GetRemoteSessionIssuerRequest | undefined,
+  security?: GetRemoteSessionIssuerSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RemoteSessionIssuerQueryData,
     RemoteSessionIssuerQueryError

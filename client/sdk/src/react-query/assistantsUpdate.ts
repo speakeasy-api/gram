@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { assistantsUpdate } from "../funcs/assistantsUpdate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { Assistant } from "../models/components/assistant.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  UpdateAssistantRequest,
+  UpdateAssistantSecurity,
+} from "../models/operations/updateassistant.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type AssistantsUpdateMutationVariables = {
-  request: operations.UpdateAssistantRequest;
-  security?: operations.UpdateAssistantSecurity | undefined;
+  request: UpdateAssistantRequest;
+  security?: UpdateAssistantSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type AssistantsUpdateMutationData = components.Assistant;
+export type AssistantsUpdateMutationData = Assistant;
 
 export type AssistantsUpdateMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

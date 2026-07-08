@@ -2,13 +2,13 @@ import { RequireScope } from "@/components/require-scope";
 import { DotRow } from "@/components/ui/dot-row";
 import { DotTable } from "@/components/ui/dot-table";
 import { Type } from "@/components/ui/type";
-import type { RemoteSession } from "@gram/client/models/components";
+import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import {
   invalidateAllOrganizationRemoteSessionClientSessions,
   useOrganizationRemoteSessionClientSessions,
-  useRefreshOrganizationRemoteSessionMutation,
-  useRevokeOrganizationRemoteSessionMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/organizationRemoteSessionClientSessions.js";
+import { useRefreshOrganizationRemoteSessionMutation } from "@gram/client/react-query/refreshOrganizationRemoteSession.js";
+import { useRevokeOrganizationRemoteSessionMutation } from "@gram/client/react-query/revokeOrganizationRemoteSession.js";
 import {
   Button,
   DropdownMenu,

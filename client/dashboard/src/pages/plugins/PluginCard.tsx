@@ -3,10 +3,8 @@ import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import { useSdkClient } from "@/contexts/Sdk";
-import type {
-  Plugin,
-  PublishStatusResult,
-} from "@gram/client/models/components";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
+import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import {
   Badge,
   Button,

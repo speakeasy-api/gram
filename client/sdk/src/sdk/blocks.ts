@@ -5,8 +5,15 @@
 import { riskBlocksGet } from "../funcs/riskBlocksGet.js";
 import { riskBlocksSubmitFeedback } from "../funcs/riskBlocksSubmitFeedback.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RiskBlock } from "../models/components/riskblock.js";
+import {
+  GetRiskBlockRequest,
+  GetRiskBlockSecurity,
+} from "../models/operations/getriskblock.js";
+import {
+  SubmitRiskBlockFeedbackRequest,
+  SubmitRiskBlockFeedbackSecurity,
+} from "../models/operations/submitriskblockfeedback.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Blocks extends ClientSDK {
@@ -17,10 +24,10 @@ export class Blocks extends ClientSDK {
    * Get a tool call block by its risk result ID for the durable block page.
    */
   async get(
-    request: operations.GetRiskBlockRequest,
-    security?: operations.GetRiskBlockSecurity | undefined,
+    request: GetRiskBlockRequest,
+    security?: GetRiskBlockSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskBlock> {
+  ): Promise<RiskBlock> {
     return unwrapAsync(riskBlocksGet(
       this,
       request,
@@ -36,10 +43,10 @@ export class Blocks extends ClientSDK {
    * Record thumbs-up/thumbs-down feedback for a tool call block from the block page.
    */
   async submitFeedback(
-    request: operations.SubmitRiskBlockFeedbackRequest,
-    security?: operations.SubmitRiskBlockFeedbackSecurity | undefined,
+    request: SubmitRiskBlockFeedbackRequest,
+    security?: SubmitRiskBlockFeedbackSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskBlock> {
+  ): Promise<RiskBlock> {
     return unwrapAsync(riskBlocksSubmitFeedback(
       this,
       request,

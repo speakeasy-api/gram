@@ -1,5 +1,5 @@
 import { Book, ExternalLink, Settings, Users } from "lucide-react";
-import type { PublishStatusResult } from "@gram/client/models/components";
+import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 
 // The connected-state marketplace card, shared verbatim across the plugins
 // list, plugin detail page, and the onboarding setup wizard

@@ -1,4 +1,5 @@
-import type { Plugin, PluginServer } from "@gram/client/models/components";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
+import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import {
   defineFilters,
   type FilterValues,

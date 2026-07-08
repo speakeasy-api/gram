@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { riskResultsUnmask } from "../funcs/riskResultsUnmask.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { RiskUnmaskResultResult } from "../models/components/riskunmaskresultresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  UnmaskRiskResultRequest,
+  UnmaskRiskResultSecurity,
+} from "../models/operations/unmaskriskresult.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RiskUnmaskResultMutationVariables = {
-  request: operations.UnmaskRiskResultRequest;
-  security?: operations.UnmaskRiskResultSecurity | undefined;
+  request: UnmaskRiskResultRequest;
+  security?: UnmaskRiskResultSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type RiskUnmaskResultMutationData = components.RiskUnmaskResultResult;
+export type RiskUnmaskResultMutationData = RiskUnmaskResultResult;
 
 export type RiskUnmaskResultMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

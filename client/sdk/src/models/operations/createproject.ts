@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateProjectRequestBody,
+  CreateProjectRequestBody$Outbound,
+  CreateProjectRequestBody$outboundSchema,
+} from "../components/createprojectrequestbody.js";
 
 export type CreateProjectSecurity = {
   apikeyHeaderGramKey?: string | undefined;
@@ -20,7 +24,7 @@ export type CreateProjectRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  createProjectRequestBody: components.CreateProjectRequestBody;
+  createProjectRequestBody: CreateProjectRequestBody;
 };
 
 /** @internal */
@@ -58,7 +62,7 @@ export function createProjectSecurityToJSON(
 export type CreateProjectRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
-  CreateProjectRequestBody: components.CreateProjectRequestBody$Outbound;
+  CreateProjectRequestBody: CreateProjectRequestBody$Outbound;
 };
 
 /** @internal */
@@ -69,8 +73,7 @@ export const CreateProjectRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-    createProjectRequestBody:
-      components.CreateProjectRequestBody$outboundSchema,
+    createProjectRequestBody: CreateProjectRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

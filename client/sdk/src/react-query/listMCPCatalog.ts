@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListMCPCatalogRequest,
+  ListMCPCatalogSecurity,
+} from "../models/operations/listmcpcatalog.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListMCPCatalogQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListMCPCatalogQueryError =
  * List available MCP servers from configured registries
  */
 export function useListMCPCatalog(
-  request?: operations.ListMCPCatalogRequest | undefined,
-  security?: operations.ListMCPCatalogSecurity | undefined,
+  request?: ListMCPCatalogRequest | undefined,
+  security?: ListMCPCatalogSecurity | undefined,
   options?: QueryHookOptions<ListMCPCatalogQueryData, ListMCPCatalogQueryError>,
 ): UseQueryResult<ListMCPCatalogQueryData, ListMCPCatalogQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useListMCPCatalog(
  * List available MCP servers from configured registries
  */
 export function useListMCPCatalogSuspense(
-  request?: operations.ListMCPCatalogRequest | undefined,
-  security?: operations.ListMCPCatalogSecurity | undefined,
+  request?: ListMCPCatalogRequest | undefined,
+  security?: ListMCPCatalogSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListMCPCatalogQueryData,
     ListMCPCatalogQueryError

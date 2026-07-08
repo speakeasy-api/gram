@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { assetsUploadOpenAPIv3 } from "../funcs/assetsUploadOpenAPIv3.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { UploadOpenAPIv3Result } from "../models/components/uploadopenapiv3result.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  UploadOpenAPIv3AssetRequest,
+  UploadOpenAPIv3AssetSecurity,
+} from "../models/operations/uploadopenapiv3asset.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UploadOpenAPIv3MutationVariables = {
-  request: operations.UploadOpenAPIv3AssetRequest;
-  security?: operations.UploadOpenAPIv3AssetSecurity | undefined;
+  request: UploadOpenAPIv3AssetRequest;
+  security?: UploadOpenAPIv3AssetSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UploadOpenAPIv3MutationData = components.UploadOpenAPIv3Result;
+export type UploadOpenAPIv3MutationData = UploadOpenAPIv3Result;
 
 export type UploadOpenAPIv3MutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

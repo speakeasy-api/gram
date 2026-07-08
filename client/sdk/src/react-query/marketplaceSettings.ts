@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetMarketplaceSettingsRequest,
+  GetMarketplaceSettingsSecurity,
+} from "../models/operations/getmarketplacesettings.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type MarketplaceSettingsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type MarketplaceSettingsQueryError =
  * Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.
  */
 export function useMarketplaceSettings(
-  request?: operations.GetMarketplaceSettingsRequest | undefined,
-  security?: operations.GetMarketplaceSettingsSecurity | undefined,
+  request?: GetMarketplaceSettingsRequest | undefined,
+  security?: GetMarketplaceSettingsSecurity | undefined,
   options?: QueryHookOptions<
     MarketplaceSettingsQueryData,
     MarketplaceSettingsQueryError
@@ -85,8 +88,8 @@ export function useMarketplaceSettings(
  * Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.
  */
 export function useMarketplaceSettingsSuspense(
-  request?: operations.GetMarketplaceSettingsRequest | undefined,
-  security?: operations.GetMarketplaceSettingsSecurity | undefined,
+  request?: GetMarketplaceSettingsRequest | undefined,
+  security?: GetMarketplaceSettingsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     MarketplaceSettingsQueryData,
     MarketplaceSettingsQueryError

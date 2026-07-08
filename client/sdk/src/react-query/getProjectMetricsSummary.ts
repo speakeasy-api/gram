@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetProjectMetricsSummaryRequest,
+  GetProjectMetricsSummarySecurity,
+} from "../models/operations/getprojectmetricssummary.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetProjectMetricsSummaryQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetProjectMetricsSummaryQueryError =
  * Get aggregated metrics summary for an entire project
  */
 export function useGetProjectMetricsSummary(
-  request: operations.GetProjectMetricsSummaryRequest,
-  security?: operations.GetProjectMetricsSummarySecurity | undefined,
+  request: GetProjectMetricsSummaryRequest,
+  security?: GetProjectMetricsSummarySecurity | undefined,
   options?: QueryHookOptions<
     GetProjectMetricsSummaryQueryData,
     GetProjectMetricsSummaryQueryError
@@ -88,8 +91,8 @@ export function useGetProjectMetricsSummary(
  * Get aggregated metrics summary for an entire project
  */
 export function useGetProjectMetricsSummarySuspense(
-  request: operations.GetProjectMetricsSummaryRequest,
-  security?: operations.GetProjectMetricsSummarySecurity | undefined,
+  request: GetProjectMetricsSummaryRequest,
+  security?: GetProjectMetricsSummarySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetProjectMetricsSummaryQueryData,
     GetProjectMetricsSummaryQueryError

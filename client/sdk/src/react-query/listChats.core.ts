@@ -11,16 +11,24 @@ import { GramCore } from "../core.js";
 import { chatList } from "../funcs/chatList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListChatsResult } from "../models/components/listchatsresult.js";
+import {
+  AccountType,
+  HasRisk,
+  ListChatsRequest,
+  ListChatsSecurity,
+  Pinned,
+  SortBy,
+  SortOrder,
+} from "../models/operations/listchats.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListChatsQueryData = components.ListChatsResult;
+export type ListChatsQueryData = ListChatsResult;
 
 export function prefetchListChats(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListChatsRequest | undefined,
-  security?: operations.ListChatsSecurity | undefined,
+  request?: ListChatsRequest | undefined,
+  security?: ListChatsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +43,8 @@ export function prefetchListChats(
 
 export function buildListChatsQuery(
   client$: GramCore,
-  request?: operations.ListChatsRequest | undefined,
-  security?: operations.ListChatsSecurity | undefined,
+  request?: ListChatsRequest | undefined,
+  security?: ListChatsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -94,16 +102,16 @@ export function queryKeyListChats(
     assistantId?: string | undefined;
     sourceKind?: string | undefined;
     excludeSourceKind?: string | undefined;
-    hasRisk?: operations.HasRisk | undefined;
-    accountType?: operations.AccountType | undefined;
-    pinned?: operations.Pinned | undefined;
+    hasRisk?: HasRisk | undefined;
+    accountType?: AccountType | undefined;
+    pinned?: Pinned | undefined;
     minRiskScore?: number | undefined;
     from?: Date | undefined;
     to?: Date | undefined;
     limit?: number | undefined;
     offset?: number | undefined;
-    sortBy?: operations.SortBy | undefined;
-    sortOrder?: operations.SortOrder | undefined;
+    sortBy?: SortBy | undefined;
+    sortOrder?: SortOrder | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
     gramChatSession?: string | undefined;

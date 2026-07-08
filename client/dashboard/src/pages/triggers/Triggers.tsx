@@ -16,16 +16,16 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { HumanizeDateTime } from "@/lib/dates";
+import { useCreateTriggerMutation } from "@gram/client/react-query/createTrigger.js";
+import { useDeleteTriggerMutation } from "@gram/client/react-query/deleteTrigger.js";
+import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
+import { invalidateAllTrigger } from "@gram/client/react-query/trigger.js";
+import { useTriggerDefinitions } from "@gram/client/react-query/triggerDefinitions.js";
 import {
   useTriggers,
-  useTriggerDefinitions,
-  useCreateTriggerMutation,
-  useUpdateTriggerMutation,
-  useDeleteTriggerMutation,
   invalidateAllTriggers,
-  invalidateAllTrigger,
-  useListEnvironments,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/triggers.js";
+import { useUpdateTriggerMutation } from "@gram/client/react-query/updateTrigger.js";
 import { TriggerInstance } from "@gram/client/models/components/triggerinstance.js";
 import { TriggerDefinition } from "@gram/client/models/components/triggerdefinition.js";
 import { CreateTriggerInstanceFormTargetKind as TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";

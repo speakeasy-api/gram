@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListOrganizationUsersRequest,
+  ListOrganizationUsersSecurity,
+} from "../models/operations/listorganizationusers.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListOrganizationUsersQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListOrganizationUsersQueryError =
  * List users in the active organization from Gram organization_user_relationships.
  */
 export function useListOrganizationUsers(
-  request?: operations.ListOrganizationUsersRequest | undefined,
-  security?: operations.ListOrganizationUsersSecurity | undefined,
+  request?: ListOrganizationUsersRequest | undefined,
+  security?: ListOrganizationUsersSecurity | undefined,
   options?: QueryHookOptions<
     ListOrganizationUsersQueryData,
     ListOrganizationUsersQueryError
@@ -88,8 +91,8 @@ export function useListOrganizationUsers(
  * List users in the active organization from Gram organization_user_relationships.
  */
 export function useListOrganizationUsersSuspense(
-  request?: operations.ListOrganizationUsersRequest | undefined,
-  security?: operations.ListOrganizationUsersSecurity | undefined,
+  request?: ListOrganizationUsersRequest | undefined,
+  security?: ListOrganizationUsersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListOrganizationUsersQueryData,
     ListOrganizationUsersQueryError

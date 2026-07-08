@@ -30,8 +30,9 @@ import {
   DropdownMenuTrigger,
   Icon,
 } from "@speakeasy-api/moonshine";
-import type { ChatOverview, RiskResult } from "@gram/client/models/components";
-import { useSearchLogsMutation } from "@gram/client/react-query";
+import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
@@ -49,6 +50,8 @@ import {
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
+import { AccountTypeBadge } from "@/components/account-type-badge";
+import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
@@ -235,6 +238,8 @@ function SessionSummary({
 }: {
   chat: {
     externalUserId?: string;
+    accountType?: string;
+    accountEmail?: string;
     source?: string;
     createdAt: Date;
     totalCost?: number;
@@ -250,6 +255,7 @@ function SessionSummary({
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const accountEmail = personalAccountEmail(chat);
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
@@ -298,6 +304,14 @@ function SessionSummary({
           <div className="mb-1 text-sm font-semibold">Session details</div>
           <div className="divide-border divide-y">
             <MetaRow label="User">{chat.externalUserId || "anonymous"}</MetaRow>
+            {accountEmail && (
+              <MetaRow label="Account">
+                <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                  {accountEmail}
+                  <AccountTypeBadge accountType={chat.accountType} noTooltip />
+                </span>
+              </MetaRow>
+            )}
             {chat.source && (
               <MetaRow label="Source">
                 <span className="inline-flex items-center gap-1.5">
@@ -1070,6 +1084,11 @@ function ChatDetailPanel({
     activeOccurrence,
   ]);
 
+  // Personal-account sessions label the user's turns with the account's own
+  // email (mirrors the sessions list) instead of the attributed employee's
+  // work email carried on the messages.
+  const userLabelOverride = chat ? personalAccountEmail(chat) : undefined;
+
   const rowCtx = useMemo<RowContext>(
     () => ({
       riskResultsByMessage,
@@ -1078,6 +1097,7 @@ function ChatDetailPanel({
       dimNonRisk,
       searchQuery: searchActive ? searchQuery : undefined,
       userLabel: chat?.externalUserId,
+      userLabelOverride,
     }),
     [
       riskResultsByMessage,
@@ -1087,6 +1107,7 @@ function ChatDetailPanel({
       searchActive,
       searchQuery,
       chat?.externalUserId,
+      userLabelOverride,
     ],
   );
 

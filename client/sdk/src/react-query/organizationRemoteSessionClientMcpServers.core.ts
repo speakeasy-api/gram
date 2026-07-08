@@ -11,19 +11,20 @@ import { GramCore } from "../core.js";
 import { organizationRemoteSessionIssuersListClientMcpServers } from "../funcs/organizationRemoteSessionIssuersListClientMcpServers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListOrganizationMcpServersResult } from "../models/components/listorganizationmcpserversresult.js";
+import {
+  ListOrganizationRemoteSessionClientMcpServersRequest,
+  ListOrganizationRemoteSessionClientMcpServersSecurity,
+} from "../models/operations/listorganizationremotesessionclientmcpservers.js";
 import { unwrapAsync } from "../types/fp.js";
 export type OrganizationRemoteSessionClientMcpServersQueryData =
-  components.ListOrganizationMcpServersResult;
+  ListOrganizationMcpServersResult;
 
 export function prefetchOrganizationRemoteSessionClientMcpServers(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListOrganizationRemoteSessionClientMcpServersRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientMcpServersSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientMcpServersRequest,
+  security?: ListOrganizationRemoteSessionClientMcpServersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,10 +39,8 @@ export function prefetchOrganizationRemoteSessionClientMcpServers(
 
 export function buildOrganizationRemoteSessionClientMcpServersQuery(
   client$: GramCore,
-  request: operations.ListOrganizationRemoteSessionClientMcpServersRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientMcpServersSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientMcpServersRequest,
+  security?: ListOrganizationRemoteSessionClientMcpServersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
