@@ -2604,7 +2604,7 @@ printf '{}\n200'
 {"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nsecond prompt\n</user_query>"}]}}
 {"role":"assistant","message":{"content":[{"type":"text","text":"ok two"}]}}
 `), 0o600))
-	run(`{"hook_event_name":"afterAgentResponse","conversation_id":"sess-turns","session_id":"sess-turns","generation_id":"turn-2","text":"ok two","transcript_path":"` + transcriptPath + `"}`)
+	run(`{"hook_event_name":"afterAgentResponse","conversation_id":"sess-turns","session_id":"sess-turns","generation_id":"turn-2","text":"ok two","user_email":"dev@example.com","transcript_path":"` + transcriptPath + `"}`)
 
 	chunks := strings.Split(string(requireFileBytes(t, capturePath)), "\n---GRAM---\n")
 	require.Len(t, chunks, 5, "expected prompt, response, backfilled prompt, response, trailing split")
@@ -2625,6 +2625,9 @@ printf '{}\n200'
 	require.Equal(t, "prompt.submitted", typ2, "turn-2 dropped prompt must be backfilled")
 	prompt2 := requireMapValue(t, requireMapValue(t, parsed2, "data"), "prompt")
 	require.Equal(t, "second prompt", prompt2["text"])
+	source2 := requireMapValue(t, parsed2, "source")
+	require.Equal(t, "dev@example.com", source2["user_email"],
+		"backfilled prompt must carry the identity enrichment from the event that triggered it")
 	typ3, _ := eventType(chunks[3])
 	require.Equal(t, "assistant.responded", typ3)
 }

@@ -947,6 +947,7 @@ gram_hooks_cursor_backfill_prompt_if_missing() {
   prompt_members=$(gram_hooks_join_members \
     "$(gram_hooks_json_string_member "hook_event_name" "beforeSubmitPrompt")" \
     "$(gram_hooks_json_string_member "prompt" "$prompt")" \
+    "$(gram_hooks_json_string_member "user_email" "$(gram_hooks_json_string_value "$payload" "user_email")")" \
     "$(gram_hooks_json_string_member "conversation_id" "$(gram_hooks_json_string_value "$payload" "conversation_id")")" \
     "$(gram_hooks_json_string_member "generation_id" "$(gram_hooks_json_string_value "$payload" "generation_id")")" \
     "$(gram_hooks_json_string_member "session_id" "$session_id")" \
