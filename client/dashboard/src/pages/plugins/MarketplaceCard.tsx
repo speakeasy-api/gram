@@ -41,9 +41,13 @@ export function MarketplaceCard({
           <span className="text-muted-foreground font-mono text-xs font-medium tracking-wide uppercase">
             Your project marketplace
           </span>
-          {hasUnpublishedChanges && (
+          {hasUnpublishedChanges ? (
             <Badge variant="warning">
               <Badge.Text>Needs syncing</Badge.Text>
+            </Badge>
+          ) : (
+            <Badge variant="success">
+              <Badge.Text>Up to date</Badge.Text>
             </Badge>
           )}
         </div>
