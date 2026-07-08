@@ -1,0 +1,101 @@
+name: Review Bypass
+
+# ╔═══════════════════════════════════════════════════════════════════════╗
+# ║ SECURITY: LEAVE THE TRIGGER AS `pull_request`.                         ║
+# ║ NEVER SWITCH THIS WORKFLOW TO `pull_request_target`.                   ║
+# ║                                                                        ║
+# ║ `pull_request_target` hands repository secrets — including             ║
+# ║ GRAM_BOT_PRIVATE_KEY, a key that can mint tokens to approve PRs — to   ║
+# ║ runs triggered by fork PRs. One future edit that checks out or         ║
+# ║ executes PR code would let a fork exfiltrate those secrets.            ║
+# ║                                                                        ║
+# ║ With `pull_request`, secrets never reach fork-triggered runs, so that  ║
+# ║ entire class of mistake is inert. The same-repo guard on the job       ║
+# ║ below makes fork PRs skip cleanly instead of failing at token minting. ║
+# ╚═══════════════════════════════════════════════════════════════════════╝
+#
+# Allows a PR to merge without a human approval when the `review:bypass`
+# label is applied by someone with triage+ access. The gram-bot app submits
+# an approving review that satisfies the "Merge to main" ruleset's required
+# review count. Required status checks and the merge queue are unaffected —
+# CI must still pass before the PR can merge. Removing the label dismisses
+# the bot's approval.
+#
+# The job reconciles state rather than reacting to individual label events:
+# it re-reads the PR's current labels and reviews, then approves or
+# dismisses to converge. This matters because `pull_request` workflows do
+# not run while a PR has merge conflicts — a label added or removed during
+# that window fires no run. Running the same reconciliation on
+# `synchronize` (the push that resolves the conflict) repairs any state
+# that drifted while runs were suppressed.
+
+on:
+  pull_request:
+    types: [labeled, unlabeled, synchronize]
+
+permissions: {}
+
+# Serialize runs per PR so rapid label churn can't interleave; each run
+# reconciles from freshly-read state, so the last run always converges.
+concurrency:
+  group: review-bypass-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  reconcile:
+    name: Reconcile bypass approval with label
+    if: >
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.action == 'synchronize' || github.event.label.name == 'review:bypass')
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - name: Generate gram-bot token
+        id: generate-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.GRAM_BOT_APP_ID }}
+          private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
+          permission-pull-requests: write
+
+      - name: Approve or dismiss to match label state
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          FALLBACK_ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+
+          has_label=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/labels" \
+            --jq '[.[].name] | index("review:bypass") != null')
+
+          approval_ids=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
+            --paginate \
+            --jq '.[] | select(.user.login == "gram-bot[bot]" and .state == "APPROVED") | .id')
+
+          if [[ "$has_label" == "true" && -z "$approval_ids" ]]; then
+            labeled_by=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/events" --paginate \
+              --jq '[.[] | select(.event == "labeled" and .label.name == "review:bypass") | .actor.login] | last // empty' \
+              | tail -1)
+            labeled_by="${labeled_by:-$FALLBACK_ACTOR}"
+            echo "Label present, no gram-bot approval: approving (label applied by ${labeled_by})."
+            gh api \
+              "repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
+              -f event=APPROVE \
+              -f body="Auto-approved: \`review:bypass\` label applied by @${labeled_by}. Required status checks still gate this merge."
+          elif [[ "$has_label" != "true" && -n "$approval_ids" ]]; then
+            unlabeled_by=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/events" --paginate \
+              --jq '[.[] | select(.event == "unlabeled" and .label.name == "review:bypass") | .actor.login] | last // empty' \
+              | tail -1)
+            unlabeled_by="${unlabeled_by:-$FALLBACK_ACTOR}"
+            for id in $approval_ids; do
+              echo "Label absent, dismissing gram-bot approval ${id}."
+              gh api \
+                --method PUT \
+                "repos/${REPO}/pulls/${PR_NUMBER}/reviews/${id}/dismissals" \
+                -f message="\`review:bypass\` label removed by @${unlabeled_by}." \
+                -f event=DISMISS
+            done
+          else
+            echo "State already consistent (label present: ${has_label}); nothing to do."
+          fi
