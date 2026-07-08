@@ -213,9 +213,11 @@ export default defineConfig(({}) => ({
     strictPort: true,
     cors: true,
   },
-  esbuild: {
-    jsx: "automatic",
-    jsxImportSource: "react",
+  oxc: {
+    jsx: {
+      runtime: "automatic",
+      importSource: "react",
+    },
     target: "es2022",
   },
   build: {
@@ -224,7 +226,7 @@ export default defineConfig(({}) => ({
     minify: "esbuild",
     outDir: "assets",
     assetsDir: ".",
-    rollupOptions: {
+    rolldownOptions: {
       input: inputs,
       preserveEntrySignatures: "strict",
     },
