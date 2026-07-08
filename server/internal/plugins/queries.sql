@@ -99,6 +99,26 @@ WHERE plugin_id = @plugin_id
   AND mcp_server_id IS NOT DISTINCT FROM sqlc.narg('mcp_server_id')::uuid
   AND deleted IS FALSE;
 
+-- name: AddPluginServerIfAbsent :one
+-- AttachToDefaultPlugin's insert. ON CONFLICT DO NOTHING keeps a lost race —
+-- the backend already attached concurrently, or the display name taken
+-- between the caller's de-confliction check and this insert — from raising a
+-- unique violation that would abort the caller's surrounding transaction.
+-- No row returned means some unique constraint was hit; the caller
+-- distinguishes which by re-checking. Manual adds keep using AddPluginServer
+-- so real conflicts still surface as errors there.
+INSERT INTO plugin_servers (plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order)
+VALUES (
+  @plugin_id,
+  sqlc.narg('toolset_id'),
+  sqlc.narg('mcp_server_id'),
+  @display_name,
+  @policy,
+  @sort_order
+)
+ON CONFLICT DO NOTHING
+RETURNING *;
+
 -- name: AddPluginServer :one
 -- Inserts a plugin server backed by exactly one of a toolset or an mcp_server.
 -- The plugin_servers backend-exclusivity CHECK enforces the XOR; callers must

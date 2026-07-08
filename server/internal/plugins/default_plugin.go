@@ -82,6 +82,13 @@ func EnsureDefaultPlugin(ctx context.Context, q *repo.Queries, organizationID st
 	return &EnsureDefaultPluginResult{Plugin: created, Created: true}, nil
 }
 
+// maxAttachNameAttempts bounds AttachToDefaultPlugin's de-conflict-and-insert
+// loop. Each retry means a concurrent attach took the chosen display name
+// between the check and the insert; contention that deep is effectively
+// impossible, so exhausting this is treated as an error rather than looping
+// forever inside the caller's transaction.
+const maxAttachNameAttempts = 5
+
 // AttachToDefaultPluginParams identifies the server to attach — exactly one
 // of ToolsetID / McpServerID must be Valid, mirroring the plugin_servers
 // backend-exclusivity constraint.
@@ -134,59 +141,70 @@ func AttachToDefaultPlugin(ctx context.Context, q *repo.Queries, params AttachTo
 		return nil, fmt.Errorf("check existing default plugin server: %w", err)
 	}
 
-	// De-conflict the display name against the plugin's live rows: collisions
-	// are legitimate (a toolset and an mcp_server sharing a name, or a
-	// same-named server that was deleted and recreated), and the
-	// (plugin_id, display_name) unique index would otherwise fail the
-	// caller's whole transaction — aborting an endpoint create or a server
-	// enable — over a cosmetic label.
-	existing, err := q.ListPluginServers(ctx, ensured.Plugin.ID)
-	if err != nil {
-		return nil, fmt.Errorf("list default plugin servers: %w", err)
-	}
-	taken := make(map[string]struct{}, len(existing))
-	for _, row := range existing {
-		taken[row.DisplayName] = struct{}{}
-	}
-	displayName := params.DisplayName
-	for i := 2; ; i++ {
-		if _, ok := taken[displayName]; !ok {
-			break
+	// De-conflict the display name against the plugin's live rows before each
+	// insert attempt: collisions are legitimate (a toolset and an mcp_server
+	// sharing a name, or a same-named server that was deleted and recreated),
+	// and a unique violation would otherwise fail the caller's whole
+	// transaction — aborting an endpoint create or a server enable — over a
+	// cosmetic label. The insert itself is ON CONFLICT DO NOTHING, so even a
+	// concurrent attach taking the chosen name between the check and the
+	// insert can't raise. A skipped insert re-checks whether our backend got
+	// attached concurrently (expected no-op) or only the name was taken
+	// (retry with a fresh suffix — converging, since the loser's next list
+	// sees the winner's committed row).
+	for range maxAttachNameAttempts {
+		existing, err := q.ListPluginServers(ctx, ensured.Plugin.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list default plugin servers: %w", err)
 		}
-		displayName = fmt.Sprintf("%s %d", params.DisplayName, i)
-	}
-
-	server, err := q.AddPluginServer(ctx, repo.AddPluginServerParams{
-		PluginID:    ensured.Plugin.ID,
-		ToolsetID:   params.ToolsetID,
-		McpServerID: params.McpServerID,
-		DisplayName: displayName,
-		Policy:      "required",
-		SortOrder:   0,
-	})
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			// Concurrent attach race lost after the existence and name checks
-			// — either the same server got attached or its name got taken.
-			// An expected no-op: the failed insert has aborted the
-			// surrounding transaction, so the caller's commit still fails; a
-			// retry then passes cleanly.
-			if pgErr.ConstraintName == "plugin_servers_plugin_id_toolset_id_key" ||
-				pgErr.ConstraintName == "plugin_servers_plugin_id_mcp_server_id_key" {
-				return nil, nil
+		taken := make(map[string]struct{}, len(existing))
+		for _, row := range existing {
+			taken[row.DisplayName] = struct{}{}
+		}
+		displayName := params.DisplayName
+		for i := 2; ; i++ {
+			if _, ok := taken[displayName]; !ok {
+				break
 			}
+			displayName = fmt.Sprintf("%s %d", params.DisplayName, i)
 		}
-		return nil, fmt.Errorf("attach server to default plugin: %w", err)
+
+		server, err := q.AddPluginServerIfAbsent(ctx, repo.AddPluginServerIfAbsentParams{
+			PluginID:    ensured.Plugin.ID,
+			ToolsetID:   params.ToolsetID,
+			McpServerID: params.McpServerID,
+			DisplayName: displayName,
+			Policy:      "required",
+			SortOrder:   0,
+		})
+		switch {
+		case err == nil:
+			return &AttachToDefaultPluginResult{
+				PluginID:      ensured.Plugin.ID,
+				PluginName:    ensured.Plugin.Name,
+				PluginSlug:    ensured.Plugin.Slug,
+				PluginCreated: ensured.Created,
+				Server:        server,
+			}, nil
+		case !errors.Is(err, pgx.ErrNoRows):
+			return nil, fmt.Errorf("attach server to default plugin: %w", err)
+		}
+
+		_, err = q.GetPluginServerByBackend(ctx, repo.GetPluginServerByBackendParams{
+			PluginID:    ensured.Plugin.ID,
+			ToolsetID:   params.ToolsetID,
+			McpServerID: params.McpServerID,
+		})
+		switch {
+		case err == nil:
+			// A concurrent attach of the same server won — expected no-op.
+			return nil, nil
+		case !errors.Is(err, pgx.ErrNoRows):
+			return nil, fmt.Errorf("recheck default plugin server after conflict: %w", err)
+		}
 	}
 
-	return &AttachToDefaultPluginResult{
-		PluginID:      ensured.Plugin.ID,
-		PluginName:    ensured.Plugin.Name,
-		PluginSlug:    ensured.Plugin.Slug,
-		PluginCreated: ensured.Created,
-		Server:        server,
-	}, nil
+	return nil, fmt.Errorf("attach server to default plugin: display name still contended after %d attempts", maxAttachNameAttempts)
 }
 
 // AttachToDefaultPluginAudited runs AttachToDefaultPlugin and records the

@@ -91,6 +91,62 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 	return i, err
 }
 
+const addPluginServerIfAbsent = `-- name: AddPluginServerIfAbsent :one
+INSERT INTO plugin_servers (plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6
+)
+ON CONFLICT DO NOTHING
+RETURNING id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+`
+
+type AddPluginServerIfAbsentParams struct {
+	PluginID    uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	DisplayName string
+	Policy      string
+	SortOrder   int32
+}
+
+// AttachToDefaultPlugin's insert. ON CONFLICT DO NOTHING keeps a lost race —
+// the backend already attached concurrently, or the display name taken
+// between the caller's de-confliction check and this insert — from raising a
+// unique violation that would abort the caller's surrounding transaction.
+// No row returned means some unique constraint was hit; the caller
+// distinguishes which by re-checking. Manual adds keep using AddPluginServer
+// so real conflicts still surface as errors there.
+func (q *Queries) AddPluginServerIfAbsent(ctx context.Context, arg AddPluginServerIfAbsentParams) (PluginServer, error) {
+	row := q.db.QueryRow(ctx, addPluginServerIfAbsent,
+		arg.PluginID,
+		arg.ToolsetID,
+		arg.McpServerID,
+		arg.DisplayName,
+		arg.Policy,
+		arg.SortOrder,
+	)
+	var i PluginServer
+	err := row.Scan(
+		&i.ID,
+		&i.PluginID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.DisplayName,
+		&i.Policy,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createDefaultPlugin = `-- name: CreateDefaultPlugin :one
 INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
 VALUES ($1, $2, 'Default', 'default', TRUE)

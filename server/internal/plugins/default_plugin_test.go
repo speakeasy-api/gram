@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -205,4 +206,63 @@ func TestListPluginPublishCandidates_IncludesConnectedProjectWithoutDefaultPlugi
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
+}
+
+// TestAddPluginServerIfAbsent_ConflictSkipsWithoutError pins the ON CONFLICT
+// DO NOTHING semantics AttachToDefaultPlugin's retry loop depends on: a
+// duplicate insert — same backend or same display name — must come back as
+// pgx.ErrNoRows, not a unique-violation error that would abort the caller's
+// surrounding transaction.
+func TestAddPluginServerIfAbsent_ConflictSkipsWithoutError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	queries := pluginsrepo.New(ti.conn)
+	defaultPlugin, err := queries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	first := createTestMcpServer(t, ctx, ti.conn, "Skip Test Server", mcpservers.VisibilityPublic)
+	_, err = queries.AddPluginServerIfAbsent(ctx, pluginsrepo.AddPluginServerIfAbsentParams{
+		PluginID:    defaultPlugin.ID,
+		ToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID: uuid.NullUUID{UUID: first.id, Valid: true},
+		DisplayName: "Skip Test Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	// Same backend again — skipped, not an error.
+	_, err = queries.AddPluginServerIfAbsent(ctx, pluginsrepo.AddPluginServerIfAbsentParams{
+		PluginID:    defaultPlugin.ID,
+		ToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID: uuid.NullUUID{UUID: first.id, Valid: true},
+		DisplayName: "Skip Test Server Renamed",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	// Different backend, same display name — also skipped, not an error.
+	second := createTestMcpServer(t, ctx, ti.conn, "Skip Test Server B", mcpservers.VisibilityPublic)
+	_, err = queries.AddPluginServerIfAbsent(ctx, pluginsrepo.AddPluginServerIfAbsentParams{
+		PluginID:    defaultPlugin.ID,
+		ToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID: uuid.NullUUID{UUID: second.id, Valid: true},
+		DisplayName: "Skip Test Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	servers, err := queries.ListPluginServers(ctx, defaultPlugin.ID)
+	require.NoError(t, err)
+	require.Len(t, servers, 1, "both conflicting inserts must have been skipped")
 }
