@@ -8,7 +8,7 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersListIssuers } from "../funcs/organizationRemoteSessionIssuersListIssuers.js";
+import { organizationRemoteSessionIssuersList } from "../funcs/organizationRemoteSessionIssuersList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import {
@@ -102,7 +102,7 @@ export function buildOrganizationRemoteSessionIssuersQuery(
         signal: sig,
       };
 
-      return unwrapAsync(organizationRemoteSessionIssuersListIssuers(
+      return unwrapAsync(organizationRemoteSessionIssuersList(
         client$,
         request,
         security,
@@ -144,7 +144,7 @@ export function buildOrganizationRemoteSessionIssuersInfiniteQuery(
 
       if (!ctx.pageParam) {
         const pageResult = await unwrapResultIterator(
-          organizationRemoteSessionIssuersListIssuers(
+          organizationRemoteSessionIssuersList(
             client$,
             request,
             security,
@@ -154,7 +154,7 @@ export function buildOrganizationRemoteSessionIssuersInfiniteQuery(
         return pageIteratorToJSON(pageResult);
       }
       const pageResult = await unwrapResultIterator(
-        organizationRemoteSessionIssuersListIssuers(
+        organizationRemoteSessionIssuersList(
           client$,
           {
             ...request!,
@@ -180,7 +180,7 @@ export function queryKeyOrganizationRemoteSessionIssuers(
   return [
     "@gram/client",
     "organizationRemoteSessionIssuers",
-    "listIssuers",
+    "list",
     parameters,
   ];
 }
@@ -196,7 +196,7 @@ export function queryKeyOrganizationRemoteSessionIssuersInfinite(
   return [
     "@gram/client",
     "organizationRemoteSessionIssuers",
-    "listIssuers",
+    "list",
     "infinite",
     parameters,
   ];

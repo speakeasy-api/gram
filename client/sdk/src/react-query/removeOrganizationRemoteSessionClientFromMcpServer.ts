@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersRemoveClientFromMcpServer } from "../funcs/organizationRemoteSessionIssuersRemoveClientFromMcpServer.js";
+import { organizationRemoteSessionClientsRemoveFromMcpServer } from "../funcs/organizationRemoteSessionClientsRemoveFromMcpServer.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GramError } from "../models/errors/gramerror.js";
@@ -54,7 +54,7 @@ export type RemoveOrganizationRemoteSessionClientFromMcpServerMutationError =
   | SDKValidationError;
 
 /**
- * removeClientFromMcpServer organizationRemoteSessionIssuers
+ * removeClientFromMcpServer organizationRemoteSessionClients
  *
  * @remarks
  * Detach a remote_session_client from an MCP server (clears the MCP server's user_session_issuer link) in the caller's organization. Requires org:admin.
@@ -83,8 +83,8 @@ export function useRemoveOrganizationRemoteSessionClientFromMcpServerMutation(
 export function mutationKeyRemoveOrganizationRemoteSessionClientFromMcpServer(): MutationKey {
   return [
     "@gram/client",
-    "organizationRemoteSessionIssuers",
-    "removeClientFromMcpServer",
+    "organizationRemoteSessionClients",
+    "removeFromMcpServer",
   ];
 }
 
@@ -121,14 +121,12 @@ export function buildRemoveOrganizationRemoteSessionClientFromMcpServerMutation(
             ),
           },
         };
-        return unwrapAsync(
-          organizationRemoteSessionIssuersRemoveClientFromMcpServer(
-            client$,
-            request,
-            security,
-            mergedOptions,
-          ),
-        );
+        return unwrapAsync(organizationRemoteSessionClientsRemoveFromMcpServer(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ));
       },
   };
 }

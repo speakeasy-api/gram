@@ -153,7 +153,7 @@ export function invalidateOrganizationRemoteSessionIssuerDeletePreflight(
     queryKey: [
       "@gram/client",
       "organizationRemoteSessionIssuers",
-      "getIssuerDeletePreflight",
+      "getDeletePreflight",
       ...queryKeyBase,
     ],
   });
@@ -168,7 +168,7 @@ export function invalidateAllOrganizationRemoteSessionIssuerDeletePreflight(
     queryKey: [
       "@gram/client",
       "organizationRemoteSessionIssuers",
-      "getIssuerDeletePreflight",
+      "getDeletePreflight",
     ],
   });
 }
