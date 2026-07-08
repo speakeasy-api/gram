@@ -8,24 +8,25 @@ import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import type { QueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-// AuthTarget abstracts the resource a user_session_issuer gets linked to. The
-// authentication components (section body, attach sheet, sessions list) only
-// ever talk to this interface; the two implementations below know whether the
-// link lives on mcp_servers.user_session_issuer_id or
-// toolsets.user_session_issuer_id.
+/**
+ * Abstracts the resource a user_session_issuer links to. The auth components
+ * (section body, attach sheet, sessions list) only talk to this interface;
+ * the implementations below know whether the link lives on
+ * mcp_servers.user_session_issuer_id or toolsets.user_session_issuer_id.
+ */
 export type AuthTarget = {
-  // Slug seeding auto-derived user_session_issuer / remote_session_issuer
-  // slugs on first add.
+  /** Seeds auto-derived issuer slugs on first add. */
   slug: string;
-  // Current user_session_issuer link; null when the target has none yet.
+  /** Current issuer link; null when the target has none yet. */
   userSessionIssuerId: string | null;
-  // Remote MCP server id for the RFC 9728 protected-resource probe. Undefined
-  // when the target has no probeable upstream (tunneled and toolset-backed
-  // servers), which leaves the probe idle.
+  /**
+   * Remote MCP server id for the RFC 9728 probe. Undefined for targets with
+   * no probeable upstream (tunneled, toolset-backed), leaving the probe idle.
+   */
   remoteMcpServerId?: string;
-  // Link a freshly created user_session_issuer to the target (first add).
+  /** Link a freshly created issuer to the target (first add). */
   linkUserSessionIssuer: (userSessionIssuerId: string) => Promise<void>;
-  // Invalidate the target-specific queries that embed the link.
+  /** Invalidate the target-specific queries that embed the link. */
   invalidate: (queryClient: QueryClient) => Promise<void>;
 };
 
@@ -38,10 +39,9 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
-        // Point the MCP server at the user_session_issuer and set visibility
-        // to private so the server begins serving traffic. updateMcpServer is
-        // a full-record replace, so re-send the existing UUID references
-        // alongside the update.
+        // Point the server at the issuer and set visibility private so it
+        // serves traffic. update is a full-record replace, so re-send the
+        // existing UUID references alongside.
         await client.mcpServers.update({
           updateMcpServerForm: {
             id: mcpServer.id,
@@ -74,8 +74,8 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
       slug: toolset.slug,
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
-        // Toolset-backed servers are already live, so linking only flips auth
-        // gating — mcpEnabled / mcpIsPublic stay untouched.
+        // Toolsets are already live, so linking only flips auth gating —
+        // mcpEnabled / mcpIsPublic stay untouched.
         await client.toolsets.setUserSessionIssuer({
           slug: toolset.slug,
           setUserSessionIssuerRequestBody: { userSessionIssuerId },

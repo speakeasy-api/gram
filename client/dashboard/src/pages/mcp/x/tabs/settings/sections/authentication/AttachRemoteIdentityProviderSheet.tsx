@@ -65,10 +65,10 @@ export function AttachRemoteIdentityProviderSheet({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // The MCP server or toolset the user_session_issuer gets linked to.
+  // The MCP server or toolset the issuer gets linked to.
   target: AuthTarget;
-  // null when the target has no user_session_issuer linked yet — the first
-  // add also creates one and links it via target.linkUserSessionIssuer.
+  // null when the target has no issuer yet — the first add creates one and
+  // links it via target.linkUserSessionIssuer.
   userSessionIssuer: UserSessionIssuer | null;
   // remote_session_issuers (organization-level and same-project) that are not
   // already associated with userSessionIssuer. Empty list hides the issuer
@@ -365,9 +365,9 @@ export function AttachRemoteIdentityProviderSheet({
         });
       }
 
-      // Step 4: on first-add, link the target to the freshly-created
-      // user_session_issuer. How the link is stored (and any side effects
-      // like flipping a remote server private) is the target's business.
+      // Step 4: on first-add, link the target to the new issuer. How the link
+      // is stored (and side effects like flipping a server private) is the
+      // target's business.
       if (!userSessionIssuer) {
         await target.linkUserSessionIssuer(issuerId);
       }

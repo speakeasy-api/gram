@@ -29,9 +29,11 @@ import {
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
 
-// Chrome wrapper for the remote/tunneled MCP server settings tab. The
-// target-agnostic body below also mounts on the toolset detail page inside
-// that page's own section chrome.
+/**
+ * Chrome wrapper for the remote/tunneled MCP server settings tab. The
+ * target-agnostic body below also mounts on the toolset detail page inside
+ * that page's own section chrome.
+ */
 export function AuthenticationSection({
   mcpServer,
 }: {
@@ -65,9 +67,11 @@ export function AuthenticationSection({
   );
 }
 
-// The authentication configuration surface: identity-provider setup or the
-// manage fields, plus the attach/modify/delete overlays. Chrome-free so both
-// the remote server settings tab and the toolset detail page can mount it.
+/**
+ * The auth configuration surface: identity-provider setup or the manage
+ * fields, plus the attach/modify/delete overlays. Chrome-free so both the
+ * remote server settings tab and the toolset detail page can mount it.
+ */
 export function AuthenticationSectionBody({
   target,
 }: {
@@ -84,9 +88,9 @@ export function AuthenticationSectionBody({
     enabled: issuerConfigured,
   });
 
-  // Probe the remote MCP server's protected-resource metadata so setup can
-  // offer discovery when the server advertises OAuth metadata. Targets with
-  // no probeable upstream (tunneled, toolset-backed) leave this idle.
+  // Probe protected-resource metadata so setup can offer discovery when the
+  // server advertises OAuth metadata. Idle for targets with no probeable
+  // upstream (tunneled, toolset-backed).
   const { status: probeStatus, metadata: protectedResourceMetadata } =
     useProtectedResourceMetadata(target.remoteMcpServerId, !issuerConfigured);
   const authorizationServer =

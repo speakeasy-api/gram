@@ -9,10 +9,11 @@ import { useToolsetAuthTarget } from "./x/tabs/settings/sections/authentication/
 import { UserSessionsList } from "./x/tabs/settings/sections/authentication/McpServerSessionsPanel";
 import { externalOauthIssuerUrl } from "./toolsetAuthSurface";
 
-// The user-sessions authentication surface for toolset-backed MCP servers:
-// the same identity-provider configuration the remote server settings tab
-// renders, wrapped in this page's section chrome. Covers both the attach
-// state (no user_session_issuer yet) and the manage state.
+/**
+ * User-sessions auth surface for toolset-backed MCP servers: the remote
+ * server tab's identity-provider config wrapped in this page's section
+ * chrome. Covers both the attach state (no issuer yet) and the manage state.
+ */
 export function ToolsetAuthenticationSection({
   toolset,
 }: {
@@ -40,10 +41,12 @@ export function ToolsetAuthenticationSection({
   );
 }
 
-// Convert path for external-OAuth toolsets: opens the attach sheet seeded
-// with the external server's issuer URL. On success the sheet links the
-// created user_session_issuer to the toolset, which flips the page to the
-// manage surface; the external OAuth config stays in place but goes inert.
+/**
+ * Convert path for external-OAuth toolsets: opens the attach sheet seeded
+ * with the external server's issuer URL. On success the sheet links the new
+ * issuer to the toolset, flipping the page to the manage surface; the
+ * external OAuth config stays in place but goes inert.
+ */
 export function ConvertToUserSessionsButton({
   toolset,
 }: {
@@ -51,8 +54,7 @@ export function ConvertToUserSessionsButton({
 }): JSX.Element {
   const [sheetOpen, setSheetOpen] = useState(false);
   const target = useToolsetAuthTarget(toolset);
-  // No user_session_issuer exists yet on this surface, so every issuer this
-  // project can see is selectable.
+  // No issuer wired yet, so every issuer this project can see is selectable.
   const { data: issuersResult } = useRemoteSessionIssuers();
   const selectableIssuers = issuersResult?.result.items ?? [];
 

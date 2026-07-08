@@ -1,8 +1,9 @@
 import type { Toolset } from "@/lib/toolTypes";
 
-// Pure decision logic for which authentication surface the toolset detail
-// page shows. Kept separate from React so the matrix stays unit testable
-// without rendering hooks.
+/**
+ * Pure decision logic for which authentication surface the toolset detail
+ * page shows. React-free so the matrix stays unit testable.
+ */
 
 export type OAuthParadigm = "external" | "gram" | "proxy";
 
@@ -16,16 +17,13 @@ export function getOAuthParadigm(toolset: Toolset): OAuthParadigm | null {
 }
 
 export type ToolsetAuthSurface =
-  // user_session_issuer wired → the shared authentication section (manage
-  // identity providers, session duration, active sessions).
+  // user_session_issuer wired → shared section, manage state.
   | "manage"
-  // legacy OAuth (external / proxy / gram) configured and no
-  // user_session_issuer yet → the legacy OAuth UI plus a convert path.
+  // legacy OAuth configured, unwired → legacy UI plus a convert path.
   | "legacy"
-  // nothing configured → the shared authentication section in its attach
-  // state; the legacy wizard is not reachable.
+  // nothing configured → shared section, attach state.
   | "attach"
-  // feature flag off → the pre-user-sessions UI, unchanged.
+  // flag off → pre-user-sessions UI, unchanged.
   | "legacy-only";
 
 export function toolsetAuthSurface({
@@ -38,17 +36,18 @@ export function toolsetAuthSurface({
   oauthParadigm: OAuthParadigm | null;
 }): ToolsetAuthSurface {
   if (!flagEnabled) return "legacy-only";
-  // A wired user_session_issuer always wins: once linked, the serve path
-  // gates on it and any leftover legacy OAuth config is inert.
+  // A wired issuer always wins: the serve path gates on it and any leftover
+  // legacy OAuth config is inert.
   if (userSessionIssuerWired) return "manage";
   if (oauthParadigm) return "legacy";
   return "attach";
 }
 
-// The convert path offered on the "legacy" surface. Proxy paradigms migrate
-// through the wire-user-session-issuer modal (it clones the proxy provider's
-// credentials); external OAuth has no credentials to clone, so it converts by
-// attaching a fresh identity provider through the attach sheet.
+/**
+ * Convert path offered on the "legacy" surface. Proxy paradigms migrate via
+ * the wire modal (it clones the proxy's credentials); external OAuth has none
+ * to clone, so it converts by attaching a fresh provider via the attach sheet.
+ */
 export type ToolsetConvertAction = "wire-modal" | "attach-sheet";
 
 export function toolsetConvertAction(
@@ -65,13 +64,13 @@ export function toolsetConvertAction(
   }
 }
 
-// Whether switching the MCP server to private must be blocked until the
-// legacy OAuth config is converted to a user session issuer. The backend
-// silently clears external OAuth / OAuth proxy config on any mcp_is_public
-// flip (UpdateToolset in server/internal/toolsets/impl.go). Once a user
-// session issuer is wired the leftover legacy config is inert, so losing it
-// is harmless and the flip goes through. Flag off keeps today's silent
-// behavior since no convert path exists there.
+/**
+ * Whether the public→private flip must be blocked pending OAuth conversion.
+ * The backend silently clears external OAuth / OAuth proxy config on any
+ * mcp_is_public flip (UpdateToolset in server/internal/toolsets/impl.go).
+ * A wired issuer makes leftover config inert, so the flip is safe. Flag off
+ * keeps today's silent behavior since no convert path exists there.
+ */
 export function mustConvertOAuthBeforePrivate({
   flagEnabled,
   mcpIsPublic,
@@ -91,9 +90,10 @@ export function mustConvertOAuthBeforePrivate({
   );
 }
 
-// Best-effort issuer URL to seed the attach sheet's discovery when converting
-// an external-OAuth toolset: the RFC 8414 `issuer` claim from the stored
-// metadata document, when present.
+/**
+ * Best-effort issuer URL to seed the attach sheet's discovery: the RFC 8414
+ * `issuer` claim from the external server's stored metadata, when present.
+ */
 export function externalOauthIssuerUrl(toolset: Toolset): string | undefined {
   const metadata = toolset.externalOauthServer?.metadata as
     | Record<string, unknown>

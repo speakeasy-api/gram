@@ -898,10 +898,12 @@ type OAuthSectionProps = {
   toolset: Toolset;
 };
 
-// Dispatches between the user-sessions authentication surface and the legacy
-// OAuth section based on the toolset's auth state (see toolsetAuthSurface).
-// A wired user_session_issuer or a clean slate gets the shared authentication
-// section; a legacy OAuth config keeps the old UI plus a convert path.
+/**
+ * Dispatches between the user-sessions surface and the legacy OAuth section
+ * by the toolset's auth state (see toolsetAuthSurface). A wired issuer or a
+ * clean slate gets the shared section; legacy OAuth keeps the old UI plus a
+ * convert path.
+ */
 function OAuthSection({ toolset }: OAuthSectionProps) {
   const telemetry = useTelemetry();
   const oauthParadigm = getOAuthParadigm(toolset);
@@ -931,7 +933,7 @@ function LegacyOAuthSection({
   toolset,
   convertAction,
 }: OAuthSectionProps & {
-  // The migration entry point to render, null when the feature flag is off.
+  /** Migration entry point to render; null when the flag is off. */
   convertAction: ToolsetConvertAction | null;
 }) {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
@@ -979,19 +981,14 @@ function LegacyOAuthSection({
     ? "Enable the MCP server to configure OAuth"
     : "This MCP server does not require the OAuth authorization code flow";
 
-  // userSessionIssuerSlug is populated by the toolsets read path when the
-  // OAuth-Proxy → user-sessions migration has produced a user_session_issuer
-  // for this toolset. Flag holders with a wired issuer never reach this
-  // component (the dispatcher above sends them to the manage surface), but
-  // non-holders can land here wired, so the legacy display still handles it.
+  // Flag holders with a wired issuer never reach this component (the
+  // dispatcher sends them to the manage surface), but non-holders can land
+  // here wired, so the legacy display still handles it.
   const userSessionIssuerWired = !!toolset.userSessionIssuerSlug;
-  // The wire-modal migration applies to both OAuth Proxy paradigms (custom
-  // and gram-managed): both produce a user_session_issuer, even though
-  // gram-managed skips the remote_session_* pair.
+  // Wire-modal covers both OAuth Proxy paradigms (custom and gram-managed).
   const showWireUserSessionIssuer = convertAction === "wire-modal";
-  // Once the user_session_issuer is wired, the OAuth-proxy CLIENT_ID/SECRET
-  // it was cloned from is no longer the live credential — hide Configure to
-  // avoid steering operators back into the legacy paradigm.
+  // Once wired, the cloned CLIENT_ID/SECRET is no longer live — hide Configure
+  // so operators aren't steered back into the legacy paradigm.
   const hideConfigureButton = userSessionIssuerWired;
 
   return (

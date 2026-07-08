@@ -771,9 +771,8 @@ function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
     const needsEnableDialog =
       status === "disabled" || currentStatus === "disabled";
     const needsPublicWarning = goingPublic && systemVarNames.length > 0;
-    // Guard on toolset.mcpIsPublic rather than currentStatus: a disabled
-    // server can still carry mcp_is_public=true, and selecting Private would
-    // flip it (and clear the OAuth config) all the same.
+    // Guard on mcpIsPublic, not currentStatus: a disabled server can still
+    // carry mcp_is_public=true, and Private would flip it (clearing OAuth).
     const needsConvertBlock =
       status === "private" &&
       mustConvertOAuthBeforePrivate({

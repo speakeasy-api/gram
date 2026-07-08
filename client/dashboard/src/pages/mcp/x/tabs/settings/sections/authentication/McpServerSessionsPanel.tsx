@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsSection } from "../../SettingsSection";
 
-// Chrome-free list of a user_session_issuer's active sessions. Mounted in
-// the remote server settings tab (wrapped in SettingsSection below) and on
-// the toolset detail page inside that page's own section chrome.
+/**
+ * Chrome-free list of an issuer's active sessions. Mounted in the remote
+ * server settings tab (wrapped in SettingsSection below) and on the toolset
+ * detail page inside that page's own section chrome.
+ */
 export function UserSessionsList({
   issuerId,
 }: {
