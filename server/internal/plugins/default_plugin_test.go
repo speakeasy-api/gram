@@ -56,7 +56,7 @@ func TestEnsureDefaultPlugin_ReturnsExistingWhenPresent(t *testing.T) {
 	require.Equal(t, first.Plugin.ID, second.Plugin.ID)
 }
 
-func TestEnsureDefaultPlugin_ConflictWithExistingNonDefaultPlugin(t *testing.T) {
+func TestEnsureDefaultPlugin_PromotesExistingDefaultSlugPlugin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestPluginsService(t)
@@ -66,10 +66,12 @@ func TestEnsureDefaultPlugin_ConflictWithExistingNonDefaultPlugin(t *testing.T) 
 
 	queries := pluginsrepo.New(ti.conn)
 
-	// A plugin already occupies the "Default"/"default" name+slug, but isn't
-	// marked is_default — a real conflict, not a race with another Ensure
-	// call, so it must surface as an error rather than being masked.
-	_, err := queries.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
+	// A plugin already occupies the "Default"/"default" name+slug (e.g.
+	// created manually before this feature shipped) but isn't marked
+	// is_default. CreateDefaultPlugin can never succeed for this project, so
+	// EnsureDefaultPlugin must heal by promoting the existing plugin instead
+	// of failing forever.
+	existing, err := queries.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		Name:           "Default",
@@ -79,8 +81,11 @@ func TestEnsureDefaultPlugin_ConflictWithExistingNonDefaultPlugin(t *testing.T) 
 	require.NoError(t, err)
 
 	tx := testenv.BeginTx(t, ctx, ti.conn)
-	_, err = plugins.EnsureDefaultPlugin(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
-	require.Error(t, err)
+	result, err := plugins.EnsureDefaultPlugin(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.False(t, result.Created)
+	require.Equal(t, existing.ID, result.Plugin.ID)
+	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, result.Plugin.IsDefault)
 }
 
 func TestAttachToDefaultPlugin_DisplayNameCollision_ReturnsError(t *testing.T) {

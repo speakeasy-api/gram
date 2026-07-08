@@ -25,6 +25,21 @@ WHERE organization_id = @organization_id
   AND is_default IS TRUE
   AND deleted IS FALSE;
 
+-- name: PromoteToDefaultPlugin :one
+-- Self-heals projects that already have a plugin sitting on the reserved
+-- "default" slug (e.g. created manually before this feature shipped) by
+-- flagging it as the project's is_default plugin. Called by
+-- EnsureDefaultPlugin when CreateDefaultPlugin loses to
+-- plugins_organization_id_project_id_slug_key instead of the is_default race.
+UPDATE plugins
+SET is_default = TRUE,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND slug = 'default'
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: GetPlugin :one
 SELECT *
 FROM plugins

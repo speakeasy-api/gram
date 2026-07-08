@@ -28,9 +28,10 @@ type EnsureDefaultPluginResult struct {
 // missing — covers projects that predate this feature (created before
 // CreateProject started provisioning one). Concurrent callers racing to
 // create it are resolved by re-fetching on the is_default unique-index
-// violation; any other unique violation (e.g. a pre-existing plugin already
-// named/slugged "Default"/"default") is a real conflict and surfaces as an
-// error rather than masking it.
+// violation. A project that already has a plugin sitting on the reserved
+// "default" slug (e.g. one created manually before this feature shipped) is
+// healed by promoting that plugin to is_default instead, since the slug
+// collision means CreateDefaultPlugin can never succeed for that project.
 //
 // Takes the raw transaction (not just *repo.Queries) because the insert
 // attempt runs inside a SAVEPOINT: a Postgres transaction is aborted after
@@ -63,18 +64,33 @@ func EnsureDefaultPlugin(ctx context.Context, tx pgx.Tx, organizationID string, 
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "plugins_project_id_is_default_key" {
-			if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT "+savepoint); err != nil {
-				return nil, fmt.Errorf("rollback savepoint after race: %w", err)
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			switch pgErr.ConstraintName {
+			case "plugins_project_id_is_default_key":
+				if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT "+savepoint); err != nil {
+					return nil, fmt.Errorf("rollback savepoint after race: %w", err)
+				}
+				plugin, err := q.GetDefaultPlugin(ctx, repo.GetDefaultPluginParams{
+					OrganizationID: organizationID,
+					ProjectID:      projectID,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("get default plugin after race: %w", err)
+				}
+				return &EnsureDefaultPluginResult{Plugin: plugin, Created: false}, nil
+			case "plugins_organization_id_project_id_slug_key":
+				if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT "+savepoint); err != nil {
+					return nil, fmt.Errorf("rollback savepoint after slug conflict: %w", err)
+				}
+				plugin, err := q.PromoteToDefaultPlugin(ctx, repo.PromoteToDefaultPluginParams{
+					OrganizationID: organizationID,
+					ProjectID:      projectID,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("promote existing default-slug plugin: %w", err)
+				}
+				return &EnsureDefaultPluginResult{Plugin: plugin, Created: false}, nil
 			}
-			plugin, err := q.GetDefaultPlugin(ctx, repo.GetDefaultPluginParams{
-				OrganizationID: organizationID,
-				ProjectID:      projectID,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("get default plugin after race: %w", err)
-			}
-			return &EnsureDefaultPluginResult{Plugin: plugin, Created: false}, nil
 		}
 		return nil, fmt.Errorf("create default plugin: %w", err)
 	}
