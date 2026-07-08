@@ -131,7 +131,9 @@ export function EnvironmentSwitcher({
             >
               <span className="flex items-center gap-2 truncate">
                 {selectedIsAttached && (
-                  <Link className="text-foreground h-3 w-3 shrink-0" />
+                  <SimpleTooltip tooltip="Attached">
+                    <Link className="text-foreground h-3 w-3 shrink-0" />
+                  </SimpleTooltip>
                 )}
                 <span className="truncate">{selectedLabel}</span>
               </span>
