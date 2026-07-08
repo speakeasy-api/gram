@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -373,10 +374,10 @@ func BuildJudgePrompt(in ra.JudgeInput) string {
 	return string(b)
 }
 
-// RenderMessage maps a JudgeMessage onto the JSON payload the judge reads.
+// RenderMessage maps a judge message onto the JSON payload the judge reads.
 // A multi-call tool request renders each call with its own attribution under
 // tool_calls; every other shape carries a single type-appropriate body.
-func RenderMessage(m ra.JudgeMessage) MessagePayload {
+func RenderMessage(m judgemessage.Message) MessagePayload {
 	if len(m.ToolCalls) > 0 {
 		calls := m.ToolCalls
 		truncatedCalls := false

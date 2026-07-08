@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersCreateClient } from "../funcs/organizationRemoteSessionIssuersCreateClient.js";
+import { organizationRemoteSessionClientsCreate } from "../funcs/organizationRemoteSessionClientsCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
@@ -52,7 +52,7 @@ export type CreateOrganizationRemoteSessionClientMutationError =
   | SDKValidationError;
 
 /**
- * createClient organizationRemoteSessionIssuers
+ * createClient organizationRemoteSessionClients
  *
  * @remarks
  * Register a standalone remote_session_client under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.
@@ -76,7 +76,7 @@ export function useCreateOrganizationRemoteSessionClientMutation(
 }
 
 export function mutationKeyCreateOrganizationRemoteSessionClient(): MutationKey {
-  return ["@gram/client", "organizationRemoteSessionIssuers", "createClient"];
+  return ["@gram/client", "organizationRemoteSessionClients", "create"];
 }
 
 export function buildCreateOrganizationRemoteSessionClientMutation(
@@ -107,7 +107,7 @@ export function buildCreateOrganizationRemoteSessionClientMutation(
           ),
         },
       };
-      return unwrapAsync(organizationRemoteSessionIssuersCreateClient(
+      return unwrapAsync(organizationRemoteSessionClientsCreate(
         client$,
         request,
         security,

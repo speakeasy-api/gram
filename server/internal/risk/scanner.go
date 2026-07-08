@@ -22,6 +22,7 @@ import (
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
@@ -30,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 )
 
 // RiskScanner checks text against blocking risk policies.
@@ -124,7 +126,7 @@ type Scanner struct {
 	gitleaks          *gitleaks.Scanner           // warm at startup, reused across scans
 	customRuleScanner *customruleanalyzer.Scanner // required; evaluates custom CEL detection rules
 	piiScanner        ra.PIIScanner               // nil if Presidio is unavailable
-	piScanner         *ra.PromptInjectionScanner  // never nil; stub-classifier when L1 disabled
+	piScanner         *promptinjection.Scanner    // never nil; stub-classifier when L1 disabled
 	judge             ra.PromptJudge              // nil-safe; guarded at the call site
 	flags             feature.Provider            // nil disables prompt_based enforcement
 	metrics           *scannerMetrics
@@ -145,13 +147,13 @@ func NewScanner(
 	db *pgxpool.Pool,
 	customRuleScanner *customruleanalyzer.Scanner,
 	piiScanner ra.PIIScanner,
-	piScanner *ra.PromptInjectionScanner,
+	piScanner *promptinjection.Scanner,
 	judge ra.PromptJudge,
 	flags feature.Provider,
 	celEng *celenv.Engine,
 ) (*Scanner, error) {
 	if piScanner == nil {
-		piScanner = ra.NewPromptInjectionScanner(logger, nil)
+		piScanner = promptinjection.NewScanner(logger, promptinjection.NoopEngine)
 	}
 
 	gitleaksScanner := gitleaks.NewScanner()
@@ -510,7 +512,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				}
 			}
 		case ra.SourcePromptInjection:
-			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), ra.NewJudgeMessage(messageType, toolName, text), piEngineOn)
+			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), judgemessage.New(messageType, toolName, text), piEngineOn)
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)
 			}
@@ -565,7 +567,7 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		// text is the type-appropriate body the hook layer already flattened:
 		// the prompt for user messages, tool-input JSON for tool_request,
 		// tool-output JSON for tool_response.
-		Message: ra.NewJudgeMessage(messageType, toolName, text),
+		Message: judgemessage.New(messageType, toolName, text),
 		Config:  cfg,
 	})
 	if verdict == nil || !verdict.Matched {

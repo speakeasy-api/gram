@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -145,7 +146,7 @@ func NewActivities(
 	cacheAdapter cache.Cache,
 	assistantsCore *assistants.ServiceCore,
 	piiScanner risk_analysis.PIIScanner,
-	piScanner *risk_analysis.PromptInjectionScanner,
+	piScanner *promptinjection.Scanner,
 	customRuleScanner *customruleanalyzer.Scanner,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,

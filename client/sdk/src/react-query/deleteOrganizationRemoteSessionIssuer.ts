@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersDeleteIssuer } from "../funcs/organizationRemoteSessionIssuersDeleteIssuer.js";
+import { organizationRemoteSessionIssuersDelete } from "../funcs/organizationRemoteSessionIssuersDelete.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GramError } from "../models/errors/gramerror.js";
@@ -74,7 +74,7 @@ export function useDeleteOrganizationRemoteSessionIssuerMutation(
 }
 
 export function mutationKeyDeleteOrganizationRemoteSessionIssuer(): MutationKey {
-  return ["@gram/client", "organizationRemoteSessionIssuers", "deleteIssuer"];
+  return ["@gram/client", "organizationRemoteSessionIssuers", "delete"];
 }
 
 export function buildDeleteOrganizationRemoteSessionIssuerMutation(
@@ -105,7 +105,7 @@ export function buildDeleteOrganizationRemoteSessionIssuerMutation(
           ),
         },
       };
-      return unwrapAsync(organizationRemoteSessionIssuersDeleteIssuer(
+      return unwrapAsync(organizationRemoteSessionIssuersDelete(
         client$,
         request,
         security,

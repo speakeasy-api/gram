@@ -17,6 +17,12 @@ interface CliCallbackProps {
    */
   codeChallenge?: string | null;
   codeChallengeMethod?: string | null;
+  /**
+   * How the credentials travel to the local callback. "post" submits them as
+   * an auto-submitted form body (Apple-style form_post) so the API key never
+   * appears in a URL; "get" is the legacy query-string redirect.
+   */
+  callbackMethod: "get" | "post";
 }
 
 /**
@@ -38,6 +44,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     organizationId,
     codeChallenge,
     codeChallengeMethod,
+    callbackMethod,
   } = props;
   const { session, status } = useSessionData();
   const [error, setError] = useState<string | null>(null);
@@ -105,15 +112,22 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     }
 
     createScopedKey(createKey, session.session, keyScope)
-      .then((key) =>
-        transmitKey(
-          localCallbackUrl,
-          key,
-          selectedProjectSlug,
-          session.user.email,
-          session.activeOrganizationId,
-        ),
-      )
+      .then((key) => {
+        const fields: Record<string, string> = { api_key: key };
+        if (selectedProjectSlug) {
+          fields.project = selectedProjectSlug;
+        }
+        if (session.user.email) {
+          fields.email = session.user.email;
+        }
+        // The receiving client binds its credential cache to this org so a
+        // cache minted here is never reused by a plugin generated for a
+        // different org.
+        if (session.activeOrganizationId) {
+          fields.organization_id = session.activeOrganizationId;
+        }
+        transmitKey(localCallbackUrl, callbackMethod, fields);
+      })
       .catch((err) => {
         setError(
           err instanceof Error ? err.message : "Failed to create API key",
@@ -124,6 +138,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     authorizeCode,
     keyScope,
     localCallbackUrl,
+    callbackMethod,
     projectSlug,
     organizationId,
     session,
@@ -243,28 +258,44 @@ function selectCallbackProjectSlug(
   return null;
 }
 
-async function transmitKey(
+function transmitKey(
   callbackUrl: string,
-  apiKey: string,
-  projectSlug: string | null,
-  userEmail: string,
-  organizationId?: string | null,
-): Promise<void> {
+  callbackMethod: "get" | "post",
+  fields: Record<string, string>,
+): void {
+  if (callbackMethod === "post") {
+    // A form navigation (not fetch) so the localhost listener does not need
+    // CORS or private-network-access preflight handling. The callback URL's
+    // own query string (the client's state token) is preserved by POST.
+    submitCallbackForm(callbackUrl, fields);
+    return;
+  }
+
   const url = new URL(callbackUrl);
-  url.searchParams.set("api_key", apiKey);
-  if (projectSlug) {
-    url.searchParams.set("project", projectSlug);
-  }
-  if (userEmail) {
-    url.searchParams.set("email", userEmail);
-  }
-  // The receiving client binds its credential cache to this org so a cache
-  // minted here is never reused by a plugin generated for a different org.
-  if (organizationId) {
-    url.searchParams.set("organization_id", organizationId);
+  for (const [name, value] of Object.entries(fields)) {
+    url.searchParams.set(name, value);
   }
 
   window.location.replace(url.toString());
+}
+
+function submitCallbackForm(
+  actionUrl: string,
+  fields: Record<string, string>,
+): void {
+  const form = document.createElement("form");
+  form.method = "post";
+  form.action = actionUrl;
+  form.style.display = "none";
+  for (const [name, value] of Object.entries(fields)) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  form.submit();
 }
 
 async function authorizePkceCode(

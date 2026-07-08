@@ -786,17 +786,20 @@ func TestProxy_Post_OversizedUpstreamBodyReturnsError(t *testing.T) {
 	require.ErrorIs(t, err, proxy.ErrBodyTooLarge)
 }
 
-func TestProxy_Post_UndecodableUpstreamBodyRelaysVerbatim(t *testing.T) {
+func TestProxy_Post_NonJSONRPC2xxBodyForRequestSynthesizesJSONRPCError(t *testing.T) {
 	t.Parallel()
 
-	// A non-spec-compliant remote returned a non-SSE body that isn't a single
-	// JSON-RPC message (observed in prod as a bare heartbeat scalar). The proxy
-	// must relay it verbatim with the upstream status rather than surfacing a
-	// 5xx — mirroring the SSE relay path's treatment of undecodable events.
+	// AIS-267: an upstream answered an authenticated request with its backing
+	// API's raw envelope ({"Output":…,"Version":…}) on HTTP 200 instead of a
+	// JSON-RPC result. Relaying that verbatim hands the client a payload it
+	// cannot parse or correlate. The proxy must synthesize a JSON-RPC error
+	// carrying the originating request id so the client surfaces a clean,
+	// correlatable failure, with the upstream body echoed in "data".
+	const upstreamBody = `{"Output":"result-payload","Version":"1"}`
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("3"))
+		_, _ = w.Write([]byte(upstreamBody))
 	}))
 	t.Cleanup(upstream.Close)
 
@@ -807,9 +810,75 @@ func TestProxy_Post_UndecodableUpstreamBodyRelaysVerbatim(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code, "a synthesized JSON-RPC error is delivered with HTTP 200")
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+
+	var envelope map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &envelope))
+	require.Equal(t, "2.0", envelope["jsonrpc"], "synthesized response must be valid JSON-RPC 2.0")
+	require.EqualValues(t, 1, envelope["id"], "synthesized error must carry the originating request id")
+	rpcErr, ok := envelope["error"].(map[string]any)
+	require.True(t, ok, "synthesized response must be a JSON-RPC error")
+	require.EqualValues(t, proxy.RejectCodeInternalError, rpcErr["code"])
+	data, ok := rpcErr["data"].(map[string]any)
+	require.True(t, ok, "error data must carry upstream diagnostics")
+	require.EqualValues(t, http.StatusOK, data["upstream_status"])
+	echoedBody, ok := data["upstream_body"].(string)
+	require.True(t, ok, "upstream body must be echoed as a string")
+	require.JSONEq(t, upstreamBody, echoedBody, "upstream body must be echoed for debugging")
+}
+
+func TestProxy_Post_UndecodableUpstreamBodyForNotificationRelaysVerbatim(t *testing.T) {
+	t.Parallel()
+
+	// A non-spec-compliant remote returned a non-JSON-RPC body (observed in
+	// prod as a bare heartbeat scalar) in response to a notification, which
+	// carries no id and no reply slot. There is nothing to correlate a
+	// synthesized error against, so the proxy relays the body verbatim with the
+	// upstream status rather than surfacing a 5xx.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("3"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	const notificationBody = `{"jsonrpc":"2.0","method":"notifications/initialized"}`
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(notificationBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
 	require.Equal(t, http.StatusOK, rr.Code, "undecodable upstream body must not surface as a 5xx")
 	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 	require.Equal(t, "3", rr.Body.String(), "undecodable upstream body must reach the client unmangled")
+}
+
+func TestProxy_Post_NonJSONRPCNon2xxBodyForRequestRelaysVerbatim(t *testing.T) {
+	t.Parallel()
+
+	// When the upstream body isn't JSON-RPC but the status is non-2xx, the
+	// status itself already signals the error. The proxy relays the body and
+	// status verbatim rather than masking the status behind a synthesized
+	// HTTP 200 JSON-RPC error.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("upstream unavailable"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusBadGateway, rr.Code, "non-2xx status must be relayed verbatim")
+	require.Equal(t, "upstream unavailable", rr.Body.String(), "non-2xx body must reach the client unmangled")
 }
 
 func TestProxy_Post_GzipEncodedUpstreamBodyIsDecodedAndIntercepted(t *testing.T) {

@@ -74,7 +74,7 @@ export type OrganizationRemoteSessionClientsQueryError =
   | SDKValidationError;
 
 /**
- * listClients organizationRemoteSessionIssuers
+ * listClients organizationRemoteSessionClients
  *
  * @remarks
  * List the remote_session_clients registered with a given issuer in the caller's organization, each with its MCP server attachment count. Requires org:read.
@@ -103,7 +103,7 @@ export function useOrganizationRemoteSessionClients(
 }
 
 /**
- * listClients organizationRemoteSessionIssuers
+ * listClients organizationRemoteSessionClients
  *
  * @remarks
  * List the remote_session_clients registered with a given issuer in the caller's organization, each with its MCP server attachment count. Requires org:read.
@@ -132,7 +132,7 @@ export function useOrganizationRemoteSessionClientsSuspense(
 }
 
 /**
- * listClients organizationRemoteSessionIssuers
+ * listClients organizationRemoteSessionClients
  *
  * @remarks
  * List the remote_session_clients registered with a given issuer in the caller's organization, each with its MCP server attachment count. Requires org:read.
@@ -175,7 +175,7 @@ export function useOrganizationRemoteSessionClientsInfinite(
 }
 
 /**
- * listClients organizationRemoteSessionIssuers
+ * listClients organizationRemoteSessionClients
  *
  * @remarks
  * List the remote_session_clients registered with a given issuer in the caller's organization, each with its MCP server attachment count. Requires org:read.
@@ -255,8 +255,8 @@ export function invalidateOrganizationRemoteSessionClients(
     ...filters,
     queryKey: [
       "@gram/client",
-      "organizationRemoteSessionIssuers",
-      "listClients",
+      "organizationRemoteSessionClients",
+      "list",
       ...queryKeyBase,
     ],
   });
@@ -268,10 +268,6 @@ export function invalidateAllOrganizationRemoteSessionClients(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/client",
-      "organizationRemoteSessionIssuers",
-      "listClients",
-    ],
+    queryKey: ["@gram/client", "organizationRemoteSessionClients", "list"],
   });
 }

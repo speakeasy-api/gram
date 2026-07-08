@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 )
 
 func TestCanonicalPresidioRuleID_SnakeCasesAndPrependsPII(t *testing.T) {
@@ -72,7 +73,7 @@ func TestDescribe_AllBuildersReturnCanonicalIDs(t *testing.T) {
 	}{
 		{"pii.credit_card", "pii.credit_card", func() (string, string) { return DescribePresidioEntity("CREDIT_CARD") }},
 		{"pii.dead_letter", "pii.dead_letter", DescribePresidioDeadLetter},
-		{"prompt_injection", "prompt_injection", DescribePromptInjection},
+		{"prompt_injection", "prompt_injection", promptinjection.Describe},
 	}
 	for _, c := range cases {
 		id, desc := c.fn()
@@ -128,7 +129,7 @@ func TestDescribeBuilders_NeverLeakSensitiveMatch(t *testing.T) {
 		{
 			name: "prompt injection",
 			desc: func() string {
-				_, d := DescribePromptInjection()
+				_, d := promptinjection.Describe()
 				return d
 			}(),
 			sentinel: "ignore previous instructions",

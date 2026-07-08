@@ -374,28 +374,34 @@ run();
 * [listToolFilters](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 * [update](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 
+### [OrganizationRemoteSessionClients](docs/sdks/organizationremotesessionclients/README.md)
+
+* [create](docs/sdks/organizationremotesessionclients/README.md#create) - createClient organizationRemoteSessionClients
+* [createCimd](docs/sdks/organizationremotesessionclients/README.md#createcimd) - createCimdClient organizationRemoteSessionClients
+* [delete](docs/sdks/organizationremotesessionclients/README.md#delete) - deleteClient organizationRemoteSessionClients
+* [get](docs/sdks/organizationremotesessionclients/README.md#get) - getClient organizationRemoteSessionClients
+* [getDeletePreflight](docs/sdks/organizationremotesessionclients/README.md#getdeletepreflight) - getClientDeletePreflight organizationRemoteSessionClients
+* [list](docs/sdks/organizationremotesessionclients/README.md#list) - listClients organizationRemoteSessionClients
+* [listMcpServers](docs/sdks/organizationremotesessionclients/README.md#listmcpservers) - listClientMcpServers organizationRemoteSessionClients
+* [removeFromMcpServer](docs/sdks/organizationremotesessionclients/README.md#removefrommcpserver) - removeClientFromMcpServer organizationRemoteSessionClients
+* [update](docs/sdks/organizationremotesessionclients/README.md#update) - updateClient organizationRemoteSessionClients
+
 ### [OrganizationRemoteSessionIssuers](docs/sdks/organizationremotesessionissuers/README.md)
 
-* [createCimdClient](docs/sdks/organizationremotesessionissuers/README.md#createcimdclient) - createCimdClient organizationRemoteSessionIssuers
-* [createClient](docs/sdks/organizationremotesessionissuers/README.md#createclient) - createClient organizationRemoteSessionIssuers
-* [createIssuer](docs/sdks/organizationremotesessionissuers/README.md#createissuer) - createIssuer organizationRemoteSessionIssuers
-* [deleteClient](docs/sdks/organizationremotesessionissuers/README.md#deleteclient) - deleteClient organizationRemoteSessionIssuers
-* [deleteIssuer](docs/sdks/organizationremotesessionissuers/README.md#deleteissuer) - deleteIssuer organizationRemoteSessionIssuers
-* [getClient](docs/sdks/organizationremotesessionissuers/README.md#getclient) - getClient organizationRemoteSessionIssuers
-* [getClientDeletePreflight](docs/sdks/organizationremotesessionissuers/README.md#getclientdeletepreflight) - getClientDeletePreflight organizationRemoteSessionIssuers
-* [getIssuer](docs/sdks/organizationremotesessionissuers/README.md#getissuer) - getIssuer organizationRemoteSessionIssuers
-* [getIssuerDeletePreflight](docs/sdks/organizationremotesessionissuers/README.md#getissuerdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
-* [listClientMcpServers](docs/sdks/organizationremotesessionissuers/README.md#listclientmcpservers) - listClientMcpServers organizationRemoteSessionIssuers
-* [listClientSessions](docs/sdks/organizationremotesessionissuers/README.md#listclientsessions) - listClientSessions organizationRemoteSessionIssuers
-* [listClients](docs/sdks/organizationremotesessionissuers/README.md#listclients) - listClients organizationRemoteSessionIssuers
-* [listIssuers](docs/sdks/organizationremotesessionissuers/README.md#listissuers) - listIssuers organizationRemoteSessionIssuers
-* [moveIssuer](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
-* [refreshSession](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
-* [removeClientFromMcpServer](docs/sdks/organizationremotesessionissuers/README.md#removeclientfrommcpserver) - removeClientFromMcpServer organizationRemoteSessionIssuers
-* [revokeAllClientSessions](docs/sdks/organizationremotesessionissuers/README.md#revokeallclientsessions) - revokeAllClientSessions organizationRemoteSessionIssuers
-* [revokeSession](docs/sdks/organizationremotesessionissuers/README.md#revokesession) - revokeSession organizationRemoteSessionIssuers
-* [updateClient](docs/sdks/organizationremotesessionissuers/README.md#updateclient) - updateClient organizationRemoteSessionIssuers
-* [updateIssuer](docs/sdks/organizationremotesessionissuers/README.md#updateissuer) - updateIssuer organizationRemoteSessionIssuers
+* [create](docs/sdks/organizationremotesessionissuers/README.md#create) - createIssuer organizationRemoteSessionIssuers
+* [delete](docs/sdks/organizationremotesessionissuers/README.md#delete) - deleteIssuer organizationRemoteSessionIssuers
+* [get](docs/sdks/organizationremotesessionissuers/README.md#get) - getIssuer organizationRemoteSessionIssuers
+* [getDeletePreflight](docs/sdks/organizationremotesessionissuers/README.md#getdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
+* [list](docs/sdks/organizationremotesessionissuers/README.md#list) - listIssuers organizationRemoteSessionIssuers
+* [move](docs/sdks/organizationremotesessionissuers/README.md#move) - moveIssuer organizationRemoteSessionIssuers
+* [update](docs/sdks/organizationremotesessionissuers/README.md#update) - updateIssuer organizationRemoteSessionIssuers
+
+### [OrganizationRemoteSessions](docs/sdks/organizationremotesessions/README.md)
+
+* [list](docs/sdks/organizationremotesessions/README.md#list) - listClientSessions organizationRemoteSessions
+* [refresh](docs/sdks/organizationremotesessions/README.md#refresh) - refreshSession organizationRemoteSessions
+* [revoke](docs/sdks/organizationremotesessions/README.md#revoke) - revokeSession organizationRemoteSessions
+* [revokeAll](docs/sdks/organizationremotesessions/README.md#revokeall) - revokeAllClientSessions organizationRemoteSessions
 
 ### [Organizations](docs/sdks/organizations/README.md)
 
@@ -870,26 +876,26 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpServersList`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`mcpServersListToolFilters`](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 - [`mcpServersUpdate`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
-- [`organizationRemoteSessionIssuersCreateCimdClient`](docs/sdks/organizationremotesessionissuers/README.md#createcimdclient) - createCimdClient organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersCreateClient`](docs/sdks/organizationremotesessionissuers/README.md#createclient) - createClient organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersCreateIssuer`](docs/sdks/organizationremotesessionissuers/README.md#createissuer) - createIssuer organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersDeleteClient`](docs/sdks/organizationremotesessionissuers/README.md#deleteclient) - deleteClient organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersDeleteIssuer`](docs/sdks/organizationremotesessionissuers/README.md#deleteissuer) - deleteIssuer organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersGetClient`](docs/sdks/organizationremotesessionissuers/README.md#getclient) - getClient organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersGetClientDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getclientdeletepreflight) - getClientDeletePreflight organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersGetIssuer`](docs/sdks/organizationremotesessionissuers/README.md#getissuer) - getIssuer organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersGetIssuerDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getissuerdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersListClientMcpServers`](docs/sdks/organizationremotesessionissuers/README.md#listclientmcpservers) - listClientMcpServers organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersListClients`](docs/sdks/organizationremotesessionissuers/README.md#listclients) - listClients organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersListClientSessions`](docs/sdks/organizationremotesessionissuers/README.md#listclientsessions) - listClientSessions organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersListIssuers`](docs/sdks/organizationremotesessionissuers/README.md#listissuers) - listIssuers organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersMoveIssuer`](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersRefreshSession`](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersRemoveClientFromMcpServer`](docs/sdks/organizationremotesessionissuers/README.md#removeclientfrommcpserver) - removeClientFromMcpServer organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersRevokeAllClientSessions`](docs/sdks/organizationremotesessionissuers/README.md#revokeallclientsessions) - revokeAllClientSessions organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersRevokeSession`](docs/sdks/organizationremotesessionissuers/README.md#revokesession) - revokeSession organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersUpdateClient`](docs/sdks/organizationremotesessionissuers/README.md#updateclient) - updateClient organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersUpdateIssuer`](docs/sdks/organizationremotesessionissuers/README.md#updateissuer) - updateIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionClientsCreate`](docs/sdks/organizationremotesessionclients/README.md#create) - createClient organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsCreateCimd`](docs/sdks/organizationremotesessionclients/README.md#createcimd) - createCimdClient organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsDelete`](docs/sdks/organizationremotesessionclients/README.md#delete) - deleteClient organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsGet`](docs/sdks/organizationremotesessionclients/README.md#get) - getClient organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsGetDeletePreflight`](docs/sdks/organizationremotesessionclients/README.md#getdeletepreflight) - getClientDeletePreflight organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsList`](docs/sdks/organizationremotesessionclients/README.md#list) - listClients organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsListMcpServers`](docs/sdks/organizationremotesessionclients/README.md#listmcpservers) - listClientMcpServers organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsRemoveFromMcpServer`](docs/sdks/organizationremotesessionclients/README.md#removefrommcpserver) - removeClientFromMcpServer organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsUpdate`](docs/sdks/organizationremotesessionclients/README.md#update) - updateClient organizationRemoteSessionClients
+- [`organizationRemoteSessionIssuersCreate`](docs/sdks/organizationremotesessionissuers/README.md#create) - createIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersDelete`](docs/sdks/organizationremotesessionissuers/README.md#delete) - deleteIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersGet`](docs/sdks/organizationremotesessionissuers/README.md#get) - getIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersGetDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersList`](docs/sdks/organizationremotesessionissuers/README.md#list) - listIssuers organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersMove`](docs/sdks/organizationremotesessionissuers/README.md#move) - moveIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersUpdate`](docs/sdks/organizationremotesessionissuers/README.md#update) - updateIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionsList`](docs/sdks/organizationremotesessions/README.md#list) - listClientSessions organizationRemoteSessions
+- [`organizationRemoteSessionsRefresh`](docs/sdks/organizationremotesessions/README.md#refresh) - refreshSession organizationRemoteSessions
+- [`organizationRemoteSessionsRevoke`](docs/sdks/organizationremotesessions/README.md#revoke) - revokeSession organizationRemoteSessions
+- [`organizationRemoteSessionsRevokeAll`](docs/sdks/organizationremotesessions/README.md#revokeall) - revokeAllClientSessions organizationRemoteSessions
 - [`organizationsCreatePortalSession`](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
 - [`organizationsDisableWebhooks`](docs/sdks/organizations/README.md#disablewebhooks) - disableWebhooks organizations
 - [`organizationsEnableWebhooks`](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
@@ -1154,7 +1160,7 @@ To learn about this feature and how to get started, check
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateAwsIamCredentialMutation`](docs/sdks/externalcredentials/README.md#createawsiam) - createAwsIamCredential externalCredentials
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
-- [`useCreateCimdOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionissuers/README.md#createcimdclient) - createCimdClient organizationRemoteSessionIssuers
+- [`useCreateCimdOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionclients/README.md#createcimd) - createCimdClient organizationRemoteSessionClients
 - [`useCreateCimdRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#createcimd) - createCimd remoteSessionClients
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
@@ -1165,8 +1171,8 @@ To learn about this feature and how to get started, check
 - [`useCreateGlobalToolVariationGroupMutation`](docs/sdks/variations/README.md#createglobal) - createGlobal variations
 - [`useCreateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
 - [`useCreateMcpServerMutation`](docs/sdks/mcpservers/README.md#create) - createMcpServer mcpServers
-- [`useCreateOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionissuers/README.md#createclient) - createClient organizationRemoteSessionIssuers
-- [`useCreateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#createissuer) - createIssuer organizationRemoteSessionIssuers
+- [`useCreateOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionclients/README.md#create) - createClient organizationRemoteSessionClients
+- [`useCreateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#create) - createIssuer organizationRemoteSessionIssuers
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreatePluginMutation`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 - [`useCreatePortalSessionMutation`](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
@@ -1195,8 +1201,8 @@ To learn about this feature and how to get started, check
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`useDeleteMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#delete) - deleteMcpEndpoint mcpEndpoints
 - [`useDeleteMcpServerMutation`](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
-- [`useDeleteOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionissuers/README.md#deleteclient) - deleteClient organizationRemoteSessionIssuers
-- [`useDeleteOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#deleteissuer) - deleteIssuer organizationRemoteSessionIssuers
+- [`useDeleteOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionclients/README.md#delete) - deleteClient organizationRemoteSessionClients
+- [`useDeleteOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#delete) - deleteIssuer organizationRemoteSessionIssuers
 - [`useDeleteOtelForwardingConfigMutation`](docs/sdks/otelforwarding/README.md#deleteconfig) - deleteConfig otelForwarding
 - [`useDeletePluginMutation`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 - [`useDeleteProjectMutation`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
@@ -1313,17 +1319,17 @@ To learn about this feature and how to get started, check
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`useMigrateLegacyGramRegistrationsMutation`](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 - [`useMintUserSessionMutation`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
-- [`useMoveOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
+- [`useMoveOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#move) - moveIssuer organizationRemoteSessionIssuers
 - [`useOnboardingStatus`](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations
 - [`useOrganization`](docs/sdks/organizations/README.md#get) - get organizations
-- [`useOrganizationRemoteSessionClient`](docs/sdks/organizationremotesessionissuers/README.md#getclient) - getClient organizationRemoteSessionIssuers
-- [`useOrganizationRemoteSessionClientDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getclientdeletepreflight) - getClientDeletePreflight organizationRemoteSessionIssuers
-- [`useOrganizationRemoteSessionClientMcpServers`](docs/sdks/organizationremotesessionissuers/README.md#listclientmcpservers) - listClientMcpServers organizationRemoteSessionIssuers
-- [`useOrganizationRemoteSessionClients`](docs/sdks/organizationremotesessionissuers/README.md#listclients) - listClients organizationRemoteSessionIssuers
-- [`useOrganizationRemoteSessionClientSessions`](docs/sdks/organizationremotesessionissuers/README.md#listclientsessions) - listClientSessions organizationRemoteSessionIssuers
-- [`useOrganizationRemoteSessionIssuer`](docs/sdks/organizationremotesessionissuers/README.md#getissuer) - getIssuer organizationRemoteSessionIssuers
-- [`useOrganizationRemoteSessionIssuerDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getissuerdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
-- [`useOrganizationRemoteSessionIssuers`](docs/sdks/organizationremotesessionissuers/README.md#listissuers) - listIssuers organizationRemoteSessionIssuers
+- [`useOrganizationRemoteSessionClient`](docs/sdks/organizationremotesessionclients/README.md#get) - getClient organizationRemoteSessionClients
+- [`useOrganizationRemoteSessionClientDeletePreflight`](docs/sdks/organizationremotesessionclients/README.md#getdeletepreflight) - getClientDeletePreflight organizationRemoteSessionClients
+- [`useOrganizationRemoteSessionClientMcpServers`](docs/sdks/organizationremotesessionclients/README.md#listmcpservers) - listClientMcpServers organizationRemoteSessionClients
+- [`useOrganizationRemoteSessionClients`](docs/sdks/organizationremotesessionclients/README.md#list) - listClients organizationRemoteSessionClients
+- [`useOrganizationRemoteSessionClientSessions`](docs/sdks/organizationremotesessions/README.md#list) - listClientSessions organizationRemoteSessions
+- [`useOrganizationRemoteSessionIssuer`](docs/sdks/organizationremotesessionissuers/README.md#get) - getIssuer organizationRemoteSessionIssuers
+- [`useOrganizationRemoteSessionIssuerDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
+- [`useOrganizationRemoteSessionIssuers`](docs/sdks/organizationremotesessionissuers/README.md#list) - listIssuers organizationRemoteSessionIssuers
 - [`useOtelForwardingConfig`](docs/sdks/otelforwarding/README.md#getconfig) - getConfig otelForwarding
 - [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`usePlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
@@ -1339,7 +1345,7 @@ To learn about this feature and how to get started, check
 - [`usePublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`useRbacStatus`](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
-- [`useRefreshOrganizationRemoteSessionMutation`](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
+- [`useRefreshOrganizationRemoteSessionMutation`](docs/sdks/organizationremotesessions/README.md#refresh) - refreshSession organizationRemoteSessions
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
 - [`useRemoteMcpServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
@@ -1349,17 +1355,17 @@ To learn about this feature and how to get started, check
 - [`useRemoteSessionIssuers`](docs/sdks/remotesessionissuers/README.md#list) - listRemoteSessionIssuers remoteSessionIssuers
 - [`useRemoteSessions`](docs/sdks/remotesessions/README.md#list) - listRemoteSessions remoteSessions
 - [`useRemoveOAuthServerMutation`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
-- [`useRemoveOrganizationRemoteSessionClientFromMcpServerMutation`](docs/sdks/organizationremotesessionissuers/README.md#removeclientfrommcpserver) - removeClientFromMcpServer organizationRemoteSessionIssuers
+- [`useRemoveOrganizationRemoteSessionClientFromMcpServerMutation`](docs/sdks/organizationremotesessionclients/README.md#removefrommcpserver) - removeClientFromMcpServer organizationRemoteSessionClients
 - [`useRemoveOrganizationUserMutation`](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 - [`useRemovePluginServerMutation`](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useResolveChallengeMutation`](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
 - [`useResumeTriggerMutation`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
-- [`useRevokeAllOrganizationRemoteSessionClientSessionsMutation`](docs/sdks/organizationremotesessionissuers/README.md#revokeallclientsessions) - revokeAllClientSessions organizationRemoteSessionIssuers
+- [`useRevokeAllOrganizationRemoteSessionClientSessionsMutation`](docs/sdks/organizationremotesessions/README.md#revokeall) - revokeAllClientSessions organizationRemoteSessions
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useRevokeInviteMutation`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
-- [`useRevokeOrganizationRemoteSessionMutation`](docs/sdks/organizationremotesessionissuers/README.md#revokesession) - revokeSession organizationRemoteSessionIssuers
+- [`useRevokeOrganizationRemoteSessionMutation`](docs/sdks/organizationremotesessions/README.md#revoke) - revokeSession organizationRemoteSessions
 - [`useRevokeRemoteSessionMutation`](docs/sdks/remotesessions/README.md#revoke) - revokeRemoteSession remoteSessions
 - [`useRevokeUserSessionClientMutation`](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
 - [`useRevokeUserSessionConsentMutation`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
@@ -1452,8 +1458,8 @@ To learn about this feature and how to get started, check
 - [`useUpdateMcpServerMutation`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 - [`useUpdateMemberRolesMutation`](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 - [`useUpdateOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
-- [`useUpdateOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionissuers/README.md#updateclient) - updateClient organizationRemoteSessionIssuers
-- [`useUpdateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#updateissuer) - updateIssuer organizationRemoteSessionIssuers
+- [`useUpdateOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionclients/README.md#update) - updateClient organizationRemoteSessionClients
+- [`useUpdateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#update) - updateIssuer organizationRemoteSessionIssuers
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`useUpdatePluginMutation`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 - [`useUpdatePluginServerMutation`](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins

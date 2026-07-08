@@ -8,7 +8,7 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersListClientMcpServers } from "../funcs/organizationRemoteSessionIssuersListClientMcpServers.js";
+import { organizationRemoteSessionClientsListMcpServers } from "../funcs/organizationRemoteSessionClientsListMcpServers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { ListOrganizationMcpServersResult } from "../models/components/listorganizationmcpserversresult.js";
@@ -68,7 +68,7 @@ export function buildOrganizationRemoteSessionClientMcpServersQuery(
         signal: sig,
       };
 
-      return unwrapAsync(organizationRemoteSessionIssuersListClientMcpServers(
+      return unwrapAsync(organizationRemoteSessionClientsListMcpServers(
         client$,
         request,
         security,
@@ -87,8 +87,8 @@ export function queryKeyOrganizationRemoteSessionClientMcpServers(
 ): QueryKey {
   return [
     "@gram/client",
-    "organizationRemoteSessionIssuers",
-    "listClientMcpServers",
+    "organizationRemoteSessionClients",
+    "listMcpServers",
     parameters,
   ];
 }
