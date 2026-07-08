@@ -144,6 +144,12 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 			for _, future := range futures {
 				var publishResult plugins.PublishProjectResult
 				if err := future.Get(ctx, &publishResult); err != nil {
+					var appErr *temporal.ApplicationError
+					if errors.As(err, &appErr) && appErr.Type() == bgactivities.ErrTypeGitHubRepoConflict {
+						result.Skipped++
+						workflow.GetLogger(ctx).Warn("plugin project publish skipped: github repo conflict", "error", err)
+						continue
+					}
 					result.Failed++
 					workflow.GetLogger(ctx).Error("plugin project publish failed", "error", err)
 					continue

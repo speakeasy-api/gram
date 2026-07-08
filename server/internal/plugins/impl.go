@@ -1664,6 +1664,9 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// published repo contains key strings with no DB records — re-publish
 	// overwrites them with fresh valid keys.
 	if err := s.persistPluginAPIKeys(ctx, input, []pluginAPIKeyCandidate{mcpCandidate, hooksCandidate}, projectName, repoOwner, repoName, pluginSlugs, fingerprint); err != nil {
+		if errors.Is(err, ErrGitHubRepoConflict) {
+			return nil, oops.E(oops.CodeConflict, err, "persist plugin api keys").LogWarn(ctx, s.logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api keys").LogError(ctx, s.logger)
 	}
 
@@ -1859,6 +1862,15 @@ func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose str
 	}, nil
 }
 
+// ErrGitHubRepoConflict indicates the computed repo_owner/repo_name for this
+// project's publish already belongs to a different project's GitHub
+// connection (plugin_github_connections_installation_repo_key). Most often
+// this is a stale row left behind by a soft-deleted project that freed its
+// org/project slug for reuse — soft-deletes never clean up this table.
+// Callers should treat this as a non-retryable, human-actionable condition
+// rather than a transient failure.
+var ErrGitHubRepoConflict = errors.New("github repo already connected to a different project")
+
 // persistPluginAPIKeys atomically writes one or more API keys, their audit
 // log entries, the plugin publish audit log entry, and the GitHub
 // connection record in a single transaction. All-or-nothing: if any
@@ -1926,6 +1938,10 @@ func (s *Service) persistPluginAPIKeys(
 		MarketplaceToken:     pgtype.Text{String: candidateToken, Valid: true},
 		PublishedFingerprint: conv.ToPGText(fingerprint),
 	}); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "plugin_github_connections_installation_repo_key" {
+			return fmt.Errorf("%w: %s/%s already connected to a different project", ErrGitHubRepoConflict, repoOwner, repoName)
+		}
 		return fmt.Errorf("upsert github connection: %w", err)
 	}
 

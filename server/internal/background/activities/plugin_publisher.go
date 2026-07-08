@@ -2,16 +2,27 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
+
+// ErrTypeGitHubRepoConflict tags the non-retryable Temporal application error
+// emitted when a project's computed GitHub repo is already connected to a
+// different project (plugin_github_connections_installation_repo_key). Most
+// often a stale row from a soft-deleted project that freed its slug for
+// reuse. Retrying can't fix this — it needs a human to clean up the stale
+// connection — so the workflow logs it once at warn and moves on instead of
+// burning retries every tick.
+const ErrTypeGitHubRepoConflict = "PluginGitHubRepoConflict"
 
 type PluginPublishClient interface {
 	PublishProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error)
@@ -86,6 +97,9 @@ func (p *PluginPublisher) PublishProject(ctx context.Context, input plugins.Publ
 
 	result, err := p.publisher.PublishProject(ctx, input)
 	if err != nil {
+		if errors.Is(err, plugins.ErrGitHubRepoConflict) {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), ErrTypeGitHubRepoConflict, err)
+		}
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}
 	return result, nil
