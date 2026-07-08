@@ -89,6 +89,11 @@ func DescribeToolsetEntries(
 		toolsetIDs[i] = ts.ID
 	}
 	organizationID := toolsets[0].OrganizationID
+	for _, ts := range toolsets[1:] {
+		if ts.OrganizationID != organizationID {
+			return nil, oops.E(oops.CodeInvariantViolation, nil, "DescribeToolsetEntries requires all toolsets to belong to the same organization").LogError(ctx, logger)
+		}
+	}
 
 	// Wave 0: every query that needs nothing but toolsetIDs/projectID/
 	// organizationID — none of these depend on each other's results, so run
