@@ -1,13 +1,10 @@
 package mcpservers
 
-import "github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
-
-// Visibility values for mcp_servers.visibility, aliasing the leaf visibility
-// package so callers can compare against typed constants instead of bare
-// string literals. Packages that mcpservers itself depends on (e.g. plugins)
-// import the visibility package directly to avoid an import cycle.
+// Visibility values for mcp_servers.visibility. Mirror the enum declared
+// in the design package (design/mcpservers/design.go) so callers can
+// compare against typed constants instead of bare string literals.
 const (
-	VisibilityPublic   = visibility.Public
-	VisibilityPrivate  = visibility.Private
-	VisibilityDisabled = visibility.Disabled
+	VisibilityPublic   = "public"
+	VisibilityPrivate  = "private"
+	VisibilityDisabled = "disabled"
 )

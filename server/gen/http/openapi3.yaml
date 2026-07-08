@@ -48404,9 +48404,6 @@ components:
                 connected:
                     type: boolean
                     description: Whether this project has a GitHub connection.
-                has_collaborators:
-                    type: boolean
-                    description: Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.
                 last_published_at:
                     type: string
                     description: When the project was last published to GitHub. Absent when the project is not connected.

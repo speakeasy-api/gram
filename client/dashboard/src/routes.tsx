@@ -30,7 +30,7 @@ import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
-import { MCPDetailPage } from "./pages/mcp/MCPDetails";
+import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import {
@@ -352,16 +352,6 @@ const ROUTE_STRUCTURE = {
         title: "Built-in MCP",
         url: "built-in/:builtInSlug",
         component: BuiltInMCPDetailPage,
-        subPages: {
-          overview: {
-            title: "Built-in MCP Overview",
-            url: "overview",
-          },
-          tools: {
-            title: "Built-in MCP Tools",
-            url: "tools",
-          },
-        },
       },
       // TODO(AGE-1902): collapse with :toolsetSlug once Hosted (toolset-backed)
       // MCP data moves to mcp_servers/mcp_endpoints. Until then this route is
@@ -381,6 +371,10 @@ const ROUTE_STRUCTURE = {
           tools: {
             title: "MCP Server Tools",
             url: "tools",
+          },
+          analytics: {
+            title: "MCP Server Analytics",
+            url: "analytics",
           },
           // Legacy route. MCPServerDetails redirects this to
           // settings#authentication now that authentication lives under
@@ -402,41 +396,8 @@ const ROUTE_STRUCTURE = {
       details: {
         title: "MCP Details",
         url: ":toolsetSlug",
-        component: MCPDetailPage,
-        subPages: {
-          overview: {
-            title: "MCP Overview",
-            url: "overview",
-          },
-          tools: {
-            title: "MCP Tools",
-            url: "tools",
-          },
-          resources: {
-            title: "MCP Resources",
-            url: "resources",
-          },
-          prompts: {
-            title: "MCP Prompts",
-            url: "prompts",
-          },
-          authentication: {
-            title: "MCP Authentication",
-            url: "authentication",
-          },
-          performance: {
-            title: "MCP Performance",
-            url: "performance",
-          },
-          teamAccess: {
-            title: "MCP Team Access",
-            url: "team-access",
-          },
-          settings: {
-            title: "MCP Settings",
-            url: "settings",
-          },
-        },
+        component: MCPDetailsRoot,
+        indexComponent: MCPDetailPage,
       },
     },
   },

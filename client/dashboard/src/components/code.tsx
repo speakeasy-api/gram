@@ -127,12 +127,8 @@ export function CodeBlock({
     };
   }, [code, language, preClassName, theme, hasSlots]);
 
-  // shiki's raw <pre> output carries the browser's UA-stylesheet
-  // `white-space: pre` — a rule matching the element itself always beats an
-  // inherited value from an ancestor, so whitespace-pre-wrap on this wrapper
-  // alone never reaches it. Target the injected <pre> directly.
   const baseClasses =
-    "rounded-md font-mono text-sm text-wrap overflow-x-auto border break-all whitespace-pre-wrap [&>pre]:whitespace-pre-wrap [&>pre]:break-all";
+    "rounded-md font-mono text-sm text-wrap overflow-x-auto border break-all whitespace-pre-wrap truncate";
   const innerClasses = cn(baseClasses, "p-4 pr-12", innerClassName);
   // Shown until the async highlight resolves (and as the slot-path placeholder).
   const fallback = <div className={innerClasses}>{code}</div>;

@@ -1,51 +1,156 @@
 import { CodeBlock } from "@/components/code";
+import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
 import { Link } from "@/components/ui/link";
 import { Heading } from "@/components/ui/heading";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useSlugs } from "@/contexts/Sdk";
-import { getServerURL } from "@/lib/utils";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
-import { Navigate, useLocation, useParams } from "react-router";
-import { activeTabFromPath, builtInTabHref } from "./BuiltInMCPDetailRouting";
-import { BUILT_IN_TOOLS } from "./builtInMcpTools";
-import { useRoutes } from "@/routes";
+import { cn, getServerURL } from "@/lib/utils";
+import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { useState } from "react";
+import { toast } from "sonner";
 
-const BUILT_IN_TAB_URLS = ["overview", "tools"];
+const BUILT_IN_TOOLS = [
+  {
+    name: "gram_list_tools",
+    description: "List all tools for a project",
+  },
+  {
+    name: "platform_search_logs",
+    description: "Search and inspect telemetry logs for the current project.",
+  },
+  {
+    name: "gram_list_global_variations",
+    description: "List globally defined tool variations.",
+  },
+  {
+    name: "gram_search_tool_calls",
+    description: "Search and list tool calls that match a search filter",
+  },
+  {
+    name: "gram_get_toolset",
+    description:
+      "Get detailed information about a toolset including full HTTP tool definitions",
+  },
+  {
+    name: "gram_get_observability_overview",
+    description:
+      "Get observability overview metrics including time series, tool breakdowns, and summary stats",
+  },
+  {
+    name: "gram_list_toolsets",
+    description: "List all toolsets for a project",
+  },
+  {
+    name: "gram_get_mcp_metadata",
+    description: "Fetch the metadata that powers the MCP install page.",
+  },
+  {
+    name: "gram_get_deployment_logs",
+    description: "Get logs for a deployment.",
+  },
+  {
+    name: "gram_list_chats",
+    description: "List all chats for a project",
+  },
+];
+
+const TAB_TRIGGER_CLASS = cn(
+  "relative h-11 rounded-none border-none bg-transparent! px-1 pt-3 pb-3 shadow-none!",
+  "text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-transparent!",
+  "data-[state=active]:after:bg-primary after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent",
+);
 
 export function BuiltInMCPDetailPage(): JSX.Element {
   const { orgSlug } = useSlugs();
-  const { builtInSlug } = useParams<{ builtInSlug: string }>();
-  const location = useLocation();
-  const routes = useRoutes();
+  const [activeTab, setActiveTab] = useState("overview");
 
   if (!orgSlug) {
     throw new Error("No org slug found.");
   }
 
-  const idOrSlug = builtInSlug ?? "";
-  const activeTab = activeTabFromPath(location.pathname, idOrSlug);
   const mcpUrl = `${getServerURL()}/mcp/${orgSlug}-mcp-logs`;
-
-  if (!activeTab) {
-    return (
-      <Navigate to={builtInTabHref(routes, idOrSlug, "overview")} replace />
-    );
-  }
 
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs
-          substitutions={{ [idOrSlug]: "MCP Logs" }}
-          skipSegments={BUILT_IN_TAB_URLS}
-        />
+        <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body fullWidth>
-        <div className="mx-auto w-full max-w-[1270px] flex-1">
-          {activeTab === "overview" && <BuiltInOverviewTab mcpUrl={mcpUrl} />}
-          {activeTab === "tools" && <BuiltInToolsTab />}
-        </div>
+      <Page.Body fullWidth noPadding>
+        <DetailHero>
+          <div className="flex items-end justify-between">
+            <Stack gap={2}>
+              <div className="ml-1 flex items-center gap-3">
+                <Heading variant="h1">MCP Logs</Heading>
+                <Badge variant="information">
+                  <Badge.Text>Built-in</Badge.Text>
+                </Badge>
+              </div>
+              <div className="ml-1 flex items-center gap-2">
+                <Type className="text-muted-foreground max-w-2xl truncate">
+                  {mcpUrl}
+                </Type>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(mcpUrl);
+                    toast.success("URL copied to clipboard");
+                  }}
+                  className="text-muted-foreground hover:text-foreground shrink-0"
+                >
+                  <Button.LeftIcon>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                    </svg>
+                  </Button.LeftIcon>
+                  <Button.Text className="sr-only">Copy URL</Button.Text>
+                </Button>
+              </div>
+            </Stack>
+          </div>
+        </DetailHero>
+
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="flex w-full flex-1 flex-col"
+        >
+          <div className="border-b">
+            <div className="mx-auto max-w-[1270px] px-8">
+              <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+                <TabsTrigger value="overview" className={TAB_TRIGGER_CLASS}>
+                  Overview
+                </TabsTrigger>
+                <TabsTrigger value="tools" className={TAB_TRIGGER_CLASS}>
+                  Tools
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
+
+          <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+            <TabsContent value="overview" className="mt-0 w-full">
+              <BuiltInOverviewTab mcpUrl={mcpUrl} />
+            </TabsContent>
+
+            <TabsContent value="tools" className="mt-0 w-full">
+              <BuiltInToolsTab />
+            </TabsContent>
+          </div>
+        </Tabs>
       </Page.Body>
     </Page>
   );

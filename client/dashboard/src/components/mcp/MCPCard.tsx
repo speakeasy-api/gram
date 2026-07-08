@@ -15,6 +15,7 @@ import {
   Package,
 } from "lucide-react";
 import { useMemo } from "react";
+import { useNavigate } from "react-router";
 import {
   useCatalogIconMap,
   useExternalMcpOAuthConfigStatus,
@@ -24,6 +25,7 @@ import { Badge } from "@speakeasy-api/moonshine";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
   const routes = useRoutes();
+  const navigate = useNavigate();
   const { installPageUrl } = useMcpUrl(toolset);
   const catalogIconMap = useCatalogIconMap();
   const { data: deploymentResult } = useLatestDeployment();
@@ -46,7 +48,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
 
   const handleClick = () => {
     if (oauthStatus === "required-unconfigured") {
-      routes.mcp.details.authentication.goTo(toolset.slug);
+      void navigate(`${routes.mcp.details.href(toolset.slug)}#authentication`);
     } else {
       routes.mcp.details.goTo(toolset.slug);
     }

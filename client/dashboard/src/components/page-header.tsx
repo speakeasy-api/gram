@@ -247,15 +247,15 @@ function PageHeaderBreadcrumbs({
   visibleElements.push(...pageElements);
 
   return (
-    // Breadcrumbs + hint share their own justify-between row so the hint
-    // always pins to the true right edge of the nav bar, independent of the
-    // SidebarTrigger/Separator siblings in the outer header row (their width
-    // otherwise threw off the old ml-auto-on-both-siblings layout).
-    <div className="flex w-full items-center justify-between gap-2">
+    // The shortcut hint is a sibling of the breadcrumb band — not nested inside
+    // it — so it pins to the true right edge of the nav bar. Nested, it would
+    // stop at the right edge of the centered max-w-[1270px] band, landing
+    // mid-bar on wide screens. Breadcrumbs are unchanged; only the hint moves.
+    <>
       <PageHeader.Title
         className={cn(fullWidth ? "max-w-full" : "", className)}
       >
-        <div className="flex items-center gap-2 normal-case">
+        <div className="ml-auto flex items-center gap-2 normal-case">
           {visibleElements.map((elem, index) => (
             <React.Fragment key={`${elem.url}-${index}`}>
               <BreadcrumbCrumb elem={elem} />
@@ -267,8 +267,8 @@ function PageHeaderBreadcrumbs({
           {stage && <ReleaseStageBadge stage={stage} />}
         </div>
       </PageHeader.Title>
-      <InsightsDockShortcutHint className="shrink-0" />
-    </div>
+      <InsightsDockShortcutHint className="ml-auto shrink-0" />
+    </>
   );
 }
 

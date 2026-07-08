@@ -1,34 +1,20 @@
 import { MetricCard } from "@/components/chart/MetricCard";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
-import { getPresetRange } from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Stack } from "@speakeasy-api/moonshine";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { PluginStatusBanner } from "./PluginStatusBanner";
-import { TopUsersTable } from "./TopUsersTable";
-
-// Fixed window — this tab is a glanceable summary, not a deep-dive analytics
-// view with an interactive range picker (that page was folded into this one).
-const OVERVIEW_RANGE = "7d" as const;
-
-// Both toolset-backed and remote-MCP-backed servers render through this same
-// dashboard — the telemetry/plugin-membership backends already key off
-// either id generically (see PluginServer.toolsetId/mcpServerId and
-// GetObservabilityOverviewPayload.toolsetSlug's dual-purpose doc comment), so
-// this ref is the minimal shared shape both variants can produce.
-export type HostedServerRef =
-  | { kind: "toolset"; id: string; slug: string; name: string }
-  | { kind: "mcp-server"; id: string; slug: string; name: string };
 
 function toolLabelFromUrn(urn: string): string {
   const parts = urn.split(":");
@@ -41,64 +27,82 @@ function errorRate(summary: ObservabilitySummary): number {
     : 0;
 }
 
-export function MCPOverviewTab({
-  server,
+export function AnalyticsTab({
+  mcpServer,
 }: {
-  server: HostedServerRef;
-}): React.JSX.Element {
-  const client = useGramContext();
+  mcpServer: McpServer | undefined;
+}): JSX.Element {
+  const gramClient = useGramContext();
+  const mcpServerId = mcpServer?.id ?? "";
+
+  const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
+  const [customRange, setCustomRange] = useState<{
+    from: Date;
+    to: Date;
+  } | null>(null);
+  const [customRangeLabel, setCustomRangeLabel] = useState<string | null>(null);
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
   const { from, to, timeRangeMs } = useMemo(() => {
-    const range = getPresetRange(OVERVIEW_RANGE);
+    const range = customRange ?? getPresetRange(dateRange);
     return {
       from: range.from,
       to: range.to,
       timeRangeMs: range.to.getTime() - range.from.getTime(),
     };
-  }, []);
+  }, [customRange, dateRange]);
 
-  const { data, isLoading, isLogsDisabled } = useLogsEnabledErrorCheck(
+  const {
+    data: telemetryData,
+    isLoading: isLoadingTelemetry,
+    isLogsDisabled,
+  } = useLogsEnabledErrorCheck(
     useQuery<GetObservabilityOverviewResult>({
+      // `mcp_server_id` scopes this to the fronting server, capturing both
+      // remote-backed and toolset-backed activity under one id.
       queryKey: [
-        "mcp-detail-overview",
-        server.slug,
+        "mcp-server-analytics",
+        mcpServerId,
         from.toISOString(),
         to.toISOString(),
       ],
       queryFn: () =>
         unwrapAsync(
-          telemetryGetObservabilityOverview(client, {
+          telemetryGetObservabilityOverview(gramClient, {
             getObservabilityOverviewPayload: {
               from,
               to,
-              toolsetSlug: server.slug,
+              mcpServerId,
               includeTimeSeries: true,
             },
           }),
         ),
+      enabled: mcpServerId !== "",
       placeholderData: keepPreviousData,
       throwOnError: false,
     }),
   );
 
-  const summary = data?.summary;
-  const comparison = data?.comparison;
-  const timeSeries = useMemo(() => data?.timeSeries ?? [], [data]);
+  const summary = telemetryData?.summary;
+  const comparison = telemetryData?.comparison;
+  const timeSeries = useMemo(
+    () => telemetryData?.timeSeries ?? [],
+    [telemetryData],
+  );
 
   const topByCount = useMemo(
     () =>
-      (data?.topToolsByCount ?? []).map((tool) => ({
+      (telemetryData?.topToolsByCount ?? []).map((tool) => ({
         key: tool.gramUrn,
         label: toolLabelFromUrn(tool.gramUrn),
         value: tool.callCount,
       })),
-    [data],
+    [telemetryData],
   );
 
   const topByFailureRate = useMemo(
     () =>
-      (data?.topToolsByFailureRate ?? [])
+      (telemetryData?.topToolsByFailureRate ?? [])
         .filter((tool) => tool.failureCount > 0)
         .map((tool) => ({
           key: tool.gramUrn,
@@ -106,12 +110,39 @@ export function MCPOverviewTab({
           value: tool.failureRate * 100,
           valueLabel: `${(tool.failureRate * 100).toFixed(1)}%`,
         })),
-    [data],
+    [telemetryData],
   );
 
   return (
-    <Stack gap={6} className="mb-4">
-      <PluginStatusBanner server={server} />
+    <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-col gap-1">
+          <Heading variant="h4">Analytics</Heading>
+          <Type muted small>
+            Tool call activity for this MCP server, spanning both remote-backed
+            and toolset-backed sources.
+          </Type>
+        </div>
+        <TimeRangePicker
+          preset={customRange ? null : dateRange}
+          customRange={customRange}
+          customRangeLabel={customRangeLabel}
+          onPresetChange={(preset) => {
+            setDateRange(preset);
+            setCustomRange(null);
+            setCustomRangeLabel(null);
+          }}
+          onCustomRangeChange={(rangeFrom, rangeTo, label) => {
+            setCustomRange({ from: rangeFrom, to: rangeTo });
+            setCustomRangeLabel(label ?? null);
+          }}
+          onClearCustomRange={() => {
+            setCustomRange(null);
+            setCustomRangeLabel(null);
+          }}
+          disabled={isLoadingTelemetry}
+        />
+      </div>
 
       {isLogsDisabled ? (
         <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
@@ -119,13 +150,14 @@ export function MCPOverviewTab({
             Observability is not enabled
           </Type>
           <Type muted small>
-            Enable logs for this organization to see usage for this MCP server.
+            Enable logs for this organization to see analytics for this MCP
+            server.
           </Type>
         </div>
       ) : (
-        <>
-          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-            {isLoading && !summary ? (
+        <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {isLoadingTelemetry && !summary ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <Skeleton key={i} className="h-[116px] w-full rounded-lg" />
               ))
@@ -169,7 +201,7 @@ export function MCPOverviewTab({
 
           <ToolCallsTimeSeriesChart
             title="Tool calls over time"
-            chartId="mcp-detail-overview-tool-calls"
+            chartId="mcp-server-tool-calls"
             timeSeries={timeSeries}
             timeRangeMs={timeRangeMs}
             expandedChart={expandedChart}
@@ -202,10 +234,8 @@ export function MCPOverviewTab({
               )}
             </div>
           </div>
-
-          <TopUsersTable toolsetSlug={server.slug} from={from} to={to} />
-        </>
+        </div>
       )}
-    </Stack>
+    </div>
   );
 }

@@ -41,11 +41,7 @@ export type PulseMCPServer = Omit<ExternalMCPServerEntry, "meta"> & {
 // sorting, and filtering all happen client-side. An optional `search` is still
 // forwarded so callers that only need a specific server (e.g. the detail page)
 // can narrow the response.
-function useListMCPCatalogImpl(
-  search?: string,
-  registryId?: string,
-  enabled = true,
-) {
+function useListMCPCatalogImpl(search?: string, registryId?: string) {
   const client = useSdkClient();
 
   return useQuery({
@@ -59,17 +55,12 @@ function useListMCPCatalogImpl(
         registryId: registryId || undefined,
       }),
     staleTime: 5 * 60 * 1000, // 5 minutes - won't refetch if data is fresh
-    enabled,
   });
 }
 
 export function useListMCPCatalog(
   search?: string,
   registryId?: string,
-  // Callers that only need the catalog conditionally (e.g. only for
-  // external-MCP-backed toolsets) can defer the fetch entirely rather than
-  // always paying for it on mount.
-  enabled = true,
 ): ReturnType<typeof useListMCPCatalogImpl> {
-  return useListMCPCatalogImpl(search, registryId, enabled);
+  return useListMCPCatalogImpl(search, registryId);
 }
