@@ -40,7 +40,10 @@ import { useCallback, useMemo, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { PlatformInstrumentationSheet } from "../setup/components/platform-instrumentation-sheet";
-import { MarketplaceCard } from "./MarketplaceCard";
+import {
+  MarketplaceCard,
+  UninitializedMarketplaceCard,
+} from "./MarketplaceCard";
 import { PluginCard } from "./PluginCard";
 import {
   matchesPluginFilters,
@@ -211,6 +214,11 @@ export default function Plugins(): JSX.Element {
 
   const [isMarketplaceSettingsDialogOpen, setIsMarketplaceSettingsDialogOpen] =
     useState(false);
+  // Set when the settings dialog was opened from the uninitialized card's
+  // "Setup" CTA rather than "Rename" on an already-connected marketplace —
+  // saving the name should then chain straight into the publish dialog so
+  // Setup reads as one flow (name, then collaborators) instead of two.
+  const [chainToPublishAfterSave, setChainToPublishAfterSave] = useState(false);
 
   const trimmedMarketplaceName = marketplaceNameInput.trim();
   const currentMarketplaceName = marketplaceSettings.marketplaceName ?? "";
@@ -221,6 +229,11 @@ export default function Plugins(): JSX.Element {
     // Reset the input to the persisted value so reopening discards unsaved edits.
     setMarketplaceNameInput(marketplaceSettings.marketplaceName ?? "");
     setIsMarketplaceSettingsDialogOpen(true);
+  };
+
+  const handleStartSetup = () => {
+    setChainToPublishAfterSave(true);
+    handleOpenMarketplaceSettings();
   };
 
   const handleSaveMarketplaceName = () => {
@@ -234,7 +247,13 @@ export default function Plugins(): JSX.Element {
         },
       },
       {
-        onSuccess: () => setIsMarketplaceSettingsDialogOpen(false),
+        onSuccess: () => {
+          setIsMarketplaceSettingsDialogOpen(false);
+          if (chainToPublishAfterSave) {
+            setChainToPublishAfterSave(false);
+            setIsPublishDialogOpen(true);
+          }
+        },
       },
     );
   };
@@ -260,43 +279,45 @@ export default function Plugins(): JSX.Element {
             skills together. Assign plugins to roles and publish them to Claude
             Code, Cursor, and Codex marketplaces via GitHub.
           </Page.Section.Description>
-          <Page.Section.CTA>
-            <Stack direction="horizontal" gap={2} align="center">
-              {/* Once connected, publishing moves to the plugin detail page
-                  and the marketplace card below — this CTA is only the
-                  first-time "connect GitHub" entrypoint. */}
-              {publishStatus?.configured && !publishStatus.connected && (
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsPublishDialogOpen(true)}
-                  disabled={publishMutation.isPending}
-                >
-                  <Button.LeftIcon>
-                    <Icon name="upload" className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>
-                    {publishMutation.isPending
-                      ? "Publishing..."
-                      : "Publish Private Marketplace"}
-                  </Button.Text>
-                </Button>
-              )}
-            </Stack>
-          </Page.Section.CTA>
           <Page.Section.Body>
             <Stack direction="vertical" gap={8}>
-              {publishStatus?.connected && publishStatus.repoUrl && (
-                <>
-                  <MarketplaceCard
-                    publishStatus={publishStatus}
-                    onManageCollaborators={() =>
-                      setIsManageCollaboratorsOpen(true)
-                    }
-                    onRename={handleOpenMarketplaceSettings}
-                  />
-                  <div className="border-border border-t" />
-                </>
-              )}
+              {publishStatus?.configured &&
+                (publishStatus.connected && publishStatus.repoUrl ? (
+                  publishStatus.hasCollaborators === false ? (
+                    <>
+                      <UninitializedMarketplaceCard
+                        publishStatus={publishStatus}
+                        onSetup={handleStartSetup}
+                        onAddCollaborators={() =>
+                          setIsManageCollaboratorsOpen(true)
+                        }
+                      />
+                      <div className="border-border border-t" />
+                    </>
+                  ) : (
+                    <>
+                      <MarketplaceCard
+                        publishStatus={publishStatus}
+                        onManageCollaborators={() =>
+                          setIsManageCollaboratorsOpen(true)
+                        }
+                        onRename={handleOpenMarketplaceSettings}
+                      />
+                      <div className="border-border border-t" />
+                    </>
+                  )
+                ) : (
+                  <>
+                    <UninitializedMarketplaceCard
+                      publishStatus={publishStatus}
+                      onSetup={handleStartSetup}
+                      onAddCollaborators={() =>
+                        setIsManageCollaboratorsOpen(true)
+                      }
+                    />
+                    <div className="border-border border-t" />
+                  </>
+                ))}
               {hasPlugins && (
                 <Page.Toolbar>
                   <Page.Toolbar.Search
@@ -424,6 +445,12 @@ export default function Plugins(): JSX.Element {
                 placeholder={marketplaceSettings.defaultName}
                 pattern="^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$"
                 title="Lowercase letters, digits, and hyphens. May not start or end with a hyphen."
+                // Renaming an already-published marketplace can fall back to
+                // the default name, so it's genuinely optional there — but
+                // mid-Setup this is the one deliberate naming step, so it
+                // reads as required (also hides the "optional" label via
+                // AnyField's group-has-[[required]] rule).
+                required={chainToPublishAfterSave}
                 autoFocus
               />
               <Type small muted>

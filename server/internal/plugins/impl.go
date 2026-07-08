@@ -59,6 +59,7 @@ type GitHubPublisher interface {
 	CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error
 	PushFiles(ctx context.Context, installationID int64, owner, repo, branch, commitMsg string, files map[string][]byte) (string, error)
 	AddCollaborator(ctx context.Context, installationID int64, owner, repo, username, permission string) error
+	HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error)
 }
 
 // GitHubConfig holds the configured GitHub client and the Gram-owned org
@@ -1275,14 +1276,15 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 	}
 
 	result := &gen.PublishStatusResult{
-		Configured:      s.github != nil,
-		Connected:       false,
-		RepoOwner:       nil,
-		RepoName:        nil,
-		RepoURL:         nil,
-		MarketplaceURL:  nil,
-		UpToDate:        nil,
-		LastPublishedAt: nil,
+		Configured:       s.github != nil,
+		Connected:        false,
+		RepoOwner:        nil,
+		RepoName:         nil,
+		RepoURL:          nil,
+		MarketplaceURL:   nil,
+		HasCollaborators: nil,
+		UpToDate:         nil,
+		LastPublishedAt:  nil,
 	}
 
 	if s.github != nil {
@@ -1307,6 +1309,15 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				result.LastPublishedAt = &lastPublishedAt
 			}
 			result.UpToDate = s.publishUpToDate(ctx, ac, conn)
+
+			hasCollaborators, err := s.github.Client.HasDirectCollaborator(ctx, s.github.InstallationID, conn.RepoOwner, conn.RepoName)
+			if err != nil {
+				// Degrade rather than fail the whole status read — the
+				// dashboard treats a missing value as "unknown", not "false".
+				s.logger.WarnContext(ctx, "check repo collaborators", attr.SlogError(err))
+			} else {
+				result.HasCollaborators = &hasCollaborators
+			}
 		}
 	}
 

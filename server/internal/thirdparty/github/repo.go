@@ -109,6 +109,35 @@ func (c *Client) AddCollaborator(ctx context.Context, installationID int64, owne
 	return nil
 }
 
+// HasDirectCollaborator reports whether the repo has at least one directly
+// added collaborator — i.e. someone explicitly invited via AddCollaborator,
+// as opposed to access granted implicitly through org membership or team
+// permissions. affiliation=direct filters to exactly that, and per_page=1
+// keeps the request cheap since only presence/absence is needed.
+func (c *Client) HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error) {
+	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "collaborators")
+	url += "?affiliation=direct&per_page=1"
+
+	resp, err := c.doAPI(ctx, installationID, http.MethodGet, url, nil)
+	if err != nil {
+		return false, fmt.Errorf("list collaborators: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("list collaborators: status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	var collaborators []struct {
+		Login string `json:"login"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&collaborators); err != nil {
+		return false, fmt.Errorf("decode collaborators: %w", err)
+	}
+
+	return len(collaborators) > 0, nil
+}
+
 // PushFiles atomically commits a set of files to the given repository branch
 // using the Git Trees API.
 func (c *Client) PushFiles(ctx context.Context, installationID int64, owner, repo, branch, commitMsg string, files map[string][]byte) (string, error) {
