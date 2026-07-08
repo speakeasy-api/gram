@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -209,12 +209,12 @@ func TestResolveAssistantMCPServers_DisabledMCPServerOmitted(t *testing.T) {
 	mcpServers := []assistantMCPServerRow{
 		{
 			ServerSlug:   pgtype.Text{String: "switched-off", Valid: true},
-			Visibility:   visibility.Disabled,
+			Visibility:   mcpservers.VisibilityDisabled,
 			EndpointSlug: "switched-off-endpoint",
 		},
 		{
 			ServerSlug:   pgtype.Text{String: "remote-saas", Valid: true},
-			Visibility:   visibility.Public,
+			Visibility:   mcpservers.VisibilityPublic,
 			EndpointSlug: "team-remote-saas",
 		},
 	}

@@ -7,15 +7,16 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, contents []string) [][]scanners.Finding {
 	out := make([][]scanners.Finding, len(messages))
 	l1Enabled := a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptInjectionUseClassifier)
-	var judgeMessages []JudgeMessage
+	var judgeMessages []judgemessage.Message
 	if l1Enabled {
-		judgeMessages = make([]JudgeMessage, len(messages))
+		judgeMessages = make([]judgemessage.Message, len(messages))
 		for i := range messages {
 			judgeMessages[i] = batchJudgeMessage(messages[i])
 		}

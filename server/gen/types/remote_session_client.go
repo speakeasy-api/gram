@@ -7,8 +7,8 @@
 
 package types
 
-// RemoteSessionClient is the result type of the remoteSessionClients service
-// createRemoteSessionClient method.
+// RemoteSessionClient is the result type of the
+// organizationRemoteSessionClients service getClient method.
 type RemoteSessionClient struct {
 	// The remote_session_client id.
 	ID string

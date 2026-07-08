@@ -28,6 +28,7 @@ import {
   toTargetTypes,
 } from "@/components/observe/observeTargetFilters";
 import { perPage } from "@/components/observe/observeFilterUtils";
+import { formatToolName } from "@/components/observe/toolNameDisplay";
 import { useObserveFilters } from "@/components/observe/useObserveFilters";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
@@ -1027,7 +1028,9 @@ function LogsToolsTraceRow({
                 {" /"}
               </span>
             )}
-            <span className="truncate font-mono text-xs">{trace.toolName}</span>
+            <span className="truncate font-mono text-xs">
+              {formatToolName(trace.toolName)}
+            </span>
           </div>
         </div>
 

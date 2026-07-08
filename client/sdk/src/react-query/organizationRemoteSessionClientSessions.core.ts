@@ -8,7 +8,7 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersListClientSessions } from "../funcs/organizationRemoteSessionIssuersListClientSessions.js";
+import { organizationRemoteSessionsList } from "../funcs/organizationRemoteSessionsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import {
@@ -105,7 +105,7 @@ export function buildOrganizationRemoteSessionClientSessionsQuery(
         signal: sig,
       };
 
-      return unwrapAsync(organizationRemoteSessionIssuersListClientSessions(
+      return unwrapAsync(organizationRemoteSessionsList(
         client$,
         request,
         security,
@@ -148,7 +148,7 @@ export function buildOrganizationRemoteSessionClientSessionsInfiniteQuery(
 
       if (!ctx.pageParam) {
         const pageResult = await unwrapResultIterator(
-          organizationRemoteSessionIssuersListClientSessions(
+          organizationRemoteSessionsList(
             client$,
             request,
             security,
@@ -158,7 +158,7 @@ export function buildOrganizationRemoteSessionClientSessionsInfiniteQuery(
         return pageIteratorToJSON(pageResult);
       }
       const pageResult = await unwrapResultIterator(
-        organizationRemoteSessionIssuersListClientSessions(
+        organizationRemoteSessionsList(
           client$,
           {
             ...request,
@@ -182,12 +182,7 @@ export function queryKeyOrganizationRemoteSessionClientSessions(
     gramKey?: string | undefined;
   },
 ): QueryKey {
-  return [
-    "@gram/client",
-    "organizationRemoteSessionIssuers",
-    "listClientSessions",
-    parameters,
-  ];
+  return ["@gram/client", "organizationRemoteSessions", "list", parameters];
 }
 
 export function queryKeyOrganizationRemoteSessionClientSessionsInfinite(
@@ -201,8 +196,8 @@ export function queryKeyOrganizationRemoteSessionClientSessionsInfinite(
 ): QueryKey {
   return [
     "@gram/client",
-    "organizationRemoteSessionIssuers",
-    "listClientSessions",
+    "organizationRemoteSessions",
+    "list",
     "infinite",
     parameters,
   ];

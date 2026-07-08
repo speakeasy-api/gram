@@ -499,7 +499,6 @@ trackedFiles:
   docs/models/components/resourcekind.md: {}
   docs/models/components/resourcetype.md: {}
   docs/models/components/responsefilter.md: {}
-  docs/models/components/revokeallclientsessionsrequestbody.md: {}
   docs/models/components/revokeallremotesessionsresult.md: {}
   docs/models/components/riskblock.md: {}
   docs/models/components/riskblockfeedback.md: {}
@@ -1950,7 +1949,9 @@ trackedFiles:
   docs/sdks/mcpmetadata/README.md: {}
   docs/sdks/mcpregistries/README.md: {}
   docs/sdks/mcpservers/README.md: {}
+  docs/sdks/organizationremotesessionclients/README.md: {}
   docs/sdks/organizationremotesessionissuers/README.md: {}
+  docs/sdks/organizationremotesessions/README.md: {}
   docs/sdks/organizations/README.md: {}
   docs/sdks/otelforwarding/README.md: {}
   docs/sdks/overview/README.md: {}
@@ -2147,26 +2148,26 @@ trackedFiles:
   src/funcs/mcpServersList.ts: {}
   src/funcs/mcpServersListToolFilters.ts: {}
   src/funcs/mcpServersUpdate.ts: {}
-  src/funcs/organizationRemoteSessionIssuersCreateCimdClient.ts: {}
-  src/funcs/organizationRemoteSessionIssuersCreateClient.ts: {}
-  src/funcs/organizationRemoteSessionIssuersCreateIssuer.ts: {}
-  src/funcs/organizationRemoteSessionIssuersDeleteClient.ts: {}
-  src/funcs/organizationRemoteSessionIssuersDeleteIssuer.ts: {}
-  src/funcs/organizationRemoteSessionIssuersGetClient.ts: {}
-  src/funcs/organizationRemoteSessionIssuersGetClientDeletePreflight.ts: {}
-  src/funcs/organizationRemoteSessionIssuersGetIssuer.ts: {}
-  src/funcs/organizationRemoteSessionIssuersGetIssuerDeletePreflight.ts: {}
-  src/funcs/organizationRemoteSessionIssuersListClientMcpServers.ts: {}
-  src/funcs/organizationRemoteSessionIssuersListClientSessions.ts: {}
-  src/funcs/organizationRemoteSessionIssuersListClients.ts: {}
-  src/funcs/organizationRemoteSessionIssuersListIssuers.ts: {}
-  src/funcs/organizationRemoteSessionIssuersMoveIssuer.ts: {}
-  src/funcs/organizationRemoteSessionIssuersRefreshSession.ts: {}
-  src/funcs/organizationRemoteSessionIssuersRemoveClientFromMcpServer.ts: {}
-  src/funcs/organizationRemoteSessionIssuersRevokeAllClientSessions.ts: {}
-  src/funcs/organizationRemoteSessionIssuersRevokeSession.ts: {}
-  src/funcs/organizationRemoteSessionIssuersUpdateClient.ts: {}
-  src/funcs/organizationRemoteSessionIssuersUpdateIssuer.ts: {}
+  src/funcs/organizationRemoteSessionClientsCreate.ts: {}
+  src/funcs/organizationRemoteSessionClientsCreateCimd.ts: {}
+  src/funcs/organizationRemoteSessionClientsDelete.ts: {}
+  src/funcs/organizationRemoteSessionClientsGet.ts: {}
+  src/funcs/organizationRemoteSessionClientsGetDeletePreflight.ts: {}
+  src/funcs/organizationRemoteSessionClientsList.ts: {}
+  src/funcs/organizationRemoteSessionClientsListMcpServers.ts: {}
+  src/funcs/organizationRemoteSessionClientsRemoveFromMcpServer.ts: {}
+  src/funcs/organizationRemoteSessionClientsUpdate.ts: {}
+  src/funcs/organizationRemoteSessionIssuersCreate.ts: {}
+  src/funcs/organizationRemoteSessionIssuersDelete.ts: {}
+  src/funcs/organizationRemoteSessionIssuersGet.ts: {}
+  src/funcs/organizationRemoteSessionIssuersGetDeletePreflight.ts: {}
+  src/funcs/organizationRemoteSessionIssuersList.ts: {}
+  src/funcs/organizationRemoteSessionIssuersMove.ts: {}
+  src/funcs/organizationRemoteSessionIssuersUpdate.ts: {}
+  src/funcs/organizationRemoteSessionsList.ts: {}
+  src/funcs/organizationRemoteSessionsRefresh.ts: {}
+  src/funcs/organizationRemoteSessionsRevoke.ts: {}
+  src/funcs/organizationRemoteSessionsRevokeAll.ts: {}
   src/funcs/organizationsCreatePortalSession.ts: {}
   src/funcs/organizationsDisableWebhooks.ts: {}
   src/funcs/organizationsEnableWebhooks.ts: {}
@@ -2760,7 +2761,6 @@ trackedFiles:
   src/models/components/resource.ts: {}
   src/models/components/resourceentry.ts: {}
   src/models/components/responsefilter.ts: {}
-  src/models/components/revokeallclientsessionsrequestbody.ts: {}
   src/models/components/revokeallremotesessionsresult.ts: {}
   src/models/components/riskblock.ts: {}
   src/models/components/riskcategoriesresult.ts: {}
@@ -3900,7 +3900,9 @@ trackedFiles:
   src/sdk/mcpmetadata.ts: {}
   src/sdk/mcpregistries.ts: {}
   src/sdk/mcpservers.ts: {}
+  src/sdk/organizationremotesessionclients.ts: {}
   src/sdk/organizationremotesessionissuers.ts: {}
+  src/sdk/organizationremotesessions.ts: {}
   src/sdk/organizations.ts: {}
   src/sdk/otelforwarding.ts: {}
   src/sdk/overview.ts: {}
@@ -6894,6 +6896,9 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   refreshOrganizationRemoteSession:
     speakeasy-default-refresh-organization-remote-session:
+      parameters:
+        query:
+          id: "debf903f-956d-4b64-ad70-c9f849ad2ba7"
       requestBody:
         application/json: {"id": "debf903f-956d-4b64-ad70-c9f849ad2ba7"}
       responses:
@@ -7023,6 +7028,9 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   revokeAllOrganizationRemoteSessionClientSessions:
     speakeasy-default-revoke-all-organization-remote-session-client-sessions:
+      parameters:
+        query:
+          client_id: "bca190ed-9ac4-47c1-ba4c-010a834f6343"
       requestBody:
         application/json: {"client_id": "bca190ed-9ac4-47c1-ba4c-010a834f6343"}
       responses:
@@ -7054,6 +7062,9 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   revokeOrganizationRemoteSession:
     speakeasy-default-revoke-organization-remote-session:
+      parameters:
+        query:
+          id: "5fdebb84-c5ea-4464-9112-8acfc18236cb"
       requestBody:
         application/json: {"id": "5fdebb84-c5ea-4464-9112-8acfc18236cb"}
       responses:

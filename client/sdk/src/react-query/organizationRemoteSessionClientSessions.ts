@@ -74,7 +74,7 @@ export type OrganizationRemoteSessionClientSessionsQueryError =
   | SDKValidationError;
 
 /**
- * listClientSessions organizationRemoteSessionIssuers
+ * listClientSessions organizationRemoteSessions
  *
  * @remarks
  * List the remote_sessions minted against a remote_session_client in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned. Requires org:read.
@@ -103,7 +103,7 @@ export function useOrganizationRemoteSessionClientSessions(
 }
 
 /**
- * listClientSessions organizationRemoteSessionIssuers
+ * listClientSessions organizationRemoteSessions
  *
  * @remarks
  * List the remote_sessions minted against a remote_session_client in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned. Requires org:read.
@@ -132,7 +132,7 @@ export function useOrganizationRemoteSessionClientSessionsSuspense(
 }
 
 /**
- * listClientSessions organizationRemoteSessionIssuers
+ * listClientSessions organizationRemoteSessions
  *
  * @remarks
  * List the remote_sessions minted against a remote_session_client in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned. Requires org:read.
@@ -175,7 +175,7 @@ export function useOrganizationRemoteSessionClientSessionsInfinite(
 }
 
 /**
- * listClientSessions organizationRemoteSessionIssuers
+ * listClientSessions organizationRemoteSessions
  *
  * @remarks
  * List the remote_sessions minted against a remote_session_client in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned. Requires org:read.
@@ -255,8 +255,8 @@ export function invalidateOrganizationRemoteSessionClientSessions(
     ...filters,
     queryKey: [
       "@gram/client",
-      "organizationRemoteSessionIssuers",
-      "listClientSessions",
+      "organizationRemoteSessions",
+      "list",
       ...queryKeyBase,
     ],
   });
@@ -268,10 +268,6 @@ export function invalidateAllOrganizationRemoteSessionClientSessions(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/client",
-      "organizationRemoteSessionIssuers",
-      "listClientSessions",
-    ],
+    queryKey: ["@gram/client", "organizationRemoteSessions", "list"],
   });
 }

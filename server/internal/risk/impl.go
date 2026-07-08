@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -53,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -105,7 +107,7 @@ type Service struct {
 	// produces during chat-message analysis. Optional: when nil the
 	// playground returns an "unsupported" response for that scanner family.
 	piiScanner      ra.PIIScanner
-	piScanner       *ra.PromptInjectionScanner
+	piScanner       *promptinjection.Scanner
 	gitleaksScanner *gitleaks.Scanner
 	// celEng is the shared CEL env, injected at construction; used to compile
 	// and validate scope/detection expressions. nil in the lightweight observer.
@@ -171,7 +173,7 @@ func NewService(
 	cacheImpl cache.Cache,
 	jwtSecret string,
 	piiScanner ra.PIIScanner,
-	piScanner *ra.PromptInjectionScanner,
+	piScanner *promptinjection.Scanner,
 	flags feature.Provider,
 	celEng *celenv.Engine,
 	builtinPresets *presetlib.Library,
@@ -2357,7 +2359,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 // TestDetectionRule runs a single detection rule against pasted sample text
 // and returns its matches. The handler dispatches to the same scanners the
 // worker uses during chat-message analysis (gitleaks for secrets.*, the
-// configured PIIScanner for pii.*, the PromptInjectionScanner for
+// configured PIIScanner for pii.*, the prompt-injection scanner for
 // prompt_injection.*, and a regex matcher for custom.*) so the playground
 // output mirrors what would be recorded as a risk_result in production.
 //
@@ -2800,7 +2802,7 @@ func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID,
 	// A rule-test preview runs the deterministic, free L0 heuristics only; the
 	// billable LLM-judge L1 engine is not invoked on a test click (l1Enabled=false),
 	// so the structured message is unused here and carries just the sample text.
-	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, ra.NewJudgeMessage(message.User, "", text), false)
+	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, judgemessage.New(message.User, "", text), false)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run prompt-injection scanner").LogError(ctx, s.logger)
 	}
