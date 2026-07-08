@@ -6,7 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsSection } from "../../SettingsSection";
 
-function McpServerSessionsPanelInner({
+// Chrome-free list of a user_session_issuer's active sessions. Mounted in
+// the remote server settings tab (wrapped in SettingsSection below) and on
+// the toolset detail page inside that page's own section chrome.
+export function UserSessionsList({
   issuerId,
 }: {
   issuerId: string;
@@ -26,7 +29,7 @@ function McpServerSessionsPanelInner({
   const sessions = data?.pages.flatMap((p) => p.result.items) ?? [];
 
   return (
-    <SettingsSection.Body>
+    <>
       {isPending ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -67,7 +70,7 @@ function McpServerSessionsPanelInner({
           </Button>
         </div>
       )}
-    </SettingsSection.Body>
+    </>
   );
 }
 
@@ -87,15 +90,15 @@ export function McpServerSessionsPanel({
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
-        {issuerId ? (
-          <McpServerSessionsPanelInner issuerId={issuerId} />
-        ) : (
-          <SettingsSection.Body>
+        <SettingsSection.Body>
+          {issuerId ? (
+            <UserSessionsList issuerId={issuerId} />
+          ) : (
             <p className="text-muted-foreground text-sm">
               This server isn&apos;t gated by a session issuer.
             </p>
-          </SettingsSection.Body>
-        )}
+          )}
+        </SettingsSection.Body>
       </SettingsSection.Panel>
     </SettingsSection>
   );

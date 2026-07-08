@@ -24,13 +24,10 @@ import {
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
-import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
-import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
-import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
@@ -38,6 +35,7 @@ import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import type { AuthTarget } from "./authTarget";
 import {
   ClientTypeFields,
   EndpointsFields,
@@ -60,16 +58,17 @@ type Mode = "select" | "new";
 export function AttachRemoteIdentityProviderSheet({
   open,
   onOpenChange,
-  mcpServer,
+  target,
   userSessionIssuer,
   selectableIssuers,
   initialIssuerUrl,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mcpServer: McpServer;
-  // null when the MCP server has no user_session_issuer linked yet — the
-  // first add also creates one and links it via updateMcpServer.
+  // The MCP server or toolset the user_session_issuer gets linked to.
+  target: AuthTarget;
+  // null when the target has no user_session_issuer linked yet — the first
+  // add also creates one and links it via target.linkUserSessionIssuer.
   userSessionIssuer: UserSessionIssuer | null;
   // remote_session_issuers (organization-level and same-project) that are not
   // already associated with userSessionIssuer. Empty list hides the issuer
@@ -226,7 +225,7 @@ export function AttachRemoteIdentityProviderSheet({
       if (!issuerId) {
         const created = await client.userSessionIssuers.create({
           createUserSessionIssuerForm: {
-            slug: buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
+            slug: buildUserSessionResourceSlug(target.slug),
             authnChallengeMode: "interactive",
             sessionDurationHours: DEFAULT_USER_SESSION_DURATION_HOURS,
           },
@@ -366,23 +365,11 @@ export function AttachRemoteIdentityProviderSheet({
         });
       }
 
-      // Step 4: on first-add, point the MCP server at the freshly-created
-      // user_session_issuer and set visibility to private so the server
-      // begins serving traffic. updateMcpServer is a full-record replace,
-      // so re-send the existing UUID references alongside the update.
+      // Step 4: on first-add, link the target to the freshly-created
+      // user_session_issuer. How the link is stored (and any side effects
+      // like flipping a remote server private) is the target's business.
       if (!userSessionIssuer) {
-        await client.mcpServers.update({
-          updateMcpServerForm: {
-            id: mcpServer.id,
-            name: mcpServer.name ?? undefined,
-            remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-            tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
-            toolsetId: mcpServer.toolsetId ?? undefined,
-            environmentId: mcpServer.environmentId ?? undefined,
-            visibility: "private",
-            userSessionIssuerId: issuerId,
-          },
-        });
+        await target.linkUserSessionIssuer(issuerId);
       }
 
       return { unsupportedDcrAuthMethod };
@@ -392,8 +379,7 @@ export function AttachRemoteIdentityProviderSheet({
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
-        invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
-        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        target.invalidate(queryClient),
       ]);
 
       toast.success("Identity provider attached");
@@ -422,7 +408,7 @@ export function AttachRemoteIdentityProviderSheet({
     : null;
   const { reset: resetAttachMutation } = attachMutation;
 
-  // Reset transient state whenever the sheet is reopened. The mcpServer slug
+  // Reset transient state whenever the sheet is reopened. The target slug
   // seeds the default new-issuer slug so most operators can submit without
   // touching the field, but we still allow editing.
   useEffect(() => {
@@ -431,11 +417,11 @@ export function AttachRemoteIdentityProviderSheet({
     setSelectedIssuerId("");
     // Seed the slug from the Issuer URL when we have one (the "Start With
     // Discovered Configuration" path). Otherwise fall back to the
-    // mcpServer-based default. Either way slugDirty resets to false so the
+    // target-based default. Either way slugDirty resets to false so the
     // operator's first keystroke in the field starts locking it in.
     setSlug(
       deriveSlugFromUrl(initialIssuerUrl ?? "") ??
-        buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
+        buildUserSessionResourceSlug(target.slug),
     );
     setSlugDirty(false);
     setName(deriveRemoteSessionIssuerNameFromUrl(initialIssuerUrl ?? "") ?? "");
@@ -453,7 +439,7 @@ export function AttachRemoteIdentityProviderSheet({
     resetAttachMutation();
   }, [
     open,
-    mcpServer.slug,
+    target.slug,
     initialIssuerUrl,
     hasSelectable,
     setIssuerUrl,

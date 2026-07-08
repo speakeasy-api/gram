@@ -56,6 +56,11 @@ import {
   EXCLUDED_TAG_KEY,
   MCPToolFilterScopesPanel,
 } from "@/pages/mcp/MCPToolFilterScopesPanel";
+import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
+import {
+  getOAuthParadigm,
+  mustConvertOAuthBeforePrivate,
+} from "./toolsetAuthSurface";
 import { useRoutes } from "@/routes";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useAddOAuthProxyServerMutation } from "@gram/client/react-query/addOAuthProxyServer.js";
@@ -664,6 +669,7 @@ function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
     target: ServerStatus;
     sourceStatus: ServerStatus;
   } | null>(null);
+  const [convertOAuthBlockOpen, setConvertOAuthBlockOpen] = useState(false);
   const updateToolsetMutation = useUpdateToolsetMutation();
   const telemetry = useTelemetry();
 
@@ -765,11 +771,27 @@ function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
     const needsEnableDialog =
       status === "disabled" || currentStatus === "disabled";
     const needsPublicWarning = goingPublic && systemVarNames.length > 0;
+    // Guard on toolset.mcpIsPublic rather than currentStatus: a disabled
+    // server can still carry mcp_is_public=true, and selecting Private would
+    // flip it (and clear the OAuth config) all the same.
+    const needsConvertBlock =
+      status === "private" &&
+      mustConvertOAuthBeforePrivate({
+        flagEnabled:
+          telemetry.isFeatureEnabled(
+            ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG,
+          ) ?? false,
+        mcpIsPublic: toolset.mcpIsPublic ?? false,
+        userSessionIssuerWired: Boolean(toolset.userSessionIssuerId),
+        oauthParadigm: getOAuthParadigm(toolset),
+      });
 
     // Defer state changes until after the dropdown has fully closed to avoid
     // Radix focus-trap conflicts (same pattern as before).
     setTimeout(() => {
-      if (needsPublicWarning) {
+      if (needsConvertBlock) {
+        setConvertOAuthBlockOpen(true);
+      } else if (needsPublicWarning) {
         // Show the system-vars warning first. If the user confirms, we chain to
         // ServerEnableDialog when the transition also requires enablement.
         setPublicWarningPending({
@@ -848,6 +870,26 @@ function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+      <Dialog
+        open={convertOAuthBlockOpen}
+        onOpenChange={setConvertOAuthBlockOpen}
+      >
+        <Dialog.Content className="max-w-md">
+          <Dialog.Header>
+            <Dialog.Title>Convert OAuth configuration first</Dialog.Title>
+            <Dialog.Description>
+              The existing OAuth configuration must be converted to a session
+              issuer before this MCP server can be made private. You can convert
+              it from the Authentication section on this page.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Footer>
+            <Button onClick={() => setConvertOAuthBlockOpen(false)}>
+              Close
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
       <PublicMcpWarningDialog
         isOpen={publicWarningPending !== null}
         onClose={() => setPublicWarningPending(null)}

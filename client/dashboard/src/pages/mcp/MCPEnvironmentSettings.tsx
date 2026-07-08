@@ -46,6 +46,17 @@ import {
   EnvironmentVariable,
   getValueForEnvironment,
 } from "./environmentVariableUtils";
+import {
+  ConvertToUserSessionsButton,
+  ToolsetAuthenticationSection,
+} from "./ToolsetAuthenticationSection";
+import {
+  getOAuthParadigm,
+  type OAuthParadigm,
+  toolsetAuthSurface,
+  type ToolsetConvertAction,
+  toolsetConvertAction,
+} from "./toolsetAuthSurface";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
 import { shouldRenderWireUserSessionIssuerModal } from "./wire-user-session-issuer/rendering";
 import { WireUserSessionIssuerModal } from "./wire-user-session-issuer/WireUserSessionIssuerModal";
@@ -883,22 +894,46 @@ export function MCPAuthenticationTab({
   );
 }
 
-type OAuthParadigm = "external" | "gram" | "proxy";
-
-function getOAuthParadigm(toolset: Toolset): OAuthParadigm | null {
-  if (toolset.externalOauthServer) return "external";
-  if (!toolset.oauthProxyServer) return null;
-  return toolset.oauthProxyServer.oauthProxyProviders?.[0]?.providerType ===
-    "gram"
-    ? "gram"
-    : "proxy";
-}
-
 type OAuthSectionProps = {
   toolset: Toolset;
 };
 
+// Dispatches between the user-sessions authentication surface and the legacy
+// OAuth section based on the toolset's auth state (see toolsetAuthSurface).
+// A wired user_session_issuer or a clean slate gets the shared authentication
+// section; a legacy OAuth config keeps the old UI plus a convert path.
 function OAuthSection({ toolset }: OAuthSectionProps) {
+  const telemetry = useTelemetry();
+  const oauthParadigm = getOAuthParadigm(toolset);
+  const surface = toolsetAuthSurface({
+    flagEnabled:
+      telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
+      false,
+    userSessionIssuerWired:
+      !!toolset.userSessionIssuerId || !!toolset.userSessionIssuerSlug,
+    oauthParadigm,
+  });
+
+  if (surface === "manage" || surface === "attach") {
+    return <ToolsetAuthenticationSection toolset={toolset} />;
+  }
+  return (
+    <LegacyOAuthSection
+      toolset={toolset}
+      convertAction={
+        surface === "legacy" ? toolsetConvertAction(oauthParadigm) : null
+      }
+    />
+  );
+}
+
+function LegacyOAuthSection({
+  toolset,
+  convertAction,
+}: OAuthSectionProps & {
+  // The migration entry point to render, null when the feature flag is off.
+  convertAction: ToolsetConvertAction | null;
+}) {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isEditOAuthModalOpen, setIsEditOAuthModalOpen] = useState(false);
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
@@ -907,8 +942,6 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
     isWireUserSessionIssuerModalOpen,
     setIsWireUserSessionIssuerModalOpen,
   ] = useState(false);
-
-  const telemetry = useTelemetry();
 
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
@@ -948,18 +981,14 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
 
   // userSessionIssuerSlug is populated by the toolsets read path when the
   // OAuth-Proxy → user-sessions migration has produced a user_session_issuer
-  // for this toolset.
+  // for this toolset. Flag holders with a wired issuer never reach this
+  // component (the dispatcher above sends them to the manage surface), but
+  // non-holders can land here wired, so the legacy display still handles it.
   const userSessionIssuerWired = !!toolset.userSessionIssuerSlug;
-  // The migration entry point appears for both OAuth Proxy paradigms (custom
+  // The wire-modal migration applies to both OAuth Proxy paradigms (custom
   // and gram-managed): both produce a user_session_issuer, even though
-  // gram-managed skips the remote_session_* pair. External-OAuth toolsets
-  // have nothing to port. Gated to feature-flag holders, and hidden once a
-  // user_session_issuer is already wired (nothing left to migrate).
-  const showWireUserSessionIssuer =
-    (telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
-      false) &&
-    !userSessionIssuerWired &&
-    (oauthParadigm === "proxy" || oauthParadigm === "gram");
+  // gram-managed skips the remote_session_* pair.
+  const showWireUserSessionIssuer = convertAction === "wire-modal";
   // Once the user_session_issuer is wired, the OAuth-proxy CLIENT_ID/SECRET
   // it was cloned from is no longer the live credential — hide Configure to
   // avoid steering operators back into the legacy paradigm.
@@ -987,6 +1016,9 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
             >
               <Button.Text>Wire User Session Issuer</Button.Text>
             </Button>
+          )}
+          {convertAction === "attach-sheet" && (
+            <ConvertToUserSessionsButton toolset={toolset} />
           )}
           {!hideConfigureButton && (
             <Tooltip>
