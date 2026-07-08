@@ -30,7 +30,7 @@ Pick the format:
   Expect one row with `gram_account_type = 'enterprise'` (the seed sets that last, so it doubles as a completeness check). No row, or a different account type, means the stack isn't (fully) seeded — run `mise run seed`, then proceed. Paths like `/speakeasy/ecommerce-api/insights` redirect to `/speakeasy/projects/ecommerce-api/insights`.
 
 - Drive the browser exclusively through the **Playwright MCP tools**.
-- `ffmpeg` is already on PATH as a managed mise tool. Nothing needs installing.
+- `ffmpeg` is available at `./tools/ffmpeg` as a managed mise tool. Nothing needs installing.
 
 ## How recording works
 
@@ -116,7 +116,7 @@ Gotchas:
 Work in the session scratchpad (never the repo tree). Trim the dead setup time at the start (`-ss`) and convert with a two-pass palette:
 
 ```bash
-ffmpeg -ss <trim-seconds> -i .playwright-mcp/videos/<file>.webm \
+./tools/ffmpeg -ss <trim-seconds> -i .playwright-mcp/videos/<file>.webm \
   -vf "fps=10,scale=1200:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
   demo.gif
 ```

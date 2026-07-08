@@ -32,7 +32,6 @@ pkl = "0.31.1"
 buf = "1.71.0"
 ruff = "0.15.20"
 "github:ast-grep/ast-grep" = "0.44.0"
-ffmpeg = "8.1.2"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
