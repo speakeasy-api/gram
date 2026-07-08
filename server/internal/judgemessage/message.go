@@ -16,11 +16,15 @@ type Message struct {
 	// ToolName is the raw tool identifier observed on a tool request, such as
 	// "mcp__github__create_issue" for MCP tools or "Bash" for native tools.
 	ToolName string
-	// MCPServer is the server slug parsed from an MCP tool name, such as
-	// "github" in "mcp__github__create_issue"; it is empty for non-MCP tools.
+	// MCPServer is the MCP attribution key parsed from the tool name. For
+	// "mcp__github__create_issue" this is "github"; for Cursor-style
+	// "MCP:slack:send_message" this is the full suffix "slack:send_message".
+	// It is empty for non-MCP tools.
 	MCPServer string
-	// MCPFunction is the function name parsed from an MCP tool name, such as
-	// "create_issue" in "mcp__github__create_issue"; it is empty for non-MCP tools.
+	// MCPFunction is the function name parsed from the tool name. For
+	// "mcp__github__create_issue" this is "create_issue"; for Cursor-style
+	// "MCP:slack:send_message" this is the full suffix "slack:send_message".
+	// It is empty for non-MCP tools.
 	MCPFunction string
 	// ToolCalls contains the individual tool invocations for multi-call
 	// assistant messages. Single-call messages use ToolName/MCPServer/MCPFunction.
@@ -31,11 +35,15 @@ type Message struct {
 type ToolCall struct {
 	// ToolName is the raw tool identifier observed on the tool call.
 	ToolName string
-	// MCPServer is the server slug parsed from an MCP tool name; it is empty
-	// for non-MCP tools.
+	// MCPServer is the MCP attribution key parsed from the tool name. For
+	// "mcp__github__create_issue" this is "github"; for Cursor-style
+	// "MCP:slack:send_message" this is the full suffix "slack:send_message".
+	// It is empty for non-MCP tools.
 	MCPServer string
-	// MCPFunction is the function name parsed from an MCP tool name; it is
-	// empty for non-MCP tools.
+	// MCPFunction is the function name parsed from the tool name. For
+	// "mcp__github__create_issue" this is "create_issue"; for Cursor-style
+	// "MCP:slack:send_message" this is the full suffix "slack:send_message".
+	// It is empty for non-MCP tools.
 	MCPFunction string
 	// Arguments is the raw serialized argument payload supplied to the tool.
 	Arguments string
