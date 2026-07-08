@@ -6,9 +6,16 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
+// Manually grouped vendor chunks. CAUTION: never group a package whose dist
+// contains a top-level `await import(...)` (check before adding). Grouping
+// pulls the package's shared internals into the group chunk, so the awaited
+// sub-module ends up statically importing the very chunk that is suspended
+// awaiting it — a silent module-evaluation deadlock that blank-screens the
+// app. This took prod down for @speakeasy-api/moonshine (its dist top-level
+// awaits ./speakeasy-logo-*.mjs), which is why it is absent from this list;
+// Rolldown's automatic chunking handles it without creating the cycle.
 const manualChunkGroups: [string, string[]][] = [
   ["lucide-react", ["lucide-react"]],
-  ["moonshine", ["@speakeasy-api/moonshine"]],
   [
     "three",
     [
