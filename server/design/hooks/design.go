@@ -359,22 +359,23 @@ var _ = Service("hooks", func() {
 	Method("ingest", func() {
 		Description("Feature-first unified endpoint for hook events from supported coding assistants.")
 
-		Security(security.ByKey, security.ProjectSlug, func() {
-			Scope("hooks")
-		})
-
+		// Gram-Key + Gram-Project are OPTIONAL: hook senders must stay
+		// non-blocking for machines that never signed in. A request with no
+		// key is acknowledged without processing (fail open); a request that
+		// presents a key gets it validated and receives a 401 on rejection so
+		// the sender's credential-recovery path can react.
 		Payload(func() {
 			Extend(IngestHookPayload)
-			security.ByKeyPayload()
-			security.ProjectPayload()
+			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
+			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
 		})
 
 		Result(IngestHookResult)
 
 		HTTP(func() {
 			POST("/rpc/hooks.ingest")
-			security.ByKeyHeader()
-			security.ProjectHeader()
+			Header("apikey_token:Gram-Key")
+			Header("project_slug_input:Gram-Project")
 			Header("idempotency_key:Idempotency-Key")
 		})
 

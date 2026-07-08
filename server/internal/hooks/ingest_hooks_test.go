@@ -88,6 +88,57 @@ func TestIngest_RequiresCurrentSchemaVersion(t *testing.T) {
 	require.Contains(t, err.Error(), "unsupported hook schema_version")
 }
 
+// A keyless request on the optional-auth ingest endpoint is acknowledged
+// without processing: hook senders must stay non-blocking for machines that
+// never signed in, and without credentials there is no org to attribute the
+// event to. Even a shadow-MCP-shaped tool request comes back "allow".
+func TestIngest_NoCredentialsFailsOpen(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestHooksService(t)
+
+	toolName := "mcp__local_server__search"
+	toolCallID := "call-keyless"
+	serverIdentity := "local-server"
+	payload := canonicalIngestPayload("claude", "tool.requested", "keyless-session")
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"query": "secret"},
+		},
+		Mcp: &gen.HookMCPData{
+			ServerIdentity: &serverIdentity,
+		},
+	}
+
+	result, err := ti.service.Ingest(t.Context(), payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "allow", result.Decision)
+}
+
+// A request that presents an API key must have it validated: a rejected key
+// is a hard 401 so the sender's credential-recovery path (org-key retry,
+// established-machine fail-closed ratchet) can react, instead of the event
+// being silently accepted or dropped.
+func TestIngest_RejectedCredentialsUnauthorized(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestHooksService(t)
+
+	badKey := "gram_key_expired_or_invalid"
+	slug := "default"
+	payload := canonicalIngestPayload("claude", "session.started", "bad-key-session")
+	payload.ApikeyToken = &badKey
+	payload.ProjectSlugInput = &slug
+
+	result, err := ti.service.Ingest(t.Context(), payload)
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Contains(t, strings.ToLower(err.Error()), "unauthorized")
+}
+
 func TestIngest_ShadowMCPPolicyUsesAuthenticatedTokenOwner(t *testing.T) {
 	t.Parallel()
 

@@ -418,7 +418,9 @@ type IngestHookResult struct {
 
 // IngestPayload is the payload type of the hooks service ingest method.
 type IngestPayload struct {
-	ApikeyToken      *string
+	// Optional API key for plugin-driven attribution.
+	ApikeyToken *string
+	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
 	// Contract version. The current version is hook.ingest.v1.
 	SchemaVersion string

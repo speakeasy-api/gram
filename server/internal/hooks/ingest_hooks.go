@@ -34,20 +34,36 @@ func isExplicitSkillActivation(payload *gen.IngestPayload) bool {
 	return strings.TrimSpace(payload.Event.Type) == eventTypeSkillActivated
 }
 
-// Ingest is the authenticated, feature-first hook endpoint. Legacy
-// provider-specific endpoints keep their compatibility behavior; this path only
-// accepts the canonical Gram contract. Events are attributed to the sender's
-// self-reported user email when the payload carries one — plugins publish with
-// an org-wide hooks key whose AuthContext identity is the publishing admin,
-// not the developer at the keyboard — falling back to the token owner for
-// personal keys and senders without a device agent.
+// Ingest is the feature-first hook endpoint; this path only accepts the
+// canonical Gram contract. Auth is optional so hook senders stay non-blocking
+// for machines that never signed in: a keyless request is acknowledged without
+// processing (there is nothing to attribute it to), while a presented key that
+// fails validation is a hard 401 — the sender explicitly tried to
+// authenticate, and its credential-recovery path keys off that status. Events
+// are attributed to the sender's self-reported user email when the payload
+// carries one — plugins publish with an org-wide hooks key whose AuthContext
+// identity is the publishing admin, not the developer at the keyboard —
+// falling back to the token owner for personal keys and senders without a
+// device agent.
 func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (*gen.IngestHookResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
-	}
 	if err := validateCanonicalIngestPayload(payload); err != nil {
 		return nil, err
+	}
+	if apikey := strings.TrimSpace(conv.PtrValOr(payload.ApikeyToken, "")); apikey != "" {
+		authedCtx, err := s.authorizePluginRequest(ctx, apikey, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
+		if err != nil {
+			return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized")
+		}
+		ctx = authedCtx
+	}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		s.logger.InfoContext(ctx, "unauthenticated hook acknowledged without processing",
+			attr.SlogEvent("hooks_ingest_unauthenticated"),
+			attr.SlogHookSource(strings.TrimSpace(payload.Source.Adapter)),
+			attr.SlogHookEvent(strings.TrimSpace(payload.Event.Type)),
+		)
+		return canonicalAllowResult(), nil
 	}
 	actor := s.resolveCanonicalActor(ctx, payload, authCtx)
 

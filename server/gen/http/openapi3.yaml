@@ -13237,18 +13237,18 @@ paths:
             operationId: ingestHookEvent
             parameters:
                 - allowEmptyValue: true
-                  description: API Key header
+                  description: Optional API key for plugin-driven attribution.
                   in: header
                   name: Gram-Key
                   schema:
-                    description: API Key header
+                    description: Optional API key for plugin-driven attribution.
                     type: string
                 - allowEmptyValue: true
-                  description: project header
+                  description: Optional project slug for plugin-driven attribution.
                   in: header
                   name: Gram-Project
                   schema:
-                    description: project header
+                    description: Optional project slug for plugin-driven attribution.
                     type: string
                 - allowEmptyValue: true
                   description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
@@ -13324,9 +13324,6 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: ingest hooks
             tags:
                 - hooks

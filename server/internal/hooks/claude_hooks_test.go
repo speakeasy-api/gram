@@ -1047,12 +1047,10 @@ func TestClaude_ContinuesWhenPluginAuthFails(t *testing.T) {
 	require.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
 }
 
-// When Claude PreToolUse cannot resolve org/project metadata for an MCP call
-// and the request carried no credentials, fail open: the machine is in the
-// never-authenticated state, and without an org there is no blocking policy
-// to enforce. Denying here blocked every MCP call for orgs that never enabled
-// shadow-MCP blocking.
-func TestClaude_PreToolUse_AllowsMCPWhenNoAuthAndNoCachedMetadata(t *testing.T) {
+// When Claude PreToolUse cannot resolve org/project metadata for an MCP call,
+// fail closed. Buffered telemetry can be replayed later, but it cannot undo an
+// already-allowed tool call.
+func TestClaude_PreToolUse_DeniesMCPWhenNoAuthAndNoCachedMetadata(t *testing.T) {
 	t.Parallel()
 	_, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -1075,51 +1073,15 @@ func TestClaude_PreToolUse_AllowsMCPWhenNoAuthAndNoCachedMetadata(t *testing.T) 
 	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
 	require.True(t, ok)
 	require.NotNil(t, output.PermissionDecision)
-	assert.Equal(t, "allow", *output.PermissionDecision,
-		"unattributed MCP tool calls without credentials must fail open")
-}
-
-// A request that explicitly presented credentials which failed validation is
-// a broken auth state, not a never-authenticated one: MCP calls fail closed
-// with a reason that names the problem.
-func TestClaude_PreToolUse_DeniesMCPWhenPluginAuthRejected(t *testing.T) {
-	t.Parallel()
-	_, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
-
-	bareCtx := t.Context()
-	sessionID := uuid.NewString()
-	toolName := "mcp__gram__do_thing"
-	toolUseID := "toolu_pretooluse_bad_key"
-	badKey := "not-a-real-key"
-	projectSlug := "default"
-
-	result, err := ti.service.Claude(bareCtx, &gen.ClaudePayload{
-		HookEventName:    "PreToolUse",
-		SessionID:        &sessionID,
-		ToolName:         &toolName,
-		ToolUseID:        &toolUseID,
-		ToolInput:        map[string]any{"foo": "bar"},
-		ApikeyToken:      &badKey,
-		ProjectSlugInput: &projectSlug,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
-	require.True(t, ok)
-	require.NotNil(t, output.PermissionDecision)
 	assert.Equal(t, "deny", *output.PermissionDecision,
-		"MCP tool calls with rejected credentials must fail closed")
+		"MCP tool calls without enforcement metadata must fail closed")
 	require.NotNil(t, output.PermissionDecisionReason)
-	assert.Contains(t, *output.PermissionDecisionReason, "credentials were rejected")
-	assert.Contains(t, *output.PermissionDecisionReason, "login.sh")
+	assert.Contains(t, *output.PermissionDecisionReason, "could not verify this MCP tool call")
+	assert.Contains(t, *output.PermissionDecisionReason, "/reload-plugins")
+	assert.Contains(t, *output.PermissionDecisionReason, "(err code: "+denyCodeNoMetadata+")")
 }
 
-// Resolved metadata without a user email no longer denies: the policy lookup
-// runs with an empty user id (everyone-audience policies still apply), and an
-// org with no blocking policy allows the call.
-func TestClaude_PreToolUse_AllowsMCPWhenResolvedMetadataHasNoUserEmail(t *testing.T) {
+func TestClaude_PreToolUse_DeniesMCPWhenResolvedMetadataHasNoUserEmail(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -1154,8 +1116,10 @@ func TestClaude_PreToolUse_AllowsMCPWhenResolvedMetadataHasNoUserEmail(t *testin
 	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
 	require.True(t, ok)
 	require.NotNil(t, output.PermissionDecision)
-	assert.Equal(t, "allow", *output.PermissionDecision,
-		"no blocking policy exists for the org, so the call is allowed")
+	assert.Equal(t, "deny", *output.PermissionDecision)
+	require.NotNil(t, output.PermissionDecisionReason)
+	assert.Contains(t, *output.PermissionDecisionReason, "could not verify this MCP tool call")
+	assert.Contains(t, *output.PermissionDecisionReason, "(err code: "+denyCodeNoUserEmail+")")
 }
 
 // Claude Code's hook output schema only permits hookSpecificOutput for

@@ -39,6 +39,19 @@ import (
 // payload.
 const decodeBodySampleLimit = 1024
 
+const claudeShadowMCPMetadataUnavailableReason = "Speakeasy could not verify this MCP tool call. Try restarting Claude, or running /reload-plugins."
+
+// Diagnostic codes appended to claudeShadowMCPMetadataUnavailableReason. The
+// three fail-closed branches that can't verify an MCP call all surface the
+// same generic copy, so the code is the only thing that tells a user (or
+// support) which branch denied the call from the message alone. They mirror
+// the slog event suffixes on each branch.
+const (
+	denyCodeNoSession   = "NO_SESSION"
+	denyCodeNoMetadata  = "NO_METADATA"
+	denyCodeNoUserEmail = "NO_USER_EMAIL"
+)
+
 // decoderFunc adapts a plain function to the goahttp.Decoder interface so we
 // can capture per-request context (logger, raw body, headers) in a closure
 // instead of via struct fields. This keeps containedctx happy and keeps the
@@ -258,10 +271,6 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		// validated. Policies that need auth context degrade gracefully.
 		if authedCtx, err := s.authorizePluginRequest(ctx, conv.PtrValOr(payload.ApikeyToken, ""), projectSlugHint); err != nil {
 			outcome = hookMetricOutcomeUnauthorized
-			// Remember that credentials were presented and rejected: the MCP
-			// guard fails closed on a bad token while staying open for
-			// requests that never carried one.
-			ctx = withHookAuthRejected(ctx)
 			logger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
 				attr.SlogEvent("claude_hook_auth_failed"),
 				attr.SlogError(err),
@@ -618,9 +627,10 @@ func hasOptionalPluginAuth(payload *gen.ClaudePayload) bool {
 }
 
 // authorizePluginRequest validates the API key and project slug supplied
-// by a plugin-driven Claude request. Returns the auth-populated context
-// on success, or a 401 on either failure (the request explicitly tried
-// to authenticate, so we don't silently fall back to OTEL on bad creds).
+// by a plugin-driven request on the optional-auth hook endpoints (claude,
+// ingest). Returns the auth-populated context on success, or an error on
+// either failure (the request explicitly tried to authenticate, so callers
+// don't silently treat it as an unauthenticated request).
 func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug string) (context.Context, error) {
 	keyScheme := &security.APIKeyScheme{
 		Name:           constants.KeySecurityScheme,
@@ -629,7 +639,7 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	}
 	ctx, err := s.auth.Authorize(ctx, key, keyScheme)
 	if err != nil {
-		return ctx, fmt.Errorf("authorize claude hook api key: %w", err)
+		return ctx, fmt.Errorf("authorize hook api key: %w", err)
 	}
 	projectScheme := &security.APIKeyScheme{
 		Name:           constants.ProjectSlugSecuritySchema,
@@ -638,7 +648,7 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	}
 	ctx, err = s.auth.Authorize(ctx, projectSlug, projectScheme)
 	if err != nil {
-		return ctx, fmt.Errorf("authorize claude hook project slug: %w", err)
+		return ctx, fmt.Errorf("authorize hook project slug: %w", err)
 	}
 	return ctx, nil
 }
@@ -883,11 +893,15 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	}
 
 	allow := "allow"
+	deny := "deny"
 	result := makeHookResult(payload.HookEventName)
 	output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
-	allowUnattributed := func() (*gen.ClaudeHookResult, error) {
+	denyUnverifiedMCP := func(code string) (*gen.ClaudeHookResult, error) {
+		reason := fmt.Sprintf("%s (err code: %s)", claudeShadowMCPMetadataUnavailableReason, code)
+		result.SystemMessage = &reason
 		if output != nil {
-			output.PermissionDecision = &allow
+			output.PermissionDecision = &deny
+			output.PermissionDecisionReason = &reason
 		}
 		return result, nil
 	}
@@ -909,40 +923,18 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	serverPrefix := parsed.Server
 	mcpToolName := parsed.Tool
 
-	// A request that presented plugin credentials which failed validation is a
-	// broken-but-established auth state: fail closed on MCP calls (native
-	// tools stay usable so the user can still run the login helper), with a
-	// reason that names the actual problem instead of a generic retry hint.
-	if isHookAuthRejected(ctx) {
-		deny := "deny"
-		reason := "Speakeasy blocked this MCP tool call: this machine's hooks credentials were rejected. Run the plugin's hooks/login.sh to reconnect, or update GRAM_HOOKS_API_KEY."
-		s.logger.WarnContext(ctx, "claude PreToolUse carried rejected plugin credentials; denying MCP tool call",
-			attr.SlogEvent("claude_hook_pretooluse_auth_rejected"),
-			attr.SlogHookSource("claude"),
-			attr.SlogHookEvent(payload.HookEventName),
-			attr.SlogToolName(rawToolName),
-		)
-		result.SystemMessage = &reason
-		if output != nil {
-			output.PermissionDecision = &deny
-			output.PermissionDecisionReason = &reason
-		}
-		return result, nil
-	}
-
 	sessionID := ""
 	if payload.SessionID != nil {
 		sessionID = *payload.SessionID
 	}
 	if sessionID == "" {
-		// No session yet to derive org/project from, and no credentials were
-		// presented. An unattributed machine fails open: there is no org to
-		// look a blocking policy up for, and denying here blocked every MCP
-		// call for orgs that never enabled shadow-MCP blocking.
-		s.logger.WarnContext(ctx, "claude PreToolUse fired without session id; allowing MCP tool call unverified",
+		// No session yet to derive org/project from. Native tools are already
+		// skipped above; MCP calls must fail closed because buffered telemetry
+		// cannot undo an already-allowed tool call.
+		s.logger.WarnContext(ctx, "claude PreToolUse fired without session id; denying MCP tool call",
 			attr.SlogEvent("claude_hook_pretooluse_no_session"),
 		)
-		return allowUnattributed()
+		return denyUnverifiedMCP(denyCodeNoSession)
 	}
 	// Plugin path: when the request authenticated via Gram-Key + Gram-Project,
 	// org/project come from the auth context — same pattern as recordHook.
@@ -953,11 +945,10 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	payloadUserEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
 	metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, payloadUserEmail)
 	if err != nil {
-		// Unauthenticated request and OTEL has not seeded this session either:
-		// the machine is in the never-authenticated state, which fails open
-		// everywhere else — the guard cannot resolve an org, so it cannot know
-		// of any blocking policy to enforce.
-		s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; allowing MCP tool call unverified",
+		// OTEL path with no cached metadata yet. Native tools are already
+		// skipped above; MCP calls must fail closed because buffered telemetry
+		// cannot undo an already-allowed tool call.
+		s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; denying MCP tool call",
 			attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
 			attr.SlogHookSource("claude"),
 			attr.SlogHookEvent(payload.HookEventName),
@@ -965,12 +956,19 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			attr.SlogToolName(rawToolName),
 			attr.SlogError(err),
 		)
-		return allowUnattributed()
+		return denyUnverifiedMCP(denyCodeNoMetadata)
+	}
+	if strings.TrimSpace(metadata.UserEmail) == "" {
+		s.logger.WarnContext(ctx, "claude PreToolUse metadata has no user email; denying MCP tool call",
+			attr.SlogEvent("claude_hook_pretooluse_no_user_email"),
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogToolName(rawToolName),
+		)
+		return denyUnverifiedMCP(denyCodeNoUserEmail)
 	}
 
-	// An empty user email is no longer a deny: the policy lookup below applies
-	// everyone-audience policies without a resolved user, and targeted
-	// policies simply don't match an unresolved one.
 	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID)
 	if policy == nil {
 		if output != nil {
