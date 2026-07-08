@@ -1929,7 +1929,11 @@ async function seedRiskFindings(init: {
       WHERE project_id = '${projectId}' AND name = '${SEED_RISK_POLICY_NAME}'
       LIMIT 1
     ) pol
-    WHERE cm.chat_id IN (${seededHistoryRiskChatIds.map((id) => `'${id}'`).join(",")});`;
+    WHERE cm.chat_id IN (${seededHistoryRiskChatIds.map((id) => `'${id}'`).join(",")})
+      -- Findings attach to the flagged user message only: tool messages carry
+      -- additional tokens, and flagging them would make "tokens in messages
+      -- with risk findings" exceed the flagged sessions' own totals.
+      AND cm.role != 'tool';`;
 
   const pgSQL = `
     BEGIN;
@@ -3553,7 +3557,13 @@ async function seedObservabilityData(init: {
         1_000_000
       ).toFixed(6);
 
-      const uaFrag = userAttrsJSONFragment(userIndex, hookSource);
+      // A small slice of sessions comes from devices without an enrolled
+      // identity (no user.email / directory attributes — only the consuming
+      // surface), populating the "tokens without user attribution" metric.
+      const anonymous = r() < 0.06;
+      const uaFrag = anonymous
+        ? `"gram.hook.source": "${hookSource}"`
+        : userAttrsJSONFragment(userIndex, hookSource);
       const acctFrag = acct.accountType
         ? `"gram.account_type": "${acct.accountType}", "gram.provider": "${acct.provider}", `
         : "";
@@ -3665,10 +3675,16 @@ async function seedObservabilityData(init: {
           `('${chatId}', '${projectId}', '${organizationId}', '${userId}', '${extUserId}', '${title}', '${createdAtIso}', '${createdAtIso}')`,
         );
         if (risky) {
-          const promptTokens =
-            inputTokens + cacheReadTokens + cacheCreationTokens;
+          // The flagged message carries a slice of the session's tokens (a
+          // finding flags one turn, not the whole session), keeping the
+          // message-level risk stat strictly below the session-level one.
+          const riskyShare = 0.4 + r() * 0.45;
+          const promptTokens = Math.round(
+            (inputTokens + cacheReadTokens + cacheCreationTokens) * riskyShare,
+          );
+          const completionTokens = Math.round(outputTokens * riskyShare);
           historyMessageRows.push(
-            `('${chatId}', '${projectId}', 'user', '${title}', '${model}', '${createdAtIso}', ${promptTokens}, ${outputTokens}, ${totalTokens})`,
+            `('${chatId}', '${projectId}', 'user', '${title}', '${model}', '${createdAtIso}', ${promptTokens}, ${completionTokens}, ${promptTokens + completionTokens})`,
           );
           seededHistoryRiskChatIds.push(chatId);
         }

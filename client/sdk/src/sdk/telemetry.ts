@@ -17,8 +17,8 @@ import { telemetryListHooksTraces } from "../funcs/telemetryListHooksTraces.js";
 import { telemetryListSessions } from "../funcs/telemetryListSessions.js";
 import { telemetryListToolUsageTraces } from "../funcs/telemetryListToolUsageTraces.js";
 import { telemetryQuery } from "../funcs/telemetryQuery.js";
-import { telemetryQueryMessageTokenStats } from "../funcs/telemetryQueryMessageTokenStats.js";
 import { telemetryQueryRiskTokens } from "../funcs/telemetryQueryRiskTokens.js";
+import { telemetryQueryTumDetails } from "../funcs/telemetryQueryTumDetails.js";
 import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
 import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
 import { telemetrySearchToolCalls } from "../funcs/telemetrySearchToolCalls.js";
@@ -38,13 +38,13 @@ import { ListFilterOptionsResult } from "../models/components/listfilteroptionsr
 import { ListHooksTracesResult } from "../models/components/listhookstracesresult.js";
 import { ListSessionsResult } from "../models/components/listsessionsresult.js";
 import { ListToolUsageTracesResult } from "../models/components/listtoolusagetracesresult.js";
-import { MessageTokenStatsResult } from "../models/components/messagetokenstatsresult.js";
 import { QueryResult } from "../models/components/queryresult.js";
 import { QueryRiskTokensResult } from "../models/components/queryrisktokensresult.js";
 import { SearchChatsResult } from "../models/components/searchchatsresult.js";
 import { SearchLogsResult } from "../models/components/searchlogsresult.js";
 import { SearchToolCallsResult } from "../models/components/searchtoolcallsresult.js";
 import { SearchUsersResult } from "../models/components/searchusersresult.js";
+import { TumDetailsResult } from "../models/components/tumdetailsresult.js";
 import {
   CaptureEventRequest,
   CaptureEventSecurity,
@@ -103,13 +103,13 @@ import {
 } from "../models/operations/listtoolusagetraces.js";
 import { QueryRequest, QuerySecurity } from "../models/operations/query.js";
 import {
-  QueryMessageTokenStatsRequest,
-  QueryMessageTokenStatsSecurity,
-} from "../models/operations/querymessagetokenstats.js";
-import {
   QueryRiskTokensRequest,
   QueryRiskTokensSecurity,
 } from "../models/operations/queryrisktokens.js";
+import {
+  QueryTumDetailsRequest,
+  QueryTumDetailsSecurity,
+} from "../models/operations/querytumdetails.js";
 import {
   SearchChatsRequest,
   SearchChatsSecurity,
@@ -415,25 +415,6 @@ export class Telemetry extends ClientSDK {
   }
 
   /**
-   * queryMessageTokenStats telemetry
-   *
-   * @remarks
-   * Org-scoped daily message-level token stats: tokens in messages carrying at least one active risk finding and tokens in tool-call messages. Powers the billing page's usage details table.
-   */
-  async queryMessageTokenStats(
-    request: QueryMessageTokenStatsRequest,
-    security?: QueryMessageTokenStatsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<MessageTokenStatsResult> {
-    return unwrapAsync(telemetryQueryMessageTokenStats(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * queryRiskTokens telemetry
    *
    * @remarks
@@ -445,6 +426,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<QueryRiskTokensResult> {
     return unwrapAsync(telemetryQueryRiskTokens(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * queryTumDetails telemetry
+   *
+   * @remarks
+   * Org-scoped daily usage details for the billing page's metrics table, computed in one pass: token type sums, session/tool-call/active-user counts, attribution slices (MCP tools, skills, unattributed users), and message-level stats (tokens in messages with active risk findings, tokens in tool-call messages).
+   */
+  async queryTumDetails(
+    request: QueryTumDetailsRequest,
+    security?: QueryTumDetailsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<TumDetailsResult> {
+    return unwrapAsync(telemetryQueryTumDetails(
       this,
       request,
       security,

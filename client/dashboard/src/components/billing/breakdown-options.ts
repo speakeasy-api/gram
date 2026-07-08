@@ -4,7 +4,6 @@ import {
   CircleUser,
   Cloud,
   Cpu,
-  FolderOpen,
   Layers,
   type LucideIcon,
   Network,
@@ -28,6 +27,24 @@ import { type StackMode } from "./token-usage-panel";
 export const BREAKDOWN_TOTAL = "total";
 export const BREAKDOWN_TOKEN_TYPE = "tokenType";
 export const BREAKDOWN_RISK = "risk";
+
+// The chart series palette, shared with the usage details table so a metric's
+// dot color matches its chart legend color.
+export const CHART_COLORS = [
+  "#60a5fa", // blue
+  "#34d399", // emerald
+  "#f97316", // orange
+  "#a78bfa", // violet
+  "#fb7185", // rose
+  "#facc15", // yellow
+  "#38bdf8", // sky
+  "#c084fc", // purple
+  "#4ade80", // green
+  "#f472b6", // pink
+];
+export const OTHER_COLOR = "#94a3b8"; // slate — the top-N remainder rollup
+export const RISKY_COLOR = "#fb7185"; // rose — tokens from sessions with risk findings
+export const CLEAN_COLOR = "#60a5fa"; // blue — everything else
 
 export type BreakdownOption = {
   value: string;
@@ -68,7 +85,6 @@ export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
   {
     heading: "Organization",
     options: [
-      { value: Dimension.ProjectId, label: "Project", icon: FolderOpen },
       { value: Dimension.DivisionName, label: "Division", icon: Network },
     ],
   },

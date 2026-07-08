@@ -4,9 +4,16 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useOrganization } from "@/contexts/Auth";
 import { isAttributionDim } from "@/pages/costs/taxonomy";
 import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
-import { telemetryQueryRiskTokens } from "@gram/client/funcs/telemetryQueryRiskTokens";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type GroupBy } from "@gram/client/models/components/querypayload.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -14,6 +21,7 @@ import {
   invalidateAllGetTokensUnderManagement,
   useGetTokensUnderManagement,
 } from "@gram/client/react-query/getTokensUnderManagement.js";
+import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBillingMetadata.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Button, Stack } from "@speakeasy-api/moonshine";
@@ -21,11 +29,17 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BillingCyclePicker } from "./billing-cycle-picker";
-import { type BillingCycle, cycleKey, cyclesFromTum } from "./billing-cycles";
+import {
+  type BillingCycle,
+  cycleKey,
+  cyclesFromTum,
+  cycleStaleTime,
+} from "./billing-cycles";
 import { stackModeFor } from "./breakdown-options";
 import { BreakdownPicker } from "./breakdown-picker";
 import { TokenUsagePanel } from "./token-usage-panel";
 import { TumDetailsTable } from "./tum-details-table";
+import { riskPointsQuery } from "./tum-queries";
 import { TumUsageCard } from "./tum-usage-card";
 
 // Org-wide token breakdown for one billing cycle: stacked daily tokens by a
@@ -38,7 +52,13 @@ import { TumUsageCard } from "./tum-usage-card";
 // simply chart as "(unset)". The generated hooks key their cache on
 // gramSession only, so the queries are driven directly with payload-encoding
 // keys.
-function TumTokenBreakdown({ cycle }: { cycle: BillingCycle }): JSX.Element {
+function TumTokenBreakdown({
+  cycle,
+  projectId,
+}: {
+  cycle: BillingCycle;
+  projectId: string | null;
+}): JSX.Element {
   const client = useGramContext();
   // The picker's selection, plus the last-picked dimension so switching to
   // token type or risk and back doesn't lose the grouping.
@@ -54,7 +74,10 @@ function TumTokenBreakdown({ cycle }: { cycle: BillingCycle }): JSX.Element {
       from.toISOString(),
       to.toISOString(),
       dimension,
+      projectId ?? "all",
     ],
+    // Closed cycles cache forever — their telemetry is immutable.
+    staleTime: cycleStaleTime(cycle),
     throwOnError: false,
     queryFn: () =>
       unwrapAsync(
@@ -67,20 +90,17 @@ function TumTokenBreakdown({ cycle }: { cycle: BillingCycle }): JSX.Element {
             topN: 100,
             // Daily buckets; the panel rolls up to weekly/monthly client-side.
             granularitySeconds: 86400,
+            filters: projectId
+              ? [{ dimension: Dimension.ProjectId, values: [projectId] }]
+              : undefined,
           },
         }),
       ),
   });
-  const { data: riskData } = useQuery({
-    queryKey: ["tum-breakdown-risk", from.toISOString(), to.toISOString()],
-    throwOnError: false,
-    queryFn: () =>
-      unwrapAsync(
-        telemetryQueryRiskTokens(client, {
-          queryRiskTokensPayload: { from, to },
-        }),
-      ),
-  });
+  // Shared with the details table's risk rows (same key — one request).
+  const { data: riskData } = useQuery(
+    riskPointsQuery({ client, cycle, projectId }),
+  );
 
   // Attribution cuts hide the "" (not-applicable) group, same as the costs page.
   const series = useMemo(() => {
@@ -118,8 +138,18 @@ function TumTokenBreakdown({ cycle }: { cycle: BillingCycle }): JSX.Element {
   );
 }
 
+// All-projects sentinel for the project filter (Radix Select rejects "").
+const ALL_PROJECTS = "__all__";
+
 export const TumUsageSection = (): JSX.Element => {
   const { data: tum } = useGetTokensUnderManagement();
+  const organization = useOrganization();
+  const { data: projectsData } = useListProjects(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
+  const projects = projectsData?.projects ?? [];
 
   // The selected billing cycle scopes the usage bar and the breakdown chart.
   // Derived (not synced) so the current cycle is the default once TUM loads.
@@ -130,6 +160,10 @@ export const TumUsageSection = (): JSX.Element => {
     cycles.find((c) => c.current) ??
     cycles[0] ??
     null;
+
+  // Optional project scope for the chart and details table. The usage card
+  // stays org-wide — the TUM contract is an organization-level number.
+  const [projectId, setProjectId] = useState<string | null>(null);
 
   return (
     <Page.Section>
@@ -148,7 +182,25 @@ export const TumUsageSection = (): JSX.Element => {
               <SimpleTooltip tooltip="Counts tokens from agent sessions Gram has stored chats or tool calls for during the selected billing cycle. Compared against your contracted monthly allowance.">
                 <Info className="text-muted-foreground h-4 w-4" />
               </SimpleTooltip>
-              <div className="ml-auto">
+              <div className="ml-auto flex items-center gap-2">
+                <Select
+                  value={projectId ?? ALL_PROJECTS}
+                  onValueChange={(value) =>
+                    setProjectId(value === ALL_PROJECTS ? null : value)
+                  }
+                >
+                  <SelectTrigger className="bg-background h-auto w-auto gap-1.5 py-1.5 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_PROJECTS}>All projects</SelectItem>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <BillingCyclePicker
                   cycles={cycles}
                   selected={selectedCycle}
@@ -161,10 +213,14 @@ export const TumUsageSection = (): JSX.Element => {
               limit={tum.monthlyTokenLimit ?? null}
             />
             <div className="mt-8">
-              <TumTokenBreakdown cycle={selectedCycle} />
+              <TumTokenBreakdown cycle={selectedCycle} projectId={projectId} />
             </div>
             <div className="mt-4">
-              <TumDetailsTable cycle={selectedCycle} />
+              <TumDetailsTable
+                cycle={selectedCycle}
+                projectId={projectId}
+                limit={tum.monthlyTokenLimit ?? null}
+              />
             </div>
           </Stack>
         ) : (

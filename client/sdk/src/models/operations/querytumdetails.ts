@@ -10,11 +10,11 @@ import {
   QueryRiskTokensPayload$outboundSchema,
 } from "../components/queryrisktokenspayload.js";
 
-export type QueryMessageTokenStatsSecurity = {
+export type QueryTumDetailsSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type QueryMessageTokenStatsRequest = {
+export type QueryTumDetailsRequest = {
   /**
    * Session header
    */
@@ -23,14 +23,14 @@ export type QueryMessageTokenStatsRequest = {
 };
 
 /** @internal */
-export type QueryMessageTokenStatsSecurity$Outbound = {
+export type QueryTumDetailsSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const QueryMessageTokenStatsSecurity$outboundSchema: z.ZodMiniType<
-  QueryMessageTokenStatsSecurity$Outbound,
-  QueryMessageTokenStatsSecurity
+export const QueryTumDetailsSecurity$outboundSchema: z.ZodMiniType<
+  QueryTumDetailsSecurity$Outbound,
+  QueryTumDetailsSecurity
 > = z.pipe(
   z.object({
     sessionHeaderGramSession: z.optional(z.string()),
@@ -42,26 +42,24 @@ export const QueryMessageTokenStatsSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function queryMessageTokenStatsSecurityToJSON(
-  queryMessageTokenStatsSecurity: QueryMessageTokenStatsSecurity,
+export function queryTumDetailsSecurityToJSON(
+  queryTumDetailsSecurity: QueryTumDetailsSecurity,
 ): string {
   return JSON.stringify(
-    QueryMessageTokenStatsSecurity$outboundSchema.parse(
-      queryMessageTokenStatsSecurity,
-    ),
+    QueryTumDetailsSecurity$outboundSchema.parse(queryTumDetailsSecurity),
   );
 }
 
 /** @internal */
-export type QueryMessageTokenStatsRequest$Outbound = {
+export type QueryTumDetailsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   QueryRiskTokensPayload: QueryRiskTokensPayload$Outbound;
 };
 
 /** @internal */
-export const QueryMessageTokenStatsRequest$outboundSchema: z.ZodMiniType<
-  QueryMessageTokenStatsRequest$Outbound,
-  QueryMessageTokenStatsRequest
+export const QueryTumDetailsRequest$outboundSchema: z.ZodMiniType<
+  QueryTumDetailsRequest$Outbound,
+  QueryTumDetailsRequest
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
@@ -75,12 +73,10 @@ export const QueryMessageTokenStatsRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function queryMessageTokenStatsRequestToJSON(
-  queryMessageTokenStatsRequest: QueryMessageTokenStatsRequest,
+export function queryTumDetailsRequestToJSON(
+  queryTumDetailsRequest: QueryTumDetailsRequest,
 ): string {
   return JSON.stringify(
-    QueryMessageTokenStatsRequest$outboundSchema.parse(
-      queryMessageTokenStatsRequest,
-    ),
+    QueryTumDetailsRequest$outboundSchema.parse(queryTumDetailsRequest),
   );
 }

@@ -64,9 +64,9 @@ type Client struct {
 	// queryRiskTokens endpoint.
 	QueryRiskTokensDoer goahttp.Doer
 
-	// QueryMessageTokenStats Doer is the HTTP client used to make requests to the
-	// queryMessageTokenStats endpoint.
-	QueryMessageTokenStatsDoer goahttp.Doer
+	// QueryTumDetails Doer is the HTTP client used to make requests to the
+	// queryTumDetails endpoint.
+	QueryTumDetailsDoer goahttp.Doer
 
 	// ListSessions Doer is the HTTP client used to make requests to the
 	// listSessions endpoint.
@@ -132,7 +132,7 @@ func NewClient(
 		GetProjectOverviewDoer:        doer,
 		QueryDoer:                     doer,
 		QueryRiskTokensDoer:           doer,
-		QueryMessageTokenStatsDoer:    doer,
+		QueryTumDetailsDoer:           doer,
 		ListSessionsDoer:              doer,
 		ListFilterOptionsDoer:         doer,
 		ListAttributeKeysDoer:         doer,
@@ -437,15 +437,15 @@ func (c *Client) QueryRiskTokens() goa.Endpoint {
 	}
 }
 
-// QueryMessageTokenStats returns an endpoint that makes HTTP requests to the
-// telemetry service queryMessageTokenStats server.
-func (c *Client) QueryMessageTokenStats() goa.Endpoint {
+// QueryTumDetails returns an endpoint that makes HTTP requests to the
+// telemetry service queryTumDetails server.
+func (c *Client) QueryTumDetails() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeQueryMessageTokenStatsRequest(c.encoder)
-		decodeResponse = DecodeQueryMessageTokenStatsResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeQueryTumDetailsRequest(c.encoder)
+		decodeResponse = DecodeQueryTumDetailsResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildQueryMessageTokenStatsRequest(ctx, v)
+		req, err := c.BuildQueryTumDetailsRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -453,9 +453,9 @@ func (c *Client) QueryMessageTokenStats() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.QueryMessageTokenStatsDoer.Do(req)
+		resp, err := c.QueryTumDetailsDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("telemetry", "queryMessageTokenStats", err)
+			return nil, goahttp.ErrRequestError("telemetry", "queryTumDetails", err)
 		}
 		return decodeResponse(resp)
 	}

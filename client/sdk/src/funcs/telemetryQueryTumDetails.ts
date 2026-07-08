@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  MessageTokenStatsResult,
-  MessageTokenStatsResult$inboundSchema,
-} from "../models/components/messagetokenstatsresult.js";
+  TumDetailsResult,
+  TumDetailsResult$inboundSchema,
+} from "../models/components/tumdetailsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  QueryMessageTokenStatsRequest,
-  QueryMessageTokenStatsRequest$outboundSchema,
-  QueryMessageTokenStatsSecurity,
-} from "../models/operations/querymessagetokenstats.js";
+  QueryTumDetailsRequest,
+  QueryTumDetailsRequest$outboundSchema,
+  QueryTumDetailsSecurity,
+} from "../models/operations/querytumdetails.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * queryMessageTokenStats telemetry
+ * queryTumDetails telemetry
  *
  * @remarks
- * Org-scoped daily message-level token stats: tokens in messages carrying at least one active risk finding and tokens in tool-call messages. Powers the billing page's usage details table.
+ * Org-scoped daily usage details for the billing page's metrics table, computed in one pass: token type sums, session/tool-call/active-user counts, attribution slices (MCP tools, skills, unattributed users), and message-level stats (tokens in messages with active risk findings, tokens in tool-call messages).
  */
-export function telemetryQueryMessageTokenStats(
+export function telemetryQueryTumDetails(
   client: GramCore,
-  request: QueryMessageTokenStatsRequest,
-  security?: QueryMessageTokenStatsSecurity | undefined,
+  request: QueryTumDetailsRequest,
+  security?: QueryTumDetailsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    MessageTokenStatsResult,
+    TumDetailsResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function telemetryQueryMessageTokenStats(
 
 async function $do(
   client: GramCore,
-  request: QueryMessageTokenStatsRequest,
-  security?: QueryMessageTokenStatsSecurity | undefined,
+  request: QueryTumDetailsRequest,
+  security?: QueryTumDetailsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      MessageTokenStatsResult,
+      TumDetailsResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,7 +95,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(QueryMessageTokenStatsRequest$outboundSchema, value),
+    (value) => z.parse(QueryTumDetailsRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -106,7 +106,7 @@ async function $do(
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/telemetry.queryMessageTokenStats")();
+  const path = pathToFunc("/rpc/telemetry.queryTumDetails")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -130,7 +130,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "queryMessageTokenStats",
+    operationID: "queryTumDetails",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -174,7 +174,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    MessageTokenStatsResult,
+    TumDetailsResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -185,7 +185,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, MessageTokenStatsResult$inboundSchema),
+    M.json(200, TumDetailsResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

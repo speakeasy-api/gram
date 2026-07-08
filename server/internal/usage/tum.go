@@ -136,6 +136,23 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 		ids = append(ids, id.String())
 	}
 
+	// Finalized cycle snapshots are the immutable billing record: once a
+	// cycle is sealed (billingCycleFinalizeGrace after it closes), its total
+	// is served from Postgres instead of being recomputed from ClickHouse, so
+	// the reported number always matches what was invoiced — even if the
+	// telemetry aggregates change or expire afterwards. Open and
+	// not-yet-finalized cycles keep computing live.
+	snapshots, err := s.repo.ListBillingCycleUsage(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list billing cycle snapshots").LogError(ctx, s.logger)
+	}
+	finalizedTokens := make(map[int64]int64, len(snapshots))
+	for _, snap := range snapshots {
+		if snap.FinalizedAt.Valid {
+			finalizedTokens[snap.CycleStart.Time.UTC().Unix()] = snap.TumTokens
+		}
+	}
+
 	// Chat qualification (stored non-metrics evidence) is evaluated per cycle,
 	// so each cycle's daily points sum exactly to that cycle's TUM.
 	history := make([]*gen.TUMPeriod, 0, len(cycles))
@@ -157,6 +174,13 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 				Date:   day.Day.UTC().Format(time.DateOnly),
 				Tokens: day.Tokens,
 			})
+		}
+
+		// The finalized snapshot wins over the live recompute; the daily
+		// points remain advisory (they can drift or expire — the sealed total
+		// is the billed number).
+		if snapTokens, ok := finalizedTokens[cycle.Start.UTC().Unix()]; ok {
+			cycleTokens = snapTokens
 		}
 
 		history = append(history, &gen.TUMPeriod{

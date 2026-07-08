@@ -28,7 +28,7 @@ type Endpoints struct {
 	GetProjectOverview        goa.Endpoint
 	Query                     goa.Endpoint
 	QueryRiskTokens           goa.Endpoint
-	QueryMessageTokenStats    goa.Endpoint
+	QueryTumDetails           goa.Endpoint
 	ListSessions              goa.Endpoint
 	ListFilterOptions         goa.Endpoint
 	ListAttributeKeys         goa.Endpoint
@@ -56,7 +56,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetProjectOverview:        NewGetProjectOverviewEndpoint(s, a.APIKeyAuth),
 		Query:                     NewQueryEndpoint(s, a.APIKeyAuth),
 		QueryRiskTokens:           NewQueryRiskTokensEndpoint(s, a.APIKeyAuth),
-		QueryMessageTokenStats:    NewQueryMessageTokenStatsEndpoint(s, a.APIKeyAuth),
+		QueryTumDetails:           NewQueryTumDetailsEndpoint(s, a.APIKeyAuth),
 		ListSessions:              NewListSessionsEndpoint(s, a.APIKeyAuth),
 		ListFilterOptions:         NewListFilterOptionsEndpoint(s, a.APIKeyAuth),
 		ListAttributeKeys:         NewListAttributeKeysEndpoint(s, a.APIKeyAuth),
@@ -82,7 +82,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetProjectOverview = m(e.GetProjectOverview)
 	e.Query = m(e.Query)
 	e.QueryRiskTokens = m(e.QueryRiskTokens)
-	e.QueryMessageTokenStats = m(e.QueryMessageTokenStats)
+	e.QueryTumDetails = m(e.QueryTumDetails)
 	e.ListSessions = m(e.ListSessions)
 	e.ListFilterOptions = m(e.ListFilterOptions)
 	e.ListAttributeKeys = m(e.ListAttributeKeys)
@@ -741,11 +741,11 @@ func NewQueryRiskTokensEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 	}
 }
 
-// NewQueryMessageTokenStatsEndpoint returns an endpoint function that calls
-// the method "queryMessageTokenStats" of service "telemetry".
-func NewQueryMessageTokenStatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewQueryTumDetailsEndpoint returns an endpoint function that calls the
+// method "queryTumDetails" of service "telemetry".
+func NewQueryTumDetailsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*QueryMessageTokenStatsPayload)
+		p := req.(*QueryTumDetailsPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -760,7 +760,7 @@ func NewQueryMessageTokenStatsEndpoint(s Service, authAPIKeyFn security.AuthAPIK
 		if err != nil {
 			return nil, err
 		}
-		return s.QueryMessageTokenStats(ctx, p)
+		return s.QueryTumDetails(ctx, p)
 	}
 }
 

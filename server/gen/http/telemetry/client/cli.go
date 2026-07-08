@@ -718,13 +718,13 @@ func BuildQueryRiskTokensPayload(telemetryQueryRiskTokensBody string, telemetryQ
 	return v, nil
 }
 
-// BuildQueryMessageTokenStatsPayload builds the payload for the telemetry
-// queryMessageTokenStats endpoint from CLI flags.
-func BuildQueryMessageTokenStatsPayload(telemetryQueryMessageTokenStatsBody string, telemetryQueryMessageTokenStatsSessionToken string) (*telemetry.QueryMessageTokenStatsPayload, error) {
+// BuildQueryTumDetailsPayload builds the payload for the telemetry
+// queryTumDetails endpoint from CLI flags.
+func BuildQueryTumDetailsPayload(telemetryQueryTumDetailsBody string, telemetryQueryTumDetailsSessionToken string) (*telemetry.QueryTumDetailsPayload, error) {
 	var err error
-	var body QueryMessageTokenStatsRequestBody
+	var body QueryTumDetailsRequestBody
 	{
-		err = json.Unmarshal([]byte(telemetryQueryMessageTokenStatsBody), &body)
+		err = json.Unmarshal([]byte(telemetryQueryTumDetailsBody), &body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
 		}
@@ -739,11 +739,11 @@ func BuildQueryMessageTokenStatsPayload(telemetryQueryMessageTokenStatsBody stri
 	}
 	var sessionToken *string
 	{
-		if telemetryQueryMessageTokenStatsSessionToken != "" {
-			sessionToken = &telemetryQueryMessageTokenStatsSessionToken
+		if telemetryQueryTumDetailsSessionToken != "" {
+			sessionToken = &telemetryQueryTumDetailsSessionToken
 		}
 	}
-	v := &telemetry.QueryMessageTokenStatsPayload{
+	v := &telemetry.QueryTumDetailsPayload{
 		From:      body.From,
 		To:        body.To,
 		ProjectID: body.ProjectID,

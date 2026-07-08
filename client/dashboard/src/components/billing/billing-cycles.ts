@@ -57,3 +57,10 @@ export function formatCycleRange(cycle: BillingCycle): string {
 export function cycleKey(cycle: BillingCycle): string {
   return cycle.start.toISOString();
 }
+
+// React Query staleTime for data scoped to a cycle: closed cycles are
+// immutable (telemetry for a past window never changes), so their queries
+// never refetch; the active cycle stays reasonably fresh.
+export function cycleStaleTime(cycle: BillingCycle): number {
+  return cycle.end.getTime() <= Date.now() ? Infinity : 60_000;
+}

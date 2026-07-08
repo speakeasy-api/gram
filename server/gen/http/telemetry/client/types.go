@@ -213,9 +213,9 @@ type QueryRiskTokensRequestBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 }
 
-// QueryMessageTokenStatsRequestBody is the type of the "telemetry" service
-// "queryMessageTokenStats" endpoint HTTP request body.
-type QueryMessageTokenStatsRequestBody struct {
+// QueryTumDetailsRequestBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP request body.
+type QueryTumDetailsRequestBody struct {
 	// Start time in ISO 8601 format
 	From string `form:"from" json:"from" xml:"from"`
 	// End time in ISO 8601 format
@@ -483,14 +483,18 @@ type QueryRiskTokensResponseBody struct {
 	Points []*RiskTokensPointResponseBody `form:"points,omitempty" json:"points,omitempty" xml:"points,omitempty"`
 }
 
-// QueryMessageTokenStatsResponseBody is the type of the "telemetry" service
-// "queryMessageTokenStats" endpoint HTTP response body.
-type QueryMessageTokenStatsResponseBody struct {
-	// Timeseries bucket width in seconds. Always 86400 — the stats are bucketed
+// QueryTumDetailsResponseBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP response body.
+type QueryTumDetailsResponseBody struct {
+	// Timeseries bucket width in seconds. Always 86400 — the details are bucketed
 	// daily.
 	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
 	// Gap-filled daily buckets in ascending time order
-	Points []*MessageTokenStatsPointResponseBody `form:"points,omitempty" json:"points,omitempty" xml:"points,omitempty"`
+	Points []*TumDetailsPointResponseBody `form:"points,omitempty" json:"points,omitempty" xml:"points,omitempty"`
+	// Whole-range totals
+	Totals *TumDetailsTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
+	// Token usage per breakdown dimension, one entry per supported dimension
+	Breakdowns []*TumDetailsBreakdownResponseBody `form:"breakdowns,omitempty" json:"breakdowns,omitempty" xml:"breakdowns,omitempty"`
 }
 
 // ListSessionsResponseBody is the type of the "telemetry" service
@@ -2812,10 +2816,10 @@ type QueryRiskTokensGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// QueryMessageTokenStatsUnauthorizedResponseBody is the type of the
-// "telemetry" service "queryMessageTokenStats" endpoint HTTP response body for
-// the "unauthorized" error.
-type QueryMessageTokenStatsUnauthorizedResponseBody struct {
+// QueryTumDetailsUnauthorizedResponseBody is the type of the "telemetry"
+// service "queryTumDetails" endpoint HTTP response body for the "unauthorized"
+// error.
+type QueryTumDetailsUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2831,10 +2835,9 @@ type QueryMessageTokenStatsUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// QueryMessageTokenStatsForbiddenResponseBody is the type of the "telemetry"
-// service "queryMessageTokenStats" endpoint HTTP response body for the
-// "forbidden" error.
-type QueryMessageTokenStatsForbiddenResponseBody struct {
+// QueryTumDetailsForbiddenResponseBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP response body for the "forbidden" error.
+type QueryTumDetailsForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2850,10 +2853,9 @@ type QueryMessageTokenStatsForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// QueryMessageTokenStatsBadRequestResponseBody is the type of the "telemetry"
-// service "queryMessageTokenStats" endpoint HTTP response body for the
-// "bad_request" error.
-type QueryMessageTokenStatsBadRequestResponseBody struct {
+// QueryTumDetailsBadRequestResponseBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP response body for the "bad_request" error.
+type QueryTumDetailsBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2869,10 +2871,9 @@ type QueryMessageTokenStatsBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// QueryMessageTokenStatsNotFoundResponseBody is the type of the "telemetry"
-// service "queryMessageTokenStats" endpoint HTTP response body for the
-// "not_found" error.
-type QueryMessageTokenStatsNotFoundResponseBody struct {
+// QueryTumDetailsNotFoundResponseBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP response body for the "not_found" error.
+type QueryTumDetailsNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2888,10 +2889,9 @@ type QueryMessageTokenStatsNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// QueryMessageTokenStatsConflictResponseBody is the type of the "telemetry"
-// service "queryMessageTokenStats" endpoint HTTP response body for the
-// "conflict" error.
-type QueryMessageTokenStatsConflictResponseBody struct {
+// QueryTumDetailsConflictResponseBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP response body for the "conflict" error.
+type QueryTumDetailsConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2907,10 +2907,10 @@ type QueryMessageTokenStatsConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// QueryMessageTokenStatsUnsupportedMediaResponseBody is the type of the
-// "telemetry" service "queryMessageTokenStats" endpoint HTTP response body for
-// the "unsupported_media" error.
-type QueryMessageTokenStatsUnsupportedMediaResponseBody struct {
+// QueryTumDetailsUnsupportedMediaResponseBody is the type of the "telemetry"
+// service "queryTumDetails" endpoint HTTP response body for the
+// "unsupported_media" error.
+type QueryTumDetailsUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2926,10 +2926,9 @@ type QueryMessageTokenStatsUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// QueryMessageTokenStatsInvalidResponseBody is the type of the "telemetry"
-// service "queryMessageTokenStats" endpoint HTTP response body for the
-// "invalid" error.
-type QueryMessageTokenStatsInvalidResponseBody struct {
+// QueryTumDetailsInvalidResponseBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP response body for the "invalid" error.
+type QueryTumDetailsInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2945,10 +2944,10 @@ type QueryMessageTokenStatsInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// QueryMessageTokenStatsInvariantViolationResponseBody is the type of the
-// "telemetry" service "queryMessageTokenStats" endpoint HTTP response body for
-// the "invariant_violation" error.
-type QueryMessageTokenStatsInvariantViolationResponseBody struct {
+// QueryTumDetailsInvariantViolationResponseBody is the type of the "telemetry"
+// service "queryTumDetails" endpoint HTTP response body for the
+// "invariant_violation" error.
+type QueryTumDetailsInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2964,10 +2963,9 @@ type QueryMessageTokenStatsInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// QueryMessageTokenStatsUnexpectedResponseBody is the type of the "telemetry"
-// service "queryMessageTokenStats" endpoint HTTP response body for the
-// "unexpected" error.
-type QueryMessageTokenStatsUnexpectedResponseBody struct {
+// QueryTumDetailsUnexpectedResponseBody is the type of the "telemetry" service
+// "queryTumDetails" endpoint HTTP response body for the "unexpected" error.
+type QueryTumDetailsUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2983,10 +2981,10 @@ type QueryMessageTokenStatsUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// QueryMessageTokenStatsGatewayErrorResponseBody is the type of the
-// "telemetry" service "queryMessageTokenStats" endpoint HTTP response body for
-// the "gateway_error" error.
-type QueryMessageTokenStatsGatewayErrorResponseBody struct {
+// QueryTumDetailsGatewayErrorResponseBody is the type of the "telemetry"
+// service "queryTumDetails" endpoint HTTP response body for the
+// "gateway_error" error.
+type QueryTumDetailsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -5098,15 +5096,88 @@ type RiskTokensPointResponseBody struct {
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
 }
 
-// MessageTokenStatsPointResponseBody is used to define fields on response body
-// types.
-type MessageTokenStatsPointResponseBody struct {
+// TumDetailsPointResponseBody is used to define fields on response body types.
+type TumDetailsPointResponseBody struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
+	// Input tokens
+	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
+	// Output tokens
+	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
+	// Cache read input tokens
+	CacheReadTokens *int64 `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
+	// Cache creation input tokens
+	CacheWriteTokens *int64 `form:"cache_write_tokens,omitempty" json:"cache_write_tokens,omitempty" xml:"cache_write_tokens,omitempty"`
+	// All tokens
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Distinct chat sessions
+	AgentSessions *int64 `form:"agent_sessions,omitempty" json:"agent_sessions,omitempty" xml:"agent_sessions,omitempty"`
+	// Completed tool calls
+	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// Distinct attributed users with usage
+	ActiveUsers *int64 `form:"active_users,omitempty" json:"active_users,omitempty" xml:"active_users,omitempty"`
+	// Tokens attributed to MCP tool usage
+	McpToolTokens *int64 `form:"mcp_tool_tokens,omitempty" json:"mcp_tool_tokens,omitempty" xml:"mcp_tool_tokens,omitempty"`
+	// Tokens attributed to skill usage
+	SkillTokens *int64 `form:"skill_tokens,omitempty" json:"skill_tokens,omitempty" xml:"skill_tokens,omitempty"`
+	// Tokens without user attribution
+	UnattributedTokens *int64 `form:"unattributed_tokens,omitempty" json:"unattributed_tokens,omitempty" xml:"unattributed_tokens,omitempty"`
 	// Tokens in messages carrying at least one active risk finding
 	RiskyMessageTokens *int64 `form:"risky_message_tokens,omitempty" json:"risky_message_tokens,omitempty" xml:"risky_message_tokens,omitempty"`
 	// Tokens in tool-call messages
 	ToolMessageTokens *int64 `form:"tool_message_tokens,omitempty" json:"tool_message_tokens,omitempty" xml:"tool_message_tokens,omitempty"`
+}
+
+// TumDetailsTotalsResponseBody is used to define fields on response body types.
+type TumDetailsTotalsResponseBody struct {
+	// Input tokens
+	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
+	// Output tokens
+	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
+	// Cache read input tokens
+	CacheReadTokens *int64 `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
+	// Cache creation input tokens
+	CacheWriteTokens *int64 `form:"cache_write_tokens,omitempty" json:"cache_write_tokens,omitempty" xml:"cache_write_tokens,omitempty"`
+	// All tokens
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Distinct chat sessions
+	AgentSessions *int64 `form:"agent_sessions,omitempty" json:"agent_sessions,omitempty" xml:"agent_sessions,omitempty"`
+	// Completed tool calls
+	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// Distinct attributed users with usage
+	ActiveUsers *int64 `form:"active_users,omitempty" json:"active_users,omitempty" xml:"active_users,omitempty"`
+	// Tokens attributed to MCP tool usage
+	McpToolTokens *int64 `form:"mcp_tool_tokens,omitempty" json:"mcp_tool_tokens,omitempty" xml:"mcp_tool_tokens,omitempty"`
+	// Tokens attributed to skill usage
+	SkillTokens *int64 `form:"skill_tokens,omitempty" json:"skill_tokens,omitempty" xml:"skill_tokens,omitempty"`
+	// Tokens without user attribution
+	UnattributedTokens *int64 `form:"unattributed_tokens,omitempty" json:"unattributed_tokens,omitempty" xml:"unattributed_tokens,omitempty"`
+	// Tokens in messages carrying at least one active risk finding
+	RiskyMessageTokens *int64 `form:"risky_message_tokens,omitempty" json:"risky_message_tokens,omitempty" xml:"risky_message_tokens,omitempty"`
+	// Tokens in tool-call messages
+	ToolMessageTokens *int64 `form:"tool_message_tokens,omitempty" json:"tool_message_tokens,omitempty" xml:"tool_message_tokens,omitempty"`
+}
+
+// TumDetailsBreakdownResponseBody is used to define fields on response body
+// types.
+type TumDetailsBreakdownResponseBody struct {
+	// The breakdown dimension key (matches telemetry.query group_by)
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// Top values by tokens in descending order, with the remainder rolled into
+	// 'Other'
+	Rows []*TumDetailsBreakdownRowResponseBody `form:"rows,omitempty" json:"rows,omitempty" xml:"rows,omitempty"`
+}
+
+// TumDetailsBreakdownRowResponseBody is used to define fields on response body
+// types.
+type TumDetailsBreakdownRowResponseBody struct {
+	// The dimension value; empty for rows without the attribute, 'Other' for the
+	// top-N remainder rollup
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Tokens for this value over the range
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Daily tokens aligned to the result's points buckets
+	Series []int64 `form:"series,omitempty" json:"series,omitempty" xml:"series,omitempty"`
 }
 
 // SessionSummaryResponseBody is used to define fields on response body types.
@@ -5793,10 +5864,10 @@ func NewQueryRiskTokensRequestBody(p *telemetry.QueryRiskTokensPayload) *QueryRi
 	return body
 }
 
-// NewQueryMessageTokenStatsRequestBody builds the HTTP request body from the
-// payload of the "queryMessageTokenStats" endpoint of the "telemetry" service.
-func NewQueryMessageTokenStatsRequestBody(p *telemetry.QueryMessageTokenStatsPayload) *QueryMessageTokenStatsRequestBody {
-	body := &QueryMessageTokenStatsRequestBody{
+// NewQueryTumDetailsRequestBody builds the HTTP request body from the payload
+// of the "queryTumDetails" endpoint of the "telemetry" service.
+func NewQueryTumDetailsRequestBody(p *telemetry.QueryTumDetailsPayload) *QueryTumDetailsRequestBody {
+	body := &QueryTumDetailsRequestBody{
 		From:      p.From,
 		To:        p.To,
 		ProjectID: p.ProjectID,
@@ -8084,27 +8155,36 @@ func NewQueryRiskTokensGatewayError(body *QueryRiskTokensGatewayErrorResponseBod
 	return v
 }
 
-// NewQueryMessageTokenStatsMessageTokenStatsResultOK builds a "telemetry"
-// service "queryMessageTokenStats" endpoint result from a HTTP "OK" response.
-func NewQueryMessageTokenStatsMessageTokenStatsResultOK(body *QueryMessageTokenStatsResponseBody) *telemetry.MessageTokenStatsResult {
-	v := &telemetry.MessageTokenStatsResult{
+// NewQueryTumDetailsTumDetailsResultOK builds a "telemetry" service
+// "queryTumDetails" endpoint result from a HTTP "OK" response.
+func NewQueryTumDetailsTumDetailsResultOK(body *QueryTumDetailsResponseBody) *telemetry.TumDetailsResult {
+	v := &telemetry.TumDetailsResult{
 		IntervalSeconds: *body.IntervalSeconds,
 	}
-	v.Points = make([]*telemetry.MessageTokenStatsPoint, len(body.Points))
+	v.Points = make([]*telemetry.TumDetailsPoint, len(body.Points))
 	for i, val := range body.Points {
 		if val == nil {
 			v.Points[i] = nil
 			continue
 		}
-		v.Points[i] = unmarshalMessageTokenStatsPointResponseBodyToTelemetryMessageTokenStatsPoint(val)
+		v.Points[i] = unmarshalTumDetailsPointResponseBodyToTelemetryTumDetailsPoint(val)
+	}
+	v.Totals = unmarshalTumDetailsTotalsResponseBodyToTelemetryTumDetailsTotals(body.Totals)
+	v.Breakdowns = make([]*telemetry.TumDetailsBreakdown, len(body.Breakdowns))
+	for i, val := range body.Breakdowns {
+		if val == nil {
+			v.Breakdowns[i] = nil
+			continue
+		}
+		v.Breakdowns[i] = unmarshalTumDetailsBreakdownResponseBodyToTelemetryTumDetailsBreakdown(val)
 	}
 
 	return v
 }
 
-// NewQueryMessageTokenStatsUnauthorized builds a telemetry service
-// queryMessageTokenStats endpoint unauthorized error.
-func NewQueryMessageTokenStatsUnauthorized(body *QueryMessageTokenStatsUnauthorizedResponseBody) *goa.ServiceError {
+// NewQueryTumDetailsUnauthorized builds a telemetry service queryTumDetails
+// endpoint unauthorized error.
+func NewQueryTumDetailsUnauthorized(body *QueryTumDetailsUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8117,9 +8197,9 @@ func NewQueryMessageTokenStatsUnauthorized(body *QueryMessageTokenStatsUnauthori
 	return v
 }
 
-// NewQueryMessageTokenStatsForbidden builds a telemetry service
-// queryMessageTokenStats endpoint forbidden error.
-func NewQueryMessageTokenStatsForbidden(body *QueryMessageTokenStatsForbiddenResponseBody) *goa.ServiceError {
+// NewQueryTumDetailsForbidden builds a telemetry service queryTumDetails
+// endpoint forbidden error.
+func NewQueryTumDetailsForbidden(body *QueryTumDetailsForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8132,9 +8212,9 @@ func NewQueryMessageTokenStatsForbidden(body *QueryMessageTokenStatsForbiddenRes
 	return v
 }
 
-// NewQueryMessageTokenStatsBadRequest builds a telemetry service
-// queryMessageTokenStats endpoint bad_request error.
-func NewQueryMessageTokenStatsBadRequest(body *QueryMessageTokenStatsBadRequestResponseBody) *goa.ServiceError {
+// NewQueryTumDetailsBadRequest builds a telemetry service queryTumDetails
+// endpoint bad_request error.
+func NewQueryTumDetailsBadRequest(body *QueryTumDetailsBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8147,9 +8227,9 @@ func NewQueryMessageTokenStatsBadRequest(body *QueryMessageTokenStatsBadRequestR
 	return v
 }
 
-// NewQueryMessageTokenStatsNotFound builds a telemetry service
-// queryMessageTokenStats endpoint not_found error.
-func NewQueryMessageTokenStatsNotFound(body *QueryMessageTokenStatsNotFoundResponseBody) *goa.ServiceError {
+// NewQueryTumDetailsNotFound builds a telemetry service queryTumDetails
+// endpoint not_found error.
+func NewQueryTumDetailsNotFound(body *QueryTumDetailsNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8162,9 +8242,9 @@ func NewQueryMessageTokenStatsNotFound(body *QueryMessageTokenStatsNotFoundRespo
 	return v
 }
 
-// NewQueryMessageTokenStatsConflict builds a telemetry service
-// queryMessageTokenStats endpoint conflict error.
-func NewQueryMessageTokenStatsConflict(body *QueryMessageTokenStatsConflictResponseBody) *goa.ServiceError {
+// NewQueryTumDetailsConflict builds a telemetry service queryTumDetails
+// endpoint conflict error.
+func NewQueryTumDetailsConflict(body *QueryTumDetailsConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8177,9 +8257,9 @@ func NewQueryMessageTokenStatsConflict(body *QueryMessageTokenStatsConflictRespo
 	return v
 }
 
-// NewQueryMessageTokenStatsUnsupportedMedia builds a telemetry service
-// queryMessageTokenStats endpoint unsupported_media error.
-func NewQueryMessageTokenStatsUnsupportedMedia(body *QueryMessageTokenStatsUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewQueryTumDetailsUnsupportedMedia builds a telemetry service
+// queryTumDetails endpoint unsupported_media error.
+func NewQueryTumDetailsUnsupportedMedia(body *QueryTumDetailsUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8192,9 +8272,9 @@ func NewQueryMessageTokenStatsUnsupportedMedia(body *QueryMessageTokenStatsUnsup
 	return v
 }
 
-// NewQueryMessageTokenStatsInvalid builds a telemetry service
-// queryMessageTokenStats endpoint invalid error.
-func NewQueryMessageTokenStatsInvalid(body *QueryMessageTokenStatsInvalidResponseBody) *goa.ServiceError {
+// NewQueryTumDetailsInvalid builds a telemetry service queryTumDetails
+// endpoint invalid error.
+func NewQueryTumDetailsInvalid(body *QueryTumDetailsInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8207,9 +8287,9 @@ func NewQueryMessageTokenStatsInvalid(body *QueryMessageTokenStatsInvalidRespons
 	return v
 }
 
-// NewQueryMessageTokenStatsInvariantViolation builds a telemetry service
-// queryMessageTokenStats endpoint invariant_violation error.
-func NewQueryMessageTokenStatsInvariantViolation(body *QueryMessageTokenStatsInvariantViolationResponseBody) *goa.ServiceError {
+// NewQueryTumDetailsInvariantViolation builds a telemetry service
+// queryTumDetails endpoint invariant_violation error.
+func NewQueryTumDetailsInvariantViolation(body *QueryTumDetailsInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8222,9 +8302,9 @@ func NewQueryMessageTokenStatsInvariantViolation(body *QueryMessageTokenStatsInv
 	return v
 }
 
-// NewQueryMessageTokenStatsUnexpected builds a telemetry service
-// queryMessageTokenStats endpoint unexpected error.
-func NewQueryMessageTokenStatsUnexpected(body *QueryMessageTokenStatsUnexpectedResponseBody) *goa.ServiceError {
+// NewQueryTumDetailsUnexpected builds a telemetry service queryTumDetails
+// endpoint unexpected error.
+func NewQueryTumDetailsUnexpected(body *QueryTumDetailsUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -8237,9 +8317,9 @@ func NewQueryMessageTokenStatsUnexpected(body *QueryMessageTokenStatsUnexpectedR
 	return v
 }
 
-// NewQueryMessageTokenStatsGatewayError builds a telemetry service
-// queryMessageTokenStats endpoint gateway_error error.
-func NewQueryMessageTokenStatsGatewayError(body *QueryMessageTokenStatsGatewayErrorResponseBody) *goa.ServiceError {
+// NewQueryTumDetailsGatewayError builds a telemetry service queryTumDetails
+// endpoint gateway_error error.
+func NewQueryTumDetailsGatewayError(body *QueryTumDetailsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -9959,18 +10039,36 @@ func ValidateQueryRiskTokensResponseBody(body *QueryRiskTokensResponseBody) (err
 	return
 }
 
-// ValidateQueryMessageTokenStatsResponseBody runs the validations defined on
-// QueryMessageTokenStatsResponseBody
-func ValidateQueryMessageTokenStatsResponseBody(body *QueryMessageTokenStatsResponseBody) (err error) {
+// ValidateQueryTumDetailsResponseBody runs the validations defined on
+// QueryTumDetailsResponseBody
+func ValidateQueryTumDetailsResponseBody(body *QueryTumDetailsResponseBody) (err error) {
 	if body.IntervalSeconds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
 	}
 	if body.Points == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("points", "body"))
 	}
+	if body.Totals == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("totals", "body"))
+	}
+	if body.Breakdowns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("breakdowns", "body"))
+	}
 	for _, e := range body.Points {
 		if e != nil {
-			if err2 := ValidateMessageTokenStatsPointResponseBody(e); err2 != nil {
+			if err2 := ValidateTumDetailsPointResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Totals != nil {
+		if err2 := ValidateTumDetailsTotalsResponseBody(body.Totals); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Breakdowns {
+		if e != nil {
+			if err2 := ValidateTumDetailsBreakdownResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -13130,9 +13228,9 @@ func ValidateQueryRiskTokensGatewayErrorResponseBody(body *QueryRiskTokensGatewa
 	return
 }
 
-// ValidateQueryMessageTokenStatsUnauthorizedResponseBody runs the validations
-// defined on queryMessageTokenStats_unauthorized_response_body
-func ValidateQueryMessageTokenStatsUnauthorizedResponseBody(body *QueryMessageTokenStatsUnauthorizedResponseBody) (err error) {
+// ValidateQueryTumDetailsUnauthorizedResponseBody runs the validations defined
+// on queryTumDetails_unauthorized_response_body
+func ValidateQueryTumDetailsUnauthorizedResponseBody(body *QueryTumDetailsUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -13154,9 +13252,9 @@ func ValidateQueryMessageTokenStatsUnauthorizedResponseBody(body *QueryMessageTo
 	return
 }
 
-// ValidateQueryMessageTokenStatsForbiddenResponseBody runs the validations
-// defined on queryMessageTokenStats_forbidden_response_body
-func ValidateQueryMessageTokenStatsForbiddenResponseBody(body *QueryMessageTokenStatsForbiddenResponseBody) (err error) {
+// ValidateQueryTumDetailsForbiddenResponseBody runs the validations defined on
+// queryTumDetails_forbidden_response_body
+func ValidateQueryTumDetailsForbiddenResponseBody(body *QueryTumDetailsForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -13178,9 +13276,9 @@ func ValidateQueryMessageTokenStatsForbiddenResponseBody(body *QueryMessageToken
 	return
 }
 
-// ValidateQueryMessageTokenStatsBadRequestResponseBody runs the validations
-// defined on queryMessageTokenStats_bad_request_response_body
-func ValidateQueryMessageTokenStatsBadRequestResponseBody(body *QueryMessageTokenStatsBadRequestResponseBody) (err error) {
+// ValidateQueryTumDetailsBadRequestResponseBody runs the validations defined
+// on queryTumDetails_bad_request_response_body
+func ValidateQueryTumDetailsBadRequestResponseBody(body *QueryTumDetailsBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -13202,9 +13300,9 @@ func ValidateQueryMessageTokenStatsBadRequestResponseBody(body *QueryMessageToke
 	return
 }
 
-// ValidateQueryMessageTokenStatsNotFoundResponseBody runs the validations
-// defined on queryMessageTokenStats_not_found_response_body
-func ValidateQueryMessageTokenStatsNotFoundResponseBody(body *QueryMessageTokenStatsNotFoundResponseBody) (err error) {
+// ValidateQueryTumDetailsNotFoundResponseBody runs the validations defined on
+// queryTumDetails_not_found_response_body
+func ValidateQueryTumDetailsNotFoundResponseBody(body *QueryTumDetailsNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -13226,9 +13324,9 @@ func ValidateQueryMessageTokenStatsNotFoundResponseBody(body *QueryMessageTokenS
 	return
 }
 
-// ValidateQueryMessageTokenStatsConflictResponseBody runs the validations
-// defined on queryMessageTokenStats_conflict_response_body
-func ValidateQueryMessageTokenStatsConflictResponseBody(body *QueryMessageTokenStatsConflictResponseBody) (err error) {
+// ValidateQueryTumDetailsConflictResponseBody runs the validations defined on
+// queryTumDetails_conflict_response_body
+func ValidateQueryTumDetailsConflictResponseBody(body *QueryTumDetailsConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -13250,9 +13348,9 @@ func ValidateQueryMessageTokenStatsConflictResponseBody(body *QueryMessageTokenS
 	return
 }
 
-// ValidateQueryMessageTokenStatsUnsupportedMediaResponseBody runs the
-// validations defined on queryMessageTokenStats_unsupported_media_response_body
-func ValidateQueryMessageTokenStatsUnsupportedMediaResponseBody(body *QueryMessageTokenStatsUnsupportedMediaResponseBody) (err error) {
+// ValidateQueryTumDetailsUnsupportedMediaResponseBody runs the validations
+// defined on queryTumDetails_unsupported_media_response_body
+func ValidateQueryTumDetailsUnsupportedMediaResponseBody(body *QueryTumDetailsUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -13274,9 +13372,9 @@ func ValidateQueryMessageTokenStatsUnsupportedMediaResponseBody(body *QueryMessa
 	return
 }
 
-// ValidateQueryMessageTokenStatsInvalidResponseBody runs the validations
-// defined on queryMessageTokenStats_invalid_response_body
-func ValidateQueryMessageTokenStatsInvalidResponseBody(body *QueryMessageTokenStatsInvalidResponseBody) (err error) {
+// ValidateQueryTumDetailsInvalidResponseBody runs the validations defined on
+// queryTumDetails_invalid_response_body
+func ValidateQueryTumDetailsInvalidResponseBody(body *QueryTumDetailsInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -13298,10 +13396,9 @@ func ValidateQueryMessageTokenStatsInvalidResponseBody(body *QueryMessageTokenSt
 	return
 }
 
-// ValidateQueryMessageTokenStatsInvariantViolationResponseBody runs the
-// validations defined on
-// queryMessageTokenStats_invariant_violation_response_body
-func ValidateQueryMessageTokenStatsInvariantViolationResponseBody(body *QueryMessageTokenStatsInvariantViolationResponseBody) (err error) {
+// ValidateQueryTumDetailsInvariantViolationResponseBody runs the validations
+// defined on queryTumDetails_invariant_violation_response_body
+func ValidateQueryTumDetailsInvariantViolationResponseBody(body *QueryTumDetailsInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -13323,9 +13420,9 @@ func ValidateQueryMessageTokenStatsInvariantViolationResponseBody(body *QueryMes
 	return
 }
 
-// ValidateQueryMessageTokenStatsUnexpectedResponseBody runs the validations
-// defined on queryMessageTokenStats_unexpected_response_body
-func ValidateQueryMessageTokenStatsUnexpectedResponseBody(body *QueryMessageTokenStatsUnexpectedResponseBody) (err error) {
+// ValidateQueryTumDetailsUnexpectedResponseBody runs the validations defined
+// on queryTumDetails_unexpected_response_body
+func ValidateQueryTumDetailsUnexpectedResponseBody(body *QueryTumDetailsUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -13347,9 +13444,9 @@ func ValidateQueryMessageTokenStatsUnexpectedResponseBody(body *QueryMessageToke
 	return
 }
 
-// ValidateQueryMessageTokenStatsGatewayErrorResponseBody runs the validations
-// defined on queryMessageTokenStats_gateway_error_response_body
-func ValidateQueryMessageTokenStatsGatewayErrorResponseBody(body *QueryMessageTokenStatsGatewayErrorResponseBody) (err error) {
+// ValidateQueryTumDetailsGatewayErrorResponseBody runs the validations defined
+// on queryTumDetails_gateway_error_response_body
+func ValidateQueryTumDetailsGatewayErrorResponseBody(body *QueryTumDetailsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16157,17 +16254,129 @@ func ValidateRiskTokensPointResponseBody(body *RiskTokensPointResponseBody) (err
 	return
 }
 
-// ValidateMessageTokenStatsPointResponseBody runs the validations defined on
-// MessageTokenStatsPointResponseBody
-func ValidateMessageTokenStatsPointResponseBody(body *MessageTokenStatsPointResponseBody) (err error) {
-	if body.BucketTimeUnixNano == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_time_unix_nano", "body"))
+// ValidateTumDetailsPointResponseBody runs the validations defined on
+// TumDetailsPointResponseBody
+func ValidateTumDetailsPointResponseBody(body *TumDetailsPointResponseBody) (err error) {
+	if body.InputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_tokens", "body"))
+	}
+	if body.OutputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("output_tokens", "body"))
+	}
+	if body.CacheReadTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_tokens", "body"))
+	}
+	if body.CacheWriteTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_write_tokens", "body"))
+	}
+	if body.TotalTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.AgentSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_sessions", "body"))
+	}
+	if body.ToolCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
+	}
+	if body.ActiveUsers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_users", "body"))
+	}
+	if body.McpToolTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_tool_tokens", "body"))
+	}
+	if body.SkillTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_tokens", "body"))
+	}
+	if body.UnattributedTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unattributed_tokens", "body"))
 	}
 	if body.RiskyMessageTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("risky_message_tokens", "body"))
 	}
 	if body.ToolMessageTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_message_tokens", "body"))
+	}
+	if body.BucketTimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_time_unix_nano", "body"))
+	}
+	return
+}
+
+// ValidateTumDetailsTotalsResponseBody runs the validations defined on
+// TumDetailsTotalsResponseBody
+func ValidateTumDetailsTotalsResponseBody(body *TumDetailsTotalsResponseBody) (err error) {
+	if body.InputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_tokens", "body"))
+	}
+	if body.OutputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("output_tokens", "body"))
+	}
+	if body.CacheReadTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_tokens", "body"))
+	}
+	if body.CacheWriteTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_write_tokens", "body"))
+	}
+	if body.TotalTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.AgentSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_sessions", "body"))
+	}
+	if body.ToolCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
+	}
+	if body.ActiveUsers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_users", "body"))
+	}
+	if body.McpToolTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_tool_tokens", "body"))
+	}
+	if body.SkillTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_tokens", "body"))
+	}
+	if body.UnattributedTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unattributed_tokens", "body"))
+	}
+	if body.RiskyMessageTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("risky_message_tokens", "body"))
+	}
+	if body.ToolMessageTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_message_tokens", "body"))
+	}
+	return
+}
+
+// ValidateTumDetailsBreakdownResponseBody runs the validations defined on
+// TumDetailsBreakdownResponseBody
+func ValidateTumDetailsBreakdownResponseBody(body *TumDetailsBreakdownResponseBody) (err error) {
+	if body.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if body.Rows == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rows", "body"))
+	}
+	for _, e := range body.Rows {
+		if e != nil {
+			if err2 := ValidateTumDetailsBreakdownRowResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateTumDetailsBreakdownRowResponseBody runs the validations defined on
+// TumDetailsBreakdownRowResponseBody
+func ValidateTumDetailsBreakdownRowResponseBody(body *TumDetailsBreakdownRowResponseBody) (err error) {
+	if body.Value == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
+	}
+	if body.TotalTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.Series == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("series", "body"))
 	}
 	return
 }

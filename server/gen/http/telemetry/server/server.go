@@ -31,7 +31,7 @@ type Server struct {
 	GetProjectOverview        http.Handler
 	Query                     http.Handler
 	QueryRiskTokens           http.Handler
-	QueryMessageTokenStats    http.Handler
+	QueryTumDetails           http.Handler
 	ListSessions              http.Handler
 	ListFilterOptions         http.Handler
 	ListAttributeKeys         http.Handler
@@ -81,7 +81,7 @@ func New(
 			{"GetProjectOverview", "POST", "/rpc/telemetry.getProjectOverview"},
 			{"Query", "POST", "/rpc/telemetry.query"},
 			{"QueryRiskTokens", "POST", "/rpc/telemetry.queryRiskTokens"},
-			{"QueryMessageTokenStats", "POST", "/rpc/telemetry.queryMessageTokenStats"},
+			{"QueryTumDetails", "POST", "/rpc/telemetry.queryTumDetails"},
 			{"ListSessions", "POST", "/rpc/telemetry.listSessions"},
 			{"ListFilterOptions", "POST", "/rpc/telemetry.listFilterOptions"},
 			{"ListAttributeKeys", "POST", "/rpc/telemetry.listAttributeKeys"},
@@ -103,7 +103,7 @@ func New(
 		GetProjectOverview:        NewGetProjectOverviewHandler(e.GetProjectOverview, mux, decoder, encoder, errhandler, formatter),
 		Query:                     NewQueryHandler(e.Query, mux, decoder, encoder, errhandler, formatter),
 		QueryRiskTokens:           NewQueryRiskTokensHandler(e.QueryRiskTokens, mux, decoder, encoder, errhandler, formatter),
-		QueryMessageTokenStats:    NewQueryMessageTokenStatsHandler(e.QueryMessageTokenStats, mux, decoder, encoder, errhandler, formatter),
+		QueryTumDetails:           NewQueryTumDetailsHandler(e.QueryTumDetails, mux, decoder, encoder, errhandler, formatter),
 		ListSessions:              NewListSessionsHandler(e.ListSessions, mux, decoder, encoder, errhandler, formatter),
 		ListFilterOptions:         NewListFilterOptionsHandler(e.ListFilterOptions, mux, decoder, encoder, errhandler, formatter),
 		ListAttributeKeys:         NewListAttributeKeysHandler(e.ListAttributeKeys, mux, decoder, encoder, errhandler, formatter),
@@ -132,7 +132,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetProjectOverview = m(s.GetProjectOverview)
 	s.Query = m(s.Query)
 	s.QueryRiskTokens = m(s.QueryRiskTokens)
-	s.QueryMessageTokenStats = m(s.QueryMessageTokenStats)
+	s.QueryTumDetails = m(s.QueryTumDetails)
 	s.ListSessions = m(s.ListSessions)
 	s.ListFilterOptions = m(s.ListFilterOptions)
 	s.ListAttributeKeys = m(s.ListAttributeKeys)
@@ -160,7 +160,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetProjectOverviewHandler(mux, h.GetProjectOverview)
 	MountQueryHandler(mux, h.Query)
 	MountQueryRiskTokensHandler(mux, h.QueryRiskTokens)
-	MountQueryMessageTokenStatsHandler(mux, h.QueryMessageTokenStats)
+	MountQueryTumDetailsHandler(mux, h.QueryTumDetails)
 	MountListSessionsHandler(mux, h.ListSessions)
 	MountListFilterOptionsHandler(mux, h.ListFilterOptions)
 	MountListAttributeKeysHandler(mux, h.ListAttributeKeys)
@@ -815,21 +815,21 @@ func NewQueryRiskTokensHandler(
 	})
 }
 
-// MountQueryMessageTokenStatsHandler configures the mux to serve the
-// "telemetry" service "queryMessageTokenStats" endpoint.
-func MountQueryMessageTokenStatsHandler(mux goahttp.Muxer, h http.Handler) {
+// MountQueryTumDetailsHandler configures the mux to serve the "telemetry"
+// service "queryTumDetails" endpoint.
+func MountQueryTumDetailsHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/telemetry.queryMessageTokenStats", f)
+	mux.Handle("POST", "/rpc/telemetry.queryTumDetails", f)
 }
 
-// NewQueryMessageTokenStatsHandler creates a HTTP handler which loads the HTTP
-// request and calls the "telemetry" service "queryMessageTokenStats" endpoint.
-func NewQueryMessageTokenStatsHandler(
+// NewQueryTumDetailsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "telemetry" service "queryTumDetails" endpoint.
+func NewQueryTumDetailsHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -838,13 +838,13 @@ func NewQueryMessageTokenStatsHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeQueryMessageTokenStatsRequest(mux, decoder)
-		encodeResponse = EncodeQueryMessageTokenStatsResponse(encoder)
-		encodeError    = EncodeQueryMessageTokenStatsError(encoder, formatter)
+		decodeRequest  = DecodeQueryTumDetailsRequest(mux, decoder)
+		encodeResponse = EncodeQueryTumDetailsResponse(encoder)
+		encodeError    = EncodeQueryTumDetailsError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "queryMessageTokenStats")
+		ctx = context.WithValue(ctx, goa.MethodKey, "queryTumDetails")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {

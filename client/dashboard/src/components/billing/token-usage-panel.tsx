@@ -12,11 +12,17 @@ import {
 } from "chart.js";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Info } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Bar } from "react-chartjs-2";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import {
+  CHART_COLORS,
+  CLEAN_COLOR,
+  OTHER_COLOR,
+  RISKY_COLOR,
+} from "./breakdown-options";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 
@@ -24,20 +30,6 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 // bar chart of tokens over the selected billing cycle, stacked by a chosen
 // dimension, by token type, or by risk involvement, with client-side
 // granularity roll-up (the caller fetches daily buckets) and a cumulative view.
-
-const CHART_COLORS = [
-  "#60a5fa", // blue
-  "#34d399", // emerald
-  "#f97316", // orange
-  "#a78bfa", // violet
-  "#fb7185", // rose
-  "#facc15", // yellow
-  "#38bdf8", // sky
-  "#c084fc", // purple
-  "#4ade80", // green
-  "#f472b6", // pink
-];
-const OTHER_COLOR = "#94a3b8"; // slate — the client-side roll-up bucket
 
 // Beyond this many stacks the legend and colors stop being readable; the
 // remainder rolls into a client-side "Other" series.
@@ -48,9 +40,6 @@ type Granularity = "day" | "week" | "month";
 // risk involvement, or as a single un-broken-down total. Selected via the
 // caller's unified breakdown picker.
 export type StackMode = "group" | "tokenType" | "risk" | "total";
-
-const RISKY_COLOR = "#fb7185"; // rose — tokens from sessions with risk findings
-const CLEAN_COLOR = "#60a5fa"; // blue — everything else
 
 const TOKEN_TYPES: { label: string; value: (m: QueryMeasures) => number }[] = [
   { label: "Input", value: (m) => m.totalInputTokens },
@@ -171,22 +160,41 @@ function stacksByGroup(
   return stacks;
 }
 
-// Two stacks — tokens from sessions with risk findings vs the remainder —
-// from the dedicated risk endpoint's daily points.
+// Two stacks — tokens from sessions with risk findings vs the remainder. The
+// risky side comes from the dedicated risk endpoint; the remainder is taken
+// against the same analytics totals every other stacking mode uses, so the
+// stacked height matches across modes (the risk endpoint's own session
+// aggregate includes forwarded tokens the analytics aggregate excludes).
 function stacksByRisk(
   points: RiskTokensPoint[],
+  series: QuerySeries[],
   granularity: Granularity,
 ): Stack[] {
   const risky = new Map<number, number>();
-  const clean = new Map<number, number>();
   for (const p of points) {
-    const bucket = floorBucket(bucketMs(p.bucketTimeUnixNano), granularity);
-    addTo(risky, bucket, p.riskyTokens);
-    addTo(clean, bucket, Math.max(0, p.totalTokens - p.riskyTokens));
+    addTo(
+      risky,
+      floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
+      p.riskyTokens,
+    );
+  }
+  const totals = new Map<number, number>();
+  for (const s of series) {
+    for (const p of s.points) {
+      addTo(
+        totals,
+        floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
+        p.measures.totalTokens,
+      );
+    }
+  }
+  const clean = new Map<number, number>();
+  for (const [bucket, total] of totals) {
+    addTo(clean, bucket, Math.max(0, total - (risky.get(bucket) ?? 0)));
   }
   return [
-    { label: "With risk findings", byBucket: risky },
-    { label: "No risk findings", byBucket: clean },
+    { label: "Sessions with risk findings", byBucket: risky },
+    { label: "Sessions without risk findings", byBucket: clean },
   ].filter((s) => s.byBucket.size > 0);
 }
 
@@ -290,6 +298,11 @@ function stackColor(label: string, index: number, stackBy: StackMode): string {
   return CHART_COLORS[index % CHART_COLORS.length]!;
 }
 
+// A 6-digit hex color with ~13% alpha, for de-emphasizing non-hovered series.
+function dimmed(hex: string): string {
+  return `${hex}22`;
+}
+
 export function TokenUsagePanel({
   series,
   stackBy,
@@ -310,6 +323,12 @@ export function TokenUsagePanel({
 }): JSX.Element {
   const [granularity, setGranularity] = useState<Granularity>("day");
   const [cumulative, setCumulative] = useState(false);
+  // Series hidden via the legend, keyed by label so toggles survive
+  // granularity switches. Labels from other stack modes are simply inert.
+  const [hiddenLabels, setHiddenLabels] = useState<Set<string>>(new Set());
+  // The legend item under the pointer; every other series renders dimmed.
+  const [focusLabel, setFocusLabel] = useState<string | null>(null);
+  const chartRef = useRef<ChartJS<"bar"> | null>(null);
 
   // Guard the async gap: risk mode before the risk data lands renders as the
   // dimension stacking rather than an empty chart.
@@ -317,26 +336,24 @@ export function TokenUsagePanel({
     stackBy === "risk" && !riskPoints ? "group" : stackBy;
 
   const chart = useMemo(() => {
-    let stacks: Stack[];
+    const stacks =
+      effectiveStackBy === "risk"
+        ? stacksByRisk(riskPoints ?? [], series, granularity)
+        : seriesStacks(effectiveStackBy, series, granularity);
     // The time axis comes from every bucket the server returned (gap-filled
     // with zeros), not just buckets with usage — zero days must keep their
     // slot so the axis stays continuous.
-    let axisSource: number[];
-    if (effectiveStackBy === "risk") {
-      const points = riskPoints ?? [];
-      stacks = stacksByRisk(points, granularity);
-      axisSource = points.map((p) =>
+    const axisSource = series.flatMap((s) =>
+      s.points.map((p) =>
         floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
-      );
-    } else {
-      stacks = seriesStacks(effectiveStackBy, series, granularity);
-      axisSource = series.flatMap((s) =>
-        s.points.map((p) =>
-          floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
-        ),
-      );
-    }
+      ),
+    );
     const buckets = [...new Set(axisSource)].sort((a, b) => a - b);
+
+    // Focusing a hidden series resolves to no focus — otherwise hiding an
+    // item while hovering it would leave every visible series dimmed.
+    const focus =
+      focusLabel !== null && !hiddenLabels.has(focusLabel) ? focusLabel : null;
 
     const datasets = stacks.map((s, i) => {
       const values = buckets.map((b) => s.byBucket.get(b) ?? 0);
@@ -345,10 +362,12 @@ export function TokenUsagePanel({
           values[j] = values[j]! + values[j - 1]!;
         }
       }
+      const base = stackColor(s.label, i, effectiveStackBy);
       return {
         label: s.label,
         data: values,
-        backgroundColor: stackColor(s.label, i, effectiveStackBy),
+        backgroundColor:
+          focus === null || s.label === focus ? base : dimmed(base),
       };
     });
 
@@ -356,9 +375,40 @@ export function TokenUsagePanel({
       labels: buckets.map((b) => bucketLabel(b, granularity)),
       datasets,
     };
-  }, [series, riskPoints, granularity, effectiveStackBy, cumulative]);
+  }, [
+    series,
+    riskPoints,
+    granularity,
+    effectiveStackBy,
+    cumulative,
+    focusLabel,
+    hiddenLabels,
+  ]);
 
   const hasData = chart.datasets.length > 0;
+
+  // Sync legend toggles into the chart instance (visibility is imperative
+  // Chart.js state, not part of the data props).
+  useEffect(() => {
+    const instance = chartRef.current;
+    if (!instance) return;
+    chart.datasets.forEach((d, i) => {
+      instance.setDatasetVisibility(i, !hiddenLabels.has(d.label));
+    });
+    instance.update();
+  }, [chart, hiddenLabels]);
+
+  const toggleLabel = (label: string) => {
+    setHiddenLabels((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) {
+        next.delete(label);
+      } else {
+        next.add(label);
+      }
+      return next;
+    });
+  };
 
   // Chart.js paints the canvas with static defaults that ignore the CSS
   // theme, so axis/legend text and gridlines need explicit dark-mode colors.
@@ -372,10 +422,9 @@ export function TokenUsagePanel({
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: {
-          position: "bottom",
-          labels: { boxWidth: 12, boxHeight: 12, color: textColor },
-        },
+        // The canvas legend can't style hover or read as clickable — an HTML
+        // legend below the chart replaces it (see the buttons in the JSX).
+        legend: { display: false },
         tooltip: {
           callbacks: {
             label: (item) =>
@@ -406,7 +455,7 @@ export function TokenUsagePanel({
     <div className="border-border rounded-lg border p-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-center gap-1.5 text-sm font-semibold">
-          Token usage
+          Token Usage Time Series
           <SimpleTooltip tooltip={headerHint(effectiveStackBy)}>
             <Info className="text-muted-foreground size-3.5" />
           </SimpleTooltip>
@@ -447,9 +496,48 @@ export function TokenUsagePanel({
       <div className="mt-4">
         {loading && <Skeleton className="h-[280px] w-full" />}
         {!loading && hasData && (
-          <div style={{ height: 280 }}>
-            <Bar data={chart} options={chartOptions} />
-          </div>
+          <>
+            <div style={{ height: 280 }}>
+              <Bar ref={chartRef} data={chart} options={chartOptions} />
+            </div>
+            {/* HTML legend: hoverable, clearly clickable buttons that toggle
+                their series; hovering spotlights the series in the chart. */}
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+              {chart.datasets.map((d, i) => {
+                const hidden = hiddenLabels.has(d.label);
+                return (
+                  <button
+                    key={d.label}
+                    type="button"
+                    onClick={() => toggleLabel(d.label)}
+                    onMouseEnter={() => setFocusLabel(d.label)}
+                    onMouseLeave={() => setFocusLabel(null)}
+                    className={cn(
+                      "hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-0.5 text-xs transition-colors",
+                      hidden
+                        ? "text-muted-foreground/60 line-through"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "size-2.5 rounded-[3px]",
+                        hidden && "opacity-40",
+                      )}
+                      style={{
+                        backgroundColor: stackColor(
+                          d.label,
+                          i,
+                          effectiveStackBy,
+                        ),
+                      }}
+                    />
+                    {d.label}
+                  </button>
+                );
+              })}
+            </div>
+          </>
         )}
         {!loading && !hasData && (
           <div className="text-muted-foreground flex h-[280px] items-center justify-center text-sm">

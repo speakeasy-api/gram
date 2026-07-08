@@ -1,16 +1,30 @@
-import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
-import { telemetryQueryMessageTokenStats } from "@gram/client/funcs/telemetryQueryMessageTokenStats";
-import { type QueryMeasures } from "@gram/client/models/components/querymeasures.js";
+import { telemetryQueryTumDetails } from "@gram/client/funcs/telemetryQueryTumDetails";
+import { Dimension } from "@gram/client/models/components/queryfilter.js";
+import { type TumDetailsResult } from "@gram/client/models/components/tumdetailsresult.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
+import { Info } from "lucide-react";
 import { useMemo } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { type BillingCycle } from "./billing-cycles";
+import { SimpleTooltip } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { isAttributionDim } from "@/pages/costs/taxonomy";
+import { type BillingCycle, cycleStaleTime } from "./billing-cycles";
+import {
+  breakdownLabel,
+  CHART_COLORS,
+  CLEAN_COLOR,
+  OTHER_COLOR,
+  RISKY_COLOR,
+} from "./breakdown-options";
+import { type RiskPointsQueryInput, riskPointsQuery } from "./tum-queries";
 
 // Vercel-style usage details for the selected billing cycle: one row per
-// metric with a colored dot, a mini sparkline of the daily series, and the
-// cycle total — grouped into scannable sections under the token usage chart.
+// metric with a colored dot, a mini sparkline of the daily series, the
+// cumulative cycle total, and the metric's share of the overage — grouped
+// into sections that mirror the chart's breakdown picker (matching names and
+// colors), plus activity counts.
 
 const compactNumber = new Intl.NumberFormat("en-US", {
   notation: "compact",
@@ -22,12 +36,82 @@ type DetailRow = {
   color: string;
   series: number[];
   total: number;
+  // Only token-denominated rows get an overage share; counts show "—".
+  kind: "tokens" | "count";
 };
 
 type DetailGroup = {
   heading: string;
+  // Optional caveat rendered beside the heading (e.g. overlapping rows).
+  note?: string;
   rows: DetailRow[];
 };
+
+// The dimension sections, split so the headline cuts (model, provider, MCP
+// server) sit directly under Total and the rest follow the token/risk groups.
+const LEAD_DIMENSION_SECTIONS: string[] = [
+  Dimension.Model,
+  Dimension.Provider,
+  Dimension.McpServerName,
+];
+const TAIL_DIMENSION_SECTIONS: string[] = [
+  Dimension.AccountType,
+  Dimension.DivisionName,
+  Dimension.Email,
+  Dimension.Role,
+  Dimension.HookSource,
+  Dimension.SkillName,
+  Dimension.McpToolName,
+];
+
+// Row color for a dimension value — same palette walk as the chart's stacks,
+// so a value's dot matches its chart series color.
+function valueColor(value: string, index: number): string {
+  if (value === "Other") return OTHER_COLOR;
+  return CHART_COLORS[index % CHART_COLORS.length]!;
+}
+
+// The dimension sections of the details table, mirroring the chart's group
+// stacks: same value order, "(unset)" labeling, attribution "" rows dropped.
+function dimensionGroups(
+  data: TumDetailsResult | undefined,
+  keys: string[],
+): DetailGroup[] {
+  const byKey = new Map(
+    (data?.breakdowns ?? []).map((b) => [b.key, b.rows] as const),
+  );
+  const groups: DetailGroup[] = [];
+  for (const key of keys) {
+    const rows = byKey.get(key);
+    if (!rows) continue;
+    // Attribution "" rows are not-applicable spend (same rule as the chart);
+    // zero-token rows (e.g. groups with only tool calls) are noise.
+    const visible = rows.filter(
+      (r) =>
+        r.totalTokens > 0 &&
+        (!isAttributionDim(key as Dimension) || r.value !== ""),
+    );
+    if (visible.length === 0) continue;
+    groups.push({
+      heading: breakdownLabel(key),
+      // Roles are multi-valued: a user can hold several, and a session's
+      // tokens count once under each — so these rows overlap and can sum to
+      // more than the total.
+      note:
+        key === Dimension.Role
+          ? "Users can hold multiple roles; rows overlap and can sum to more than the total."
+          : undefined,
+      rows: visible.map((r, i) => ({
+        label: r.value === "" ? "(unset)" : r.value,
+        color: valueColor(r.value, i),
+        series: r.series,
+        total: r.totalTokens,
+        kind: "tokens",
+      })),
+    });
+  }
+  return groups;
+}
 
 // Minimal inline sparkline — a normalized polyline of the daily series.
 function Sparkline({
@@ -68,7 +152,26 @@ function Sparkline({
   );
 }
 
-function DetailRowItem({ row }: { row: DetailRow }): JSX.Element {
+function DetailRowItem({
+  row,
+  overageWeights,
+}: {
+  row: DetailRow;
+  // Per-day overage fraction: 0 before the allowance was crossed, prorated on
+  // the crossing day, 1 after. A metric's overage is its tokens weighted by it.
+  overageWeights: number[];
+}): JSX.Element {
+  const overageTokens =
+    row.kind === "tokens"
+      ? Math.round(
+          row.series.reduce(
+            (sum, v, i) => sum + v * (overageWeights[i] ?? 0),
+            0,
+          ),
+        )
+      : null;
+  const overage =
+    overageTokens === null ? "—" : compactNumber.format(overageTokens);
   return (
     <div className="flex items-center gap-3 px-4 py-2.5">
       <span
@@ -85,137 +188,275 @@ function DetailRowItem({ row }: { row: DetailRow }): JSX.Element {
       >
         {compactNumber.format(row.total)}
       </span>
+      <span
+        className={cn(
+          "w-24 shrink-0 text-right text-sm tabular-nums",
+          // Matches the usage card's Overage stat tone.
+          overageTokens !== null && overageTokens > 0
+            ? "text-warning"
+            : "text-muted-foreground",
+        )}
+        title={overageTokens?.toLocaleString()}
+      >
+        {overage}
+      </span>
     </div>
   );
 }
 
 /**
  * Per-metric usage details for one billing cycle, rendered under the token
- * usage chart. Token-type and activity rows come from the org-wide analytics
- * aggregates; the message rows come from Postgres per-message token counts
- * (telemetry.queryMessageTokenStats).
+ * usage chart. Everything comes from a single telemetry.queryTumDetails
+ * request (plus the risk series shared with the chart); closed cycles cache
+ * forever (their data is immutable).
  */
 export function TumDetailsTable({
   cycle,
+  projectId,
+  limit,
 }: {
   cycle: BillingCycle;
+  // Optional project scope, matching the page-level project filter.
+  projectId: string | null;
+  // Contracted monthly allowance; drives the per-metric overage share.
+  limit: number | null;
 }): JSX.Element {
   const client = useGramContext();
   const from = cycle.start;
   const to = cycle.end;
 
-  // Ungrouped slice: one series carrying every measure per day, plus true
-  // totals (distinct session counts can't be summed from grouped rows). The
-  // generated hooks key their cache on gramSession only, so drive useQuery
-  // directly with payload-encoding keys.
-  const { data: usageData, isFetching: usageFetching } = useQuery({
-    queryKey: ["tum-details", from.toISOString(), to.toISOString()],
+  // The generated hooks key their cache on gramSession only, so drive
+  // useQuery directly with payload-encoding keys.
+  const { data, isFetching } = useQuery({
+    queryKey: [
+      "tum-details",
+      from.toISOString(),
+      to.toISOString(),
+      projectId ?? "all",
+    ],
+    staleTime: cycleStaleTime(cycle),
     throwOnError: false,
     queryFn: () =>
       unwrapAsync(
-        telemetryQuery(client, {
-          queryPayload: {
+        telemetryQueryTumDetails(client, {
+          // The generator dedupes structurally identical payload schemas, so
+          // this request reuses the risk-tokens payload shape/name.
+          queryRiskTokensPayload: {
             from,
             to,
-            topN: 1,
-            granularitySeconds: 86400,
+            projectId: projectId ?? undefined,
           },
         }),
       ),
   });
-  const { data: messageStats, isFetching: statsFetching } = useQuery({
-    queryKey: ["tum-details-messages", from.toISOString(), to.toISOString()],
-    throwOnError: false,
-    queryFn: () =>
-      unwrapAsync(
-        telemetryQueryMessageTokenStats(client, {
-          // The generator dedupes structurally identical payload schemas, so
-          // this request reuses the risk-tokens payload shape/name.
-          queryRiskTokensPayload: { from, to },
-        }),
-      ),
-  });
+  // Same query (and key) as the chart's risk series — React Query dedupes.
+  const riskInput: RiskPointsQueryInput = { client, cycle, projectId };
+  const { data: riskData } = useQuery(riskPointsQuery(riskInput));
+
+  // The table presents BILLED tokens: the analytics aggregate supplies the
+  // distribution across metrics (it has the dimensions; billing's per-session
+  // qualification can't be expressed there), and one uniform scale converts
+  // it into billed units so the Total row equals the cycle's billed tokens —
+  // the usage card's number — exactly. The two aggregates track within a
+  // fraction of a percent, so the correction is invisible per metric.
+  const billedScale = useMemo(() => {
+    const analyticsTotal = data?.totals?.totalTokens ?? 0;
+    if (analyticsTotal === 0 || cycle.tokens === 0) return 1;
+    return cycle.tokens / analyticsTotal;
+  }, [data, cycle.tokens]);
 
   const groups = useMemo<DetailGroup[]>(() => {
-    const points = usageData?.timeseries?.[0]?.points ?? [];
-    const totals = usageData?.table?.[0]?.measures;
-    const measureRow = (
-      label: string,
-      color: string,
-      value: (m: QueryMeasures) => number,
-    ): DetailRow => ({
-      label,
-      color,
-      series: points.map((p) => value(p.measures)),
-      total: totals ? value(totals) : 0,
-    });
+    const points = data?.points ?? [];
+    const totals = data?.totals;
+    const riskPoints = riskData?.points ?? [];
+    const riskyTotal = riskPoints.reduce((sum, p) => sum + p.riskyTokens, 0);
+    const cleanTotal = points.reduce(
+      (sum, p, i) =>
+        sum + Math.max(0, p.totalTokens - (riskPoints[i]?.riskyTokens ?? 0)),
+      0,
+    );
 
-    const statsPoints = messageStats?.points ?? [];
-    const statsRow = (
-      label: string,
-      color: string,
-      value: (p: {
-        riskyMessageTokens: number;
-        toolMessageTokens: number;
-      }) => number,
-    ): DetailRow => ({
-      label,
-      color,
-      series: statsPoints.map((p) => value(p)),
-      total: statsPoints.reduce((sum, p) => sum + value(p), 0),
-    });
-
-    return [
+    const raw: DetailGroup[] = [
       {
-        heading: "Tokens",
+        heading: "Total",
         rows: [
-          measureRow("Input tokens", "#60a5fa", (m) => m.totalInputTokens),
-          measureRow("Output tokens", "#34d399", (m) => m.totalOutputTokens),
-          measureRow(
-            "Cache read tokens",
-            "#f97316",
-            (m) => m.cacheReadInputTokens,
-          ),
-          measureRow(
-            "Cache write tokens",
-            "#a78bfa",
-            (m) => m.cacheCreationInputTokens,
-          ),
+          {
+            label: "Total tokens",
+            color: CHART_COLORS[0]!,
+            series: points.map((p) => p.totalTokens),
+            total: totals?.totalTokens ?? 0,
+            kind: "tokens" as const,
+          },
         ],
       },
+      ...dimensionGroups(data, LEAD_DIMENSION_SECTIONS),
+      {
+        heading: "Token type",
+        rows: [
+          {
+            label: "Input",
+            color: CHART_COLORS[0]!,
+            series: points.map((p) => p.inputTokens),
+            total: totals?.inputTokens ?? 0,
+            kind: "tokens" as const,
+          },
+          {
+            label: "Output",
+            color: CHART_COLORS[1]!,
+            series: points.map((p) => p.outputTokens),
+            total: totals?.outputTokens ?? 0,
+            kind: "tokens" as const,
+          },
+          {
+            label: "Cache read",
+            color: CHART_COLORS[2]!,
+            series: points.map((p) => p.cacheReadTokens),
+            total: totals?.cacheReadTokens ?? 0,
+            kind: "tokens" as const,
+          },
+          {
+            label: "Cache write",
+            color: CHART_COLORS[3]!,
+            series: points.map((p) => p.cacheWriteTokens),
+            total: totals?.cacheWriteTokens ?? 0,
+            kind: "tokens" as const,
+          },
+        ],
+      },
+      {
+        heading: "Risk findings",
+        rows: [
+          {
+            label: "Sessions with risk findings",
+            color: RISKY_COLOR,
+            series: riskPoints.map((p) => p.riskyTokens),
+            total: riskyTotal,
+            kind: "tokens" as const,
+          },
+          {
+            label: "Sessions without risk findings",
+            color: CLEAN_COLOR,
+            // Remainder against the same totals as the "Total tokens" row, so
+            // the two risk rows sum to it exactly (the risk endpoint's own
+            // session aggregate includes forwarded tokens that the analytics
+            // totals exclude).
+            series: points.map((p, i) =>
+              Math.max(0, p.totalTokens - (riskPoints[i]?.riskyTokens ?? 0)),
+            ),
+            total: cleanTotal,
+            kind: "tokens" as const,
+          },
+          {
+            label: "Messages with risk findings",
+            color: "#e879f9",
+            series: points.map((p) => p.riskyMessageTokens),
+            total: totals?.riskyMessageTokens ?? 0,
+            kind: "tokens" as const,
+          },
+        ],
+      },
+      ...dimensionGroups(data, TAIL_DIMENSION_SECTIONS),
       {
         heading: "Activity",
         rows: [
-          measureRow("Agent sessions", "#38bdf8", (m) => m.totalChats),
-          measureRow("Tool calls", "#4ade80", (m) => m.totalToolCalls),
-        ],
-      },
-      {
-        heading: "Messages",
-        rows: [
-          statsRow(
-            "Tokens in messages with risk findings",
-            "#fb7185",
-            (p) => p.riskyMessageTokens,
-          ),
-          statsRow(
-            "Tokens from tool call messages",
-            "#94a3b8",
-            (p) => p.toolMessageTokens,
-          ),
+          {
+            label: "Agent sessions",
+            color: "#38bdf8",
+            series: points.map((p) => p.agentSessions),
+            total: totals?.agentSessions ?? 0,
+            kind: "count" as const,
+          },
+          {
+            label: "Tool calls",
+            color: "#4ade80",
+            series: points.map((p) => p.toolCalls),
+            total: totals?.toolCalls ?? 0,
+            kind: "count" as const,
+          },
+          {
+            label: "Active users",
+            color: "#facc15",
+            series: points.map((p) => p.activeUsers),
+            total: totals?.activeUsers ?? 0,
+            kind: "count" as const,
+          },
+          {
+            label: "Tokens from tool call messages",
+            color: "#94a3b8",
+            series: points.map((p) => p.toolMessageTokens),
+            total: totals?.toolMessageTokens ?? 0,
+            kind: "tokens" as const,
+          },
         ],
       },
     ];
-  }, [usageData, messageStats]);
 
-  const loading =
-    (usageFetching && !usageData) || (statsFetching && !messageStats);
+    // Convert every token-denominated row into billed units (see billedScale).
+    return raw.map((group) => ({
+      ...group,
+      rows: group.rows.map((row) =>
+        row.kind === "tokens"
+          ? {
+              ...row,
+              total: Math.round(row.total * billedScale),
+              series: row.series.map((v) => v * billedScale),
+            }
+          : row,
+      ),
+    }));
+  }, [data, riskData, billedScale]);
+
+  // Time-based overage attribution: tokens count as overage from the moment
+  // the cycle's cumulative usage crossed the included allowance. Days before
+  // the crossing weigh 0, days after weigh 1, and the crossing day is prorated
+  // by how far into its tokens the allowance ran out (the data is daily, so
+  // metrics are assumed to share the within-day distribution). The weights are
+  // then scaled so the "Total tokens" row reproduces the BILLED overage
+  // (cycle TUM tokens − allowance) to the token — the analytics totals the
+  // weights are computed from run slightly apart from the billed aggregate,
+  // and the usage card's Overage stat is the number to agree with.
+  const overageWeights = useMemo<number[]>(() => {
+    // The crossing point is found on the billed-unit series (see billedScale),
+    // matching the allowance's own units.
+    const totals = data?.points.map((p) => p.totalTokens * billedScale) ?? [];
+    const weights = totals.map(() => 0);
+    if (limit == null) return weights;
+    let cumulative = 0;
+    for (let i = 0; i < totals.length; i++) {
+      const before = cumulative;
+      cumulative += totals[i]!;
+      if (cumulative <= limit) continue;
+      weights[i] =
+        before >= limit ? 1 : (cumulative - limit) / (totals[i]! || 1);
+    }
+    const billedOverage = Math.max(0, cycle.tokens - limit);
+    const weightedTotal = totals.reduce(
+      (sum, t, i) => sum + t * weights[i]!,
+      0,
+    );
+    if (weightedTotal === 0) return weights.map(() => 0);
+    const scale = billedOverage / weightedTotal;
+    return weights.map((w) => w * scale);
+  }, [data, limit, cycle.tokens, billedScale]);
+
+  const loading = isFetching && !data;
 
   return (
     <div className="border-border overflow-hidden rounded-lg border">
-      <div className="text-muted-foreground flex items-center px-4 py-2.5 text-xs font-medium">
+      <div className="flex items-baseline gap-2 px-4 pt-3 pb-1">
+        <span className="text-sm font-semibold">Usage details</span>
+        <span className="text-muted-foreground text-xs">
+          Cumulative totals over the selected billing cycle
+        </span>
+      </div>
+      <div className="text-muted-foreground flex items-center px-4 py-2 text-xs font-medium">
         <span className="flex-1">Metric</span>
-        <span className="w-24 text-right">Usage</span>
+        <SimpleTooltip tooltip="Billed tokens under management, attributed across metrics by the analytics distribution.">
+          <span className="w-24 cursor-help text-right">Total</span>
+        </SimpleTooltip>
+        <SimpleTooltip tooltip="The billed overage (tokens beyond the included allowance), attributed to each metric by its tokens recorded after the allowance ran out. The crossing day is prorated.">
+          <span className="w-24 cursor-help text-right">Overage</span>
+        </SimpleTooltip>
       </div>
       {loading ? (
         <div className="space-y-3 p-4">
@@ -226,12 +467,21 @@ export function TumDetailsTable({
       ) : (
         groups.map((group) => (
           <div key={group.heading}>
-            <div className="bg-muted/50 text-muted-foreground border-border border-t px-4 py-1.5 text-xs font-medium">
-              {group.heading}
+            <div className="bg-muted/50 text-muted-foreground border-border flex items-center gap-1.5 border-t px-4 py-1.5 text-xs">
+              <span className="font-medium">{group.heading}</span>
+              {group.note && (
+                <SimpleTooltip tooltip={group.note}>
+                  <Info className="size-3 cursor-help" />
+                </SimpleTooltip>
+              )}
             </div>
             <div className="divide-border divide-y">
               {group.rows.map((row) => (
-                <DetailRowItem key={row.label} row={row} />
+                <DetailRowItem
+                  key={row.label}
+                  row={row}
+                  overageWeights={overageWeights}
+                />
               ))}
             </div>
           </div>

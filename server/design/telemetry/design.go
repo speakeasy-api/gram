@@ -357,29 +357,29 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQueryRiskTokens", "type": "query"}`)
 	})
 
-	Method("queryMessageTokenStats", func() {
-		Description("Org-scoped daily message-level token stats: tokens in messages carrying at least one active risk finding and tokens in tool-call messages. Powers the billing page's usage details table.")
+	Method("queryTumDetails", func() {
+		Description("Org-scoped daily usage details for the billing page's metrics table, computed in one pass: token type sums, session/tool-call/active-user counts, attribution slices (MCP tools, skills, unattributed users), and message-level stats (tokens in messages with active risk findings, tokens in tool-call messages).")
 
 		// Org-scoped like queryRiskTokens; project_id optionally narrows the
 		// slice to one of the caller's projects.
 		Security(security.Session)
 
 		Payload(func() {
-			Extend(MessageTokenStatsPayload)
+			Extend(TumDetailsPayload)
 			security.SessionPayload()
 		})
 
-		Result(MessageTokenStatsResult)
+		Result(TumDetailsResult)
 
 		HTTP(func() {
-			POST("/rpc/telemetry.queryMessageTokenStats")
+			POST("/rpc/telemetry.queryTumDetails")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "queryMessageTokenStats")
-		Meta("openapi:extension:x-speakeasy-name-override", "queryMessageTokenStats")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQueryMessageTokenStats", "type": "query"}`)
+		Meta("openapi:operationId", "queryTumDetails")
+		Meta("openapi:extension:x-speakeasy-name-override", "queryTumDetails")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQueryTumDetails", "type": "query"}`)
 	})
 
 	Method("listSessions", func() {
@@ -1487,8 +1487,8 @@ var QueryRiskTokensResult = Type("QueryRiskTokensResult", func() {
 	Required("interval_seconds", "points")
 })
 
-var MessageTokenStatsPayload = Type("MessageTokenStatsPayload", func() {
-	Description("Payload for the org-scoped message-level token stats query")
+var TumDetailsPayload = Type("TumDetailsPayload", func() {
+	Description("Payload for the org-scoped billing usage details query")
 
 	Attribute("from", String, "Start time in ISO 8601 format", func() {
 		Format(FormatDateTime)
@@ -1505,23 +1505,71 @@ var MessageTokenStatsPayload = Type("MessageTokenStatsPayload", func() {
 	Required("from", "to")
 })
 
-var MessageTokenStatsPoint = Type("MessageTokenStatsPoint", func() {
-	Description("One UTC day of message-level token stats")
-
-	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
+// The per-metric fields shared by the daily points and the range totals.
+func tumDetailsMeasures() {
+	Attribute("input_tokens", Int64, "Input tokens")
+	Attribute("output_tokens", Int64, "Output tokens")
+	Attribute("cache_read_tokens", Int64, "Cache read input tokens")
+	Attribute("cache_write_tokens", Int64, "Cache creation input tokens")
+	Attribute("total_tokens", Int64, "All tokens")
+	Attribute("agent_sessions", Int64, "Distinct chat sessions")
+	Attribute("tool_calls", Int64, "Completed tool calls")
+	Attribute("active_users", Int64, "Distinct attributed users with usage")
+	Attribute("mcp_tool_tokens", Int64, "Tokens attributed to MCP tool usage")
+	Attribute("skill_tokens", Int64, "Tokens attributed to skill usage")
+	Attribute("unattributed_tokens", Int64, "Tokens without user attribution")
 	Attribute("risky_message_tokens", Int64, "Tokens in messages carrying at least one active risk finding")
 	Attribute("tool_message_tokens", Int64, "Tokens in tool-call messages")
+	Required(
+		"input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens",
+		"total_tokens", "agent_sessions", "tool_calls", "active_users",
+		"mcp_tool_tokens", "skill_tokens", "unattributed_tokens",
+		"risky_message_tokens", "tool_message_tokens",
+	)
+}
 
-	Required("bucket_time_unix_nano", "risky_message_tokens", "tool_message_tokens")
+var TumDetailsPoint = Type("TumDetailsPoint", func() {
+	Description("One UTC day of billing usage details")
+
+	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
+	tumDetailsMeasures()
+	Required("bucket_time_unix_nano")
 })
 
-var MessageTokenStatsResult = Type("MessageTokenStatsResult", func() {
-	Description("Result of the message-level token stats query")
+var TumDetailsTotals = Type("TumDetailsTotals", func() {
+	Description("Whole-range totals for the billing usage details. Distinct counts (sessions, active users) are computed over the full range and cannot be derived by summing the daily points.")
 
-	Attribute("interval_seconds", Int64, "Timeseries bucket width in seconds. Always 86400 — the stats are bucketed daily.")
-	Attribute("points", ArrayOf(MessageTokenStatsPoint), "Gap-filled daily buckets in ascending time order")
+	tumDetailsMeasures()
+})
 
-	Required("interval_seconds", "points")
+var TumDetailsBreakdownRow = Type("TumDetailsBreakdownRow", func() {
+	Description("One value of a breakdown dimension with its token usage over the range")
+
+	Attribute("value", String, "The dimension value; empty for rows without the attribute, 'Other' for the top-N remainder rollup")
+	Attribute("total_tokens", Int64, "Tokens for this value over the range")
+	Attribute("series", ArrayOf(Int64), "Daily tokens aligned to the result's points buckets")
+
+	Required("value", "total_tokens", "series")
+})
+
+var TumDetailsBreakdown = Type("TumDetailsBreakdown", func() {
+	Description("Per-dimension token breakdown for the usage details table")
+
+	Attribute("key", String, "The breakdown dimension key (matches telemetry.query group_by)")
+	Attribute("rows", ArrayOf(TumDetailsBreakdownRow), "Top values by tokens in descending order, with the remainder rolled into 'Other'")
+
+	Required("key", "rows")
+})
+
+var TumDetailsResult = Type("TumDetailsResult", func() {
+	Description("Result of the billing usage details query")
+
+	Attribute("interval_seconds", Int64, "Timeseries bucket width in seconds. Always 86400 — the details are bucketed daily.")
+	Attribute("points", ArrayOf(TumDetailsPoint), "Gap-filled daily buckets in ascending time order")
+	Attribute("totals", TumDetailsTotals, "Whole-range totals")
+	Attribute("breakdowns", ArrayOf(TumDetailsBreakdown), "Token usage per breakdown dimension, one entry per supported dimension")
+
+	Required("interval_seconds", "points", "totals", "breakdowns")
 })
 
 var QueryMeasures = Type("QueryMeasures", func() {
