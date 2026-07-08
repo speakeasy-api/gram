@@ -158,7 +158,26 @@ export function CostsExplorer(): JSX.Element {
   // full-project `all` view. It scopes both the breakdown options and, via the
   // attribution empty-row handling below, which rows count.
   const datasetParam = searchParams.get(DATASET_PARAM);
-  const dataset: Dataset = isDataset(datasetParam) ? datasetParam : "all";
+  // Backward compat: shared/bookmarked links from before the dataset selector
+  // pointed `?by=` straight at an attribution dim (e.g. `?by=mcp_server_name`)
+  // with no `?dataset=`. Infer the owning dataset from such a `?by=` so the link
+  // still lands on the intended attribution view rather than silently falling
+  // back to the org default (BASE_PIVOTS excludes attribution dims).
+  const dataset: Dataset = isDataset(datasetParam)
+    ? datasetParam
+    : isDimension(byParam) && isAttributionDim(byParam)
+      ? datasetForDim(byParam)
+      : "all";
+  // Within a non-`all` dataset the slice is enforced only by dropping the empty
+  // attribution group from the *grouped* table. The un-groupable views — the
+  // session list, the "Most costly sessions" widget, and cross-cut cards over a
+  // non-attribution dim — can't express that "attribute present" predicate with
+  // the IN-only filter API, so on their own they'd show whole-project numbers
+  // under a dataset label. They only become correct once the drill path pins an
+  // attribution value (which inherently restricts rows to the slice); until
+  // then, suppress them rather than mislead.
+  const sliceScoped =
+    dataset === "all" || path.some((c) => isAttributionDim(c.dim));
   // The deepest filter crumb is the entity in view. Agent/Model are leaves —
   // once you're on one, individual sessions are the only meaningful view, so we
   // lock to them: force sessions mode and offer no further dimension breakdown.
@@ -166,11 +185,18 @@ export function CostsExplorer(): JSX.Element {
   const deepestCrumb = path.length ? path[path.length - 1]! : null;
   const atSessionLeaf = deepestCrumb != null && isSessionLeaf(deepestCrumb.dim);
   // The sessions sentinel swaps the table for the per-session list; the rest of
-  // the page (filters, widgets, header stats) is unchanged.
-  const sessionsMode = isSessionsAxis(byParam) || atSessionLeaf;
+  // the page (filters, widgets, header stats) is unchanged. In an unscoped
+  // dataset view the list can't be restricted to the slice, so the sentinel is
+  // ignored there (a session leaf always pins an attribution value, so it stays
+  // scoped and is still honored).
+  const sessionsMode =
+    atSessionLeaf || (isSessionsAxis(byParam) && sliceScoped);
   // The "Most costly sessions" widget shows on org/division/department/user
-  // (not Agent/Model, which already render the full session table).
-  const showSessionsWidget = showsTopSessionsWidget(deepestCrumb);
+  // (not Agent/Model, which already render the full session table), and only
+  // where the slice is scoped — at an unscoped dataset root it would list
+  // whole-project sessions.
+  const showSessionsWidget =
+    showsTopSessionsWidget(deepestCrumb) && sliceScoped;
 
   // Navigate to a node: encode its filter path into the URL and pin the
   // breakdown axis in `?by=`. `replace` for view-only changes (re-pivoting)
@@ -238,8 +264,19 @@ export function CostsExplorer(): JSX.Element {
     () => new Set(datasetPivots(dataset).map((p) => p.dim)),
     [dataset],
   );
+  // A dataset's nested breakdown dim (MCP Tool under MCP Server, Skill under
+  // Subagent) is only valid once its parent is pinned in the drill path. Guard
+  // the raw `?by=` against this too — otherwise a deep/stale link like
+  // `?dataset=subagents&by=skill_name` would render the child cut at the dataset
+  // root while the selector reads "Subagents". Fall back to the dataset default
+  // when the required parent is missing.
+  const byParamParent = isDimension(byParam)
+    ? datasetPivotParent(dataset, byParam)
+    : null;
   const groupBy =
-    isDimension(byParam) && datasetDimSet.has(byParam)
+    isDimension(byParam) &&
+    datasetDimSet.has(byParam) &&
+    (byParamParent === null || path.some((c) => c.dim === byParamParent))
       ? byParam
       : datasetDefaultGroupBy(dataset, path, availableDims);
 
@@ -548,6 +585,9 @@ export function CostsExplorer(): JSX.Element {
       d !== groupBy &&
       !path.some((c) => c.dim === d) &&
       (!availableDims || availableDims.has(d)) &&
+      // In an unscoped dataset view only the dataset's own attribution dims are
+      // correctly scoped; a cross-cut like Model would sum whole-project spend.
+      (sliceScoped || datasetDimSet.has(d)) &&
       (!attributes || (attributes[d]?.length ?? 0) > 1),
   );
   const mixDimA = mixDims[0];
@@ -810,12 +850,17 @@ export function CostsExplorer(): JSX.Element {
     : pivotOptions.map((p) => ({ value: p.dim as string, label: p.label }));
   const axisOptions: { value: string; label: string }[] = [
     ...dimensionAxisOptions,
-    { value: SESSIONS_AXIS, label: LABELS[SESSIONS_AXIS]! },
+    // The per-session list is only offered where the slice is scoped — at an
+    // unscoped dataset root it can't be filtered to the slice (see sliceScoped).
+    ...(sliceScoped
+      ? [{ value: SESSIONS_AXIS, label: LABELS[SESSIONS_AXIS]! }]
+      : []),
   ];
   const axisValue: string = sessionsMode ? SESSIONS_AXIS : groupBy;
-  const onViewSessions = sessionsMode
-    ? undefined
-    : () => changeGroupBy(SESSIONS_AXIS);
+  const onViewSessions =
+    sessionsMode || !sliceScoped
+      ? undefined
+      : () => changeGroupBy(SESSIONS_AXIS);
 
   // The root Skill breakdown is scoped to agent-less spend (skill-only branch of
   // the Subagent → Skill tree). Rather than relabel the axis "Skill (only)",

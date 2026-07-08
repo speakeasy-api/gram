@@ -445,18 +445,25 @@ export function EntityProfile({
               header, in line with the back controls on the left. The dataset
               narrows to a spend slice; the range scopes every number below. */}
           <div className="absolute top-5 right-8 z-10 flex items-stretch gap-2">
-            <Select value={datasetValue} onValueChange={onDatasetChange}>
-              <SelectTrigger className="border-border bg-background hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto cursor-pointer gap-1.5 rounded-md border py-1 pr-2.5 pl-3 text-sm font-medium shadow-none transition-colors focus-visible:ring-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent align="end">
-                {datasetOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Grey "Dataset" label box wrapping the selector; stretches to the
+                same height as the date picker via the row's items-stretch. */}
+            <div className="border-border bg-muted flex items-stretch overflow-hidden rounded-md border text-sm">
+              <span className="text-muted-foreground flex items-center pr-2 pl-3 font-medium">
+                Dataset
+              </span>
+              <Select value={datasetValue} onValueChange={onDatasetChange}>
+                <SelectTrigger className="border-border bg-background hover:bg-muted data-[state=open]:bg-muted !h-full w-auto cursor-pointer gap-1.5 rounded-none border-0 border-l py-1 pr-2.5 pl-3 font-medium shadow-none transition-colors">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  {datasetOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {rangePicker}
           </div>
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
