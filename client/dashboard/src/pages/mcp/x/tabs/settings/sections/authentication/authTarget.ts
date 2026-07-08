@@ -50,6 +50,7 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
             tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
             toolsetId: mcpServer.toolsetId ?? undefined,
             environmentId: mcpServer.environmentId ?? undefined,
+            toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
             visibility: "private",
             userSessionIssuerId,
           },
