@@ -9,10 +9,11 @@ import (
 )
 
 type User struct {
-	ID              string
-	Email           string
-	DisplayName     string
-	PhotoUrl        pgtype.Text
+	ID          string
+	Email       string
+	DisplayName string
+	PhotoUrl    pgtype.Text
+	// Maps to the application's platform_admin concept: TRUE marks a Gram/Speakeasy platform admin. Distinct from the org-level admin role.
 	Admin           bool
 	LastLogin       pgtype.Timestamptz
 	WorkosID        pgtype.Text

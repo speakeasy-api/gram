@@ -21,7 +21,7 @@
     "react-router-dom": "^7.18.0",
     "remark-gfm": "^4.0.1",
     "shiki": "^3.23.0",
-    "tailwindcss": "^4.3.1",
+    "tailwindcss": "^4.3.2",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
