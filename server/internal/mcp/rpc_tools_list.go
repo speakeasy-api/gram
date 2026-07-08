@@ -42,6 +42,15 @@ type toolListEntry struct {
 	InputSchema json.RawMessage              `json:"inputSchema,omitempty,omitzero"`
 	Annotations *externalmcp.ToolAnnotations `json:"annotations,omitempty"`
 	Meta        map[string]any               `json:"_meta,omitempty"`
+
+	// fromProxy marks entries unfolded from a live upstream tools/list of a
+	// proxy tool. Their Annotations come from the upstream response, not from
+	// recorded tool metadata, so the tool_annotations RBAC dimension resolves
+	// to unknown for them rather than known/none — an entry with nil
+	// Annotations is authoritatively "none" only when the nil is recorded on a
+	// materialized definition. The recorded-metadata read path (AGE-2877)
+	// replaces this with a real lookup.
+	fromProxy bool
 }
 
 func handleToolsList(
@@ -118,11 +127,18 @@ func handleToolsList(
 		allowed := make([]*toolListEntry, 0, len(tools))
 		for _, t := range tools {
 			disposition := dispositionFromAnnotations(t.Annotations)
+			// known/none only for entries whose annotations are authoritative
+			// (recorded on the tool definition); proxy entries resolve to
+			// unknown — see [toolListEntry.fromProxy].
+			toolAnnotations := authz.ToolAnnotationsUnknown
+			if !t.fromProxy {
+				toolAnnotations = conv.Ternary(disposition != "", authz.ToolAnnotationsKnown, authz.ToolAnnotationsNone)
+			}
 			if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
 				Tool:            t.Name,
 				Disposition:     disposition,
 				ProjectID:       payload.projectID.String(),
-				ToolAnnotations: conv.Ternary(disposition != "", authz.ToolAnnotationsKnown, authz.ToolAnnotationsNone),
+				ToolAnnotations: toolAnnotations,
 			})); err != nil {
 				var oopsErr *oops.ShareableError
 				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
@@ -223,6 +239,7 @@ func buildToolListEntries(
 				InputSchema: extTool.Schema,
 				Annotations: extTool.Annotations,
 				Meta:        nil,
+				fromProxy:   true,
 			})
 		}
 	}
@@ -257,6 +274,7 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 		InputSchema: toolEntry.InputSchema,
 		Annotations: convertConvAnnotations(toolEntry.Annotations),
 		Meta:        toolEntry.Meta,
+		fromProxy:   false,
 	}
 }
 
