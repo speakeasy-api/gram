@@ -109,7 +109,7 @@ func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectI
 	}
 
 	for i, r := range results {
-		if texts[i] == "" {
+		if texts[i] == "" && !msgs[i].HasContent() {
 			continue
 		}
 		if f := s.findingFromResult(texts[i], r); f != nil {

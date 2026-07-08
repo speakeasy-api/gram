@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -192,6 +193,38 @@ func TestPromptInjectionScanner_BatchEngineAppendsToL0(t *testing.T) {
 	assert.Empty(t, out[1], "second text: engine says SAFE, no L0 either")
 	assert.Len(t, out[2], 1, "third text: L1 only")
 	assert.Equal(t, 1, fc.calls, "ScanBatch should hit the engine exactly once for the whole batch")
+}
+
+func TestPromptInjectionScanner_BatchEngineKeepsEmptyTextToolCallFinding(t *testing.T) {
+	t.Parallel()
+	fc := &fakeEngine{
+		results: []promptinjection.Result{{Label: "INJECTION", Score: 0.91, Rationale: ""}},
+	}
+	s := newScanner(t, fc)
+
+	msgs := []judgemessage.Message{
+		judgemessage.New(message.ToolRequest, "mcp__github__delete_repo", `{"repo":"prod"}`),
+	}
+	out, err := s.ScanBatch(t.Context(), []string{""}, testOrgID, testProjectID, msgs, true)
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	require.Len(t, out[0], 1)
+	assert.True(t, hasTag(out[0][0].Tags, "llm-judge"))
+	assert.Equal(t, 1, fc.calls)
+}
+
+func TestPromptInjectionScanner_BatchEngineSkipsEmptyMessageFinding(t *testing.T) {
+	t.Parallel()
+	fc := &fakeEngine{
+		results: []promptinjection.Result{{Label: "INJECTION", Score: 0.91, Rationale: ""}},
+	}
+	s := newScanner(t, fc)
+
+	out, err := s.ScanBatch(t.Context(), []string{""}, testOrgID, testProjectID, []judgemessage.Message{mkMsg("")}, true)
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	assert.Empty(t, out[0])
+	assert.Equal(t, 1, fc.calls)
 }
 
 func hasTag(tags []string, want string) bool {
