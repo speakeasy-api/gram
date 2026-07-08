@@ -253,16 +253,21 @@ export function GlobalRSCsModal({
     passthrough: draft.passthrough,
   });
 
-  // Client fields for a *new* client. Empty secret omits the field entirely.
+  // Client fields for a *new* client. Empty optionals are omitted, not sent as
+  // explicit empties: "" audience fails the API's non-empty pattern, and an
+  // omitted scope is the documented way to fall back to the issuer's
+  // scopes_supported.
   const newClientFields = (remoteSessionIssuerId: string) => {
     const secret = draft.secret.trim();
+    const scope = parseList(draft.scopeText);
+    const audience = draft.audience.trim();
     return {
       remoteSessionIssuerId,
       clientId: draft.clientId.trim(),
       clientSecret: secret.length > 0 ? secret : undefined,
       tokenEndpointAuthMethod: draft.authMethod,
-      scope: parseList(draft.scopeText),
-      audience: draft.audience.trim(),
+      scope: scope.length > 0 ? scope : undefined,
+      audience: audience.length > 0 ? audience : undefined,
     };
   };
 
@@ -316,6 +321,7 @@ export function GlobalRSCsModal({
 
       if (primaryClient) {
         const secret = draft.secret.trim();
+        const audience = draft.audience.trim();
         await updateClient.mutateAsync({
           request: {
             updateRemoteSessionClientForm: {
@@ -323,8 +329,13 @@ export function GlobalRSCsModal({
               // Empty secret = keep current; non-empty = rotate.
               clientSecret: secret.length > 0 ? secret : undefined,
               tokenEndpointAuthMethod: draft.authMethod,
+              // [] clears explicit scopes (dance falls back to the issuer's
+              // scopes_supported), so always send the parsed list.
               scope: parseList(draft.scopeText),
-              audience: draft.audience.trim(),
+              // "" fails the API's non-empty audience pattern, so a blanked
+              // field is omitted, which keeps the stored value. Clearing an
+              // audience isn't reachable through the API today.
+              audience: audience.length > 0 ? audience : undefined,
             },
           },
         });
