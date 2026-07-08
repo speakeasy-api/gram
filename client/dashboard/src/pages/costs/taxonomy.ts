@@ -177,18 +177,14 @@ export function datasetLabel(ds: Dataset): string {
 // The dataset an attribution dimension belongs to — used to promote the `all`
 // view into the right dataset when a drill lands on an attribution cut (e.g. a
 // "Spend by MCP server" mix-card row). Non-attribution dims stay in `all`.
+const DIM_DATASET: Partial<Record<Dimension, Dataset>> = {
+  [Dimension.McpServerName]: "mcp",
+  [Dimension.McpToolName]: "mcp",
+  [Dimension.AgentName]: "subagents",
+  [Dimension.SkillName]: "skills",
+};
 export function datasetForDim(dim: Dimension): Dataset {
-  switch (dim) {
-    case Dimension.McpServerName:
-    case Dimension.McpToolName:
-      return "mcp";
-    case Dimension.AgentName:
-      return "subagents";
-    case Dimension.SkillName:
-      return "skills";
-    default:
-      return "all";
-  }
+  return DIM_DATASET[dim] ?? "all";
 }
 
 // The non-attribution breakdown axes — the `all` dataset's pivots. Attribution
