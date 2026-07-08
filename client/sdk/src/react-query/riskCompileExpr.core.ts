@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { riskExprCompile } from "../funcs/riskExprCompile.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ExprCompileResult } from "../models/components/exprcompileresult.js";
+import {
+  CompileExprRequest,
+  CompileExprSecurity,
+} from "../models/operations/compileexpr.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskCompileExprQueryData = components.ExprCompileResult;
+export type RiskCompileExprQueryData = ExprCompileResult;
 
 export function prefetchRiskCompileExpr(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.CompileExprRequest | undefined,
-  security?: operations.CompileExprSecurity | undefined,
+  request?: CompileExprRequest | undefined,
+  security?: CompileExprSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchRiskCompileExpr(
 
 export function buildRiskCompileExprQuery(
   client$: GramCore,
-  request?: operations.CompileExprRequest | undefined,
-  security?: operations.CompileExprSecurity | undefined,
+  request?: CompileExprRequest | undefined,
+  security?: CompileExprSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

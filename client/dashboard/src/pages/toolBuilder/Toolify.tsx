@@ -5,7 +5,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { TextArea } from "@/components/ui/textarea";
 import { useToolset } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
-import { ToolsetEntry } from "@gram/client/models/components";
+import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { generateObject } from "ai";
 import { useState } from "react";

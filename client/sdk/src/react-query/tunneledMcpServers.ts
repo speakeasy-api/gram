@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListTunneledMcpServersRequest,
+  ListTunneledMcpServersSecurity,
+} from "../models/operations/listtunneledmcpservers.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type TunneledMcpServersQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type TunneledMcpServersQueryError =
  * List all tunneled MCP server sources for a project
  */
 export function useTunneledMcpServers(
-  request?: operations.ListTunneledMcpServersRequest | undefined,
-  security?: operations.ListTunneledMcpServersSecurity | undefined,
+  request?: ListTunneledMcpServersRequest | undefined,
+  security?: ListTunneledMcpServersSecurity | undefined,
   options?: QueryHookOptions<
     TunneledMcpServersQueryData,
     TunneledMcpServersQueryError
@@ -85,8 +88,8 @@ export function useTunneledMcpServers(
  * List all tunneled MCP server sources for a project
  */
 export function useTunneledMcpServersSuspense(
-  request?: operations.ListTunneledMcpServersRequest | undefined,
-  security?: operations.ListTunneledMcpServersSecurity | undefined,
+  request?: ListTunneledMcpServersRequest | undefined,
+  security?: ListTunneledMcpServersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     TunneledMcpServersQueryData,
     TunneledMcpServersQueryError

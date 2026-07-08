@@ -4,8 +4,11 @@
 
 import { riskExprCompile } from "../funcs/riskExprCompile.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ExprCompileResult } from "../models/components/exprcompileresult.js";
+import {
+  CompileExprRequest,
+  CompileExprSecurity,
+} from "../models/operations/compileexpr.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Expr extends ClientSDK {
@@ -16,10 +19,10 @@ export class Expr extends ClientSDK {
    * Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).
    */
   async compile(
-    request?: operations.CompileExprRequest | undefined,
-    security?: operations.CompileExprSecurity | undefined,
+    request?: CompileExprRequest | undefined,
+    security?: CompileExprSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ExprCompileResult> {
+  ): Promise<ExprCompileResult> {
     return unwrapAsync(riskExprCompile(
       this,
       request,

@@ -1,9 +1,7 @@
 import { toast } from "sonner";
-import type {
-  ChatMessage,
-  RiskResult,
-  TelemetryLogRecord,
-} from "@gram/client/models/components";
+import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 
 function downloadJsonFile(filename: string, data: unknown) {
   const json = JSON.stringify(data, null, 2);

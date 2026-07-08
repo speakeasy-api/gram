@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { variationsListGroups } from "../funcs/variationsListGroups.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListToolVariationGroupsResult } from "../models/components/listtoolvariationgroupsresult.js";
+import {
+  ListToolVariationGroupsRequest,
+  ListToolVariationGroupsSecurity,
+} from "../models/operations/listtoolvariationgroups.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ToolVariationGroupsQueryData =
-  components.ListToolVariationGroupsResult;
+export type ToolVariationGroupsQueryData = ListToolVariationGroupsResult;
 
 export function prefetchToolVariationGroups(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListToolVariationGroupsRequest | undefined,
-  security?: operations.ListToolVariationGroupsSecurity | undefined,
+  request?: ListToolVariationGroupsRequest | undefined,
+  security?: ListToolVariationGroupsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchToolVariationGroups(
 
 export function buildToolVariationGroupsQuery(
   client$: GramCore,
-  request?: operations.ListToolVariationGroupsRequest | undefined,
-  security?: operations.ListToolVariationGroupsSecurity | undefined,
+  request?: ListToolVariationGroupsRequest | undefined,
+  security?: ListToolVariationGroupsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

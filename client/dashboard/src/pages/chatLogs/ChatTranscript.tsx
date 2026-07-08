@@ -33,10 +33,8 @@ import {
   Icon,
 } from "@speakeasy-api/moonshine";
 import { MessageContent, type SectionMatch, ToolUI } from "@gram-ai/elements";
-import type {
-  ClaudeToolUsage,
-  RiskResult,
-} from "@gram/client/models/components";
+import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   Popover,
   PopoverContent,
@@ -93,6 +91,10 @@ interface RowContext {
   /** Chat-level user label, used as the turn-header name when an individual
    * message carries no user id of its own. */
   userLabel?: string;
+  /** Overrides the per-message identity on user turn headers — set when the
+   * session ran on a personal AI account, whose email should label the turns
+   * instead of the attributed employee's work email. */
+  userLabelOverride?: string;
 }
 
 type ResolvedRowContext = Required<
@@ -917,7 +919,7 @@ function DisplayItemView({
       return (
         <TurnHeader
           author={item.author}
-          userId={item.userId}
+          userId={ctx.userLabelOverride ?? item.userId}
           userLabel={ctx.userLabel}
           createdAt={item.createdAt}
           results={item.messageIds.flatMap(

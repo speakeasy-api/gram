@@ -1,5 +1,5 @@
-import { PromptTemplateKind } from "@gram/client/models/components";
-import { useTemplates } from "@gram/client/react-query";
+import { PromptTemplateKind } from "@gram/client/models/components/prompttemplate.js";
+import { useTemplates } from "@gram/client/react-query/templates.js";
 
 export function useCustomTools(): {
   customTools:

@@ -18,10 +18,15 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  AccessScope,
+  Disposition,
+  ListShadowMCPAccessRulesRequest,
+  ListShadowMCPAccessRulesSecurity,
+} from "../models/operations/listshadowmcpaccessrules.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +47,7 @@ export {
 };
 
 export type ShadowMCPAccessRulesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +64,8 @@ export type ShadowMCPAccessRulesQueryError =
  * List managed Shadow MCP allow and deny rules.
  */
 export function useShadowMCPAccessRules(
-  request?: operations.ListShadowMCPAccessRulesRequest | undefined,
-  security?: operations.ListShadowMCPAccessRulesSecurity | undefined,
+  request?: ListShadowMCPAccessRulesRequest | undefined,
+  security?: ListShadowMCPAccessRulesSecurity | undefined,
   options?: QueryHookOptions<
     ShadowMCPAccessRulesQueryData,
     ShadowMCPAccessRulesQueryError
@@ -88,8 +93,8 @@ export function useShadowMCPAccessRules(
  * List managed Shadow MCP allow and deny rules.
  */
 export function useShadowMCPAccessRulesSuspense(
-  request?: operations.ListShadowMCPAccessRulesRequest | undefined,
-  security?: operations.ListShadowMCPAccessRulesSecurity | undefined,
+  request?: ListShadowMCPAccessRulesRequest | undefined,
+  security?: ListShadowMCPAccessRulesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ShadowMCPAccessRulesQueryData,
     ShadowMCPAccessRulesQueryError
@@ -114,8 +119,8 @@ export function setShadowMCPAccessRulesData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      disposition?: operations.Disposition | undefined;
-      accessScope?: operations.AccessScope | undefined;
+      disposition?: Disposition | undefined;
+      accessScope?: AccessScope | undefined;
       projectId?: string | undefined;
       limit?: number | undefined;
       cursor?: string | undefined;
@@ -133,8 +138,8 @@ export function invalidateShadowMCPAccessRules(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      disposition?: operations.Disposition | undefined;
-      accessScope?: operations.AccessScope | undefined;
+      disposition?: Disposition | undefined;
+      accessScope?: AccessScope | undefined;
       projectId?: string | undefined;
       limit?: number | undefined;
       cursor?: string | undefined;

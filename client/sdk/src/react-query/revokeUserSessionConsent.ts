@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  RevokeUserSessionConsentRequest,
+  RevokeUserSessionConsentSecurity,
+} from "../models/operations/revokeusersessionconsent.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RevokeUserSessionConsentMutationVariables = {
-  request: operations.RevokeUserSessionConsentRequest;
-  security?: operations.RevokeUserSessionConsentSecurity | undefined;
+  request: RevokeUserSessionConsentRequest;
+  security?: RevokeUserSessionConsentSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type RevokeUserSessionConsentMutationData = void;
 
 export type RevokeUserSessionConsentMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

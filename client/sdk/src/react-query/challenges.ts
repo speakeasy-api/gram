@@ -18,10 +18,14 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListChallengesRequest,
+  ListChallengesSecurity,
+  QueryParamOutcome,
+} from "../models/operations/listchallenges.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +46,7 @@ export {
 };
 
 export type ChallengesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +63,8 @@ export type ChallengesQueryError =
  * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
  */
 export function useChallenges(
-  request?: operations.ListChallengesRequest | undefined,
-  security?: operations.ListChallengesSecurity | undefined,
+  request?: ListChallengesRequest | undefined,
+  security?: ListChallengesSecurity | undefined,
   options?: QueryHookOptions<ChallengesQueryData, ChallengesQueryError>,
 ): UseQueryResult<ChallengesQueryData, ChallengesQueryError> {
   const client = useGramContext();
@@ -82,8 +86,8 @@ export function useChallenges(
  * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
  */
 export function useChallengesSuspense(
-  request?: operations.ListChallengesRequest | undefined,
-  security?: operations.ListChallengesSecurity | undefined,
+  request?: ListChallengesRequest | undefined,
+  security?: ListChallengesSecurity | undefined,
   options?: SuspenseQueryHookOptions<ChallengesQueryData, ChallengesQueryError>,
 ): UseSuspenseQueryResult<ChallengesQueryData, ChallengesQueryError> {
   const client = useGramContext();
@@ -102,7 +106,7 @@ export function setChallengesData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      outcome?: operations.QueryParamOutcome | undefined;
+      outcome?: QueryParamOutcome | undefined;
       principalUrn?: string | undefined;
       scope?: string | undefined;
       projectId?: string | undefined;
@@ -125,7 +129,7 @@ export function invalidateChallenges(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      outcome?: operations.QueryParamOutcome | undefined;
+      outcome?: QueryParamOutcome | undefined;
       principalUrn?: string | undefined;
       scope?: string | undefined;
       projectId?: string | undefined;

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateIssuerRequestBody,
+  CreateIssuerRequestBody$Outbound,
+  CreateIssuerRequestBody$outboundSchema,
+} from "../components/createissuerrequestbody.js";
 
 export type CreateOrganizationRemoteSessionIssuerSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -20,7 +24,7 @@ export type CreateOrganizationRemoteSessionIssuerRequest = {
    * API Key header
    */
   gramKey?: string | undefined;
-  createIssuerRequestBody: components.CreateIssuerRequestBody;
+  createIssuerRequestBody: CreateIssuerRequestBody;
 };
 
 /** @internal */
@@ -62,7 +66,7 @@ export function createOrganizationRemoteSessionIssuerSecurityToJSON(
 export type CreateOrganizationRemoteSessionIssuerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
-  CreateIssuerRequestBody: components.CreateIssuerRequestBody$Outbound;
+  CreateIssuerRequestBody: CreateIssuerRequestBody$Outbound;
 };
 
 /** @internal */
@@ -74,8 +78,7 @@ export const CreateOrganizationRemoteSessionIssuerRequest$outboundSchema:
     z.object({
       gramSession: z.optional(z.string()),
       gramKey: z.optional(z.string()),
-      createIssuerRequestBody:
-        components.CreateIssuerRequestBody$outboundSchema,
+      createIssuerRequestBody: CreateIssuerRequestBody$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {

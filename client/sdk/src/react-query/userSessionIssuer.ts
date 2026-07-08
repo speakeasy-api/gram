@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetUserSessionIssuerRequest,
+  GetUserSessionIssuerSecurity,
+} from "../models/operations/getusersessionissuer.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type UserSessionIssuerQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type UserSessionIssuerQueryError =
  * Get a user_session_issuer by id or by slug. Provide exactly one.
  */
 export function useUserSessionIssuer(
-  request?: operations.GetUserSessionIssuerRequest | undefined,
-  security?: operations.GetUserSessionIssuerSecurity | undefined,
+  request?: GetUserSessionIssuerRequest | undefined,
+  security?: GetUserSessionIssuerSecurity | undefined,
   options?: QueryHookOptions<
     UserSessionIssuerQueryData,
     UserSessionIssuerQueryError
@@ -85,8 +88,8 @@ export function useUserSessionIssuer(
  * Get a user_session_issuer by id or by slug. Provide exactly one.
  */
 export function useUserSessionIssuerSuspense(
-  request?: operations.GetUserSessionIssuerRequest | undefined,
-  security?: operations.GetUserSessionIssuerSecurity | undefined,
+  request?: GetUserSessionIssuerRequest | undefined,
+  security?: GetUserSessionIssuerSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     UserSessionIssuerQueryData,
     UserSessionIssuerQueryError

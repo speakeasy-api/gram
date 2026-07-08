@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { telemetrySearchUsers } from "../funcs/telemetrySearchUsers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { SearchUsersResult } from "../models/components/searchusersresult.js";
+import {
+  SearchUsersRequest,
+  SearchUsersSecurity,
+} from "../models/operations/searchusers.js";
 import { unwrapAsync } from "../types/fp.js";
-export type SearchUsersQueryData = components.SearchUsersResult;
+export type SearchUsersQueryData = SearchUsersResult;
 
 export function prefetchSearchUsers(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.SearchUsersRequest,
-  security?: operations.SearchUsersSecurity | undefined,
+  request: SearchUsersRequest,
+  security?: SearchUsersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchSearchUsers(
 
 export function buildSearchUsersQuery(
   client$: GramCore,
-  request: operations.SearchUsersRequest,
-  security?: operations.SearchUsersSecurity | undefined,
+  request: SearchUsersRequest,
+  security?: SearchUsersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

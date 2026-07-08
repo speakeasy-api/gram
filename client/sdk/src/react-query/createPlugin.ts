@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { pluginsCreatePlugin } from "../funcs/pluginsCreatePlugin.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { Plugin } from "../models/components/plugin.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CreatePluginRequest,
+  CreatePluginSecurity,
+} from "../models/operations/createplugin.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreatePluginMutationVariables = {
-  request: operations.CreatePluginRequest;
-  security?: operations.CreatePluginSecurity | undefined;
+  request: CreatePluginRequest;
+  security?: CreatePluginSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type CreatePluginMutationData = components.Plugin;
+export type CreatePluginMutationData = Plugin;
 
 export type CreatePluginMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

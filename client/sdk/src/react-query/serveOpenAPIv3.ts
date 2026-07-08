@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ServeOpenAPIv3Request,
+  ServeOpenAPIv3Security,
+} from "../models/operations/serveopenapiv3.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ServeOpenAPIv3QueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ServeOpenAPIv3QueryError =
  * Serve an OpenAPIv3 asset from Gram.
  */
 export function useServeOpenAPIv3(
-  request: operations.ServeOpenAPIv3Request,
-  security?: operations.ServeOpenAPIv3Security | undefined,
+  request: ServeOpenAPIv3Request,
+  security?: ServeOpenAPIv3Security | undefined,
   options?: QueryHookOptions<ServeOpenAPIv3QueryData, ServeOpenAPIv3QueryError>,
 ): UseQueryResult<ServeOpenAPIv3QueryData, ServeOpenAPIv3QueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useServeOpenAPIv3(
  * Serve an OpenAPIv3 asset from Gram.
  */
 export function useServeOpenAPIv3Suspense(
-  request: operations.ServeOpenAPIv3Request,
-  security?: operations.ServeOpenAPIv3Security | undefined,
+  request: ServeOpenAPIv3Request,
+  security?: ServeOpenAPIv3Security | undefined,
   options?: SuspenseQueryHookOptions<
     ServeOpenAPIv3QueryData,
     ServeOpenAPIv3QueryError

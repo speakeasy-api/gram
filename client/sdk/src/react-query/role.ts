@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetRoleRequest,
+  GetRoleSecurity,
+} from "../models/operations/getrole.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -37,7 +40,7 @@ import {
 export { buildRoleQuery, prefetchRole, queryKeyRole, type RoleQueryData };
 
 export type RoleQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -54,8 +57,8 @@ export type RoleQueryError =
  * Get a role by ID.
  */
 export function useRole(
-  request: operations.GetRoleRequest,
-  security?: operations.GetRoleSecurity | undefined,
+  request: GetRoleRequest,
+  security?: GetRoleSecurity | undefined,
   options?: QueryHookOptions<RoleQueryData, RoleQueryError>,
 ): UseQueryResult<RoleQueryData, RoleQueryError> {
   const client = useGramContext();
@@ -77,8 +80,8 @@ export function useRole(
  * Get a role by ID.
  */
 export function useRoleSuspense(
-  request: operations.GetRoleRequest,
-  security?: operations.GetRoleSecurity | undefined,
+  request: GetRoleRequest,
+  security?: GetRoleSecurity | undefined,
   options?: SuspenseQueryHookOptions<RoleQueryData, RoleQueryError>,
 ): UseSuspenseQueryResult<RoleQueryData, RoleQueryError> {
   const client = useGramContext();

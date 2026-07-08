@@ -8,10 +8,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersUpdateIssuer } from "../funcs/organizationRemoteSessionIssuersUpdateIssuer.js";
+import { organizationRemoteSessionIssuersUpdate } from "../funcs/organizationRemoteSessionIssuersUpdate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,27 +20,28 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  UpdateOrganizationRemoteSessionIssuerRequest,
+  UpdateOrganizationRemoteSessionIssuerSecurity,
+} from "../models/operations/updateorganizationremotesessionissuer.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UpdateOrganizationRemoteSessionIssuerMutationVariables = {
-  request: operations.UpdateOrganizationRemoteSessionIssuerRequest;
-  security?:
-    | operations.UpdateOrganizationRemoteSessionIssuerSecurity
-    | undefined;
+  request: UpdateOrganizationRemoteSessionIssuerRequest;
+  security?: UpdateOrganizationRemoteSessionIssuerSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type UpdateOrganizationRemoteSessionIssuerMutationData =
-  components.RemoteSessionIssuer;
+  RemoteSessionIssuer;
 
 export type UpdateOrganizationRemoteSessionIssuerMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -75,7 +76,7 @@ export function useUpdateOrganizationRemoteSessionIssuerMutation(
 }
 
 export function mutationKeyUpdateOrganizationRemoteSessionIssuer(): MutationKey {
-  return ["@gram/client", "organizationRemoteSessionIssuers", "updateIssuer"];
+  return ["@gram/client", "organizationRemoteSessionIssuers", "update"];
 }
 
 export function buildUpdateOrganizationRemoteSessionIssuerMutation(
@@ -106,7 +107,7 @@ export function buildUpdateOrganizationRemoteSessionIssuerMutation(
           ),
         },
       };
-      return unwrapAsync(organizationRemoteSessionIssuersUpdateIssuer(
+      return unwrapAsync(organizationRemoteSessionIssuersUpdate(
         client$,
         request,
         security,

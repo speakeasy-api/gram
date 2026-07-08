@@ -24,10 +24,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListOrganizationRemoteSessionIssuersRequest,
+  ListOrganizationRemoteSessionIssuersSecurity,
+} from "../models/operations/listorganizationremotesessionissuers.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -60,7 +63,7 @@ export {
 };
 
 export type OrganizationRemoteSessionIssuersQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -77,10 +80,8 @@ export type OrganizationRemoteSessionIssuersQueryError =
  * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuers(
-  request?: operations.ListOrganizationRemoteSessionIssuersRequest | undefined,
-  security?:
-    | operations.ListOrganizationRemoteSessionIssuersSecurity
-    | undefined,
+  request?: ListOrganizationRemoteSessionIssuersRequest | undefined,
+  security?: ListOrganizationRemoteSessionIssuersSecurity | undefined,
   options?: QueryHookOptions<
     OrganizationRemoteSessionIssuersQueryData,
     OrganizationRemoteSessionIssuersQueryError
@@ -108,10 +109,8 @@ export function useOrganizationRemoteSessionIssuers(
  * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuersSuspense(
-  request?: operations.ListOrganizationRemoteSessionIssuersRequest | undefined,
-  security?:
-    | operations.ListOrganizationRemoteSessionIssuersSecurity
-    | undefined,
+  request?: ListOrganizationRemoteSessionIssuersRequest | undefined,
+  security?: ListOrganizationRemoteSessionIssuersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     OrganizationRemoteSessionIssuersQueryData,
     OrganizationRemoteSessionIssuersQueryError
@@ -139,10 +138,8 @@ export function useOrganizationRemoteSessionIssuersSuspense(
  * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuersInfinite(
-  request?: operations.ListOrganizationRemoteSessionIssuersRequest | undefined,
-  security?:
-    | operations.ListOrganizationRemoteSessionIssuersSecurity
-    | undefined,
+  request?: ListOrganizationRemoteSessionIssuersRequest | undefined,
+  security?: ListOrganizationRemoteSessionIssuersSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     OrganizationRemoteSessionIssuersInfiniteQueryData,
     OrganizationRemoteSessionIssuersQueryError
@@ -184,10 +181,8 @@ export function useOrganizationRemoteSessionIssuersInfinite(
  * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuersInfiniteSuspense(
-  request?: operations.ListOrganizationRemoteSessionIssuersRequest | undefined,
-  security?:
-    | operations.ListOrganizationRemoteSessionIssuersSecurity
-    | undefined,
+  request?: ListOrganizationRemoteSessionIssuersRequest | undefined,
+  security?: ListOrganizationRemoteSessionIssuersSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     OrganizationRemoteSessionIssuersInfiniteQueryData,
     OrganizationRemoteSessionIssuersQueryError
@@ -259,7 +254,7 @@ export function invalidateOrganizationRemoteSessionIssuers(
     queryKey: [
       "@gram/client",
       "organizationRemoteSessionIssuers",
-      "listIssuers",
+      "list",
       ...queryKeyBase,
     ],
   });
@@ -271,10 +266,6 @@ export function invalidateAllOrganizationRemoteSessionIssuers(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/client",
-      "organizationRemoteSessionIssuers",
-      "listIssuers",
-    ],
+    queryKey: ["@gram/client", "organizationRemoteSessionIssuers", "list"],
   });
 }

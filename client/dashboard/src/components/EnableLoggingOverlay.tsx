@@ -1,8 +1,8 @@
 import { RequireScope } from "@/components/require-scope";
 import { useState } from "react";
 import { Button, Icon } from "@speakeasy-api/moonshine";
-import { FeatureName } from "@gram/client/models/components";
-import { useFeaturesSetMutation } from "@gram/client/react-query";
+import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
+import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
 
 interface EnableLoggingOverlayProps {
   onEnabled: () => void;

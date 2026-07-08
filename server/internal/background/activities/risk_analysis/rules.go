@@ -23,20 +23,10 @@ import (
 // consumers, but the prefix alone is enough to bucket findings into
 // dashboard categories.
 //
-// Per-source `Describe*` builders that produce (rule_id, description) for a
-// Finding live next to the scanner that owns them: presidio.go, pi_scanner.go,
-// and the extracted scanner packages under internal/scanners (gitleaks,
-// clidestructive, destructivetool, shadowmcpscan, accountidentity). This file
-// is just the shared grammar + constants.
+// Per-source `Describe*` builders live next to the scanner that owns them.
 
 const (
 	prefixPII = "pii."
-
-	// RulePromptInjection is the canonical rule id emitted for every
-	// prompt-injection finding. There is exactly one rule: whether the
-	// match came from the L1 LLM judge or an L0 heuristic regex is an
-	// implementation detail not part of the public contract.
-	RulePromptInjection = "prompt_injection"
 
 	// DeadLetterRuleID is the rule id emitted for Presidio dead-letter
 	// sentinel rows when a message could not be analyzed.

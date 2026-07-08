@@ -18,10 +18,14 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DownloadObservabilityPluginRequest,
+  DownloadObservabilityPluginSecurity,
+  Platform,
+} from "../models/operations/downloadobservabilityplugin.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +46,7 @@ export {
 };
 
 export type PluginsDownloadObservabilityPluginQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +63,8 @@ export type PluginsDownloadObservabilityPluginQueryError =
  * Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
  */
 export function usePluginsDownloadObservabilityPlugin(
-  request: operations.DownloadObservabilityPluginRequest,
-  security?: operations.DownloadObservabilityPluginSecurity | undefined,
+  request: DownloadObservabilityPluginRequest,
+  security?: DownloadObservabilityPluginSecurity | undefined,
   options?: QueryHookOptions<
     PluginsDownloadObservabilityPluginQueryData,
     PluginsDownloadObservabilityPluginQueryError
@@ -88,8 +92,8 @@ export function usePluginsDownloadObservabilityPlugin(
  * Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
  */
 export function usePluginsDownloadObservabilityPluginSuspense(
-  request: operations.DownloadObservabilityPluginRequest,
-  security?: operations.DownloadObservabilityPluginSecurity | undefined,
+  request: DownloadObservabilityPluginRequest,
+  security?: DownloadObservabilityPluginSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     PluginsDownloadObservabilityPluginQueryData,
     PluginsDownloadObservabilityPluginQueryError
@@ -114,7 +118,7 @@ export function setPluginsDownloadObservabilityPluginData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      platform: operations.Platform;
+      platform: Platform;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -133,7 +137,7 @@ export function invalidatePluginsDownloadObservabilityPlugin(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      platform: operations.Platform;
+      platform: Platform;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]

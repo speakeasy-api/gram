@@ -26,9 +26,6 @@ procs:
   server:
     cmd: ["mise", "run", "start:server"]
     stop: SIGTERM
-  gram-local-proxy:
-    cmd: ["mise", "run", "start:local-proxy"]
-    stop: SIGTERM
   admin:
     cmd: ["mise", "run", "start:admin"]
     stop: SIGTERM

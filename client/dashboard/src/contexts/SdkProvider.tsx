@@ -6,7 +6,7 @@ import { Gram } from "@gram/client";
 import { HTTPClient } from "@gram/client/lib/http.js";
 import { buildLatestDeploymentQuery } from "@gram/client/react-query/latestDeployment.core.js";
 import { buildListToolsetsQuery } from "@gram/client/react-query/listToolsets.core.js";
-import { GramProvider } from "@gram/client/react-query/index.js";
+import { GramProvider } from "@gram/client/react-query/_context.js";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { useTelemetry } from "./Telemetry";

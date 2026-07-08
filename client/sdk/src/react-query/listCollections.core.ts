@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { collectionsList } from "../funcs/collectionsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListResponseBody } from "../models/components/listresponsebody.js";
+import {
+  ListCollectionsRequest,
+  ListCollectionsSecurity,
+} from "../models/operations/listcollections.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListCollectionsQueryData = components.ListResponseBody;
+export type ListCollectionsQueryData = ListResponseBody;
 
 export function prefetchListCollections(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListCollectionsRequest | undefined,
-  security?: operations.ListCollectionsSecurity | undefined,
+  request?: ListCollectionsRequest | undefined,
+  security?: ListCollectionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListCollections(
 
 export function buildListCollectionsQuery(
   client$: GramCore,
-  request?: operations.ListCollectionsRequest | undefined,
-  security?: operations.ListCollectionsSecurity | undefined,
+  request?: ListCollectionsRequest | undefined,
+  security?: ListCollectionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

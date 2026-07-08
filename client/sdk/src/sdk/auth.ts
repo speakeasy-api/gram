@@ -9,7 +9,33 @@ import { authLogout } from "../funcs/authLogout.js";
 import { authRegister } from "../funcs/authRegister.js";
 import { authSwitchScopes } from "../funcs/authSwitchScopes.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  AuthCallbackRequest,
+  AuthCallbackResponse,
+} from "../models/operations/authcallback.js";
+import {
+  AuthLoginRequest,
+  AuthLoginResponse,
+} from "../models/operations/authlogin.js";
+import {
+  LogoutRequest,
+  LogoutResponse,
+  LogoutSecurity,
+} from "../models/operations/logout.js";
+import {
+  RegisterRequest,
+  RegisterSecurity,
+} from "../models/operations/register.js";
+import {
+  SessionInfoRequest,
+  SessionInfoResponse,
+  SessionInfoSecurity,
+} from "../models/operations/sessioninfo.js";
+import {
+  SwitchAuthScopesRequest,
+  SwitchAuthScopesResponse,
+  SwitchAuthScopesSecurity,
+} from "../models/operations/switchauthscopes.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Auth extends ClientSDK {
@@ -20,9 +46,9 @@ export class Auth extends ClientSDK {
    * Handles the authentication callback.
    */
   async callback(
-    request: operations.AuthCallbackRequest,
+    request: AuthCallbackRequest,
     options?: RequestOptions,
-  ): Promise<operations.AuthCallbackResponse | undefined> {
+  ): Promise<AuthCallbackResponse | undefined> {
     return unwrapAsync(authCallback(
       this,
       request,
@@ -37,10 +63,10 @@ export class Auth extends ClientSDK {
    * Provides information about the current authentication status.
    */
   async info(
-    request?: operations.SessionInfoRequest | undefined,
-    security?: operations.SessionInfoSecurity | undefined,
+    request?: SessionInfoRequest | undefined,
+    security?: SessionInfoSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<operations.SessionInfoResponse> {
+  ): Promise<SessionInfoResponse> {
     return unwrapAsync(authInfo(
       this,
       request,
@@ -56,9 +82,9 @@ export class Auth extends ClientSDK {
    * Proxies to auth login through speakeasy oidc.
    */
   async login(
-    request?: operations.AuthLoginRequest | undefined,
+    request?: AuthLoginRequest | undefined,
     options?: RequestOptions,
-  ): Promise<operations.AuthLoginResponse | undefined> {
+  ): Promise<AuthLoginResponse | undefined> {
     return unwrapAsync(authLogin(
       this,
       request,
@@ -73,10 +99,10 @@ export class Auth extends ClientSDK {
    * Logs out the current user by clearing their session.
    */
   async logout(
-    request?: operations.LogoutRequest | undefined,
-    security?: operations.LogoutSecurity | undefined,
+    request?: LogoutRequest | undefined,
+    security?: LogoutSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<operations.LogoutResponse | undefined> {
+  ): Promise<LogoutResponse | undefined> {
     return unwrapAsync(authLogout(
       this,
       request,
@@ -92,8 +118,8 @@ export class Auth extends ClientSDK {
    * Register a new org for a user with their session information.
    */
   async register(
-    request: operations.RegisterRequest,
-    security?: operations.RegisterSecurity | undefined,
+    request: RegisterRequest,
+    security?: RegisterSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(authRegister(
@@ -111,10 +137,10 @@ export class Auth extends ClientSDK {
    * Switches the authentication scope to a different organization.
    */
   async switchScopes(
-    request?: operations.SwitchAuthScopesRequest | undefined,
-    security?: operations.SwitchAuthScopesSecurity | undefined,
+    request?: SwitchAuthScopesRequest | undefined,
+    security?: SwitchAuthScopesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<operations.SwitchAuthScopesResponse | undefined> {
+  ): Promise<SwitchAuthScopesResponse | undefined> {
     return unwrapAsync(authSwitchScopes(
       this,
       request,

@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { domainsGetDomain } from "../funcs/domainsGetDomain.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { CustomDomain } from "../models/components/customdomain.js";
+import {
+  GetDomainRequest,
+  GetDomainSecurity,
+} from "../models/operations/getdomain.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetDomainQueryData = components.CustomDomain;
+export type GetDomainQueryData = CustomDomain;
 
 export function prefetchGetDomain(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetDomainRequest | undefined,
-  security?: operations.GetDomainSecurity | undefined,
+  request?: GetDomainRequest | undefined,
+  security?: GetDomainSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGetDomain(
 
 export function buildGetDomainQuery(
   client$: GramCore,
-  request?: operations.GetDomainRequest | undefined,
-  security?: operations.GetDomainSecurity | undefined,
+  request?: GetDomainRequest | undefined,
+  security?: GetDomainSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

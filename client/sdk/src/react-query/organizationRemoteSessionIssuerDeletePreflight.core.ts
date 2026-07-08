@@ -8,21 +8,24 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersGetIssuerDeletePreflight } from "../funcs/organizationRemoteSessionIssuersGetIssuerDeletePreflight.js";
+import { organizationRemoteSessionIssuersGetDeletePreflight } from "../funcs/organizationRemoteSessionIssuersGetDeletePreflight.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { OrganizationIssuerDeletePreflight } from "../models/components/organizationissuerdeletepreflight.js";
+import {
+  GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
+  GetOrganizationRemoteSessionIssuerDeletePreflightSecurity,
+} from "../models/operations/getorganizationremotesessionissuerdeletepreflight.js";
 import { unwrapAsync } from "../types/fp.js";
 export type OrganizationRemoteSessionIssuerDeletePreflightQueryData =
-  components.OrganizationIssuerDeletePreflight;
+  OrganizationIssuerDeletePreflight;
 
 export function prefetchOrganizationRemoteSessionIssuerDeletePreflight(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
+  request: GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
   security?:
-    | operations.GetOrganizationRemoteSessionIssuerDeletePreflightSecurity
+    | GetOrganizationRemoteSessionIssuerDeletePreflightSecurity
     | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -38,9 +41,9 @@ export function prefetchOrganizationRemoteSessionIssuerDeletePreflight(
 
 export function buildOrganizationRemoteSessionIssuerDeletePreflightQuery(
   client$: GramCore,
-  request: operations.GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
+  request: GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
   security?:
-    | operations.GetOrganizationRemoteSessionIssuerDeletePreflightSecurity
+    | GetOrganizationRemoteSessionIssuerDeletePreflightSecurity
     | undefined,
   options?: RequestOptions,
 ): {
@@ -70,14 +73,12 @@ export function buildOrganizationRemoteSessionIssuerDeletePreflightQuery(
           signal: sig,
         };
 
-        return unwrapAsync(
-          organizationRemoteSessionIssuersGetIssuerDeletePreflight(
-            client$,
-            request,
-            security,
-            mergedOptions,
-          ),
-        );
+        return unwrapAsync(organizationRemoteSessionIssuersGetDeletePreflight(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ));
       },
   };
 }
@@ -92,7 +93,7 @@ export function queryKeyOrganizationRemoteSessionIssuerDeletePreflight(
   return [
     "@gram/client",
     "organizationRemoteSessionIssuers",
-    "getIssuerDeletePreflight",
+    "getDeletePreflight",
     parameters,
   ];
 }

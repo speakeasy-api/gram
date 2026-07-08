@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { packagesList } from "../funcs/packagesList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListPackagesResult } from "../models/components/listpackagesresult.js";
+import {
+  ListPackagesRequest,
+  ListPackagesSecurity,
+} from "../models/operations/listpackages.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListPackagesQueryData = components.ListPackagesResult;
+export type ListPackagesQueryData = ListPackagesResult;
 
 export function prefetchListPackages(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListPackagesRequest | undefined,
-  security?: operations.ListPackagesSecurity | undefined,
+  request?: ListPackagesRequest | undefined,
+  security?: ListPackagesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListPackages(
 
 export function buildListPackagesQuery(
   client$: GramCore,
-  request?: operations.ListPackagesRequest | undefined,
-  security?: operations.ListPackagesSecurity | undefined,
+  request?: ListPackagesRequest | undefined,
+  security?: ListPackagesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

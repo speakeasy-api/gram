@@ -147,6 +147,9 @@ type Chat struct {
 	// Account type that produced the chat ('team', 'personal', or empty), resolved
 	// from the linked AI account.
 	AccountType *string
+	// Email of the AI account that produced the chat, resolved from the linked AI
+	// account. May differ from the employee's work email (e.g. a personal account).
+	AccountEmail *string
 }
 
 type ChatMessage struct {
@@ -221,6 +224,9 @@ type ChatOverview struct {
 	// Account type that produced the chat ('team', 'personal', or empty), resolved
 	// from the linked AI account.
 	AccountType *string
+	// Email of the AI account that produced the chat, resolved from the linked AI
+	// account. May differ from the employee's work email (e.g. a personal account).
+	AccountEmail *string
 }
 
 // Trace-entry counts across the entire returned generation, independent of

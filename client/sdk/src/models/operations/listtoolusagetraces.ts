@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  ListToolUsageTracesPayload,
+  ListToolUsageTracesPayload$Outbound,
+  ListToolUsageTracesPayload$outboundSchema,
+} from "../components/listtoolusagetracespayload.js";
 
 export type ListToolUsageTracesSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type ListToolUsageTracesRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  listToolUsageTracesPayload: components.ListToolUsageTracesPayload;
+  listToolUsageTracesPayload: ListToolUsageTracesPayload;
 };
 
 /** @internal */
@@ -145,7 +149,7 @@ export type ListToolUsageTracesRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  ListToolUsageTracesPayload: components.ListToolUsageTracesPayload$Outbound;
+  ListToolUsageTracesPayload: ListToolUsageTracesPayload$Outbound;
 };
 
 /** @internal */
@@ -157,8 +161,7 @@ export const ListToolUsageTracesRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    listToolUsageTracesPayload:
-      components.ListToolUsageTracesPayload$outboundSchema,
+    listToolUsageTracesPayload: ListToolUsageTracesPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

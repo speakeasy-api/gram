@@ -48,6 +48,7 @@ import (
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -215,7 +216,7 @@ func evaluate(client openrouter.CompletionClient, model, orgID, projectID string
 		OrgID:     orgID,
 		ProjectID: projectID,
 		Prompt:    tc.Policy,
-		Message:   ra.NewJudgeMessage(tc.MessageType, tc.ToolName, tc.Text),
+		Message:   judgemessage.New(tc.MessageType, tc.ToolName, tc.Text),
 		Config:    ra.JudgeConfig{Model: "", Temperature: nil, FailOpen: true},
 	})
 

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetPublishStatusRequest,
+  GetPublishStatusSecurity,
+} from "../models/operations/getpublishstatus.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type PublishStatusQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type PublishStatusQueryError =
  * Check whether GitHub publishing is configured and connected for this project.
  */
 export function usePublishStatus(
-  request?: operations.GetPublishStatusRequest | undefined,
-  security?: operations.GetPublishStatusSecurity | undefined,
+  request?: GetPublishStatusRequest | undefined,
+  security?: GetPublishStatusSecurity | undefined,
   options?: QueryHookOptions<PublishStatusQueryData, PublishStatusQueryError>,
 ): UseQueryResult<PublishStatusQueryData, PublishStatusQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function usePublishStatus(
  * Check whether GitHub publishing is configured and connected for this project.
  */
 export function usePublishStatusSuspense(
-  request?: operations.GetPublishStatusRequest | undefined,
-  security?: operations.GetPublishStatusSecurity | undefined,
+  request?: GetPublishStatusRequest | undefined,
+  security?: GetPublishStatusSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     PublishStatusQueryData,
     PublishStatusQueryError

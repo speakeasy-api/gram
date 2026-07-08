@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  DeleteRequestBody,
+  DeleteRequestBody$Outbound,
+  DeleteRequestBody$outboundSchema,
+} from "../components/deleterequestbody.js";
 
 export type DeleteServerNameOverrideSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type DeleteServerNameOverrideRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  deleteRequestBody: components.DeleteRequestBody;
+  deleteRequestBody: DeleteRequestBody;
 };
 
 /** @internal */
@@ -149,7 +153,7 @@ export type DeleteServerNameOverrideRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  DeleteRequestBody: components.DeleteRequestBody$Outbound;
+  DeleteRequestBody: DeleteRequestBody$Outbound;
 };
 
 /** @internal */
@@ -161,7 +165,7 @@ export const DeleteServerNameOverrideRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    deleteRequestBody: components.DeleteRequestBody$outboundSchema,
+    deleteRequestBody: DeleteRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

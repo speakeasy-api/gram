@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { telemetryGetEmployeeDataFlowGraph } from "../funcs/telemetryGetEmployeeDataFlowGraph.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetEmployeeDataFlowGraphResult } from "../models/components/getemployeedataflowgraphresult.js";
+import {
+  GetEmployeeDataFlowGraphRequest,
+  GetEmployeeDataFlowGraphSecurity,
+} from "../models/operations/getemployeedataflowgraph.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetEmployeeDataFlowGraphQueryData =
-  components.GetEmployeeDataFlowGraphResult;
+export type GetEmployeeDataFlowGraphQueryData = GetEmployeeDataFlowGraphResult;
 
 export function prefetchGetEmployeeDataFlowGraph(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetEmployeeDataFlowGraphRequest,
-  security?: operations.GetEmployeeDataFlowGraphSecurity | undefined,
+  request: GetEmployeeDataFlowGraphRequest,
+  security?: GetEmployeeDataFlowGraphSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchGetEmployeeDataFlowGraph(
 
 export function buildGetEmployeeDataFlowGraphQuery(
   client$: GramCore,
-  request: operations.GetEmployeeDataFlowGraphRequest,
-  security?: operations.GetEmployeeDataFlowGraphSecurity | undefined,
+  request: GetEmployeeDataFlowGraphRequest,
+  security?: GetEmployeeDataFlowGraphSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

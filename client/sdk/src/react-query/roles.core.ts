@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { accessListRoles } from "../funcs/accessListRoles.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListRolesResult } from "../models/components/listrolesresult.js";
+import {
+  ListRolesRequest,
+  ListRolesSecurity,
+} from "../models/operations/listroles.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RolesQueryData = components.ListRolesResult;
+export type RolesQueryData = ListRolesResult;
 
 export function prefetchRoles(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListRolesRequest | undefined,
-  security?: operations.ListRolesSecurity | undefined,
+  request?: ListRolesRequest | undefined,
+  security?: ListRolesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchRoles(
 
 export function buildRolesQuery(
   client$: GramCore,
-  request?: operations.ListRolesRequest | undefined,
-  security?: operations.ListRolesSecurity | undefined,
+  request?: ListRolesRequest | undefined,
+  security?: ListRolesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

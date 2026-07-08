@@ -3,14 +3,12 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useEnvironments } from "@/pages/environments/useEnvironments";
 import { BUILTIN_RULES_BY_CATEGORY } from "@/pages/security/detection-rules-data";
 import { useRoutes } from "@/routes";
-import {
-  useAssistantsListSuspense,
-  useLatestDeploymentSuspense,
-  useListDeploymentsSuspense,
-  useListToolsetsSuspense,
-  useRiskListCustomDetectionRulesSuspense,
-  useRiskListPoliciesSuspense,
-} from "@gram/client/react-query/index.js";
+import { useAssistantsListSuspense } from "@gram/client/react-query/assistantsList.js";
+import { useLatestDeploymentSuspense } from "@gram/client/react-query/latestDeployment.js";
+import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
+import { useListToolsetsSuspense } from "@gram/client/react-query/listToolsets.js";
+import { useRiskListCustomDetectionRulesSuspense } from "@gram/client/react-query/riskListCustomDetectionRules.js";
+import { useRiskListPoliciesSuspense } from "@gram/client/react-query/riskListPolicies.js";
 import { usePluginsSuspense } from "@gram/client/react-query/plugins";
 import { useShadowMCPApprovalRequestsSuspense } from "@gram/client/react-query/shadowMCPApprovalRequests.js";
 import { Icon, type IconName } from "@speakeasy-api/moonshine";

@@ -7,8 +7,25 @@ import { keysList } from "../funcs/keysList.js";
 import { keysRevokeById } from "../funcs/keysRevokeById.js";
 import { keysValidate } from "../funcs/keysValidate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { Key } from "../models/components/key.js";
+import { ListKeysResult } from "../models/components/listkeysresult.js";
+import { ValidateKeyResult } from "../models/components/validatekeyresult.js";
+import {
+  CreateAPIKeyRequest,
+  CreateAPIKeySecurity,
+} from "../models/operations/createapikey.js";
+import {
+  ListAPIKeysRequest,
+  ListAPIKeysSecurity,
+} from "../models/operations/listapikeys.js";
+import {
+  RevokeAPIKeyRequest,
+  RevokeAPIKeySecurity,
+} from "../models/operations/revokeapikey.js";
+import {
+  ValidateAPIKeyRequest,
+  ValidateAPIKeySecurity,
+} from "../models/operations/validateapikey.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Keys extends ClientSDK {
@@ -19,10 +36,10 @@ export class Keys extends ClientSDK {
    * Create a new api key
    */
   async create(
-    request: operations.CreateAPIKeyRequest,
-    security?: operations.CreateAPIKeySecurity | undefined,
+    request: CreateAPIKeyRequest,
+    security?: CreateAPIKeySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Key> {
+  ): Promise<Key> {
     return unwrapAsync(keysCreate(
       this,
       request,
@@ -38,10 +55,10 @@ export class Keys extends ClientSDK {
    * List all api keys for an organization
    */
   async list(
-    request?: operations.ListAPIKeysRequest | undefined,
-    security?: operations.ListAPIKeysSecurity | undefined,
+    request?: ListAPIKeysRequest | undefined,
+    security?: ListAPIKeysSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListKeysResult> {
+  ): Promise<ListKeysResult> {
     return unwrapAsync(keysList(
       this,
       request,
@@ -57,8 +74,8 @@ export class Keys extends ClientSDK {
    * Revoke a api key
    */
   async revokeById(
-    request: operations.RevokeAPIKeyRequest,
-    security?: operations.RevokeAPIKeySecurity | undefined,
+    request: RevokeAPIKeyRequest,
+    security?: RevokeAPIKeySecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(keysRevokeById(
@@ -76,10 +93,10 @@ export class Keys extends ClientSDK {
    * Verify an api key
    */
   async validate(
-    request?: operations.ValidateAPIKeyRequest | undefined,
-    security?: operations.ValidateAPIKeySecurity | undefined,
+    request?: ValidateAPIKeyRequest | undefined,
+    security?: ValidateAPIKeySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ValidateKeyResult> {
+  ): Promise<ValidateKeyResult> {
     return unwrapAsync(keysValidate(
       this,
       request,

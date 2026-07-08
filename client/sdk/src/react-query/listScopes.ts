@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListScopesRequest,
+  ListScopesSecurity,
+} from "../models/operations/listscopes.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListScopesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListScopesQueryError =
  * List all available scopes and their resource types.
  */
 export function useListScopes(
-  request?: operations.ListScopesRequest | undefined,
-  security?: operations.ListScopesSecurity | undefined,
+  request?: ListScopesRequest | undefined,
+  security?: ListScopesSecurity | undefined,
   options?: QueryHookOptions<ListScopesQueryData, ListScopesQueryError>,
 ): UseQueryResult<ListScopesQueryData, ListScopesQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useListScopes(
  * List all available scopes and their resource types.
  */
 export function useListScopesSuspense(
-  request?: operations.ListScopesRequest | undefined,
-  security?: operations.ListScopesSecurity | undefined,
+  request?: ListScopesRequest | undefined,
+  security?: ListScopesSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListScopesQueryData, ListScopesQueryError>,
 ): UseSuspenseQueryResult<ListScopesQueryData, ListScopesQueryError> {
   const client = useGramContext();

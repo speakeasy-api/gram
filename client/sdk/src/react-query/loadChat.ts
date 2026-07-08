@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  LoadChatRequest,
+  LoadChatSecurity,
+} from "../models/operations/loadchat.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type LoadChatQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type LoadChatQueryError =
  * Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).
  */
 export function useLoadChat(
-  request: operations.LoadChatRequest,
-  security?: operations.LoadChatSecurity | undefined,
+  request: LoadChatRequest,
+  security?: LoadChatSecurity | undefined,
   options?: QueryHookOptions<LoadChatQueryData, LoadChatQueryError>,
 ): UseQueryResult<LoadChatQueryData, LoadChatQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useLoadChat(
  * Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).
  */
 export function useLoadChatSuspense(
-  request: operations.LoadChatRequest,
-  security?: operations.LoadChatSecurity | undefined,
+  request: LoadChatRequest,
+  security?: LoadChatSecurity | undefined,
   options?: SuspenseQueryHookOptions<LoadChatQueryData, LoadChatQueryError>,
 ): UseSuspenseQueryResult<LoadChatQueryData, LoadChatQueryError> {
   const client = useGramContext();

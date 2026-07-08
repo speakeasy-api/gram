@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { telemetryListAttributeKeys } from "../funcs/telemetryListAttributeKeys.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListAttributeKeysResult } from "../models/components/listattributekeysresult.js";
+import {
+  ListAttributeKeysRequest,
+  ListAttributeKeysSecurity,
+} from "../models/operations/listattributekeys.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListAttributeKeysQueryData = components.ListAttributeKeysResult;
+export type ListAttributeKeysQueryData = ListAttributeKeysResult;
 
 export function prefetchListAttributeKeys(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListAttributeKeysRequest,
-  security?: operations.ListAttributeKeysSecurity | undefined,
+  request: ListAttributeKeysRequest,
+  security?: ListAttributeKeysSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListAttributeKeys(
 
 export function buildListAttributeKeysQuery(
   client$: GramCore,
-  request: operations.ListAttributeKeysRequest,
-  security?: operations.ListAttributeKeysSecurity | undefined,
+  request: ListAttributeKeysRequest,
+  security?: ListAttributeKeysSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

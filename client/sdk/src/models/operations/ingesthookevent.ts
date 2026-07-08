@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  IngestRequestBody,
+  IngestRequestBody$Outbound,
+  IngestRequestBody$outboundSchema,
+} from "../components/ingestrequestbody.js";
 
 export type IngestHookEventSecurity = {
   apikeyHeaderGramKey?: string | undefined;
@@ -24,7 +28,7 @@ export type IngestHookEventRequest = {
    * Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
    */
   idempotencyKey?: string | undefined;
-  ingestRequestBody: components.IngestRequestBody;
+  ingestRequestBody: IngestRequestBody;
 };
 
 /** @internal */
@@ -63,7 +67,7 @@ export type IngestHookEventRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Idempotency-Key"?: string | undefined;
-  IngestRequestBody: components.IngestRequestBody$Outbound;
+  IngestRequestBody: IngestRequestBody$Outbound;
 };
 
 /** @internal */
@@ -75,7 +79,7 @@ export const IngestHookEventRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     idempotencyKey: z.optional(z.string()),
-    ingestRequestBody: components.IngestRequestBody$outboundSchema,
+    ingestRequestBody: IngestRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

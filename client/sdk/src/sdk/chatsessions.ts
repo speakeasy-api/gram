@@ -5,8 +5,15 @@
 import { chatSessionsCreate } from "../funcs/chatSessionsCreate.js";
 import { chatSessionsRevoke } from "../funcs/chatSessionsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { CreateResponseBody } from "../models/components/createresponsebody.js";
+import {
+  CreateChatSessionRequest,
+  CreateChatSessionSecurity,
+} from "../models/operations/createchatsession.js";
+import {
+  RevokeChatSessionRequest,
+  RevokeChatSessionSecurity,
+} from "../models/operations/revokechatsession.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class ChatSessions extends ClientSDK {
@@ -17,10 +24,10 @@ export class ChatSessions extends ClientSDK {
    * Creates a new chat session token
    */
   async create(
-    request: operations.CreateChatSessionRequest,
-    security?: operations.CreateChatSessionSecurity | undefined,
+    request: CreateChatSessionRequest,
+    security?: CreateChatSessionSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.CreateResponseBody> {
+  ): Promise<CreateResponseBody> {
     return unwrapAsync(chatSessionsCreate(
       this,
       request,
@@ -36,8 +43,8 @@ export class ChatSessions extends ClientSDK {
    * Revokes an existing chat session token
    */
   async revoke(
-    request: operations.RevokeChatSessionRequest,
-    security?: operations.RevokeChatSessionSecurity | undefined,
+    request: RevokeChatSessionRequest,
+    security?: RevokeChatSessionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(chatSessionsRevoke(

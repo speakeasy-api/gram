@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CheckMCPSlugAvailabilityRequest,
+  CheckMCPSlugAvailabilitySecurity,
+} from "../models/operations/checkmcpslugavailability.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type CheckMCPSlugAvailabilityQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type CheckMCPSlugAvailabilityQueryError =
  * Check if a MCP slug is available
  */
 export function useCheckMCPSlugAvailability(
-  request: operations.CheckMCPSlugAvailabilityRequest,
-  security?: operations.CheckMCPSlugAvailabilitySecurity | undefined,
+  request: CheckMCPSlugAvailabilityRequest,
+  security?: CheckMCPSlugAvailabilitySecurity | undefined,
   options?: QueryHookOptions<
     CheckMCPSlugAvailabilityQueryData,
     CheckMCPSlugAvailabilityQueryError
@@ -88,8 +91,8 @@ export function useCheckMCPSlugAvailability(
  * Check if a MCP slug is available
  */
 export function useCheckMCPSlugAvailabilitySuspense(
-  request: operations.CheckMCPSlugAvailabilityRequest,
-  security?: operations.CheckMCPSlugAvailabilitySecurity | undefined,
+  request: CheckMCPSlugAvailabilityRequest,
+  security?: CheckMCPSlugAvailabilitySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     CheckMCPSlugAvailabilityQueryData,
     CheckMCPSlugAvailabilityQueryError

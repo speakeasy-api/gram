@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  SetProductFeatureRequest,
+  SetProductFeatureSecurity,
+} from "../models/operations/setproductfeature.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type FeaturesSetMutationVariables = {
-  request: operations.SetProductFeatureRequest;
-  security?: operations.SetProductFeatureSecurity | undefined;
+  request: SetProductFeatureRequest;
+  security?: SetProductFeatureSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type FeaturesSetMutationData = void;
 
 export type FeaturesSetMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

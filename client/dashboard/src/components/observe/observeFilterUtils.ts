@@ -1,9 +1,9 @@
 import type { DateRangePreset } from "@gram-ai/elements";
+import { type AccessMember } from "@gram/client/models/components/accessmember.js";
 import {
   Operator,
   type LogFilter,
-  type AccessMember,
-} from "@gram/client/models/components";
+} from "@gram/client/models/components/logfilter.js";
 import type { FilterChip } from "@/components/observe/ObserveFilterBar";
 import { normalizeUserEmailFilter } from "./observeUserFilters";
 

@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { keysCreate } from "../funcs/keysCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { Key } from "../models/components/key.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CreateAPIKeyRequest,
+  CreateAPIKeySecurity,
+} from "../models/operations/createapikey.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateAPIKeyMutationVariables = {
-  request: operations.CreateAPIKeyRequest;
-  security?: operations.CreateAPIKeySecurity | undefined;
+  request: CreateAPIKeyRequest;
+  security?: CreateAPIKeySecurity | undefined;
   options?: RequestOptions;
 };
 
-export type CreateAPIKeyMutationData = components.Key;
+export type CreateAPIKeyMutationData = Key;
 
 export type CreateAPIKeyMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

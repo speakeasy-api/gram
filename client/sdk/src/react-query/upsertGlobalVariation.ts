@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { variationsUpsertGlobal } from "../funcs/variationsUpsertGlobal.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { UpsertGlobalToolVariationResult } from "../models/components/upsertglobaltoolvariationresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,25 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  UpsertGlobalVariationRequest,
+  UpsertGlobalVariationSecurity,
+} from "../models/operations/upsertglobalvariation.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UpsertGlobalVariationMutationVariables = {
-  request: operations.UpsertGlobalVariationRequest;
-  security?: operations.UpsertGlobalVariationSecurity | undefined;
+  request: UpsertGlobalVariationRequest;
+  security?: UpsertGlobalVariationSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpsertGlobalVariationMutationData =
-  components.UpsertGlobalToolVariationResult;
+export type UpsertGlobalVariationMutationData = UpsertGlobalToolVariationResult;
 
 export type UpsertGlobalVariationMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

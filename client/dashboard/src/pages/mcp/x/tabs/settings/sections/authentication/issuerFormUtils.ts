@@ -1,4 +1,4 @@
-import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
+import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 
 // Snapshot of the issuer + RFC 8414 metadata for a given Issuer URL. Created
 // fresh on every successful discovery and seeded from saved records in the

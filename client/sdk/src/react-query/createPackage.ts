@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { packagesCreate } from "../funcs/packagesCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { CreatePackageResult } from "../models/components/createpackageresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CreatePackageRequest,
+  CreatePackageSecurity,
+} from "../models/operations/createpackage.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreatePackageMutationVariables = {
-  request: operations.CreatePackageRequest;
-  security?: operations.CreatePackageSecurity | undefined;
+  request: CreatePackageRequest;
+  security?: CreatePackageSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type CreatePackageMutationData = components.CreatePackageResult;
+export type CreatePackageMutationData = CreatePackageResult;
 
 export type CreatePackageMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

@@ -6,14 +6,10 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Type } from "@/components/ui/type";
-import type {
-  McpServer,
-  RemoteSessionIssuer,
-} from "@gram/client/models/components";
-import {
-  useRemoteSessionIssuers,
-  useUserSessionIssuer,
-} from "@gram/client/react-query/index.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { useMemo, useState, type ReactNode } from "react";
 import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
 import { SettingsSection } from "../../SettingsSection";

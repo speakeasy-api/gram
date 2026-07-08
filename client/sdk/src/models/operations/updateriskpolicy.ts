@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpdateRiskPolicyRequestBody,
+  UpdateRiskPolicyRequestBody$Outbound,
+  UpdateRiskPolicyRequestBody$outboundSchema,
+} from "../components/updateriskpolicyrequestbody.js";
 
 export type UpdateRiskPolicySecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type UpdateRiskPolicyRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  updateRiskPolicyRequestBody: components.UpdateRiskPolicyRequestBody;
+  updateRiskPolicyRequestBody: UpdateRiskPolicyRequestBody;
 };
 
 /** @internal */
@@ -143,7 +147,7 @@ export type UpdateRiskPolicyRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  UpdateRiskPolicyRequestBody: components.UpdateRiskPolicyRequestBody$Outbound;
+  UpdateRiskPolicyRequestBody: UpdateRiskPolicyRequestBody$Outbound;
 };
 
 /** @internal */
@@ -155,8 +159,7 @@ export const UpdateRiskPolicyRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    updateRiskPolicyRequestBody:
-      components.UpdateRiskPolicyRequestBody$outboundSchema,
+    updateRiskPolicyRequestBody: UpdateRiskPolicyRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

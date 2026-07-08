@@ -17,20 +17,20 @@ import { formatDistanceToNow } from "date-fns";
 import { z } from "zod";
 import {
   invalidateAllListInvites,
+  useListInvitesSuspense,
+} from "@gram/client/react-query/listInvites.js";
+import {
   invalidateAllListOrganizationUsers,
   useListOrganizationUsersSuspense,
-  useListInvitesSuspense,
-  useSendInviteMutation,
-  useRevokeInviteMutation,
-  useUpdateInviteRoleMutation,
-  useRemoveOrganizationUserMutation,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/listOrganizationUsers.js";
+import { useRemoveOrganizationUserMutation } from "@gram/client/react-query/removeOrganizationUser.js";
+import { useRevokeInviteMutation } from "@gram/client/react-query/revokeInvite.js";
+import { useSendInviteMutation } from "@gram/client/react-query/sendInvite.js";
+import { useUpdateInviteRoleMutation } from "@gram/client/react-query/updateInviteRole.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import {
-  OrganizationUser,
-  OrganizationInvitation,
-} from "@gram/client/models/components";
+import { OrganizationInvitation } from "@gram/client/models/components/organizationinvitation.js";
+import { OrganizationUser } from "@gram/client/models/components/organizationuser.js";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   Alert,

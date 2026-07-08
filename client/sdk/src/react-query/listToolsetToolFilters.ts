@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListToolsetToolFiltersRequest,
+  ListToolsetToolFiltersSecurity,
+} from "../models/operations/listtoolsettoolfilters.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListToolsetToolFiltersQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListToolsetToolFiltersQueryError =
  * List the tool filter scopes (tags) available on a toolset-backed MCP server and the tools under each, including tools excluded from all filters. Read-only; reflects the explicit tool variations group configured on the toolset, deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
  */
 export function useListToolsetToolFilters(
-  request: operations.ListToolsetToolFiltersRequest,
-  security?: operations.ListToolsetToolFiltersSecurity | undefined,
+  request: ListToolsetToolFiltersRequest,
+  security?: ListToolsetToolFiltersSecurity | undefined,
   options?: QueryHookOptions<
     ListToolsetToolFiltersQueryData,
     ListToolsetToolFiltersQueryError
@@ -88,8 +91,8 @@ export function useListToolsetToolFilters(
  * List the tool filter scopes (tags) available on a toolset-backed MCP server and the tools under each, including tools excluded from all filters. Read-only; reflects the explicit tool variations group configured on the toolset, deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
  */
 export function useListToolsetToolFiltersSuspense(
-  request: operations.ListToolsetToolFiltersRequest,
-  security?: operations.ListToolsetToolFiltersSecurity | undefined,
+  request: ListToolsetToolFiltersRequest,
+  security?: ListToolsetToolFiltersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListToolsetToolFiltersQueryData,
     ListToolsetToolFiltersQueryError

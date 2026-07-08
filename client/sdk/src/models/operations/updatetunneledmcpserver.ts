@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpdateTunneledMcpServerForm,
+  UpdateTunneledMcpServerForm$Outbound,
+  UpdateTunneledMcpServerForm$outboundSchema,
+} from "../components/updatetunneledmcpserverform.js";
 
 export type UpdateTunneledMcpServerSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type UpdateTunneledMcpServerRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  updateTunneledMcpServerForm: components.UpdateTunneledMcpServerForm;
+  updateTunneledMcpServerForm: UpdateTunneledMcpServerForm;
 };
 
 /** @internal */
@@ -149,7 +153,7 @@ export type UpdateTunneledMcpServerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  UpdateTunneledMcpServerForm: components.UpdateTunneledMcpServerForm$Outbound;
+  UpdateTunneledMcpServerForm: UpdateTunneledMcpServerForm$Outbound;
 };
 
 /** @internal */
@@ -161,8 +165,7 @@ export const UpdateTunneledMcpServerRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    updateTunneledMcpServerForm:
-      components.UpdateTunneledMcpServerForm$outboundSchema,
+    updateTunneledMcpServerForm: UpdateTunneledMcpServerForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { riskExclusionsListBuiltinExclusions } from "../funcs/riskExclusionsListBuiltinExclusions.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListBuiltinExclusionsResult } from "../models/components/listbuiltinexclusionsresult.js";
+import {
+  ListBuiltinExclusionsRequest,
+  ListBuiltinExclusionsSecurity,
+} from "../models/operations/listbuiltinexclusions.js";
 import { unwrapAsync } from "../types/fp.js";
-export type BuiltinExclusionsQueryData = components.ListBuiltinExclusionsResult;
+export type BuiltinExclusionsQueryData = ListBuiltinExclusionsResult;
 
 export function prefetchBuiltinExclusions(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListBuiltinExclusionsRequest | undefined,
-  security?: operations.ListBuiltinExclusionsSecurity | undefined,
+  request?: ListBuiltinExclusionsRequest | undefined,
+  security?: ListBuiltinExclusionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchBuiltinExclusions(
 
 export function buildBuiltinExclusionsQuery(
   client$: GramCore,
-  request?: operations.ListBuiltinExclusionsRequest | undefined,
-  security?: operations.ListBuiltinExclusionsSecurity | undefined,
+  request?: ListBuiltinExclusionsRequest | undefined,
+  security?: ListBuiltinExclusionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

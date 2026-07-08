@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { pluginsGetPublishStatus } from "../funcs/pluginsGetPublishStatus.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { PublishStatusResult } from "../models/components/publishstatusresult.js";
+import {
+  GetPublishStatusRequest,
+  GetPublishStatusSecurity,
+} from "../models/operations/getpublishstatus.js";
 import { unwrapAsync } from "../types/fp.js";
-export type PublishStatusQueryData = components.PublishStatusResult;
+export type PublishStatusQueryData = PublishStatusResult;
 
 export function prefetchPublishStatus(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetPublishStatusRequest | undefined,
-  security?: operations.GetPublishStatusSecurity | undefined,
+  request?: GetPublishStatusRequest | undefined,
+  security?: GetPublishStatusSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchPublishStatus(
 
 export function buildPublishStatusQuery(
   client$: GramCore,
-  request?: operations.GetPublishStatusRequest | undefined,
-  security?: operations.GetPublishStatusSecurity | undefined,
+  request?: GetPublishStatusRequest | undefined,
+  security?: GetPublishStatusSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

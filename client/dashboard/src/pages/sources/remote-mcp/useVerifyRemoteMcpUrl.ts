@@ -1,4 +1,4 @@
-import { useVerifyRemoteMcpURLMutation } from "@gram/client/react-query/index.js";
+import { useVerifyRemoteMcpURLMutation } from "@gram/client/react-query/verifyRemoteMcpURL.js";
 import { useEffect, useRef, useState } from "react";
 
 type VerifyResult = {

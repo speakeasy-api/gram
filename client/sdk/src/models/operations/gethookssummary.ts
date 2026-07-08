@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  GetHooksSummaryPayload,
+  GetHooksSummaryPayload$Outbound,
+  GetHooksSummaryPayload$outboundSchema,
+} from "../components/gethookssummarypayload.js";
 
 export type GetHooksSummarySecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type GetHooksSummaryRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  getHooksSummaryPayload: components.GetHooksSummaryPayload;
+  getHooksSummaryPayload: GetHooksSummaryPayload;
 };
 
 /** @internal */
@@ -143,7 +147,7 @@ export type GetHooksSummaryRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  GetHooksSummaryPayload: components.GetHooksSummaryPayload$Outbound;
+  GetHooksSummaryPayload: GetHooksSummaryPayload$Outbound;
 };
 
 /** @internal */
@@ -155,7 +159,7 @@ export const GetHooksSummaryRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    getHooksSummaryPayload: components.GetHooksSummaryPayload$outboundSchema,
+    getHooksSummaryPayload: GetHooksSummaryPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

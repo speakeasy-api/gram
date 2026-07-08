@@ -6,18 +6,14 @@ import {
 } from "@/lib/externalMcpUserSessions";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
 import { createDefaultMcpEndpoint } from "@/lib/mcpEndpoints";
-import type {
-  McpServer,
-  RemoteMcpServer,
-} from "@gram/client/models/components";
-import {
-  invalidateAllMcpEndpoints,
-  invalidateAllMcpServers,
-  invalidateAllRemoteMcpServers,
-  invalidateAllRemoteSessionClients,
-  invalidateAllRemoteSessionIssuers,
-  invalidateAllUserSessionIssuers,
-} from "@gram/client/react-query/index.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
+import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
+import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import {
   useMutation,
   useQueryClient,

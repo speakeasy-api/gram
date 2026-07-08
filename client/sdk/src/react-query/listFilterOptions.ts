@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListFilterOptionsRequest,
+  ListFilterOptionsSecurity,
+} from "../models/operations/listfilteroptions.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListFilterOptionsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListFilterOptionsQueryError =
  * List available filter options (API keys or users) for the observability overview
  */
 export function useListFilterOptions(
-  request: operations.ListFilterOptionsRequest,
-  security?: operations.ListFilterOptionsSecurity | undefined,
+  request: ListFilterOptionsRequest,
+  security?: ListFilterOptionsSecurity | undefined,
   options?: QueryHookOptions<
     ListFilterOptionsQueryData,
     ListFilterOptionsQueryError
@@ -85,8 +88,8 @@ export function useListFilterOptions(
  * List available filter options (API keys or users) for the observability overview
  */
 export function useListFilterOptionsSuspense(
-  request: operations.ListFilterOptionsRequest,
-  security?: operations.ListFilterOptionsSecurity | undefined,
+  request: ListFilterOptionsRequest,
+  security?: ListFilterOptionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListFilterOptionsQueryData,
     ListFilterOptionsQueryError

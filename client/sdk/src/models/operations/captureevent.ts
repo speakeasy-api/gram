@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CaptureEventPayload,
+  CaptureEventPayload$Outbound,
+  CaptureEventPayload$outboundSchema,
+} from "../components/captureeventpayload.js";
 
 export type CaptureEventSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -43,7 +47,7 @@ export type CaptureEventRequest = {
    * Chat Sessions token header
    */
   gramChatSession?: string | undefined;
-  captureEventPayload: components.CaptureEventPayload;
+  captureEventPayload: CaptureEventPayload;
 };
 
 /** @internal */
@@ -189,7 +193,7 @@ export type CaptureEventRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
-  CaptureEventPayload: components.CaptureEventPayload$Outbound;
+  CaptureEventPayload: CaptureEventPayload$Outbound;
 };
 
 /** @internal */
@@ -202,7 +206,7 @@ export const CaptureEventRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
-    captureEventPayload: components.CaptureEventPayload$outboundSchema,
+    captureEventPayload: CaptureEventPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

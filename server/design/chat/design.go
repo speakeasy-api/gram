@@ -352,6 +352,7 @@ var ChatOverview = Type("ChatOverview", func() {
 	})
 	Attribute("risk_findings_count", Int, "Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.")
 	Attribute("account_type", String, "Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.")
+	Attribute("account_email", String, "Email of the AI account that produced the chat, resolved from the linked AI account. May differ from the employee's work email (e.g. a personal account).")
 
 	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
 })

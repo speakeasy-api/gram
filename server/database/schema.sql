@@ -108,6 +108,40 @@ ON billing_metadata (organization_id);
 
 COMMENT ON COLUMN billing_metadata.tunneled_mcp_server_limit IS 'Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.';
 
+-- Durable per-billing-cycle "tokens under management" (TUM) snapshots for an
+-- organization. ClickHouse telemetry expires (telemetry_logs after 90 days,
+-- chat_token_summaries after 730 days), so rows here are the permanent record
+-- of each cycle's usage for billing, overage math, and admin reporting.
+CREATE TABLE IF NOT EXISTS billing_cycle_usage (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  -- [cycle_start, cycle_end) boundaries computed from
+  -- billing_metadata.billing_cycle_anchor_day at snapshot time.
+  cycle_start timestamptz NOT NULL,
+  cycle_end timestamptz NOT NULL,
+
+  -- Total tokens under management observed for the cycle.
+  tum_tokens BIGINT NOT NULL DEFAULT 0,
+
+  -- Set once the cycle has closed plus an ingest grace period, after which the
+  -- row is treated as immutable. NULL while the cycle is still being refreshed.
+  finalized_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT billing_cycle_usage_pkey PRIMARY KEY (id),
+  CONSTRAINT billing_cycle_usage_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT billing_cycle_usage_cycle_bounds_check CHECK (cycle_end > cycle_start),
+  -- Token counts originate from client-supplied OTEL attributes; a negative
+  -- sum must never become part of the permanent billing record.
+  CONSTRAINT billing_cycle_usage_tum_tokens_check CHECK (tum_tokens >= 0)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS billing_cycle_usage_organization_id_cycle_start_key
+ON billing_cycle_usage (organization_id, cycle_start);
+
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_slug_key
 ON organization_metadata (slug);
 

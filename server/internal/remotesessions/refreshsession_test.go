@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	orggen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
+	orgsessionsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -98,7 +98,7 @@ func TestRefreshSession(t *testing.T) {
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionRefresh)
 	require.NoError(t, err)
 
-	result, err := ti.service.RefreshSession(ctx, &orggen.RefreshSessionPayload{
+	result, err := ti.service.RefreshSession(ctx, &orgsessionsgen.RefreshSessionPayload{
 		ID:           sessionID.String(),
 		SessionToken: nil,
 		ApikeyToken:  nil,
@@ -148,7 +148,7 @@ func TestRefreshSession_NoRefreshToken(t *testing.T) {
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionRefresh)
 	require.NoError(t, err)
 
-	_, err = ti.service.RefreshSession(ctx, &orggen.RefreshSessionPayload{
+	_, err = ti.service.RefreshSession(ctx, &orgsessionsgen.RefreshSessionPayload{
 		ID:           session.ID.String(),
 		SessionToken: nil,
 		ApikeyToken:  nil,
@@ -189,7 +189,7 @@ func TestRefreshSession_UnreadableRefreshToken(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = ti.service.RefreshSession(ctx, &orggen.RefreshSessionPayload{
+	_, err = ti.service.RefreshSession(ctx, &orgsessionsgen.RefreshSessionPayload{
 		ID:           session.ID.String(),
 		SessionToken: nil,
 		ApikeyToken:  nil,
@@ -213,7 +213,7 @@ func TestRefreshSession_UpstreamRejected(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
 	})
 
-	_, err := ti.service.RefreshSession(ctx, &orggen.RefreshSessionPayload{
+	_, err := ti.service.RefreshSession(ctx, &orgsessionsgen.RefreshSessionPayload{
 		ID:           sessionID.String(),
 		SessionToken: nil,
 		ApikeyToken:  nil,
@@ -235,7 +235,7 @@ func TestRefreshSession_RBACForbidden(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	_, err := ti.service.RefreshSession(ctx, &orggen.RefreshSessionPayload{
+	_, err := ti.service.RefreshSession(ctx, &orgsessionsgen.RefreshSessionPayload{
 		ID:           uuid.New().String(),
 		SessionToken: nil,
 		ApikeyToken:  nil,
@@ -249,7 +249,7 @@ func TestRefreshSession_NotFound(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	_, err := ti.service.RefreshSession(ctx, &orggen.RefreshSessionPayload{
+	_, err := ti.service.RefreshSession(ctx, &orgsessionsgen.RefreshSessionPayload{
 		ID:           uuid.New().String(),
 		SessionToken: nil,
 		ApikeyToken:  nil,
@@ -284,7 +284,7 @@ func TestRefreshSession_CrossOrgNotFound(t *testing.T) {
 	})
 
 	// The session belongs to the original org, so this org's admin can't see it.
-	_, err := ti.service.RefreshSession(ctx, &orggen.RefreshSessionPayload{
+	_, err := ti.service.RefreshSession(ctx, &orgsessionsgen.RefreshSessionPayload{
 		ID:           session.ID.String(),
 		SessionToken: nil,
 		ApikeyToken:  nil,

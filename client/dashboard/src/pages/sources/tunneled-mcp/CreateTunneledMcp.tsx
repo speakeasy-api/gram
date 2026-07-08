@@ -9,10 +9,8 @@ import { mcpServerRouteParam, tunneledMcpRouteParam } from "@/lib/sources";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
-import type {
-  McpServer,
-  TunneledMcpServer,
-} from "@gram/client/models/components";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { AlertCircle, Loader2, Network } from "lucide-react";
 import { useState } from "react";
 import { Navigate } from "react-router";

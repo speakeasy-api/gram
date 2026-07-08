@@ -8,8 +8,31 @@ import { packagesListVersions } from "../funcs/packagesListVersions.js";
 import { packagesPublish } from "../funcs/packagesPublish.js";
 import { packagesUpdate } from "../funcs/packagesUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { CreatePackageResult } from "../models/components/createpackageresult.js";
+import { ListPackagesResult } from "../models/components/listpackagesresult.js";
+import { ListVersionsResult } from "../models/components/listversionsresult.js";
+import { PublishPackageResult } from "../models/components/publishpackageresult.js";
+import {
+  CreatePackageRequest,
+  CreatePackageSecurity,
+} from "../models/operations/createpackage.js";
+import {
+  ListPackagesRequest,
+  ListPackagesSecurity,
+} from "../models/operations/listpackages.js";
+import {
+  ListVersionsRequest,
+  ListVersionsSecurity,
+} from "../models/operations/listversions.js";
+import {
+  PublishRequest,
+  PublishSecurity,
+} from "../models/operations/publish.js";
+import {
+  UpdatePackageRequest,
+  UpdatePackageResponse,
+  UpdatePackageSecurity,
+} from "../models/operations/updatepackage.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Packages extends ClientSDK {
@@ -20,10 +43,10 @@ export class Packages extends ClientSDK {
    * Create a new package for a project.
    */
   async create(
-    request: operations.CreatePackageRequest,
-    security?: operations.CreatePackageSecurity | undefined,
+    request: CreatePackageRequest,
+    security?: CreatePackageSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.CreatePackageResult> {
+  ): Promise<CreatePackageResult> {
     return unwrapAsync(packagesCreate(
       this,
       request,
@@ -39,10 +62,10 @@ export class Packages extends ClientSDK {
    * List all packages for a project.
    */
   async list(
-    request?: operations.ListPackagesRequest | undefined,
-    security?: operations.ListPackagesSecurity | undefined,
+    request?: ListPackagesRequest | undefined,
+    security?: ListPackagesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListPackagesResult> {
+  ): Promise<ListPackagesResult> {
     return unwrapAsync(packagesList(
       this,
       request,
@@ -58,10 +81,10 @@ export class Packages extends ClientSDK {
    * List published versions of a package.
    */
   async listVersions(
-    request: operations.ListVersionsRequest,
-    security?: operations.ListVersionsSecurity | undefined,
+    request: ListVersionsRequest,
+    security?: ListVersionsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListVersionsResult> {
+  ): Promise<ListVersionsResult> {
     return unwrapAsync(packagesListVersions(
       this,
       request,
@@ -77,10 +100,10 @@ export class Packages extends ClientSDK {
    * Publish a new version of a package.
    */
   async publish(
-    request: operations.PublishRequest,
-    security?: operations.PublishSecurity | undefined,
+    request: PublishRequest,
+    security?: PublishSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.PublishPackageResult> {
+  ): Promise<PublishPackageResult> {
     return unwrapAsync(packagesPublish(
       this,
       request,
@@ -96,10 +119,10 @@ export class Packages extends ClientSDK {
    * Update package details.
    */
   async update(
-    request: operations.UpdatePackageRequest,
-    security?: operations.UpdatePackageSecurity | undefined,
+    request: UpdatePackageRequest,
+    security?: UpdatePackageSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<operations.UpdatePackageResponse> {
+  ): Promise<UpdatePackageResponse> {
     return unwrapAsync(packagesUpdate(
       this,
       request,

@@ -23,12 +23,10 @@ import { handleAPIError } from "@/lib/errors";
 import { filterHttpTools, useGroupedHttpTools } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { Toolset } from "@gram/client/models/components";
-import {
-  invalidateAllLatestDeployment,
-  invalidateAllListToolsets,
-  invalidateAllToolset,
-} from "@gram/client/react-query";
+import { Toolset } from "@gram/client/models/components/toolset.js";
+import { invalidateAllLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {

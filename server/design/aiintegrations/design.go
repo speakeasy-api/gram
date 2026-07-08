@@ -57,7 +57,6 @@ var _ = Service("aiIntegrations", func() {
 			security.SessionPayload()
 			Attribute("provider", String, "AI provider identifier. Supported values include cursor and anthropic_compliance.")
 			Required("provider")
-			Meta("openapi:typename", "GetAIIntegrationConfigRequest")
 		})
 
 		Result(Config)
@@ -92,7 +91,6 @@ var _ = Service("aiIntegrations", func() {
 			Attribute("billing_mode", String, "How the provider org is billed: 'metered', 'flat_rate', or 'unknown'. Free-form; omit to leave the existing value unchanged.")
 			Attribute("enabled", Boolean, "Whether the integration should be active.")
 			Required("provider", "api_key", "enabled")
-			Meta("openapi:typename", "UpsertAIIntegrationConfigRequest")
 		})
 
 		Result(Config)
@@ -122,7 +120,6 @@ var _ = Service("aiIntegrations", func() {
 			security.SessionPayload()
 			Attribute("provider", String, "AI provider identifier. Supported values include cursor and anthropic_compliance.")
 			Required("provider")
-			Meta("openapi:typename", "DeleteAIIntegrationConfigRequest")
 		})
 
 		Result(Empty)

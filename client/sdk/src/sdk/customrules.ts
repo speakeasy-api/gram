@@ -9,8 +9,33 @@ import { riskCustomRulesList } from "../funcs/riskCustomRulesList.js";
 import { riskCustomRulesSuggest } from "../funcs/riskCustomRulesSuggest.js";
 import { riskCustomRulesUpdate } from "../funcs/riskCustomRulesUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListCustomDetectionRulesResult } from "../models/components/listcustomdetectionrulesresult.js";
+import { RiskCustomDetectionRule } from "../models/components/riskcustomdetectionrule.js";
+import { SuggestCustomDetectionRuleResult } from "../models/components/suggestcustomdetectionruleresult.js";
+import {
+  CreateCustomDetectionRuleRequest,
+  CreateCustomDetectionRuleSecurity,
+} from "../models/operations/createcustomdetectionrule.js";
+import {
+  DeleteCustomDetectionRuleRequest,
+  DeleteCustomDetectionRuleSecurity,
+} from "../models/operations/deletecustomdetectionrule.js";
+import {
+  GetCustomDetectionRuleRequest,
+  GetCustomDetectionRuleSecurity,
+} from "../models/operations/getcustomdetectionrule.js";
+import {
+  ListCustomDetectionRulesRequest,
+  ListCustomDetectionRulesSecurity,
+} from "../models/operations/listcustomdetectionrules.js";
+import {
+  SuggestCustomDetectionRuleRequest,
+  SuggestCustomDetectionRuleSecurity,
+} from "../models/operations/suggestcustomdetectionrule.js";
+import {
+  UpdateCustomDetectionRuleRequest,
+  UpdateCustomDetectionRuleSecurity,
+} from "../models/operations/updatecustomdetectionrule.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class CustomRules extends ClientSDK {
@@ -21,10 +46,10 @@ export class CustomRules extends ClientSDK {
    * Create a custom regex-backed detection rule for the current project.
    */
   async create(
-    request: operations.CreateCustomDetectionRuleRequest,
-    security?: operations.CreateCustomDetectionRuleSecurity | undefined,
+    request: CreateCustomDetectionRuleRequest,
+    security?: CreateCustomDetectionRuleSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskCustomDetectionRule> {
+  ): Promise<RiskCustomDetectionRule> {
     return unwrapAsync(riskCustomRulesCreate(
       this,
       request,
@@ -40,8 +65,8 @@ export class CustomRules extends ClientSDK {
    * Delete a custom detection rule.
    */
   async delete(
-    request: operations.DeleteCustomDetectionRuleRequest,
-    security?: operations.DeleteCustomDetectionRuleSecurity | undefined,
+    request: DeleteCustomDetectionRuleRequest,
+    security?: DeleteCustomDetectionRuleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(riskCustomRulesDelete(
@@ -59,10 +84,10 @@ export class CustomRules extends ClientSDK {
    * Get a custom detection rule by ID.
    */
   async get(
-    request: operations.GetCustomDetectionRuleRequest,
-    security?: operations.GetCustomDetectionRuleSecurity | undefined,
+    request: GetCustomDetectionRuleRequest,
+    security?: GetCustomDetectionRuleSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskCustomDetectionRule> {
+  ): Promise<RiskCustomDetectionRule> {
     return unwrapAsync(riskCustomRulesGet(
       this,
       request,
@@ -78,10 +103,10 @@ export class CustomRules extends ClientSDK {
    * List custom detection rules for the current project.
    */
   async list(
-    request?: operations.ListCustomDetectionRulesRequest | undefined,
-    security?: operations.ListCustomDetectionRulesSecurity | undefined,
+    request?: ListCustomDetectionRulesRequest | undefined,
+    security?: ListCustomDetectionRulesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListCustomDetectionRulesResult> {
+  ): Promise<ListCustomDetectionRulesResult> {
     return unwrapAsync(riskCustomRulesList(
       this,
       request,
@@ -97,10 +122,10 @@ export class CustomRules extends ClientSDK {
    * Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.
    */
   async suggest(
-    request: operations.SuggestCustomDetectionRuleRequest,
-    security?: operations.SuggestCustomDetectionRuleSecurity | undefined,
+    request: SuggestCustomDetectionRuleRequest,
+    security?: SuggestCustomDetectionRuleSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.SuggestCustomDetectionRuleResult> {
+  ): Promise<SuggestCustomDetectionRuleResult> {
     return unwrapAsync(riskCustomRulesSuggest(
       this,
       request,
@@ -116,10 +141,10 @@ export class CustomRules extends ClientSDK {
    * Update a custom detection rule.
    */
   async update(
-    request: operations.UpdateCustomDetectionRuleRequest,
-    security?: operations.UpdateCustomDetectionRuleSecurity | undefined,
+    request: UpdateCustomDetectionRuleRequest,
+    security?: UpdateCustomDetectionRuleSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskCustomDetectionRule> {
+  ): Promise<RiskCustomDetectionRule> {
     return unwrapAsync(riskCustomRulesUpdate(
       this,
       request,

@@ -3,15 +3,13 @@ import { telemetryListSessions } from "@gram/client/funcs/telemetryListSessions"
 import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
 import {
   Dimension,
-  type GroupBy,
   type QueryFilter,
-  type QueryRow,
-} from "@gram/client/models/components";
-import {
-  invalidateAllListChats,
-  useChatDeleteMutation,
-  useGramContext,
-} from "@gram/client/react-query";
+} from "@gram/client/models/components/queryfilter.js";
+import { type GroupBy } from "@gram/client/models/components/querypayload.js";
+import { type QueryRow } from "@gram/client/models/components/queryrow.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useChatDeleteMutation } from "@gram/client/react-query/chatDelete.js";
+import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";

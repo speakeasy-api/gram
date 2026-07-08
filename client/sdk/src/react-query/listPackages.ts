@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListPackagesRequest,
+  ListPackagesSecurity,
+} from "../models/operations/listpackages.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListPackagesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListPackagesQueryError =
  * List all packages for a project.
  */
 export function useListPackages(
-  request?: operations.ListPackagesRequest | undefined,
-  security?: operations.ListPackagesSecurity | undefined,
+  request?: ListPackagesRequest | undefined,
+  security?: ListPackagesSecurity | undefined,
   options?: QueryHookOptions<ListPackagesQueryData, ListPackagesQueryError>,
 ): UseQueryResult<ListPackagesQueryData, ListPackagesQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useListPackages(
  * List all packages for a project.
  */
 export function useListPackagesSuspense(
-  request?: operations.ListPackagesRequest | undefined,
-  security?: operations.ListPackagesSecurity | undefined,
+  request?: ListPackagesRequest | undefined,
+  security?: ListPackagesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListPackagesQueryData,
     ListPackagesQueryError

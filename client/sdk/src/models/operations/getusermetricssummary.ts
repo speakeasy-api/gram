@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  GetUserMetricsSummaryPayload,
+  GetUserMetricsSummaryPayload$Outbound,
+  GetUserMetricsSummaryPayload$outboundSchema,
+} from "../components/getusermetricssummarypayload.js";
 
 export type GetUserMetricsSummarySecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type GetUserMetricsSummaryRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  getUserMetricsSummaryPayload: components.GetUserMetricsSummaryPayload;
+  getUserMetricsSummaryPayload: GetUserMetricsSummaryPayload;
 };
 
 /** @internal */
@@ -145,8 +149,7 @@ export type GetUserMetricsSummaryRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  GetUserMetricsSummaryPayload:
-    components.GetUserMetricsSummaryPayload$Outbound;
+  GetUserMetricsSummaryPayload: GetUserMetricsSummaryPayload$Outbound;
 };
 
 /** @internal */
@@ -158,8 +161,7 @@ export const GetUserMetricsSummaryRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    getUserMetricsSummaryPayload:
-      components.GetUserMetricsSummaryPayload$outboundSchema,
+    getUserMetricsSummaryPayload: GetUserMetricsSummaryPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

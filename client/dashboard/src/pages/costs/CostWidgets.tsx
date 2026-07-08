@@ -1,4 +1,4 @@
-import type { Dimension } from "@gram/client/models/components";
+import type { Dimension } from "@gram/client/models/components/queryfilter.js";
 import type { Measures } from "./taxonomy";
 import { Sparkline } from "./Sparkline";
 import { movingAverage, resample, smoothPath } from "./sparkline-math";

@@ -18,17 +18,15 @@ import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { Button } from "@speakeasy-api/moonshine";
-import {
-  invalidateAllListChats,
-  invalidateAllRiskListExclusions,
-  invalidateAllRiskListResults,
-  invalidateAllRiskListResultsByChat,
-  invalidateAllRiskListResultsForAgent,
-  invalidateAllRiskOverview,
-  useRiskCreateExclusionMutation,
-  useRiskListPolicies,
-  useRiskUpdateExclusionMutation,
-} from "@gram/client/react-query/index.js";
+import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
+import { useRiskCreateExclusionMutation } from "@gram/client/react-query/riskCreateExclusion.js";
+import { invalidateAllRiskListExclusions } from "@gram/client/react-query/riskListExclusions.js";
+import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import { invalidateAllRiskListResults } from "@gram/client/react-query/riskListResults.js";
+import { invalidateAllRiskListResultsByChat } from "@gram/client/react-query/riskListResultsByChat.js";
+import { invalidateAllRiskListResultsForAgent } from "@gram/client/react-query/riskListResultsForAgent.js";
+import { invalidateAllRiskOverview } from "@gram/client/react-query/riskOverview.js";
+import { useRiskUpdateExclusionMutation } from "@gram/client/react-query/riskUpdateExclusion.js";
 import type { RiskExclusion } from "@gram/client/models/components/riskexclusion.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";

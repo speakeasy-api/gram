@@ -7,8 +7,25 @@ import { riskEvalsEvaluate } from "../funcs/riskEvalsEvaluate.js";
 import { riskEvalsListReviews } from "../funcs/riskEvalsListReviews.js";
 import { riskEvalsSaveReview } from "../funcs/riskEvalsSaveReview.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListRiskEvalReviewsResult } from "../models/components/listriskevalreviewsresult.js";
+import { PromptGuardrailEvalResult } from "../models/components/promptguardrailevalresult.js";
+import { RiskPolicyEvalReview } from "../models/components/riskpolicyevalreview.js";
+import {
+  DeleteRiskEvalReviewRequest,
+  DeleteRiskEvalReviewSecurity,
+} from "../models/operations/deleteriskevalreview.js";
+import {
+  EvaluatePromptGuardrailRequest,
+  EvaluatePromptGuardrailSecurity,
+} from "../models/operations/evaluatepromptguardrail.js";
+import {
+  ListRiskEvalReviewsRequest,
+  ListRiskEvalReviewsSecurity,
+} from "../models/operations/listriskevalreviews.js";
+import {
+  SaveRiskEvalReviewRequest,
+  SaveRiskEvalReviewSecurity,
+} from "../models/operations/saveriskevalreview.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Evals extends ClientSDK {
@@ -19,8 +36,8 @@ export class Evals extends ClientSDK {
    * Remove the current reviewer's verdict for one session (the toggle-off path). A reviewer can only clear their own verdict.
    */
   async deleteReview(
-    request: operations.DeleteRiskEvalReviewRequest,
-    security?: operations.DeleteRiskEvalReviewSecurity | undefined,
+    request: DeleteRiskEvalReviewRequest,
+    security?: DeleteRiskEvalReviewSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(riskEvalsDeleteReview(
@@ -38,10 +55,10 @@ export class Evals extends ClientSDK {
    * Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation; message-type scoping and CEL scope predicates are both applied.
    */
   async evaluate(
-    request: operations.EvaluatePromptGuardrailRequest,
-    security?: operations.EvaluatePromptGuardrailSecurity | undefined,
+    request: EvaluatePromptGuardrailRequest,
+    security?: EvaluatePromptGuardrailSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.PromptGuardrailEvalResult> {
+  ): Promise<PromptGuardrailEvalResult> {
     return unwrapAsync(riskEvalsEvaluate(
       this,
       request,
@@ -57,10 +74,10 @@ export class Evals extends ClientSDK {
    * List the active regression set for a prompt-based policy: every reviewer's current ground-truth verdicts.
    */
   async listReviews(
-    request: operations.ListRiskEvalReviewsRequest,
-    security?: operations.ListRiskEvalReviewsSecurity | undefined,
+    request: ListRiskEvalReviewsRequest,
+    security?: ListRiskEvalReviewsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListRiskEvalReviewsResult> {
+  ): Promise<ListRiskEvalReviewsResult> {
     return unwrapAsync(riskEvalsListReviews(
       this,
       request,
@@ -76,10 +93,10 @@ export class Evals extends ClientSDK {
    * Record (or replace) the current reviewer's ground-truth verdict for one chat session under a prompt-based policy. This is the durable regression set the eval workbench scores the live guardrail against. Upserts: a reviewer has at most one verdict per session per policy.
    */
   async saveReview(
-    request: operations.SaveRiskEvalReviewRequest,
-    security?: operations.SaveRiskEvalReviewSecurity | undefined,
+    request: SaveRiskEvalReviewRequest,
+    security?: SaveRiskEvalReviewSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RiskPolicyEvalReview> {
+  ): Promise<RiskPolicyEvalReview> {
     return unwrapAsync(riskEvalsSaveReview(
       this,
       request,

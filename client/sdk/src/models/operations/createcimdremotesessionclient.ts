@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateCimdForm,
+  CreateCimdForm$Outbound,
+  CreateCimdForm$outboundSchema,
+} from "../components/createcimdform.js";
 
 export type CreateCimdRemoteSessionClientSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type CreateCimdRemoteSessionClientRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  createCimdForm: components.CreateCimdForm;
+  createCimdForm: CreateCimdForm;
 };
 
 /** @internal */
@@ -154,7 +158,7 @@ export type CreateCimdRemoteSessionClientRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  CreateCimdForm: components.CreateCimdForm$Outbound;
+  CreateCimdForm: CreateCimdForm$Outbound;
 };
 
 /** @internal */
@@ -166,7 +170,7 @@ export const CreateCimdRemoteSessionClientRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    createCimdForm: components.CreateCimdForm$outboundSchema,
+    createCimdForm: CreateCimdForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

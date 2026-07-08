@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { chatCreditUsage } from "../funcs/chatCreditUsage.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { CreditUsageResponseBody } from "../models/components/creditusageresponsebody.js";
+import {
+  CreditUsageRequest,
+  CreditUsageSecurity,
+} from "../models/operations/creditusage.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetCreditUsageQueryData = components.CreditUsageResponseBody;
+export type GetCreditUsageQueryData = CreditUsageResponseBody;
 
 export function prefetchGetCreditUsage(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.CreditUsageRequest | undefined,
-  security?: operations.CreditUsageSecurity | undefined,
+  request?: CreditUsageRequest | undefined,
+  security?: CreditUsageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGetCreditUsage(
 
 export function buildGetCreditUsageQuery(
   client$: GramCore,
-  request?: operations.CreditUsageRequest | undefined,
-  security?: operations.CreditUsageSecurity | undefined,
+  request?: CreditUsageRequest | undefined,
+  security?: CreditUsageSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

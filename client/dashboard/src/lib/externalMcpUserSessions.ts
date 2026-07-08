@@ -1,10 +1,8 @@
 import type { Gram } from "@gram/client";
-import {
-  CreateRemoteSessionClientFormTokenEndpointAuthMethod,
-  type ExternalMCPToolDefinition,
-  type RemoteSessionIssuerDraft,
-  type Tool,
-} from "@gram/client/models/components";
+import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import { type ExternalMCPToolDefinition } from "@gram/client/models/components/externalmcptooldefinition.js";
+import { type RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
+import { type Tool } from "@gram/client/models/components/tool.js";
 
 import {
   type AuthedFetch,

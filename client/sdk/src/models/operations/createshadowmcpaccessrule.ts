@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateShadowMCPAccessRuleForm,
+  CreateShadowMCPAccessRuleForm$Outbound,
+  CreateShadowMCPAccessRuleForm$outboundSchema,
+} from "../components/createshadowmcpaccessruleform.js";
 
 export type CreateShadowMCPAccessRuleSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,7 +19,7 @@ export type CreateShadowMCPAccessRuleRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  createShadowMCPAccessRuleForm: components.CreateShadowMCPAccessRuleForm;
+  createShadowMCPAccessRuleForm: CreateShadowMCPAccessRuleForm;
 };
 
 /** @internal */
@@ -51,8 +55,7 @@ export function createShadowMCPAccessRuleSecurityToJSON(
 /** @internal */
 export type CreateShadowMCPAccessRuleRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  CreateShadowMCPAccessRuleForm:
-    components.CreateShadowMCPAccessRuleForm$Outbound;
+  CreateShadowMCPAccessRuleForm: CreateShadowMCPAccessRuleForm$Outbound;
 };
 
 /** @internal */
@@ -62,8 +65,7 @@ export const CreateShadowMCPAccessRuleRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    createShadowMCPAccessRuleForm:
-      components.CreateShadowMCPAccessRuleForm$outboundSchema,
+    createShadowMCPAccessRuleForm: CreateShadowMCPAccessRuleForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

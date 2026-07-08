@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { assetsUploadImage } from "../funcs/assetsUploadImage.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { UploadImageResult } from "../models/components/uploadimageresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  UploadImageRequest,
+  UploadImageSecurity,
+} from "../models/operations/uploadimage.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type UploadImageMutationVariables = {
-  request: operations.UploadImageRequest;
-  security?: operations.UploadImageSecurity | undefined;
+  request: UploadImageRequest;
+  security?: UploadImageSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UploadImageMutationData = components.UploadImageResult;
+export type UploadImageMutationData = UploadImageResult;
 
 export type UploadImageMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

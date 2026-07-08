@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListTriggerInstancesRequest,
+  ListTriggerInstancesSecurity,
+} from "../models/operations/listtriggerinstances.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type TriggersQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type TriggersQueryError =
  * List trigger instances for the current project.
  */
 export function useTriggers(
-  request?: operations.ListTriggerInstancesRequest | undefined,
-  security?: operations.ListTriggerInstancesSecurity | undefined,
+  request?: ListTriggerInstancesRequest | undefined,
+  security?: ListTriggerInstancesSecurity | undefined,
   options?: QueryHookOptions<TriggersQueryData, TriggersQueryError>,
 ): UseQueryResult<TriggersQueryData, TriggersQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useTriggers(
  * List trigger instances for the current project.
  */
 export function useTriggersSuspense(
-  request?: operations.ListTriggerInstancesRequest | undefined,
-  security?: operations.ListTriggerInstancesSecurity | undefined,
+  request?: ListTriggerInstancesRequest | undefined,
+  security?: ListTriggerInstancesSecurity | undefined,
   options?: SuspenseQueryHookOptions<TriggersQueryData, TriggersQueryError>,
 ): UseSuspenseQueryResult<TriggersQueryData, TriggersQueryError> {
   const client = useGramContext();

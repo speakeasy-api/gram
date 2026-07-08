@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpdateMarketplaceSettingsRequestBody,
+  UpdateMarketplaceSettingsRequestBody$Outbound,
+  UpdateMarketplaceSettingsRequestBody$outboundSchema,
+} from "../components/updatemarketplacesettingsrequestbody.js";
 
 export type UpdateMarketplaceSettingsSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -20,8 +24,7 @@ export type UpdateMarketplaceSettingsRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  updateMarketplaceSettingsRequestBody:
-    components.UpdateMarketplaceSettingsRequestBody;
+  updateMarketplaceSettingsRequestBody: UpdateMarketplaceSettingsRequestBody;
 };
 
 /** @internal */
@@ -62,7 +65,7 @@ export type UpdateMarketplaceSettingsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   UpdateMarketplaceSettingsRequestBody:
-    components.UpdateMarketplaceSettingsRequestBody$Outbound;
+    UpdateMarketplaceSettingsRequestBody$Outbound;
 };
 
 /** @internal */
@@ -74,7 +77,7 @@ export const UpdateMarketplaceSettingsRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     updateMarketplaceSettingsRequestBody:
-      components.UpdateMarketplaceSettingsRequestBody$outboundSchema,
+      UpdateMarketplaceSettingsRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

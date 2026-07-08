@@ -11,8 +11,44 @@ import { projectsSetLogo } from "../funcs/projectsSetLogo.js";
 import { projectsSetOrganizationWhitelist } from "../funcs/projectsSetOrganizationWhitelist.js";
 import { projectsUpsertAllowedOrigin } from "../funcs/projectsUpsertAllowedOrigin.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { CreateProjectResult } from "../models/components/createprojectresult.js";
+import { GetProjectResult } from "../models/components/getprojectresult.js";
+import { ListAllowedOriginsResult } from "../models/components/listallowedoriginsresult.js";
+import { ListProjectsResult } from "../models/components/listprojectsresult.js";
+import { SetProjectLogoResult } from "../models/components/setprojectlogoresult.js";
+import { UpsertAllowedOriginResult } from "../models/components/upsertallowedoriginresult.js";
+import {
+  CreateProjectRequest,
+  CreateProjectSecurity,
+} from "../models/operations/createproject.js";
+import {
+  DeleteProjectRequest,
+  DeleteProjectSecurity,
+} from "../models/operations/deleteproject.js";
+import {
+  GetProjectRequest,
+  GetProjectSecurity,
+} from "../models/operations/getproject.js";
+import {
+  ListAllowedOriginsRequest,
+  ListAllowedOriginsSecurity,
+} from "../models/operations/listallowedorigins.js";
+import {
+  ListProjectsRequest,
+  ListProjectsSecurity,
+} from "../models/operations/listprojects.js";
+import {
+  SetOrganizationWhitelistRequest,
+  SetOrganizationWhitelistSecurity,
+} from "../models/operations/setorganizationwhitelist.js";
+import {
+  SetProjectLogoRequest,
+  SetProjectLogoSecurity,
+} from "../models/operations/setprojectlogo.js";
+import {
+  UpsertAllowedOriginRequest,
+  UpsertAllowedOriginSecurity,
+} from "../models/operations/upsertallowedorigin.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Projects extends ClientSDK {
@@ -23,10 +59,10 @@ export class Projects extends ClientSDK {
    * Create a new project.
    */
   async create(
-    request: operations.CreateProjectRequest,
-    security?: operations.CreateProjectSecurity | undefined,
+    request: CreateProjectRequest,
+    security?: CreateProjectSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.CreateProjectResult> {
+  ): Promise<CreateProjectResult> {
     return unwrapAsync(projectsCreate(
       this,
       request,
@@ -42,8 +78,8 @@ export class Projects extends ClientSDK {
    * Delete a project by its ID
    */
   async deleteById(
-    request: operations.DeleteProjectRequest,
-    security?: operations.DeleteProjectSecurity | undefined,
+    request: DeleteProjectRequest,
+    security?: DeleteProjectSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(projectsDeleteById(
@@ -61,10 +97,10 @@ export class Projects extends ClientSDK {
    * Get project details by slug.
    */
   async read(
-    request: operations.GetProjectRequest,
-    security?: operations.GetProjectSecurity | undefined,
+    request: GetProjectRequest,
+    security?: GetProjectSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetProjectResult> {
+  ): Promise<GetProjectResult> {
     return unwrapAsync(projectsRead(
       this,
       request,
@@ -80,10 +116,10 @@ export class Projects extends ClientSDK {
    * List all projects for an organization.
    */
   async list(
-    request: operations.ListProjectsRequest,
-    security?: operations.ListProjectsSecurity | undefined,
+    request: ListProjectsRequest,
+    security?: ListProjectsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListProjectsResult> {
+  ): Promise<ListProjectsResult> {
     return unwrapAsync(projectsList(
       this,
       request,
@@ -99,10 +135,10 @@ export class Projects extends ClientSDK {
    * List allowed origins for a project.
    */
   async listAllowedOrigins(
-    request?: operations.ListAllowedOriginsRequest | undefined,
-    security?: operations.ListAllowedOriginsSecurity | undefined,
+    request?: ListAllowedOriginsRequest | undefined,
+    security?: ListAllowedOriginsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListAllowedOriginsResult> {
+  ): Promise<ListAllowedOriginsResult> {
     return unwrapAsync(projectsListAllowedOrigins(
       this,
       request,
@@ -118,10 +154,10 @@ export class Projects extends ClientSDK {
    * Uploads a logo for a project.
    */
   async setLogo(
-    request: operations.SetProjectLogoRequest,
-    security?: operations.SetProjectLogoSecurity | undefined,
+    request: SetProjectLogoRequest,
+    security?: SetProjectLogoSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.SetProjectLogoResult> {
+  ): Promise<SetProjectLogoResult> {
     return unwrapAsync(projectsSetLogo(
       this,
       request,
@@ -137,8 +173,8 @@ export class Projects extends ClientSDK {
    * Set organization whitelist status (admin only - requires speakeasy-team API key)
    */
   async setOrganizationWhitelist(
-    request: operations.SetOrganizationWhitelistRequest,
-    security?: operations.SetOrganizationWhitelistSecurity | undefined,
+    request: SetOrganizationWhitelistRequest,
+    security?: SetOrganizationWhitelistSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(projectsSetOrganizationWhitelist(
@@ -156,10 +192,10 @@ export class Projects extends ClientSDK {
    * Upsert an allowed origin for a project.
    */
   async upsertAllowedOrigin(
-    request: operations.UpsertAllowedOriginRequest,
-    security?: operations.UpsertAllowedOriginSecurity | undefined,
+    request: UpsertAllowedOriginRequest,
+    security?: UpsertAllowedOriginSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.UpsertAllowedOriginResult> {
+  ): Promise<UpsertAllowedOriginResult> {
     return unwrapAsync(projectsUpsertAllowedOrigin(
       this,
       request,

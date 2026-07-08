@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { mcpRegistriesListCatalog } from "../funcs/mcpRegistriesListCatalog.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListCatalogResponseBody } from "../models/components/listcatalogresponsebody.js";
+import {
+  ListMCPCatalogRequest,
+  ListMCPCatalogSecurity,
+} from "../models/operations/listmcpcatalog.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListMCPCatalogQueryData = components.ListCatalogResponseBody;
+export type ListMCPCatalogQueryData = ListCatalogResponseBody;
 
 export function prefetchListMCPCatalog(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListMCPCatalogRequest | undefined,
-  security?: operations.ListMCPCatalogSecurity | undefined,
+  request?: ListMCPCatalogRequest | undefined,
+  security?: ListMCPCatalogSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListMCPCatalog(
 
 export function buildListMCPCatalogQuery(
   client$: GramCore,
-  request?: operations.ListMCPCatalogRequest | undefined,
-  security?: operations.ListMCPCatalogSecurity | undefined,
+  request?: ListMCPCatalogRequest | undefined,
+  security?: ListMCPCatalogSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

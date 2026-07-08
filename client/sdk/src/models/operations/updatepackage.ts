@@ -6,7 +6,19 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
-import * as components from "../components/index.js";
+import {
+  NotModified,
+  NotModified$inboundSchema,
+} from "../components/notmodified.js";
+import {
+  UpdatePackageForm,
+  UpdatePackageForm$Outbound,
+  UpdatePackageForm$outboundSchema,
+} from "../components/updatepackageform.js";
+import {
+  UpdatePackageResult,
+  UpdatePackageResult$inboundSchema,
+} from "../components/updatepackageresult.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type UpdatePackageSecurityOption1 = {
@@ -37,12 +49,10 @@ export type UpdatePackageRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  updatePackageForm: components.UpdatePackageForm;
+  updatePackageForm: UpdatePackageForm;
 };
 
-export type UpdatePackageResponse =
-  | components.UpdatePackageResult
-  | components.NotModified;
+export type UpdatePackageResponse = UpdatePackageResult | NotModified;
 
 /** @internal */
 export type UpdatePackageSecurityOption1$Outbound = {
@@ -150,7 +160,7 @@ export type UpdatePackageRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  UpdatePackageForm: components.UpdatePackageForm$Outbound;
+  UpdatePackageForm: UpdatePackageForm$Outbound;
 };
 
 /** @internal */
@@ -162,7 +172,7 @@ export const UpdatePackageRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    updatePackageForm: components.UpdatePackageForm$outboundSchema,
+    updatePackageForm: UpdatePackageForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -186,10 +196,7 @@ export function updatePackageRequestToJSON(
 export const UpdatePackageResponse$inboundSchema: z.ZodMiniType<
   UpdatePackageResponse,
   unknown
-> = z.union([
-  components.UpdatePackageResult$inboundSchema,
-  components.NotModified$inboundSchema,
-]);
+> = z.union([UpdatePackageResult$inboundSchema, NotModified$inboundSchema]);
 
 export function updatePackageResponseFromJSON(
   jsonString: string,

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListBuiltinExclusionsRequest,
+  ListBuiltinExclusionsSecurity,
+} from "../models/operations/listbuiltinexclusions.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type BuiltinExclusionsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type BuiltinExclusionsQueryError =
  * List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
  */
 export function useBuiltinExclusions(
-  request?: operations.ListBuiltinExclusionsRequest | undefined,
-  security?: operations.ListBuiltinExclusionsSecurity | undefined,
+  request?: ListBuiltinExclusionsRequest | undefined,
+  security?: ListBuiltinExclusionsSecurity | undefined,
   options?: QueryHookOptions<
     BuiltinExclusionsQueryData,
     BuiltinExclusionsQueryError
@@ -85,8 +88,8 @@ export function useBuiltinExclusions(
  * List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
  */
 export function useBuiltinExclusionsSuspense(
-  request?: operations.ListBuiltinExclusionsRequest | undefined,
-  security?: operations.ListBuiltinExclusionsSecurity | undefined,
+  request?: ListBuiltinExclusionsRequest | undefined,
+  security?: ListBuiltinExclusionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     BuiltinExclusionsQueryData,
     BuiltinExclusionsQueryError

@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { pluginsGetPlugin } from "../funcs/pluginsGetPlugin.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { Plugin } from "../models/components/plugin.js";
+import {
+  GetPluginRequest,
+  GetPluginSecurity,
+} from "../models/operations/getplugin.js";
 import { unwrapAsync } from "../types/fp.js";
-export type PluginQueryData = components.Plugin;
+export type PluginQueryData = Plugin;
 
 export function prefetchPlugin(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetPluginRequest,
-  security?: operations.GetPluginSecurity | undefined,
+  request: GetPluginRequest,
+  security?: GetPluginSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchPlugin(
 
 export function buildPluginQuery(
   client$: GramCore,
-  request: operations.GetPluginRequest,
-  security?: operations.GetPluginSecurity | undefined,
+  request: GetPluginRequest,
+  security?: GetPluginSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { tunneledMcpGetServer } from "../funcs/tunneledMcpGetServer.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { TunneledMcpServer } from "../models/components/tunneledmcpserver.js";
+import {
+  GetTunneledMcpServerRequest,
+  GetTunneledMcpServerSecurity,
+} from "../models/operations/gettunneledmcpserver.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetTunneledMcpServerQueryData = components.TunneledMcpServer;
+export type GetTunneledMcpServerQueryData = TunneledMcpServer;
 
 export function prefetchGetTunneledMcpServer(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetTunneledMcpServerRequest,
-  security?: operations.GetTunneledMcpServerSecurity | undefined,
+  request: GetTunneledMcpServerRequest,
+  security?: GetTunneledMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGetTunneledMcpServer(
 
 export function buildGetTunneledMcpServerQuery(
   client$: GramCore,
-  request: operations.GetTunneledMcpServerRequest,
-  security?: operations.GetTunneledMcpServerSecurity | undefined,
+  request: GetTunneledMcpServerRequest,
+  security?: GetTunneledMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
