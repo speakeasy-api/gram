@@ -59,6 +59,7 @@ import {
 import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import {
   getOAuthParadigm,
+  isUserSessionIssuerWired,
   mustConvertOAuthBeforePrivate,
 } from "./toolsetAuthSurface";
 import { useRoutes } from "@/routes";
@@ -781,7 +782,7 @@ function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
             ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG,
           ) ?? false,
         mcpIsPublic: toolset.mcpIsPublic ?? false,
-        userSessionIssuerWired: Boolean(toolset.userSessionIssuerId),
+        userSessionIssuerWired: isUserSessionIssuerWired(toolset),
         oauthParadigm: getOAuthParadigm(toolset),
       });
 

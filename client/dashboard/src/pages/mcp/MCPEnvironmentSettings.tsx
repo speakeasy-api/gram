@@ -52,6 +52,7 @@ import {
 } from "./ToolsetAuthenticationSection";
 import {
   getOAuthParadigm,
+  isUserSessionIssuerWired,
   type OAuthParadigm,
   toolsetAuthSurface,
   type ToolsetConvertAction,
@@ -911,8 +912,7 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
     flagEnabled:
       telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
       false,
-    userSessionIssuerWired:
-      !!toolset.userSessionIssuerId || !!toolset.userSessionIssuerSlug,
+    userSessionIssuerWired: isUserSessionIssuerWired(toolset),
     oauthParadigm,
   });
 

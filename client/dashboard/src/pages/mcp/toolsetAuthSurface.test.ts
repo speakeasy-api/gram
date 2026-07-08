@@ -4,6 +4,7 @@ import type { Toolset } from "@/lib/toolTypes";
 import {
   externalOauthIssuerUrl,
   getOAuthParadigm,
+  isUserSessionIssuerWired,
   mustConvertOAuthBeforePrivate,
   toolsetAuthSurface,
   toolsetConvertAction,
@@ -147,6 +148,31 @@ describe("mustConvertOAuthBeforePrivate", () => {
         oauthParadigm: "proxy",
       }),
     ).toBe(false);
+  });
+});
+
+describe("isUserSessionIssuerWired", () => {
+  it("treats either issuer field as wired", () => {
+    expect(
+      isUserSessionIssuerWired({
+        userSessionIssuerId: "usi_123",
+      } as unknown as Toolset),
+    ).toBe(true);
+    expect(
+      isUserSessionIssuerWired({
+        userSessionIssuerSlug: "my-issuer",
+      } as unknown as Toolset),
+    ).toBe(true);
+    expect(
+      isUserSessionIssuerWired({
+        userSessionIssuerId: "usi_123",
+        userSessionIssuerSlug: "my-issuer",
+      } as unknown as Toolset),
+    ).toBe(true);
+  });
+
+  it("is unwired when both fields are absent", () => {
+    expect(isUserSessionIssuerWired({} as Toolset)).toBe(false);
   });
 });
 

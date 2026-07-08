@@ -16,6 +16,17 @@ export function getOAuthParadigm(toolset: Toolset): OAuthParadigm | null {
     : "proxy";
 }
 
+/**
+ * Whether a user_session_issuer is wired to the toolset. The read path
+ * populates userSessionIssuerSlug together with userSessionIssuerId, but both
+ * fields are independently optional in the SDK type, so accepting either
+ * keeps every consumer (surface dispatch, private-flip guard) agreeing on
+ * wiredness rather than diverging on which field it happens to check.
+ */
+export function isUserSessionIssuerWired(toolset: Toolset): boolean {
+  return !!toolset.userSessionIssuerId || !!toolset.userSessionIssuerSlug;
+}
+
 export type ToolsetAuthSurface =
   // user_session_issuer wired → shared section, manage state.
   | "manage"
