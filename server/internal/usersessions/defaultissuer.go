@@ -2,10 +2,12 @@ package usersessions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -44,14 +46,33 @@ func defaultIssuerSlug(projectID uuid.UUID) string {
 	return "gram-default-" + DefaultIssuerID(projectID).String()
 }
 
-// GetOrCreateDefaultIssuer upserts the backing row for the project's implicit
-// default issuer at its deterministic id, resurrecting it if soft-deleted.
-// Called only from the stateful OAuth entry points (DCR, authorize/connect,
-// dashboard mint) that need the row for their issuer FKs; resolution itself
-// uses DefaultIssuerID and never reads it.
+// GetOrCreateDefaultIssuer returns the backing row for the project's implicit
+// default issuer, creating or resurrecting it at its deterministic id. Called
+// only from the stateful OAuth entry points (DCR, authorize/connect, dashboard
+// mint) that need the row for their issuer FKs; resolution itself uses
+// DefaultIssuerID and never reads it.
+//
+// Steady state (row present and active) is a single read — these entry points
+// run per request, so we avoid rewriting/locking the row every time. The
+// write path is taken only on first touch or to resurrect a soft-deleted row;
+// its ON CONFLICT DO UPDATE also settles the concurrent-first-touch race.
 func GetOrCreateDefaultIssuer(ctx context.Context, db repo.DBTX, projectID uuid.UUID) (repo.UserSessionIssuer, error) {
-	row, err := repo.New(db).UpsertDefaultUserSessionIssuer(ctx, repo.UpsertDefaultUserSessionIssuerParams{
-		ID:                 DefaultIssuerID(projectID),
+	id := DefaultIssuerID(projectID)
+	q := repo.New(db)
+
+	row, err := q.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+		ID:        id,
+		ProjectID: projectID,
+	})
+	switch {
+	case err == nil:
+		return row, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return repo.UserSessionIssuer{}, fmt.Errorf("get default user session issuer: %w", err)
+	}
+
+	row, err = q.UpsertDefaultUserSessionIssuer(ctx, repo.UpsertDefaultUserSessionIssuerParams{
+		ID:                 id,
 		ProjectID:          projectID,
 		Slug:               defaultIssuerSlug(projectID),
 		AuthnChallengeMode: "interactive",
