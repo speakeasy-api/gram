@@ -175,7 +175,9 @@ export function UninitializedMarketplaceCard({
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
             </span>
             <span className="font-medium text-amber-700 dark:text-amber-400">
-              Marketplace not yet setup
+              {hasRepo
+                ? "Marketplace needs at least one collaborator added"
+                : "Marketplace not yet setup"}
             </span>
           </span>
           <div className="flex flex-wrap items-center gap-2">
