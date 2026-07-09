@@ -629,7 +629,7 @@ FROM telemetry_logs
 WHERE chat_id != ''
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source;
 
--- completion_token_summaries is the DIMENSIONED billing aggregate: the same
+-- tum_breakdown_summaries is the DIMENSIONED billing aggregate: the same
 -- gen_ai completion rows chat_token_summaries (the billing record) sums,
 -- broken down by consuming surface and user identity so the billing page's
 -- breakdowns can report the billed population exactly. Reads apply the same
@@ -638,7 +638,7 @@ GROUP BY gram_project_id, chat_id, time_bucket, hook_source;
 -- dimensions are stamped on completion rows at emit time by the telemetry
 -- logger's directory snapshot. attribute_metrics_summaries is provenance-
 -- first (agent-fleet surfaces only) and no longer carries these rows.
-CREATE TABLE IF NOT EXISTS completion_token_summaries (
+CREATE TABLE IF NOT EXISTS tum_breakdown_summaries (
     -- Key columns
     gram_project_id UUID,
     chat_id String,
@@ -660,7 +660,7 @@ TTL time_bucket + INTERVAL 730 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Per-chat daily billed token usage broken down by consuming surface and user identity, retained beyond the raw telemetry TTL to power the billing page breakdowns across historical billing cycles';
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS completion_token_summaries_mv TO completion_token_summaries AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS tum_breakdown_summaries_mv TO tum_breakdown_summaries AS
 SELECT
     gram_project_id,
     chat_id,
