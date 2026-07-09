@@ -150,6 +150,38 @@ func TestListRiskResults_ByPolicy_DisabledPolicyShowsHistoricalFindings(t *testi
 	require.Equal(t, int64(0), unfiltered.TotalCount, "unfiltered total count should not include disabled-policy findings")
 }
 
+// A policy filter must not swallow the other filters. Selecting a policy and a
+// rule id together has to honor both, otherwise (as reported in FDE-32) picking
+// a policy causes rule_id/user_id/category/time filters to be silently ignored.
+func TestListRiskResults_ByPolicyAndRuleID(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Policy+Rule Filter")})
+	require.NoError(t, err)
+	policyID, _ := uuid.Parse(policy.ID)
+
+	_, injMsg := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, injMsg, "prompt_injection", "prompt_injection", "ignore previous instructions")
+
+	_, emailMsg := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, emailMsg, "presidio", "pii.email_address", "a@b.com")
+
+	ruleID := "prompt_injection"
+	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		PolicyID: &policy.ID,
+		RuleID:   &ruleID,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1, "policy + rule_id filter should return only the matching rule")
+	require.Equal(t, "prompt_injection", *result.Results[0].RuleID)
+}
+
 func TestListRiskResults_ByChatID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
