@@ -817,7 +817,6 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
   session_duration INTERVAL NOT NULL,
-  classification TEXT NOT NULL DEFAULT 'custom' CHECK (classification IN ('custom', 'project_default_idp')), -- 'project_default_idp' is the auto-provisioned implicit Gram issuer for private servers; 'custom' is user-configured
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -831,11 +830,6 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_slug_key
 ON user_session_issuers (project_id, slug)
 WHERE deleted IS FALSE;
-
--- At most one auto-provisioned project-default issuer per project.
-CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_default_key
-ON user_session_issuers (project_id)
-WHERE classification = 'project_default_idp' AND deleted IS FALSE;
 
 -- User Session Clients are MCP Clients that have registered themselves with Gram
 -- See: https://datatracker.ietf.org/doc/html/rfc6749#section-1.1
@@ -2980,7 +2974,14 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   -- Exactly one backend must be set.
-  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id) = 1)
+  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id) = 1),
+  -- Tunneled servers front a private network and are never anonymous, so they
+  -- always carry a Gram-as-AS issuer (auto-provisioned on create/update).
+  CONSTRAINT mcp_servers_tunneled_requires_issuer_check CHECK (tunneled_mcp_server_id IS NULL OR user_session_issuer_id IS NOT NULL),
+  -- Private remote servers serve authenticated traffic, so they require an
+  -- issuer; public remote servers are anonymous and carry none. Toolset-backed
+  -- servers are exempt (their auth lives on toolsets.user_session_issuer_id).
+  CONSTRAINT mcp_servers_private_remote_requires_issuer_check CHECK (remote_mcp_server_id IS NULL OR visibility <> 'private' OR user_session_issuer_id IS NOT NULL)
 );
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx

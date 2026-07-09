@@ -156,6 +156,14 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
+	// Guarantee the private/tunneled ⇒ issuer invariant: auto-provision a
+	// user_session_issuer when this server requires one and none was supplied,
+	// so no create path can persist a row the CHECK constraints would reject.
+	ids.UserSessionIssuerID, err = ensureServerUserSessionIssuer(ctx, dbtx, *authCtx.ProjectID, slug, ids, string(payload.Visibility))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "ensure mcp server issuer").LogError(ctx, logger)
+	}
+
 	server, err := txRepo.CreateMCPServer(ctx, repo.CreateMCPServerParams{
 		ID:                    serverID,
 		ProjectID:             *authCtx.ProjectID,
@@ -454,6 +462,18 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	slug, err := computeServerSlug(conv.FromPGTextOrEmpty[string](name), serverID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
+	}
+
+	// UpdateMCPServer is a full-record replace, so an omitted issuer would null
+	// the column. Preserve the existing issuer when the payload doesn't carry
+	// one, then auto-provision if the invariant now requires one (e.g. a
+	// disabled server being enabled to private), guaranteeing the CHECK holds.
+	if !ids.UserSessionIssuerID.Valid {
+		ids.UserSessionIssuerID = existing.UserSessionIssuerID
+	}
+	ids.UserSessionIssuerID, err = ensureServerUserSessionIssuer(ctx, dbtx, *authCtx.ProjectID, slug, ids, string(payload.Visibility))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "ensure mcp server issuer").LogError(ctx, logger)
 	}
 
 	updated, err := txRepo.UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
