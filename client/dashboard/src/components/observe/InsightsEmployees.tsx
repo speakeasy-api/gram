@@ -166,6 +166,11 @@ const AGENT_STATUS_TICK_MS = 30 * 1000;
 
 type DeviceAgentState = "active" | "stale" | "none";
 
+// Whole-column state: "hidden" when the feature is off; otherwise it tracks the
+// listSyncedUsers query so cells can show loading/error instead of a misleading
+// "Not Enrolled" derived from a not-yet-populated map.
+type DeviceAgentColumnStatus = "hidden" | "loading" | "error" | "ready";
+
 // Rank for sorting: active devices first, then stale, then members with no
 // agent at all — so the rows an admin cares about surface at the top.
 const AGENT_SORT_RANK: Record<DeviceAgentState, number> = {
@@ -225,11 +230,22 @@ export function InsightsEmployeesContent(): JSX.Element {
     useTelemetry().isFeatureEnabled("gram-device-agent") ?? false;
   const {
     data: deviceSyncData,
+    isError: deviceSyncsError,
     refetch: refetchDeviceSyncs,
     isFetching: deviceSyncsFetching,
   } = useSyncedAgentUsers(undefined, undefined, {
     enabled: isDeviceAgentEnabled,
   });
+  // Drive the column off the query's own state, not just its data: an empty map
+  // while loading or after an error must not read as "everyone Not Enrolled".
+  // "ready" only once data has actually arrived.
+  const deviceStatus: DeviceAgentColumnStatus = !isDeviceAgentEnabled
+    ? "hidden"
+    : deviceSyncsError
+      ? "error"
+      : deviceSyncData === undefined
+        ? "loading"
+        : "ready";
 
   const { values, setValue, clearValue, clearAll } =
     useFilterState(EMPLOYEE_FILTERS);
@@ -545,7 +561,7 @@ export function InsightsEmployeesContent(): JSX.Element {
                 search={search}
                 onSelectUser={openUser}
                 deviceSyncByEmail={deviceSyncByEmail}
-                showDeviceAgent={isDeviceAgentEnabled}
+                deviceStatus={deviceStatus}
               />
               <EnrollmentLegend />
             </>
@@ -563,19 +579,20 @@ function EmployeeTable({
   search,
   onSelectUser,
   deviceSyncByEmail,
-  showDeviceAgent,
+  deviceStatus,
 }: {
   employees: Employee[];
   search: string;
   onSelectUser: (employee: Employee) => void;
   deviceSyncByEmail: Map<string, Date>;
-  showDeviceAgent: boolean;
+  deviceStatus: DeviceAgentColumnStatus;
 }) {
+  const showDeviceAgent = deviceStatus !== "hidden";
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<SortDescriptor | null>(null);
-  // Only ticks when the column is shown; disabled (0) otherwise, so the memo
-  // stays stable (deviceAgentState is never called in that case).
-  const now = useNow(showDeviceAgent ? AGENT_STATUS_TICK_MS : 0);
+  // Only ticks once statuses are actually resolvable; disabled (0) otherwise so
+  // the memo stays stable (deviceAgentState is only called when "ready").
+  const now = useNow(deviceStatus === "ready" ? AGENT_STATUS_TICK_MS : 0);
   const filteredEmployees = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return employees;
@@ -648,18 +665,23 @@ function EmployeeTable({
                   </SimpleTooltip>
                 </span>
               ),
+              // Only meaningfully sortable once statuses have resolved; while
+              // loading/errored every row ranks equal, preserving base order.
               sortable: true,
               sortLabel: "Device Agent",
               sortValue: (item) =>
-                AGENT_SORT_RANK[
-                  deviceAgentState(
-                    deviceSyncByEmail.get(item.email.toLowerCase()),
-                    now,
-                  )
-                ],
+                deviceStatus === "ready"
+                  ? AGENT_SORT_RANK[
+                      deviceAgentState(
+                        deviceSyncByEmail.get(item.email.toLowerCase()),
+                        now,
+                      )
+                    ]
+                  : 0,
               width: "1fr",
               render: (item) => (
                 <DeviceAgentCell
+                  status={deviceStatus}
                   lastSeen={deviceSyncByEmail.get(item.email.toLowerCase())}
                   now={now}
                 />
@@ -719,7 +741,7 @@ function EmployeeTable({
         ),
       },
     ],
-    [onSelectUser, showDeviceAgent, deviceSyncByEmail, now],
+    [onSelectUser, showDeviceAgent, deviceStatus, deviceSyncByEmail, now],
   );
   const sortedEmployees = useMemo(() => {
     if (sort?.id === "lastActivity") {
@@ -913,15 +935,29 @@ const deviceAgentMeta: Record<
   none: { label: "Not Enrolled", variant: "neutral" },
 };
 
-// Device-agent status cell: an Active/Stale/Not Enrolled badge. Active and Stale
-// reveal the last sync time on hover; Not Enrolled explains the empty signal.
+// Device-agent status cell. Until the listSyncedUsers query resolves the cell
+// shows a skeleton (loading) or a muted "unknown" dash (error) rather than a
+// badge — an empty map must never render as a definitive "Not Enrolled". Once
+// "ready": an Active/Stale/Not Enrolled badge, with the last sync time on hover.
 function DeviceAgentCell({
+  status,
   lastSeen,
   now,
 }: {
+  status: DeviceAgentColumnStatus;
   lastSeen: Date | undefined;
   now: number;
 }) {
+  if (status === "loading") {
+    return <Skeleton className="h-5 w-20 rounded-md" />;
+  }
+  if (status === "error") {
+    return (
+      <SimpleTooltip tooltip="Couldn't load device agent status. Try refreshing.">
+        <span className="text-muted-foreground/50 text-sm">—</span>
+      </SimpleTooltip>
+    );
+  }
   const meta = deviceAgentMeta[deviceAgentState(lastSeen, now)];
   const tooltip = lastSeen
     ? `Last synced ${dateTimeFormatters.humanize(lastSeen)}`
