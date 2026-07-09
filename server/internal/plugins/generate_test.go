@@ -62,45 +62,28 @@ func TestHookPayloadEscaperEscapesControlChars(t *testing.T) {
 	require.Equal(t, "a\x1b[31mred\x1b[0m\vb\tc\"d\\e", decoded)
 }
 
-// TestDogfoodPluginsMatchCheckedIn guards against drift between the checked-in
-// dogfood plugins (hooks/plugin-claude, hooks/plugin-cursor) and the renders
-// the publish path produces: the dogfood senders must exercise the exact
-// scripts customers run — canonical payloads, /rpc/hooks.ingest, ratchet and
-// org-key recovery. On failure, regenerate with `go run ./cmd/export-hook-plugin`.
-func TestDogfoodPluginsMatchCheckedIn(t *testing.T) {
-	t.Parallel()
+// writeDogfoodPlugins renders the dogfood plugins into a temp directory and
+// returns its path, so tests exercise a freshly generated plugin instead of a
+// checked-in copy. Shell scripts are made executable, mirroring how the
+// publish path packages them.
+func writeDogfoodPlugins(t *testing.T) string {
+	t.Helper()
+
 	files, err := DogfoodPluginFiles()
 	require.NoError(t, err)
 	require.NotEmpty(t, files)
+
+	dir := t.TempDir()
 	for name, content := range files {
-		checkedIn := requireFileBytes(t, filepath.Join("..", "..", "..", "hooks", filepath.FromSlash(name)))
-		require.Equal(t, string(content), string(checkedIn),
-			"hooks/%s has drifted from the render — regenerate with `go run ./cmd/export-hook-plugin`", name)
+		dst := filepath.Join(dir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(dst), 0o755))
+		mode := os.FileMode(0o644)
+		if filepath.Ext(dst) == ".sh" {
+			mode = 0o755
+		}
+		require.NoError(t, os.WriteFile(dst, content, mode))
 	}
-}
-
-// TestSharedHTTPScriptMatchesCheckedIn guards against drift between the
-// generated hooks/http.sh (renderSharedHTTPScript) and the checked-in
-// hooks/plugin-claude/hooks/http.sh sourced by the local-dev plugin. Both must
-// be identical so local-dev and generated plugins share one transport.
-func TestSharedHTTPScriptMatchesCheckedIn(t *testing.T) {
-	t.Parallel()
-	checkedIn := requireFileBytes(t, filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "http.sh"))
-	// renderSharedHTTPScript() is canonical → pass it as testify's "expected".
-	require.Equal(t, string(renderSharedHTTPScript()), string(checkedIn),
-		"hooks/plugin-claude/hooks/http.sh has drifted from renderSharedHTTPScript() — keep them identical")
-}
-
-// TestSharedAuthScriptMatchesCheckedIn guards against drift between the
-// generated hooks/auth.sh (renderSharedAuthScript) and the checked-in
-// hooks/plugin-claude/hooks/auth.sh sourced by the local-dev plugin. Both must
-// be identical so local-dev and generated plugins share one auth flow.
-func TestSharedAuthScriptMatchesCheckedIn(t *testing.T) {
-	t.Parallel()
-	checkedIn := requireFileBytes(t, filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "auth.sh"))
-	// renderSharedAuthScript() is canonical → pass it as testify's "expected".
-	require.Equal(t, string(renderSharedAuthScript()), string(checkedIn),
-		"hooks/plugin-claude/hooks/auth.sh has drifted from renderSharedAuthScript() — keep them identical")
+	return dir
 }
 
 // authLoginHarness is a running gram_hooks_login invocation whose localhost
@@ -2236,14 +2219,14 @@ func TestRenderAuthPreflightScriptObservabilityModeFailsOpen(t *testing.T) {
 	require.NoFileExists(t, urlFile)
 }
 
-// checkedInSenderCapturedRequest runs a checked-in per-event sender with no
-// env credentials but a cached browser-login auth file, and returns the curl
-// config lines plus request URL captured by a stubbed curl.
-func checkedInSenderCapturedRequest(t *testing.T, plugin, payload string, extraEnv ...string) string {
+// dogfoodSenderCapturedRequest renders a fresh dogfood plugin and runs its
+// per-event sender with no env credentials but a cached browser-login auth
+// file, returning the curl config lines plus request URL captured by a
+// stubbed curl.
+func dogfoodSenderCapturedRequest(t *testing.T, plugin, payload string, extraEnv ...string) string {
 	t.Helper()
 
-	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", plugin, "hooks", "hook.sh"))
-	require.NoError(t, err)
+	senderPath := filepath.Join(writeDogfoodPlugins(t), plugin, "hooks", "hook.sh")
 
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
@@ -2286,13 +2269,13 @@ printf '{}\n200'
 	return string(requireFileBytes(t, headersPath))
 }
 
-// TestCheckedInSenderEnvProjectOverridesCachedProject verifies an explicit
+// TestDogfoodSenderEnvProjectOverridesCachedProject verifies an explicit
 // GRAM_HOOKS_PROJECT_SLUG outranks the project the browser-login key was
 // cached with, so switching projects does not require a forced re-login.
-func TestCheckedInSenderEnvProjectOverridesCachedProject(t *testing.T) {
+func TestDogfoodSenderEnvProjectOverridesCachedProject(t *testing.T) {
 	t.Parallel()
 
-	headers := checkedInSenderCapturedRequest(t, "plugin-cursor",
+	headers := dogfoodSenderCapturedRequest(t, "plugin-cursor",
 		`{"hook_event_name":"beforeSubmitPrompt","conversation_id":"sess-env-project","prompt":"hi"}`,
 		"GRAM_HOOKS_PROJECT_SLUG=acme-staging")
 	require.Contains(t, headers, "Gram-Key: gram_cached_browser_key",
@@ -2303,28 +2286,28 @@ func TestCheckedInSenderEnvProjectOverridesCachedProject(t *testing.T) {
 	require.Contains(t, headers, "/rpc/hooks.ingest")
 }
 
-// TestCheckedInCursorSenderUsesCachedBrowserAuth verifies the checked-in
-// Cursor plugin's per-event sender falls back to the credentials cached by
-// the browser login flow (auth_preflight.sh / login.sh) when no env key is
-// set, instead of silently skipping the send.
-func TestCheckedInCursorSenderUsesCachedBrowserAuth(t *testing.T) {
+// TestDogfoodCursorSenderUsesCachedBrowserAuth verifies the rendered Cursor
+// plugin's per-event sender falls back to the credentials cached by the
+// browser login flow (auth_preflight.sh / login.sh) when no env key is set,
+// instead of silently skipping the send.
+func TestDogfoodCursorSenderUsesCachedBrowserAuth(t *testing.T) {
 	t.Parallel()
 
-	headers := checkedInSenderCapturedRequest(t, "plugin-cursor",
+	headers := dogfoodSenderCapturedRequest(t, "plugin-cursor",
 		`{"hook_event_name":"beforeSubmitPrompt","conversation_id":"sess-cached","prompt":"hi"}`)
 	require.Contains(t, headers, "Gram-Key: gram_cached_browser_key", "sender must use the cached browser-login key")
 	require.Contains(t, headers, "Gram-Project: acme-prod")
 	require.Contains(t, headers, "/rpc/hooks.ingest")
 }
 
-// TestCheckedInClaudeSenderUsesCachedBrowserAuth verifies the checked-in
-// Claude plugin's per-event sender attaches the credentials cached by the
-// browser login flow when no env key is set, so policy enforcement that needs
-// auth context is not silently skipped.
-func TestCheckedInClaudeSenderUsesCachedBrowserAuth(t *testing.T) {
+// TestDogfoodClaudeSenderUsesCachedBrowserAuth verifies the rendered Claude
+// plugin's per-event sender attaches the credentials cached by the browser
+// login flow when no env key is set, so policy enforcement that needs auth
+// context is not silently skipped.
+func TestDogfoodClaudeSenderUsesCachedBrowserAuth(t *testing.T) {
 	t.Parallel()
 
-	headers := checkedInSenderCapturedRequest(t, "plugin-claude",
+	headers := dogfoodSenderCapturedRequest(t, "plugin-claude",
 		`{"hook_event_name":"UserPromptSubmit","session_id":"sess-cached-claude","prompt":"hi"}`)
 	require.Contains(t, headers, "Gram-Key: gram_cached_browser_key", "sender must use the cached browser-login key")
 	require.Contains(t, headers, "Gram-Project: acme-prod")

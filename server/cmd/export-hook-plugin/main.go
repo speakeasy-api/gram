@@ -1,12 +1,13 @@
-// Command export-hook-plugin regenerates the checked-in dogfood hook plugins
-// under hooks/plugin-claude and hooks/plugin-cursor from the same generators
-// that publish customer plugins. Run it after changing the plugin script
-// renderers in internal/plugins:
+// Command export-hook-plugin renders the dogfood hook plugins (plugin-claude,
+// plugin-cursor) from the same generators that publish customer plugins. The
+// rendered trees are not checked in — this exists for local development, e.g.
+// running the Claude plugin against a dev server:
 //
-//	go run ./cmd/export-hook-plugin
+//	out=$(mktemp -d)
+//	go run ./cmd/export-hook-plugin -out "$out"
+//	claude --plugin-dir "$out/plugin-claude"
 //
-// TestDogfoodPluginsMatchCheckedIn fails when the checked-in copies drift
-// from the renders.
+// The mise task `hooks:test` wraps exactly that flow.
 package main
 
 import (
@@ -18,24 +19,34 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
 
+// localClaudeManifest makes the rendered plugin-claude tree loadable via
+// `claude --plugin-dir`. Published plugins get an org-derived manifest from the
+// publish path instead; this one only names the local-dev copy.
+const localClaudeManifest = `{
+  "name": "gram-hooks-local",
+  "description": "Forward Claude Code hooks to Gram for analytics, monitoring, and compliance",
+  "version": "0.0.1",
+  "author": {
+    "name": "Gram",
+    "url": "https://getgram.ai"
+  }
+}
+`
+
 func main() {
-	out := flag.String("out", "../hooks", "directory holding the checked-in plugin-claude and plugin-cursor trees")
+	out := flag.String("out", "", "directory to render the plugin-claude and plugin-cursor trees into (required)")
 	flag.Parse()
+	if *out == "" {
+		fmt.Fprintln(os.Stderr, "export-hook-plugin: -out is required")
+		os.Exit(1)
+	}
 
 	files, err := plugins.DogfoodPluginFiles()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "render dogfood plugins: %v\n", err)
 		os.Exit(1)
 	}
-	// The hooks/ subtrees are fully rendered; prune them first so a file the
-	// generators no longer emit does not linger as a stale checked-in copy.
-	// The hand-maintained plugin manifests live outside hooks/ and survive.
-	for _, plugin := range []string{"plugin-claude", "plugin-cursor"} {
-		if err := os.RemoveAll(filepath.Join(*out, plugin, "hooks")); err != nil {
-			fmt.Fprintf(os.Stderr, "prune %s/hooks: %v\n", plugin, err)
-			os.Exit(1)
-		}
-	}
+	files["plugin-claude/.claude-plugin/plugin.json"] = []byte(localClaudeManifest)
 	for name, content := range files {
 		dst := filepath.Join(*out, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {

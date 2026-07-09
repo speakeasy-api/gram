@@ -86,17 +86,17 @@ type GenerateConfig struct {
 	ObservabilityMode bool
 }
 
-// DogfoodPluginFiles renders the checked-in dogfood plugins under
-// hooks/plugin-claude and hooks/plugin-cursor from the same generators that
-// publish customer plugins, so local senders exercise the exact scripts --
-// canonical payloads, /rpc/hooks.ingest, ratchet and org-key recovery --
-// customers run. The configuration is fully environment-driven: no org, no
-// baked key, no project; every value resolves from GRAM_HOOKS_* variables at
-// run time. Each plugin's .claude-plugin/.cursor-plugin manifest stays
-// hand-maintained (the rendered ones carry org-derived names), so manifests
-// are dropped from the returned map. Regenerate with
-// `go run ./cmd/export-hook-plugin`; TestDogfoodPluginsMatchCheckedIn guards
-// against drift.
+// DogfoodPluginFiles renders the dogfood plugins (plugin-claude,
+// plugin-cursor) from the same generators that publish customer plugins, so
+// dogfood senders exercise the exact scripts -- canonical payloads,
+// /rpc/hooks.ingest, ratchet and org-key recovery -- customers run. The
+// configuration is fully environment-driven: no org, no baked key, no
+// project; every value resolves from GRAM_HOOKS_* variables at run time.
+// The rendered manifests carry org-derived names that make no sense without
+// an org, so manifests are dropped from the returned map; consumers that
+// need one (cmd/export-hook-plugin for `claude --plugin-dir`) supply their
+// own. Nothing is checked in: tests and the local-dev task render into temp
+// directories on demand.
 func DogfoodPluginFiles() (map[string][]byte, error) {
 	cfg := GenerateConfig{
 		OrgName:           "",
@@ -160,8 +160,7 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 // force the automated rollout to republish every connected project on the next
 // run, even when an individual project's generated output is byte-identical —
 // for generator changes that alter behaviour in ways the placeholder
-// fingerprint pass can't observe. The Plugin Generate Check CI workflow
-// requires this to change whenever generate.go does.
+// fingerprint pass can't observe.
 const pluginGeneratorVersion = "9"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when

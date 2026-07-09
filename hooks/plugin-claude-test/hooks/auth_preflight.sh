@@ -1,1 +1,0 @@
-../../plugin-claude/hooks/auth_preflight.sh
