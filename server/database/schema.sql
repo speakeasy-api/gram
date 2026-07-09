@@ -925,6 +925,9 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   token_endpoint TEXT,
   registration_endpoint TEXT,
   jwks_uri TEXT,
+  service_documentation TEXT,
+  op_policy_uri TEXT,
+  op_tos_uri TEXT,
 
   scopes_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
@@ -941,6 +944,10 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
 
   name TEXT CHECK (name IS NULL OR name <> ''),
   logo_asset_id uuid,
+
+  -- Manually set (not RFC 8414) link to instructions for setting up an OAuth
+  -- client with this issuer's provider, surfaced to customers.
+  client_setup_documentation_url TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
