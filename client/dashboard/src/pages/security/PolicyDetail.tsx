@@ -651,9 +651,7 @@ function PromptPolicyEditor({
   const [scopeMode, setScopeMode] = useState<"messageTypes" | "cel">(
     policy?.scopeInclude ? "cel" : "messageTypes",
   );
-  const [action, setAction] = useState<PolicyAction>(
-    policy?.action === "block" ? "block" : "flag",
-  );
+  const [action, setAction] = useState<PolicyAction>(policy?.action ?? "flag");
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
   );
@@ -677,7 +675,7 @@ function PromptPolicyEditor({
       failOpen !== (policy.modelConfig?.failOpen ?? true) ||
       scopeInclude !== (policy.scopeInclude ?? "") ||
       scopeExempt !== (policy.scopeExempt ?? "") ||
-      action !== (policy.action === "block" ? "block" : "flag") ||
+      action !== (policy.action ?? "flag") ||
       userMessage !== (policy.userMessage ?? "") ||
       audienceType !==
         (policy.audienceType === "targeted" ? "targeted" : "everyone") ||
@@ -1209,17 +1207,24 @@ function ActionStep({
           selectedAudiencePrincipalUrns={audiencePrincipalUrns}
           setSelectedAudiencePrincipalUrns={setAudiencePrincipalUrns}
         />
-        {action === "block" && (
+        {action !== "flag" && (
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Custom Message</Label>
+            <Label className="text-sm font-medium">
+              {action === "warn" ? "Warning message" : "Custom Message"}
+            </Label>
             <p className="text-muted-foreground text-xs">
-              Shown to the user when this policy blocks a tool call or prompt.
-              Leave blank to use the default message.
+              {action === "warn"
+                ? "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message."
+                : "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."}
             </p>
             <TextArea
               value={userMessage}
               onChange={setUserMessage}
-              placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+              placeholder={
+                action === "warn"
+                  ? "e.g. %{match} looks sensitive. Acknowledge to proceed."
+                  : "e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+              }
               rows={3}
             />
           </div>
@@ -1631,8 +1636,12 @@ function PromptReview({
             </SummaryRow>
           ) : null}
           <SummaryRow label="Action">
-            <Badge variant={action === "block" ? "warning" : "neutral"}>
-              {action === "block" ? "Block" : "Flag"}
+            <Badge variant={action === "flag" ? "neutral" : "warning"}>
+              {action === "block"
+                ? "Block"
+                : action === "warn"
+                  ? "Warn"
+                  : "Flag"}
             </Badge>
           </SummaryRow>
           <SummaryRow label="Audience">
@@ -2858,7 +2867,7 @@ function StandardPolicyEditor({
     for (const rule of rules) nextDisabled.delete(rule.id);
     setSelectedCategories(nextCats);
     setDisabledRules(nextDisabled);
-    if (checked && FLAG_ONLY_CATEGORIES.has(cat) && action === "block") {
+    if (checked && FLAG_ONLY_CATEGORIES.has(cat) && action !== "flag") {
       setAction("flag");
     }
   };
@@ -2894,7 +2903,7 @@ function StandardPolicyEditor({
       FLAG_ONLY_CATEGORIES.has(s as RuleCategory),
     );
     const resolvedAction =
-      flagOnlyActive && action === "block" ? "flag" : action;
+      flagOnlyActive && action !== "flag" ? "flag" : action;
     const principals =
       audienceType === "targeted" ? [...audiencePrincipalUrns] : [];
     const autoName = name.trim() === "";
@@ -3170,8 +3179,8 @@ function StandardReview({
           </SummaryRow>
         ) : null}
         <SummaryRow label="Action">
-          <Badge variant={action === "block" ? "warning" : "neutral"}>
-            {action === "block" ? "Block" : "Flag"}
+          <Badge variant={action === "flag" ? "neutral" : "warning"}>
+            {action === "block" ? "Block" : action === "warn" ? "Warn" : "Flag"}
           </Badge>
         </SummaryRow>
         <SummaryRow label="Audience">

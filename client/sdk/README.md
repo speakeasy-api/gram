@@ -565,6 +565,12 @@ run();
 * [list](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
 * [revoke](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
 
+### [Risk.PolicyChallenges](docs/sdks/policychallenges/README.md)
+
+* [acknowledge](docs/sdks/policychallenges/README.md#acknowledge) - acknowledgeRiskPolicyChallenge risk
+* [decline](docs/sdks/policychallenges/README.md#decline) - declineRiskPolicyChallenge risk
+* [get](docs/sdks/policychallenges/README.md#get) - getRiskPolicyChallenge risk
+
 ### [Risk.Results](docs/sdks/results/README.md)
 
 * [list](docs/sdks/results/README.md#list) - listRiskResults risk
@@ -1001,6 +1007,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskPolicyBypassRequestsDeny`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
 - [`riskPolicyBypassRequestsList`](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
 - [`riskPolicyBypassRequestsRevoke`](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
+- [`riskPolicyChallengesAcknowledge`](docs/sdks/policychallenges/README.md#acknowledge) - acknowledgeRiskPolicyChallenge risk
+- [`riskPolicyChallengesDecline`](docs/sdks/policychallenges/README.md#decline) - declineRiskPolicyChallenge risk
+- [`riskPolicyChallengesGet`](docs/sdks/policychallenges/README.md#get) - getRiskPolicyChallenge risk
 - [`riskResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`riskResultsListForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
@@ -1370,6 +1379,7 @@ To learn about this feature and how to get started, check
 - [`useRevokeUserSessionClientMutation`](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
 - [`useRevokeUserSessionConsentMutation`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
 - [`useRevokeUserSessionMutation`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
+- [`useRiskAcknowledgePolicyChallengeMutation`](docs/sdks/policychallenges/README.md#acknowledge) - acknowledgeRiskPolicyChallenge risk
 - [`useRiskApprovePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
 - [`useRiskCategories`](docs/sdks/categories/README.md#list) - listRiskCategories risk
 - [`useRiskCompileExpr`](docs/sdks/expr/README.md#compile) - compileExpr risk
@@ -1377,6 +1387,7 @@ To learn about this feature and how to get started, check
 - [`useRiskCreateExclusionMutation`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 - [`useRiskCreatePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
 - [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
+- [`useRiskDeclinePolicyChallengeMutation`](docs/sdks/policychallenges/README.md#decline) - declineRiskPolicyChallenge risk
 - [`useRiskDeleteCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
 - [`useRiskDeleteEvalReviewMutation`](docs/sdks/evals/README.md#deletereview) - deleteRiskEvalReview risk
 - [`useRiskDeleteExclusionMutation`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
@@ -1384,6 +1395,7 @@ To learn about this feature and how to get started, check
 - [`useRiskEvaluatePromptGuardrail`](docs/sdks/evals/README.md#evaluate) - evaluatePromptGuardrail risk
 - [`useRiskGetBlock`](docs/sdks/blocks/README.md#get) - getRiskBlock risk
 - [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
+- [`useRiskGetPolicyChallengeMutation`](docs/sdks/policychallenges/README.md#get) - getRiskPolicyChallenge risk
 - [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`useRiskListEvalReviews`](docs/sdks/evals/README.md#listreviews) - listRiskEvalReviews risk
 - [`useRiskListExclusions`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk

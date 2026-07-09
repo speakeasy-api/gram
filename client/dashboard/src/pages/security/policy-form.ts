@@ -258,6 +258,12 @@ export const ACTION_OPTIONS: {
     description: "Log findings for review without interrupting the session",
   },
   {
+    value: "warn",
+    title: "Warn & confirm",
+    description:
+      "Warn the user and require them to acknowledge before the action proceeds. Falls back to blocking where confirmation isn't possible.",
+  },
+  {
     value: "block",
     title: "Deny the request",
     description: "Deny prompts and tool calls that match detection rules",
