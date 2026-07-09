@@ -172,6 +172,7 @@ run();
 ### [Agent](docs/sdks/agent/README.md)
 
 * [getPlugins](docs/sdks/agent/README.md#getplugins) - getPlugins agent
+* [listSyncedUsers](docs/sdks/agent/README.md#listsyncedusers) - listSyncedUsers agent
 
 ### [AiIntegrations](docs/sdks/aiintegrations/README.md)
 
@@ -756,6 +757,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`adminRemoteSessionsUpdateGlobalClient`](docs/sdks/adminremotesessions/README.md#updateglobalclient) - updateGlobalClient adminRemoteSessions
 - [`adminRemoteSessionsUpdateGlobalIssuer`](docs/sdks/adminremotesessions/README.md#updateglobalissuer) - updateGlobalIssuer adminRemoteSessions
 - [`agentGetPlugins`](docs/sdks/agent/README.md#getplugins) - getPlugins agent
+- [`agentListSyncedUsers`](docs/sdks/agent/README.md#listsyncedusers) - listSyncedUsers agent
 - [`aiIntegrationsDeleteConfig`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
 - [`aiIntegrationsGetConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getConfig aiIntegrations
 - [`aiIntegrationsUpsertConfig`](docs/sdks/aiintegrations/README.md#upsertconfig) - upsertConfig aiIntegrations
@@ -1446,6 +1448,7 @@ To learn about this feature and how to get started, check
 - [`useShadowMCPAccessRules`](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
 - [`useShadowMCPApprovalRequests`](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
+- [`useSyncedAgentUsers`](docs/sdks/agent/README.md#listsyncedusers) - listSyncedUsers agent
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`useTelemetryQuery`](docs/sdks/telemetry/README.md#query) - query telemetry
 - [`useTelemetryQueryRiskTokens`](docs/sdks/telemetry/README.md#queryrisktokens) - queryRiskTokens telemetry

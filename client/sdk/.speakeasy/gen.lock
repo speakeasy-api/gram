@@ -346,6 +346,7 @@ trackedFiles:
   docs/models/components/listshadowmcpaccessrulesresult.md: {}
   docs/models/components/listshadowmcpapprovalrequestsresult.md: {}
   docs/models/components/listsourcesresult.md: {}
+  docs/models/components/listsyncedusersresult.md: {}
   docs/models/components/listtoolfiltersresult.md: {}
   docs/models/components/listtoolsetsresult.md: {}
   docs/models/components/listtoolsetsummariesresult.md: {}
@@ -619,6 +620,7 @@ trackedFiles:
   docs/models/components/suggestcustomdetectionrulerequestbody.md: {}
   docs/models/components/suggestcustomdetectionruleresult.md: {}
   docs/models/components/suggestcustomdetectionruleresultseverity.md: {}
+  docs/models/components/syncedagentuser.md: {}
   docs/models/components/targetkind.md: {}
   docs/models/components/targettype.md: {}
   docs/models/components/targettypes.md: {}
@@ -1529,6 +1531,8 @@ trackedFiles:
   docs/models/operations/listshadowmcpaccessrulessecurity.md: {}
   docs/models/operations/listshadowmcpapprovalrequestsrequest.md: {}
   docs/models/operations/listshadowmcpapprovalrequestssecurity.md: {}
+  docs/models/operations/listsyncedagentusersrequest.md: {}
+  docs/models/operations/listsyncedagentuserssecurity.md: {}
   docs/models/operations/listtemplatesrequest.md: {}
   docs/models/operations/listtemplatessecurity.md: {}
   docs/models/operations/listtemplatessecurityoption1.md: {}
@@ -2045,6 +2049,7 @@ trackedFiles:
   src/funcs/adminRemoteSessionsUpdateGlobalClient.ts: {}
   src/funcs/adminRemoteSessionsUpdateGlobalIssuer.ts: {}
   src/funcs/agentGetPlugins.ts: {}
+  src/funcs/agentListSyncedUsers.ts: {}
   src/funcs/aiIntegrationsDeleteConfig.ts: {}
   src/funcs/aiIntegrationsGetConfig.ts: {}
   src/funcs/aiIntegrationsUpsertConfig.ts: {}
@@ -2664,6 +2669,7 @@ trackedFiles:
   src/models/components/listshadowmcpaccessrulesresult.ts: {}
   src/models/components/listshadowmcpapprovalrequestsresult.ts: {}
   src/models/components/listsourcesresult.ts: {}
+  src/models/components/listsyncedusersresult.ts: {}
   src/models/components/listtoolfiltersresult.ts: {}
   src/models/components/listtoolsetsresult.ts: {}
   src/models/components/listtoolsetsummariesresult.ts: {}
@@ -2875,6 +2881,7 @@ trackedFiles:
   src/models/components/submitriskblockfeedbackrequestbody.ts: {}
   src/models/components/suggestcustomdetectionrulerequestbody.ts: {}
   src/models/components/suggestcustomdetectionruleresult.ts: {}
+  src/models/components/syncedagentuser.ts: {}
   src/models/components/telemetrylogrecord.ts: {}
   src/models/components/telemetrywindowpayload.ts: {}
   src/models/components/testdetectionrulematch.ts: {}
@@ -3242,6 +3249,7 @@ trackedFiles:
   src/models/operations/listsessions.ts: {}
   src/models/operations/listshadowmcpaccessrules.ts: {}
   src/models/operations/listshadowmcpapprovalrequests.ts: {}
+  src/models/operations/listsyncedagentusers.ts: {}
   src/models/operations/listtemplates.ts: {}
   src/models/operations/listtools.ts: {}
   src/models/operations/listtoolsets.ts: {}
@@ -3841,6 +3849,8 @@ trackedFiles:
   src/react-query/shadowMCPApprovalRequests.core.ts: {}
   src/react-query/shadowMCPApprovalRequests.ts: {}
   src/react-query/switchScopes.ts: {}
+  src/react-query/syncedAgentUsers.core.ts: {}
+  src/react-query/syncedAgentUsers.ts: {}
   src/react-query/telemetryCaptureEvent.ts: {}
   src/react-query/telemetryQuery.core.ts: {}
   src/react-query/telemetryQuery.ts: {}
@@ -6704,6 +6714,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listSyncedAgentUsers:
+    speakeasy-default-list-synced-agent-users:
+      responses:
+        "200":
+          application/json: {"users": [{"email": "dev@acme.corp", "first_seen_at": "2026-09-16T15:52:34.809Z", "last_seen_at": "2025-03-24T22:40:59.836Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listTemplates:
     speakeasy-default-list-templates:
       responses:

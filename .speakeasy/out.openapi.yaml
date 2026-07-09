@@ -3270,6 +3270,88 @@ paths:
       x-speakeasy-name-override: getPlugins
       x-speakeasy-react-hook:
         name: AgentPlugins
+  /rpc/agent.listSyncedUsers:
+    get:
+      description: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.
+      operationId: listSyncedAgentUsers
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSyncedUsersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listSyncedUsers agent
+      tags:
+        - agent
+      x-speakeasy-name-override: listSyncedUsers
+      x-speakeasy-react-hook:
+        name: SyncedAgentUsers
   /rpc/aiIntegrations.deleteConfig:
     post:
       description: Delete the org-wide AI integration config for a provider.
@@ -46001,6 +46083,16 @@ components:
           description: The distinct agent sources present in this project's chats (raw source strings such as 'claude-code', 'Codex', 'playground').
       required:
         - sources
+    ListSyncedUsersResult:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncedAgentUser'
+          description: Emails seen syncing the device agent, most recently active first.
+      required:
+        - users
     ListToolFiltersResult:
       type: object
       properties:
@@ -51938,6 +52030,25 @@ components:
         - description
         - regex
         - severity
+    SyncedAgentUser:
+      type: object
+      properties:
+        email:
+          type: string
+          description: Email the device agent reported on sync. Resolve against org members for display.
+          example: dev@acme.corp
+        first_seen_at:
+          type: string
+          description: First time this email was seen syncing the device agent.
+          format: date-time
+        last_seen_at:
+          type: string
+          description: Most recent time this email was seen syncing the device agent.
+          format: date-time
+      required:
+        - email
+        - first_seen_at
+        - last_seen_at
     TUMPeriod:
       type: object
       properties:
