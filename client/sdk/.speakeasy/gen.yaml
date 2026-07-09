@@ -43,7 +43,7 @@ typescript:
       '@tanstack/react-query': 'catalog:'
       '@types/react': 'catalog:'
       '@types/react-dom': 'catalog:'
-      typescript: 'catalog:ts5'
+      typescript: 'catalog:'
     peerDependencies: {}
   additionalPackageJSON:
     private: true
@@ -102,6 +102,6 @@ typescript:
   unionStrategy: left-to-right
   usageSDKInitImports: []
   useIndexModules: false
-  useOxlint: false
+  useOxlint: true
   useTsgo: false
   zodVersion: v4-mini

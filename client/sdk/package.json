@@ -25,7 +25,7 @@
   },
   "sideEffects": false,
   "scripts": {
-    "lint": "eslint --cache --max-warnings=0 src",
+    "lint": "oxlint --max-warnings=0 --deny-warnings src/**/*.ts src/**/*.tsx",
     "build": "tsc",
     "prepublishOnly": "npm run build"
   },
@@ -40,14 +40,11 @@
     "react-dom": {"optional":true}
   },
   "devDependencies": {
-    "@eslint/js": "^9.26.0",
     "@tanstack/react-query": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "eslint": "^9.26.0",
-    "globals": "^15.14.0",
-    "typescript": "catalog:ts5",
-    "typescript-eslint": "^8.26.0"
+    "oxlint": "^1.60.0",
+    "typescript": "catalog:"
   },
   "dependencies": {
     "zod": "^3.25.65 || ^4.0.0"
