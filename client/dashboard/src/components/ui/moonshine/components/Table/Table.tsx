@@ -799,7 +799,8 @@ function HeaderCell({ className, children, ...props }: HeaderCellProps) {
       {...props}
       className={cn(
         styles.tableHeader,
-        "flex items-center align-middle font-medium whitespace-nowrap text-body select-none",
+        // Column headers read as mono eyebrows (Claude Design).
+        "flex items-center align-middle font-mono text-xs font-light tracking-[0.08em] uppercase whitespace-nowrap text-muted select-none",
         className,
       )}
     >
