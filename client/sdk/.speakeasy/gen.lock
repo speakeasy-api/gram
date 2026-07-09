@@ -40,6 +40,8 @@ trackedFiles:
   docs/lib/utils/retryconfig.md: {}
   docs/models/components/accessmember.md: {}
   docs/models/components/accessscope.md: {}
+  docs/models/components/acknowledgeriskpolicychallengerequestbody.md: {}
+  docs/models/components/acknowledgeriskpolicychallengeresponsebody.md: {}
   docs/models/components/action.md: {}
   docs/models/components/adddeploymentpackageform.md: {}
   docs/models/components/addexternalmcpform.md: {}
@@ -166,6 +168,7 @@ trackedFiles:
   docs/models/components/customdomain.md: {}
   docs/models/components/customdomainmcpendpoint.md: {}
   docs/models/components/decision.md: {}
+  docs/models/components/declineriskpolicychallengeresponsebody.md: {}
   docs/models/components/deleteconfigrequestbody.md: {}
   docs/models/components/deleteglobaltoolvariationresult.md: {}
   docs/models/components/deleterequestbody.md: {}
@@ -240,6 +243,7 @@ trackedFiles:
   docs/models/components/getprojectoverviewresult.md: {}
   docs/models/components/getprojectresult.md: {}
   docs/models/components/getprompttemplateresult.md: {}
+  docs/models/components/getriskpolicychallengeresponsebody.md: {}
   docs/models/components/getsignedasseturlform.md: {}
   docs/models/components/gettoolusagefilteroptionspayload.md: {}
   docs/models/components/gettoolusagefilteroptionsresult.md: {}
@@ -342,6 +346,7 @@ trackedFiles:
   docs/models/components/listshadowmcpaccessrulesresult.md: {}
   docs/models/components/listshadowmcpapprovalrequestsresult.md: {}
   docs/models/components/listsourcesresult.md: {}
+  docs/models/components/listsyncedusersresult.md: {}
   docs/models/components/listtoolfiltersresult.md: {}
   docs/models/components/listtoolsetsresult.md: {}
   docs/models/components/listtoolsetsummariesresult.md: {}
@@ -615,6 +620,7 @@ trackedFiles:
   docs/models/components/suggestcustomdetectionrulerequestbody.md: {}
   docs/models/components/suggestcustomdetectionruleresult.md: {}
   docs/models/components/suggestcustomdetectionruleresultseverity.md: {}
+  docs/models/components/syncedagentuser.md: {}
   docs/models/components/targetkind.md: {}
   docs/models/components/targettype.md: {}
   docs/models/components/targettypes.md: {}
@@ -780,6 +786,8 @@ trackedFiles:
   docs/models/errors/serviceerror.md: {}
   docs/models/operations/accessscope.md: {}
   docs/models/operations/accounttype.md: {}
+  docs/models/operations/acknowledgeriskpolicychallengerequest.md: {}
+  docs/models/operations/acknowledgeriskpolicychallengesecurity.md: {}
   docs/models/operations/addexternaloauthserverrequest.md: {}
   docs/models/operations/addexternaloauthserversecurity.md: {}
   docs/models/operations/addexternaloauthserversecurityoption1.md: {}
@@ -958,6 +966,8 @@ trackedFiles:
   docs/models/operations/createusersessionissuersecurityoption2.md: {}
   docs/models/operations/creditusagerequest.md: {}
   docs/models/operations/creditusagesecurity.md: {}
+  docs/models/operations/declineriskpolicychallengerequest.md: {}
+  docs/models/operations/declineriskpolicychallengesecurity.md: {}
   docs/models/operations/deleteaiintegrationconfigrequest.md: {}
   docs/models/operations/deleteaiintegrationconfigsecurity.md: {}
   docs/models/operations/deleteassistantmemoryrequest.md: {}
@@ -1250,6 +1260,8 @@ trackedFiles:
   docs/models/operations/getriskoverviewsecurity.md: {}
   docs/models/operations/getriskoverviewsecurityoption1.md: {}
   docs/models/operations/getriskoverviewsecurityoption2.md: {}
+  docs/models/operations/getriskpolicychallengerequest.md: {}
+  docs/models/operations/getriskpolicychallengesecurity.md: {}
   docs/models/operations/getriskpolicyrequest.md: {}
   docs/models/operations/getriskpolicysecurity.md: {}
   docs/models/operations/getriskpolicysecurityoption1.md: {}
@@ -1519,6 +1531,8 @@ trackedFiles:
   docs/models/operations/listshadowmcpaccessrulessecurity.md: {}
   docs/models/operations/listshadowmcpapprovalrequestsrequest.md: {}
   docs/models/operations/listshadowmcpapprovalrequestssecurity.md: {}
+  docs/models/operations/listsyncedagentusersrequest.md: {}
+  docs/models/operations/listsyncedagentuserssecurity.md: {}
   docs/models/operations/listtemplatesrequest.md: {}
   docs/models/operations/listtemplatessecurity.md: {}
   docs/models/operations/listtemplatessecurityoption1.md: {}
@@ -1972,6 +1986,7 @@ trackedFiles:
   docs/sdks/plugins/README.md: {}
   docs/sdks/policies/README.md: {}
   docs/sdks/policybypassrequests/README.md: {}
+  docs/sdks/policychallenges/README.md: {}
   docs/sdks/projects/README.md: {}
   docs/sdks/remotemcp/README.md: {}
   docs/sdks/remotesessionclients/README.md: {}
@@ -2034,6 +2049,7 @@ trackedFiles:
   src/funcs/adminRemoteSessionsUpdateGlobalClient.ts: {}
   src/funcs/adminRemoteSessionsUpdateGlobalIssuer.ts: {}
   src/funcs/agentGetPlugins.ts: {}
+  src/funcs/agentListSyncedUsers.ts: {}
   src/funcs/aiIntegrationsDeleteConfig.ts: {}
   src/funcs/aiIntegrationsGetConfig.ts: {}
   src/funcs/aiIntegrationsUpsertConfig.ts: {}
@@ -2285,6 +2301,9 @@ trackedFiles:
   src/funcs/riskPolicyBypassRequestsDeny.ts: {}
   src/funcs/riskPolicyBypassRequestsList.ts: {}
   src/funcs/riskPolicyBypassRequestsRevoke.ts: {}
+  src/funcs/riskPolicyChallengesAcknowledge.ts: {}
+  src/funcs/riskPolicyChallengesDecline.ts: {}
+  src/funcs/riskPolicyChallengesGet.ts: {}
   src/funcs/riskResultsByChat.ts: {}
   src/funcs/riskResultsList.ts: {}
   src/funcs/riskResultsListForAgent.ts: {}
@@ -2394,6 +2413,8 @@ trackedFiles:
   src/lib/security.ts: {}
   src/lib/url.ts: {}
   src/models/components/accessmember.ts: {}
+  src/models/components/acknowledgeriskpolicychallengerequestbody.ts: {}
+  src/models/components/acknowledgeriskpolicychallengeresponsebody.ts: {}
   src/models/components/adddeploymentpackageform.ts: {}
   src/models/components/addexternalmcpform.ts: {}
   src/models/components/addexternaloauthserverrequestbody.ts: {}
@@ -2490,6 +2511,7 @@ trackedFiles:
   src/models/components/cursorhookresult.ts: {}
   src/models/components/customdomain.ts: {}
   src/models/components/customdomainmcpendpoint.ts: {}
+  src/models/components/declineriskpolicychallengeresponsebody.ts: {}
   src/models/components/deleteconfigrequestbody.ts: {}
   src/models/components/deleteglobaltoolvariationresult.ts: {}
   src/models/components/deleterequestbody.ts: {}
@@ -2554,6 +2576,7 @@ trackedFiles:
   src/models/components/getprojectoverviewresult.ts: {}
   src/models/components/getprojectresult.ts: {}
   src/models/components/getprompttemplateresult.ts: {}
+  src/models/components/getriskpolicychallengeresponsebody.ts: {}
   src/models/components/getsignedasseturlform.ts: {}
   src/models/components/gettoolusagefilteroptionspayload.ts: {}
   src/models/components/gettoolusagefilteroptionsresult.ts: {}
@@ -2646,6 +2669,7 @@ trackedFiles:
   src/models/components/listshadowmcpaccessrulesresult.ts: {}
   src/models/components/listshadowmcpapprovalrequestsresult.ts: {}
   src/models/components/listsourcesresult.ts: {}
+  src/models/components/listsyncedusersresult.ts: {}
   src/models/components/listtoolfiltersresult.ts: {}
   src/models/components/listtoolsetsresult.ts: {}
   src/models/components/listtoolsetsummariesresult.ts: {}
@@ -2857,6 +2881,7 @@ trackedFiles:
   src/models/components/submitriskblockfeedbackrequestbody.ts: {}
   src/models/components/suggestcustomdetectionrulerequestbody.ts: {}
   src/models/components/suggestcustomdetectionruleresult.ts: {}
+  src/models/components/syncedagentuser.ts: {}
   src/models/components/telemetrylogrecord.ts: {}
   src/models/components/telemetrywindowpayload.ts: {}
   src/models/components/testdetectionrulematch.ts: {}
@@ -2975,6 +3000,7 @@ trackedFiles:
   src/models/errors/responsevalidationerror.ts: {}
   src/models/errors/sdkvalidationerror.ts: {}
   src/models/errors/serviceerror.ts: {}
+  src/models/operations/acknowledgeriskpolicychallenge.ts: {}
   src/models/operations/addexternaloauthserver.ts: {}
   src/models/operations/addoauthproxyserver.ts: {}
   src/models/operations/addpluginserver.ts: {}
@@ -3034,6 +3060,7 @@ trackedFiles:
   src/models/operations/createtunneledmcpserver.ts: {}
   src/models/operations/createusersessionissuer.ts: {}
   src/models/operations/creditusage.ts: {}
+  src/models/operations/declineriskpolicychallenge.ts: {}
   src/models/operations/deleteaiintegrationconfig.ts: {}
   src/models/operations/deleteassistant.ts: {}
   src/models/operations/deleteassistantmemory.ts: {}
@@ -3135,6 +3162,7 @@ trackedFiles:
   src/models/operations/getriskblock.ts: {}
   src/models/operations/getriskoverview.ts: {}
   src/models/operations/getriskpolicy.ts: {}
+  src/models/operations/getriskpolicychallenge.ts: {}
   src/models/operations/getriskpolicystatus.ts: {}
   src/models/operations/getriskrulebreakdown.ts: {}
   src/models/operations/getriskuserbreakdown.ts: {}
@@ -3221,6 +3249,7 @@ trackedFiles:
   src/models/operations/listsessions.ts: {}
   src/models/operations/listshadowmcpaccessrules.ts: {}
   src/models/operations/listshadowmcpapprovalrequests.ts: {}
+  src/models/operations/listsyncedagentusers.ts: {}
   src/models/operations/listtemplates.ts: {}
   src/models/operations/listtools.ts: {}
   src/models/operations/listtoolsets.ts: {}
@@ -3723,6 +3752,7 @@ trackedFiles:
   src/react-query/revokeUserSession.ts: {}
   src/react-query/revokeUserSessionClient.ts: {}
   src/react-query/revokeUserSessionConsent.ts: {}
+  src/react-query/riskAcknowledgePolicyChallenge.ts: {}
   src/react-query/riskApprovePolicyBypassRequest.ts: {}
   src/react-query/riskCategories.core.ts: {}
   src/react-query/riskCategories.ts: {}
@@ -3732,6 +3762,7 @@ trackedFiles:
   src/react-query/riskCreateExclusion.ts: {}
   src/react-query/riskCreatePolicy.ts: {}
   src/react-query/riskCreatePolicyBypassRequest.ts: {}
+  src/react-query/riskDeclinePolicyChallenge.ts: {}
   src/react-query/riskDeleteCustomDetectionRule.ts: {}
   src/react-query/riskDeleteEvalReview.ts: {}
   src/react-query/riskDeleteExclusion.ts: {}
@@ -3742,6 +3773,7 @@ trackedFiles:
   src/react-query/riskGetBlock.ts: {}
   src/react-query/riskGetCustomDetectionRule.core.ts: {}
   src/react-query/riskGetCustomDetectionRule.ts: {}
+  src/react-query/riskGetPolicyChallenge.ts: {}
   src/react-query/riskListCustomDetectionRules.core.ts: {}
   src/react-query/riskListCustomDetectionRules.ts: {}
   src/react-query/riskListEvalReviews.core.ts: {}
@@ -3817,6 +3849,8 @@ trackedFiles:
   src/react-query/shadowMCPApprovalRequests.core.ts: {}
   src/react-query/shadowMCPApprovalRequests.ts: {}
   src/react-query/switchScopes.ts: {}
+  src/react-query/syncedAgentUsers.core.ts: {}
+  src/react-query/syncedAgentUsers.ts: {}
   src/react-query/telemetryCaptureEvent.ts: {}
   src/react-query/telemetryQuery.core.ts: {}
   src/react-query/telemetryQuery.ts: {}
@@ -3938,6 +3972,7 @@ trackedFiles:
   src/sdk/plugins.ts: {}
   src/sdk/policies.ts: {}
   src/sdk/policybypassrequests.ts: {}
+  src/sdk/policychallenges.ts: {}
   src/sdk/projects.ts: {}
   src/sdk/remotemcp.ts: {}
   src/sdk/remotesessionclients.ts: {}
@@ -3971,6 +4006,17 @@ trackedFiles:
   src/types/unrecognized.ts: {}
   tsconfig.json: {}
 examples:
+  acknowledgeRiskPolicyChallenge:
+    speakeasy-default-acknowledge-risk-policy-challenge:
+      requestBody:
+        application/json: {"ack_token": "<value>"}
+      responses:
+        "200":
+          application/json: {"acknowledged": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   addExternalOAuthServer:
     speakeasy-default-add-external-O-auth-server:
       parameters:
@@ -4658,6 +4704,17 @@ examples:
       responses:
         "200":
           application/json: {"credits_used": 4205.07, "monthly_credits": 586555}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  declineRiskPolicyChallenge:
+    speakeasy-default-decline-risk-policy-challenge:
+      requestBody:
+        application/json: {"ack_token": "<value>"}
+      responses:
+        "200":
+          application/json: {"declined": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -5719,6 +5776,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getRiskPolicyChallenge:
+    speakeasy-default-get-risk-policy-challenge:
+      requestBody:
+        application/json: {"ack_token": "<value>"}
+      responses:
+        "200":
+          application/json: {"acknowledged": true, "message": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getRiskPolicyStatus:
     speakeasy-default-get-risk-policy-status:
       parameters:
@@ -6646,6 +6714,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listSyncedAgentUsers:
+    speakeasy-default-list-synced-agent-users:
+      responses:
+        "200":
+          application/json: {"users": [{"email": "dev@acme.corp", "first_seen_at": "2026-09-16T15:52:34.809Z", "last_seen_at": "2025-03-24T22:40:59.836Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listTemplates:
     speakeasy-default-list-templates:
       responses:

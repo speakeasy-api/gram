@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -154,6 +155,29 @@ func TestCorrelateClaudePromptsAdvancesMessageCursorWithoutMatches(t *testing.T)
 	require.Equal(t, int32(claudePromptCorrelationMessageBatchSize+1), store.lastListParams.LimitCount)
 }
 
+func TestCorrelateClaudePromptsSkipsOversizedMessagePrompt(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeClaudePromptStore{
+		rows: []activitiesrepo.ListUnlinkedClaudeUserMessagesForCorrelationRow{{
+			ID:        uuid.New(),
+			Seq:       1,
+			Content:   strings.Repeat("a", telemetryrepo.MaxClaudePromptCorrelationEditDistanceBytes+1),
+			CreatedAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+		}},
+	}
+	telemetry := &fakeClaudePromptTelemetry{}
+	act := newTestCorrelateClaudePrompts(t, store, telemetry)
+
+	result, err := act.Do(t.Context(), fakeCorrelateClaudePromptsArgs())
+
+	require.NoError(t, err)
+	require.False(t, result.HasMore)
+	require.Equal(t, int64(1), result.AfterMessageSeq)
+	require.Equal(t, 0, telemetry.calls)
+	require.False(t, store.backfilled)
+}
+
 func TestCorrelateClaudePromptsCarriesInputCursors(t *testing.T) {
 	t.Parallel()
 
@@ -244,10 +268,12 @@ type fakeClaudePromptTelemetry struct {
 	candidates          []telemetryrepo.ClaudeUserPromptCandidate
 	err                 error
 	waitForContextDone  bool
+	calls               int
 	lastCandidateParams telemetryrepo.ListClaudeUserPromptCandidatesForCorrelationParams
 }
 
 func (f *fakeClaudePromptTelemetry) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Context, params telemetryrepo.ListClaudeUserPromptCandidatesForCorrelationParams) ([]telemetryrepo.ClaudeUserPromptCandidate, error) {
+	f.calls++
 	f.lastCandidateParams = params
 	if f.waitForContextDone {
 		<-ctx.Done()

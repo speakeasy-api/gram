@@ -53,7 +53,7 @@ func New(guardianPolicy *guardian.Policy, opts ...Option) *Client {
 		panic("anthropic client requires guardian policy")
 	}
 	c := &Client{
-		httpClient: guardianPolicy.PooledClient(),
+		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
 		baseURL:    defaultBaseURL,
 		apiKey:     "",
 	}

@@ -16,7 +16,8 @@ import (
 
 // Endpoints wraps the "agent" service endpoints.
 type Endpoints struct {
-	GetPlugins goa.Endpoint
+	GetPlugins      goa.Endpoint
+	ListSyncedUsers goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "agent" service with endpoints.
@@ -24,13 +25,15 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetPlugins: NewGetPluginsEndpoint(s, a.APIKeyAuth),
+		GetPlugins:      NewGetPluginsEndpoint(s, a.APIKeyAuth),
+		ListSyncedUsers: NewListSyncedUsersEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "agent" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetPlugins = m(e.GetPlugins)
+	e.ListSyncedUsers = m(e.ListSyncedUsers)
 }
 
 // NewGetPluginsEndpoint returns an endpoint function that calls the method
@@ -53,5 +56,28 @@ func NewGetPluginsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return s.GetPlugins(ctx, p)
+	}
+}
+
+// NewListSyncedUsersEndpoint returns an endpoint function that calls the
+// method "listSyncedUsers" of service "agent".
+func NewListSyncedUsersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSyncedUsersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSyncedUsers(ctx, p)
 	}
 }

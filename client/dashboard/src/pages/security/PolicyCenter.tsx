@@ -1620,6 +1620,7 @@ const ACTION_BADGE_CONFIG: Record<
   { label: string; variant: NonNullable<BadgeProps["variant"]> }
 > = {
   flag: { label: "Flag", variant: "neutral" },
+  warn: { label: "Warn", variant: "warning" },
   block: { label: "Block", variant: "destructive" },
 };
 
@@ -1674,14 +1675,16 @@ export function ActionPicker({
   setFormAction: (v: PolicyAction) => void;
   flagOnlySelected?: boolean;
 }): JSX.Element {
+  // Flag-only sources reject both block and warn (blocking-class); present them
+  // as flag. Mirrors validateSourceAction in server/internal/risk/impl.go.
   const actionValue =
-    flagOnlySelected && formAction === "block" ? "flag" : formAction;
+    flagOnlySelected && formAction !== "flag" ? "flag" : formAction;
 
   return (
     <RadioGroup
       value={actionValue}
       onValueChange={(v) => {
-        if (flagOnlySelected && v === "block") {
+        if (flagOnlySelected && v !== "flag") {
           return;
         }
         setFormAction(v as PolicyAction);
@@ -1689,7 +1692,7 @@ export function ActionPicker({
       className="space-y-2.5"
     >
       {ACTION_OPTIONS.map((opt) => {
-        const disabled = flagOnlySelected && opt.value === "block";
+        const disabled = flagOnlySelected && opt.value !== "flag";
         const selected = actionValue === opt.value;
 
         return (

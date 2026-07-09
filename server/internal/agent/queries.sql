@@ -61,3 +61,23 @@ LEFT JOIN plugins p
 WHERE pr.organization_id = @organization_id
   AND pgc.marketplace_token IS NOT NULL
 ORDER BY pr.id, p.slug;
+
+-- name: UpsertDeviceAgentSync :exec
+-- Best-effort record that the device agent for @email in @organization_id polled.
+-- The ON CONFLICT WHERE guard caps writes to at most once per minute per
+-- (org, email) so the agent's ~60s poll cadence doesn't create write spikes,
+-- mirroring how api_keys.last_accessed_at is throttled.
+INSERT INTO device_agent_syncs (organization_id, email)
+VALUES (@organization_id, @email)
+ON CONFLICT (organization_id, email) DO UPDATE
+SET last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+WHERE device_agent_syncs.last_seen_at < clock_timestamp() - interval '1 minute';
+
+-- name: ListDeviceAgentSyncs :many
+-- Lists every distinct email seen polling the device agent for an org, most
+-- recently active first, for the dashboard's device-agent users view.
+SELECT organization_id, email, first_seen_at, last_seen_at
+FROM device_agent_syncs
+WHERE organization_id = @organization_id
+ORDER BY last_seen_at DESC;

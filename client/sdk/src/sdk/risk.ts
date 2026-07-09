@@ -12,10 +12,16 @@ import { Expr } from "./expr.js";
 import { Overview } from "./overview.js";
 import { Policies } from "./policies.js";
 import { PolicyBypassRequests } from "./policybypassrequests.js";
+import { PolicyChallenges } from "./policychallenges.js";
 import { Results } from "./results.js";
 import { Rules } from "./rules.js";
 
 export class Risk extends ClientSDK {
+  private _policyChallenges?: PolicyChallenges;
+  get policyChallenges(): PolicyChallenges {
+    return (this._policyChallenges ??= new PolicyChallenges(this._options));
+  }
+
   private _policyBypassRequests?: PolicyBypassRequests;
   get policyBypassRequests(): PolicyBypassRequests {
     return (this._policyBypassRequests ??= new PolicyBypassRequests(

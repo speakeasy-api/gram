@@ -122,3 +122,67 @@ func (q *Queries) GetAgentPluginSet(ctx context.Context, organizationID string) 
 	}
 	return items, nil
 }
+
+const listDeviceAgentSyncs = `-- name: ListDeviceAgentSyncs :many
+SELECT organization_id, email, first_seen_at, last_seen_at
+FROM device_agent_syncs
+WHERE organization_id = $1
+ORDER BY last_seen_at DESC
+`
+
+type ListDeviceAgentSyncsRow struct {
+	OrganizationID string
+	Email          string
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+}
+
+// Lists every distinct email seen polling the device agent for an org, most
+// recently active first, for the dashboard's device-agent users view.
+func (q *Queries) ListDeviceAgentSyncs(ctx context.Context, organizationID string) ([]ListDeviceAgentSyncsRow, error) {
+	rows, err := q.db.Query(ctx, listDeviceAgentSyncs, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDeviceAgentSyncsRow
+	for rows.Next() {
+		var i ListDeviceAgentSyncsRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.Email,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertDeviceAgentSync = `-- name: UpsertDeviceAgentSync :exec
+INSERT INTO device_agent_syncs (organization_id, email)
+VALUES ($1, $2)
+ON CONFLICT (organization_id, email) DO UPDATE
+SET last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+WHERE device_agent_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
+`
+
+type UpsertDeviceAgentSyncParams struct {
+	OrganizationID string
+	Email          string
+}
+
+// Best-effort record that the device agent for @email in @organization_id polled.
+// The ON CONFLICT WHERE guard caps writes to at most once per minute per
+// (org, email) so the agent's ~60s poll cadence doesn't create write spikes,
+// mirroring how api_keys.last_accessed_at is throttled.
+func (q *Queries) UpsertDeviceAgentSync(ctx context.Context, arg UpsertDeviceAgentSyncParams) error {
+	_, err := q.db.Exec(ctx, upsertDeviceAgentSync, arg.OrganizationID, arg.Email)
+	return err
+}
