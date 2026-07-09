@@ -237,8 +237,8 @@ export const TumUsageSection = (): JSX.Element => {
     <Page.Section>
       <Page.Section.Title>Billing</Page.Section.Title>
       <Page.Section.Description>
-        The volume of agent traffic Gram has processed, stored, and run security
-        analysis on each billing cycle, measured in tokens.
+        The volume of agent traffic the platform has processed, stored, and run
+        security analysis on each billing cycle, measured in tokens.
       </Page.Section.Description>
       <Page.Section.Body>
         {tum && period ? (
@@ -247,7 +247,7 @@ export const TumUsageSection = (): JSX.Element => {
               <Type variant="body" className="font-medium">
                 Tokens Under Management
               </Type>
-              <SimpleTooltip tooltip="Counts tokens from agent sessions Gram has stored chats or tool calls for during the selected billing cycle. Compared against your contracted monthly allowance.">
+              <SimpleTooltip tooltip="Counts tokens from agent sessions the platform has stored chats or tool calls for during the selected billing cycle. Compared against your contracted monthly allowance.">
                 <Info className="text-muted-foreground h-4 w-4" />
               </SimpleTooltip>
               <div className="ml-auto flex items-center gap-2">
