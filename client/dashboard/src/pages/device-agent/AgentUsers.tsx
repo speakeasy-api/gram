@@ -1,3 +1,9 @@
+import {
+  defineFilters,
+  useFilterState,
+  type FilterValue,
+} from "@/components/filters";
+import { Page } from "@/components/page-layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
@@ -9,11 +15,31 @@ import type { SyncedAgentUser } from "@gram/client/models/components/syncedagent
 import { Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
 import { Laptop } from "lucide-react";
 import { useMemo } from "react";
+import { useSearchParams } from "react-router";
 
 // A device counts as "active" if it has synced within this window. The agent
 // polls every ~60s, so five minutes tolerates a few missed polls (sleep, brief
 // network loss) before we flag the device as stale.
 const ACTIVE_WINDOW_MS = 5 * 60 * 1000;
+
+type SyncStatus = "active" | "stale";
+
+// Derived Active/Stale filter. Pinned so its chip is always visible; the actual
+// status is computed client-side from last_seen_at, so this filters the derived
+// rows rather than anything the server knows about.
+const STATUS_FILTERS = defineFilters([
+  { id: "status", label: "Status", kind: "multiselect", pinned: true },
+]);
+const STATUS_OPTIONS = [
+  { label: "Active", value: "active" },
+  { label: "Stale", value: "stale" },
+];
+
+function syncStatus(user: SyncedAgentUser, now: number): SyncStatus {
+  return now - user.lastSeenAt.getTime() < ACTIVE_WINDOW_MS
+    ? "active"
+    : "stale";
+}
 
 // initialsFor derives up to two uppercase initials from a display name, falling
 // back to the first character of the email's local part.
@@ -84,7 +110,8 @@ function UserCell({
 // returned most-recently-active first by the server. Org admins only — the tab
 // hosting it is gated on org:admin, and the endpoint enforces the same.
 export function AgentUsers(): React.JSX.Element {
-  const { data, isLoading, isError } = useSyncedAgentUsers();
+  const { data, isLoading, isError, refetch, isFetching } =
+    useSyncedAgentUsers();
   const { data: membersData } = useMembers();
 
   const membersByEmail = useMemo(() => {
@@ -95,7 +122,45 @@ export function AgentUsers(): React.JSX.Element {
     return map;
   }, [membersData]);
 
-  const users = data?.users ?? [];
+  // Status filter is URL-backed (?status=…). Search is a separate ?search=
+  // param so a filtered view is shareable/deep-linkable.
+  const { values, setValue, clearValue, clearAll } =
+    useFilterState(STATUS_FILTERS);
+  const statusFilter = values.status;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get("search") ?? "";
+  const setSearch = (value: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) next.set("search", value);
+        else next.delete("search");
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
+  const users = useMemo(() => data?.users ?? [], [data]);
+
+  const filteredUsers = useMemo(() => {
+    const now = Date.now();
+    const query = search.trim().toLowerCase();
+    return users.filter((user) => {
+      if (
+        statusFilter.length > 0 &&
+        !statusFilter.includes(syncStatus(user, now))
+      ) {
+        return false;
+      }
+      if (query) {
+        const member = membersByEmail.get(user.email.toLowerCase());
+        const haystack = `${user.email} ${member?.name ?? ""}`.toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [users, statusFilter, search, membersByEmail]);
 
   const columns: Column<SyncedAgentUser>[] = [
     {
@@ -159,6 +224,10 @@ export function AgentUsers(): React.JSX.Element {
     );
   }
 
+  // Distinguish "nobody has ever synced" from "filters hid everyone" so the
+  // empty state isn't misleading once the org has synced users.
+  const hasSyncedUsers = users.length > 0;
+
   return (
     <div className="flex flex-col gap-4">
       <Type muted>
@@ -167,9 +236,32 @@ export function AgentUsers(): React.JSX.Element {
         device is <strong className="text-foreground">Active</strong> when it
         has synced in the last few minutes, otherwise <strong>Stale</strong>.
       </Type>
+      <Page.Toolbar>
+        <Page.Toolbar.Search
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by name or email…"
+          debounceMs={200}
+        />
+        <Page.Toolbar.Filters
+          schema={STATUS_FILTERS}
+          values={values}
+          optionsById={{ status: STATUS_OPTIONS }}
+          onChange={setValue as (id: string, value: FilterValue) => void}
+          onClear={clearValue as (id: string) => void}
+          onClearAll={clearAll}
+        />
+        <Page.Toolbar.Count>
+          {filteredUsers.length} {filteredUsers.length === 1 ? "user" : "users"}
+        </Page.Toolbar.Count>
+        <Page.Toolbar.Refresh
+          onRefresh={() => void refetch()}
+          isRefreshing={isFetching}
+        />
+      </Page.Toolbar>
       <Table
         columns={columns}
-        data={users}
+        data={filteredUsers}
         rowKey={(row) => row.email}
         className="min-h-fit"
         noResultsMessage={
@@ -181,11 +273,14 @@ export function AgentUsers(): React.JSX.Element {
           >
             <Laptop className="text-muted-foreground h-10 w-10" />
             <Type variant="body" className="font-medium">
-              No device agents have synced yet
+              {hasSyncedUsers
+                ? "No users match your filters"
+                : "No device agents have synced yet"}
             </Type>
             <Type muted small className="text-center">
-              Once a user installs the agent and it enrolls, they'll appear here
-              within a minute.
+              {hasSyncedUsers
+                ? "Try clearing the search or status filter."
+                : "Once a user installs the agent and it enrolls, they'll appear here within a minute."}
             </Type>
           </Stack>
         }
