@@ -269,6 +269,38 @@ func TestValidateRemoteMCPServerCall_ServerInOtherProject(t *testing.T) {
 	assert.Contains(t, detail, "not found in this project")
 }
 
+func TestValidateRemoteMCPServerCall_TunneledServerSuccess(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	serverID := f.createTunneledMCPServer(t, "tnl-"+uuid.NewString()[:8])
+
+	detail, denied := f.client.ValidateRemoteMCPServerCall(
+		t.Context(),
+		map[string]any{shadowmcp.XGramToolsetIDField: serverID.String()},
+		"arbitrary-tool-name",
+		f.projectID.String(),
+	)
+	require.False(t, denied, detail)
+	require.Empty(t, detail)
+}
+
+func TestValidateRemoteMCPServerCall_TunneledServerInOtherProject(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	serverID := f.createTunneledMCPServer(t, "tnl-"+uuid.NewString()[:8])
+
+	detail, denied := f.client.ValidateRemoteMCPServerCall(
+		t.Context(),
+		map[string]any{shadowmcp.XGramToolsetIDField: serverID.String()},
+		"tool",
+		uuid.New().String(),
+	)
+	assert.True(t, denied)
+	assert.Contains(t, detail, "not found in this project")
+}
+
 func TestValidateRemoteMCPServerCall_EmptyToolName(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

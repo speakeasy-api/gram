@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
 import { encodeSimple } from "../lib/encodings.js";
+import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -19,10 +20,19 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ServiceError,
+  ServiceError$inboundSchema,
+} from "../models/errors/serviceerror.js";
+import {
+  DownloadCodexInstallScriptRequest,
+  DownloadCodexInstallScriptRequest$outboundSchema,
+  DownloadCodexInstallScriptResponse,
+  DownloadCodexInstallScriptResponse$inboundSchema,
+  DownloadCodexInstallScriptSecurity,
+} from "../models/operations/downloadcodexinstallscript.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -34,13 +44,13 @@ import { Result } from "../types/fp.js";
  */
 export function pluginsDownloadCodexInstallScript(
   client: GramCore,
-  request?: operations.DownloadCodexInstallScriptRequest | undefined,
-  security?: operations.DownloadCodexInstallScriptSecurity | undefined,
+  request?: DownloadCodexInstallScriptRequest | undefined,
+  security?: DownloadCodexInstallScriptSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.DownloadCodexInstallScriptResponse,
-    | errors.ServiceError
+    DownloadCodexInstallScriptResponse,
+    | ServiceError
     | GramError
     | ResponseValidationError
     | ConnectionError
@@ -61,14 +71,14 @@ export function pluginsDownloadCodexInstallScript(
 
 async function $do(
   client: GramCore,
-  request?: operations.DownloadCodexInstallScriptRequest | undefined,
-  security?: operations.DownloadCodexInstallScriptSecurity | undefined,
+  request?: DownloadCodexInstallScriptRequest | undefined,
+  security?: DownloadCodexInstallScriptSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.DownloadCodexInstallScriptResponse,
-      | errors.ServiceError
+      DownloadCodexInstallScriptResponse,
+      | ServiceError
       | GramError
       | ResponseValidationError
       | ConnectionError
@@ -85,7 +95,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        z.optional(operations.DownloadCodexInstallScriptRequest$outboundSchema),
+        z.optional(DownloadCodexInstallScriptRequest$outboundSchema),
         value,
       ),
     "Input validation failed",
@@ -157,19 +167,8 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    errorCodes: [
-      "400",
-      "401",
-      "403",
-      "404",
-      "409",
-      "415",
-      "422",
-      "4XX",
-      "500",
-      "502",
-      "5XX",
-    ],
+    isErrorStatusCode: (statusCode: number) =>
+      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });
@@ -183,8 +182,8 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.DownloadCodexInstallScriptResponse,
-    | errors.ServiceError
+    DownloadCodexInstallScriptResponse,
+    | ServiceError
     | GramError
     | ResponseValidationError
     | ConnectionError
@@ -194,16 +193,13 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.stream(200, operations.DownloadCodexInstallScriptResponse$inboundSchema, {
+    M.stream(200, DownloadCodexInstallScriptResponse$inboundSchema, {
       ctype: "text/x-shellscript",
       hdrs: true,
       key: "Result",
     }),
-    M.jsonErr(
-      [400, 401, 403, 404, 409, 415, 422],
-      errors.ServiceError$inboundSchema,
-    ),
-    M.jsonErr([500, 502], errors.ServiceError$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

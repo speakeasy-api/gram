@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.39.0**](../README.md)
+[**@gram-ai/elements v1.41.0**](../README.md)
 
 ***
 
@@ -8,7 +8,7 @@
 
 ## Indexable
 
-\[`key`: `string`\]: `unknown`
+> \[`key`: `string`\]: `unknown`
 
 ## Properties
 
@@ -20,4 +20,4 @@
 
 ### componentStack?
 
-> `optional` **componentStack**: `string`
+> `optional` **componentStack?**: `string`

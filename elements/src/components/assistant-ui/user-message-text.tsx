@@ -27,7 +27,7 @@ const ContextDisclosure: FC<{ blocks: ContextBlock[] }> = ({ blocks }) => {
       <CollapsibleTrigger
         className={cn(
           "aui-user-context-trigger group/trigger flex items-center gap-1.5 py-0.5",
-          "text-xs text-muted-foreground transition-colors hover:text-foreground",
+          "text-xs text-white/70 transition-colors hover:text-white",
         )}
       >
         <ChevronDownIcon
@@ -43,7 +43,7 @@ const ContextDisclosure: FC<{ blocks: ContextBlock[] }> = ({ blocks }) => {
             shrink-to-fit message bubble — contribute 0 to its intrinsic width,
             then fill the bubble's resolved width and wrap. Keeps the bubble the
             same width open or closed. */}
-        <div className="aui-user-context-body mt-1.5 w-0 min-w-full space-y-2 border-l-2 border-border pl-3 text-xs whitespace-pre-line text-muted-foreground">
+        <div className="aui-user-context-body mt-1.5 w-0 min-w-full space-y-2 border-l-2 border-white/30 pl-3 text-xs whitespace-pre-line text-white/70">
           {blocks.map((block, i) => (
             <p key={i}>{block.body}</p>
           ))}

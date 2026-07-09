@@ -100,7 +100,12 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					// Derived authoritatively from the policy inside AnalyzeBatch.Do;
 					// left unset here to avoid a second config source.
 					PresidioScoreThreshold: 0,
+					ApprovedEmailDomains:   nil,
 					CustomRuleIds:          policy.CustomRuleIds,
+					// Placeholder: overwritten by AnalyzeBatch.Do from the refetched
+					// policy's AnalyzerConfig (defaults to true). The zero value here
+					// does NOT disable the library; it is required only by exhaustruct.
+					BuiltinPresetsEnabled: false,
 				})
 				futures = append(futures, f)
 			}

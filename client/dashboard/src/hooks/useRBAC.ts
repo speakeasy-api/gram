@@ -1,12 +1,10 @@
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
-import { useIsAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useProductTier } from "@/hooks/useProductTier";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
-
-export { Scope };
 
 /**
  * Derive the resource kind from a scope's family prefix.
@@ -52,7 +50,7 @@ export function selectorMatches(
  */
 function useRBACImpl() {
   const telemetry = useTelemetry();
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsPlatformAdmin();
   const productTier = useProductTier();
   const featureFlagEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
   // Toolbar is accessible in dev or for admins; pass the flag into the getter

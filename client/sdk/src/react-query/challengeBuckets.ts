@@ -18,10 +18,14 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListChallengeBucketsRequest,
+  ListChallengeBucketsSecurity,
+  Outcome,
+} from "../models/operations/listchallengebuckets.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +46,7 @@ export {
 };
 
 export type ChallengeBucketsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +63,8 @@ export type ChallengeBucketsQueryError =
  * List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
  */
 export function useChallengeBuckets(
-  request?: operations.ListChallengeBucketsRequest | undefined,
-  security?: operations.ListChallengeBucketsSecurity | undefined,
+  request?: ListChallengeBucketsRequest | undefined,
+  security?: ListChallengeBucketsSecurity | undefined,
   options?: QueryHookOptions<
     ChallengeBucketsQueryData,
     ChallengeBucketsQueryError
@@ -85,8 +89,8 @@ export function useChallengeBuckets(
  * List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
  */
 export function useChallengeBucketsSuspense(
-  request?: operations.ListChallengeBucketsRequest | undefined,
-  security?: operations.ListChallengeBucketsSecurity | undefined,
+  request?: ListChallengeBucketsRequest | undefined,
+  security?: ListChallengeBucketsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ChallengeBucketsQueryData,
     ChallengeBucketsQueryError
@@ -111,7 +115,7 @@ export function setChallengeBucketsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      outcome?: operations.Outcome | undefined;
+      outcome?: Outcome | undefined;
       principalUrn?: string | undefined;
       scope?: string | undefined;
       projectId?: string | undefined;
@@ -133,7 +137,7 @@ export function invalidateChallengeBuckets(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      outcome?: operations.Outcome | undefined;
+      outcome?: Outcome | undefined;
       principalUrn?: string | undefined;
       scope?: string | undefined;
       projectId?: string | undefined;

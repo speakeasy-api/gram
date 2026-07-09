@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link as RouterLink, useLocation, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
 import {
   invalidateAllRiskListPolicies,
-  useRiskCreatePolicyMutation,
   useRiskListPolicies,
-  useRiskPoliciesDeleteMutation,
-  useRiskPoliciesUpdateMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/riskListPolicies.js";
+import { useRiskPoliciesDeleteMutation } from "@gram/client/react-query/riskPoliciesDelete.js";
+import { useRiskPoliciesUpdateMutation } from "@gram/client/react-query/riskPoliciesUpdate.js";
 import { invalidateAllRiskPoliciesStatus } from "@gram/client/react-query/riskPoliciesStatus.js";
 import {
   ShieldCheck,
@@ -140,6 +140,11 @@ const DEFAULTS: Record<RuleCategory, CategoryConfig> = {
     enabled: false,
     action: "flag",
     messageTypes: new Set(["tool_request"]),
+  },
+  account_identity: {
+    enabled: false,
+    action: "flag",
+    messageTypes: new Set(["user_message"]),
   },
   custom: {
     enabled: false,

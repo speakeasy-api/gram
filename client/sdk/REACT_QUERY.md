@@ -105,10 +105,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useCreateRoleMutation } from "@gram/client/react-query/accessCreateRole.js";
+import { useApproveShadowMCPApprovalRequestMutation } from "@gram/client/react-query/accessApproveShadowMCPApprovalRequest.js";
 
 export function Example() {
-  const { mutate, status } = useCreateRoleMutation();
+  const { mutate, status } = useApproveShadowMCPApprovalRequestMutation();
 
   return (
     <form
@@ -118,14 +118,12 @@ export function Example() {
         // Read form data here...
 
         mutate({
-          createRoleForm: {
-            description: "swerve hm receptor how",
-            grants: [
-              {
-                scope: "environment:write",
-              },
-            ],
-            name: "<value>",
+          approveShadowMCPApprovalRequestForm: {
+            accessScope: "organization",
+            displayName: "Danny75",
+            id: "07e9687f-f01e-43f5-9a11-0ddd8f277af1",
+            matchBreadth: "full_url",
+            matchValue: "<value>",
           },
         });
       }}
@@ -143,10 +141,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useCreateRoleMutation } from "@gram/client/react-query/accessCreateRole.js";
+import { useApproveShadowMCPApprovalRequestMutation } from "@gram/client/react-query/accessApproveShadowMCPApprovalRequest.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useCreateRoleMutation({
+  const { mutate, status } = useApproveShadowMCPApprovalRequestMutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes
@@ -225,11 +223,11 @@ infinite scrolling and "load more" user interfaces.
 > those hooks may be more suitable.
 
 ```tsx
-import { useListAssistantMemoriesInfinite } from "@gram/client/react-query/assistantMemoriesList.js";
+import { useGlobalRemoteSessionClientsInfinite } from "@gram/client/react-query/adminRemoteSessionsListGlobalClients.js";
 
 export function Example() {
-  const { data, error, status, fetchNextPage, hasNextPage } = useListAssistantMemoriesInfinite({
-    assistantId: "56bcc863-cc81-4d15-92ee-28eb89e8930f",
+  const { data, error, status, fetchNextPage, hasNextPage } = useGlobalRemoteSessionClientsInfinite({
+    remoteSessionIssuerId: "7c1fa209-8b42-46d5-9dae-1898e2a1e3bf",
   });
 
   return (

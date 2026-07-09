@@ -4,8 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { dlv } from "../lib/dlv.js";
 import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -20,10 +20,19 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ServiceError,
+  ServiceError$inboundSchema,
+} from "../models/errors/serviceerror.js";
+import {
+  ListRemoteSessionClientsRequest,
+  ListRemoteSessionClientsRequest$outboundSchema,
+  ListRemoteSessionClientsResponse,
+  ListRemoteSessionClientsResponse$inboundSchema,
+  ListRemoteSessionClientsSecurity,
+} from "../models/operations/listremotesessionclients.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 import {
@@ -41,14 +50,14 @@ import {
  */
 export function remoteSessionClientsList(
   client: GramCore,
-  request?: operations.ListRemoteSessionClientsRequest | undefined,
-  security?: operations.ListRemoteSessionClientsSecurity | undefined,
+  request?: ListRemoteSessionClientsRequest | undefined,
+  security?: ListRemoteSessionClientsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
     Result<
-      operations.ListRemoteSessionClientsResponse,
-      | errors.ServiceError
+      ListRemoteSessionClientsResponse,
+      | ServiceError
       | GramError
       | ResponseValidationError
       | ConnectionError
@@ -71,15 +80,15 @@ export function remoteSessionClientsList(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListRemoteSessionClientsRequest | undefined,
-  security?: operations.ListRemoteSessionClientsSecurity | undefined,
+  request?: ListRemoteSessionClientsRequest | undefined,
+  security?: ListRemoteSessionClientsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     PageIterator<
       Result<
-        operations.ListRemoteSessionClientsResponse,
-        | errors.ServiceError
+        ListRemoteSessionClientsResponse,
+        | ServiceError
         | GramError
         | ResponseValidationError
         | ConnectionError
@@ -98,7 +107,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        z.optional(operations.ListRemoteSessionClientsRequest$outboundSchema),
+        z.optional(ListRemoteSessionClientsRequest$outboundSchema),
         value,
       ),
     "Input validation failed",
@@ -194,19 +203,8 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    errorCodes: [
-      "400",
-      "401",
-      "403",
-      "404",
-      "409",
-      "415",
-      "422",
-      "4XX",
-      "500",
-      "502",
-      "5XX",
-    ],
+    isErrorStatusCode: (statusCode: number) =>
+      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });
@@ -220,8 +218,8 @@ async function $do(
   };
 
   const [result, raw] = await M.match<
-    operations.ListRemoteSessionClientsResponse,
-    | errors.ServiceError
+    ListRemoteSessionClientsResponse,
+    | ServiceError
     | GramError
     | ResponseValidationError
     | ConnectionError
@@ -231,14 +229,11 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, operations.ListRemoteSessionClientsResponse$inboundSchema, {
+    M.json(200, ListRemoteSessionClientsResponse$inboundSchema, {
       key: "Result",
     }),
-    M.jsonErr(
-      [400, 401, 403, 404, 409, 415, 422],
-      errors.ServiceError$inboundSchema,
-    ),
-    M.jsonErr([500, 502], errors.ServiceError$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });
@@ -255,8 +250,8 @@ async function $do(
   ): {
     next: Paginator<
       Result<
-        operations.ListRemoteSessionClientsResponse,
-        | errors.ServiceError
+        ListRemoteSessionClientsResponse,
+        | ServiceError
         | GramError
         | ResponseValidationError
         | ConnectionError
@@ -269,7 +264,7 @@ async function $do(
     >;
     "~next"?: { cursor: string };
   } => {
-    const nextCursor = dlv(responseData, "next_cursor");
+    const nextCursor = (responseData as { next_cursor?: unknown }).next_cursor;
     if (typeof nextCursor !== "string") {
       return { next: () => null };
     }

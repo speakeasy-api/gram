@@ -15,18 +15,19 @@ import {
   useRegisterToolsetTelemetry,
 } from "@/contexts/Telemetry";
 import { useLatestDeployment, useToolset } from "@/hooks/toolTypes";
+import { DEFAULT_MODEL } from "@/lib/models";
 import { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useHideInsightsDock } from "@/components/insights-context";
-import { Confirm } from "@gram/client/models/components";
+import { Confirm } from "@gram/client/models/components/upsertglobaltoolvariationform.js";
+import { queryKeyInstance } from "@gram/client/react-query/instance.js";
 import {
-  invalidateAllToolset,
-  invalidateTemplate,
-  queryKeyInstance,
   queryKeyListToolsets,
   useListToolsets,
-  useUpdateToolsetMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/listToolsets.js";
+import { invalidateTemplate } from "@gram/client/react-query/template.js";
+import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
+import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
 import { ResizablePanel } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, Plus, ScrollTextIcon } from "lucide-react";
@@ -96,7 +97,7 @@ function PlaygroundInner() {
   );
   const [showLogs, setShowLogs] = useState(false);
   const [temperature, setTemperature] = useState(0.5);
-  const [model, setModel] = useState("anthropic/claude-sonnet-4.5");
+  const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [maxTokens, setMaxTokens] = useState(4096);
   const [playgroundEnvironmentSlug, setPlaygroundEnvironmentSlug] = useState<
     string | undefined

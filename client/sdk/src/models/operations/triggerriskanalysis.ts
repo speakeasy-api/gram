@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  TriggerRiskAnalysisRequestBody,
+  TriggerRiskAnalysisRequestBody$Outbound,
+  TriggerRiskAnalysisRequestBody$outboundSchema,
+} from "../components/triggerriskanalysisrequestbody.js";
 
 export type TriggerRiskAnalysisSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type TriggerRiskAnalysisRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  triggerRiskAnalysisRequestBody: components.TriggerRiskAnalysisRequestBody;
+  triggerRiskAnalysisRequestBody: TriggerRiskAnalysisRequestBody;
 };
 
 /** @internal */
@@ -145,8 +149,7 @@ export type TriggerRiskAnalysisRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  TriggerRiskAnalysisRequestBody:
-    components.TriggerRiskAnalysisRequestBody$Outbound;
+  TriggerRiskAnalysisRequestBody: TriggerRiskAnalysisRequestBody$Outbound;
 };
 
 /** @internal */
@@ -159,7 +162,7 @@ export const TriggerRiskAnalysisRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     triggerRiskAnalysisRequestBody:
-      components.TriggerRiskAnalysisRequestBody$outboundSchema,
+      TriggerRiskAnalysisRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

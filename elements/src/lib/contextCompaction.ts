@@ -32,6 +32,7 @@ export const DEFAULT_CONTEXT_LIMIT = 200_000;
  */
 const MODEL_CONTEXT_LIMITS: Partial<Record<KnownModelId, number>> = {
   // Anthropic (1M tier where available, else 200K)
+  "anthropic/claude-sonnet-5": 1_000_000,
   "anthropic/claude-opus-4.8": 1_000_000,
   "anthropic/claude-opus-4.7": 1_000_000,
   "anthropic/claude-opus-4.6": 1_000_000,

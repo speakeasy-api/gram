@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  RiskPolicyBypassApprovalRequestBody,
+  RiskPolicyBypassApprovalRequestBody$Outbound,
+  RiskPolicyBypassApprovalRequestBody$outboundSchema,
+} from "../components/riskpolicybypassapprovalrequestbody.js";
 
 export type ApproveRiskPolicyBypassRequestSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,8 +38,7 @@ export type ApproveRiskPolicyBypassRequestRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  riskPolicyBypassApprovalRequestBody:
-    components.RiskPolicyBypassApprovalRequestBody;
+  riskPolicyBypassApprovalRequestBody: RiskPolicyBypassApprovalRequestBody;
 };
 
 /** @internal */
@@ -153,7 +156,7 @@ export type ApproveRiskPolicyBypassRequestRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   RiskPolicyBypassApprovalRequestBody:
-    components.RiskPolicyBypassApprovalRequestBody$Outbound;
+    RiskPolicyBypassApprovalRequestBody$Outbound;
 };
 
 /** @internal */
@@ -167,7 +170,7 @@ export const ApproveRiskPolicyBypassRequestRequest$outboundSchema:
       gramSession: z.optional(z.string()),
       gramProject: z.optional(z.string()),
       riskPolicyBypassApprovalRequestBody:
-        components.RiskPolicyBypassApprovalRequestBody$outboundSchema,
+        RiskPolicyBypassApprovalRequestBody$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {

@@ -1,9 +1,7 @@
-import type {
-  OAuthProxyProvider,
-  RemoteSessionClient,
-  RemoteSessionIssuer,
-  UserSessionIssuer,
-} from "@gram/client/models/components";
+import type { OAuthProxyProvider } from "@gram/client/models/components/oauthproxyprovider.js";
+import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { describe, expect, it } from "vitest";
 import { createActor, fromPromise, waitFor } from "xstate";
 
@@ -82,6 +80,7 @@ function remoteSessionIssuer(id = "rsi-1"): RemoteSessionIssuer {
     grantTypesSupported: ["authorization_code", "refresh_token"],
     responseTypesSupported: ["code"],
     tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
+    clientIdMetadataDocumentSupported: false,
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };
@@ -91,6 +90,7 @@ function remoteSessionClient(id = "rsc-1"): RemoteSessionClient {
   return {
     id,
     projectId: "project-1",
+    organizationId: "org-1",
     remoteSessionIssuerId: "rsi-1",
     userSessionIssuerIds: ["usi-1"],
     clientId: "client-id",

@@ -26,11 +26,136 @@ import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
 import { accessUpdateShadowMCPAccessRule } from "../funcs/accessUpdateShadowMCPAccessRule.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { AccessMember } from "../models/components/accessmember.js";
+import { CreateShadowMCPAccessRuleResult } from "../models/components/createshadowmcpaccessruleresult.js";
+import { ListChallengeBucketsResult } from "../models/components/listchallengebucketsresult.js";
+import { ListChallengesResult } from "../models/components/listchallengesresult.js";
+import { ListMembersResult } from "../models/components/listmembersresult.js";
+import { ListRolesResult } from "../models/components/listrolesresult.js";
+import { ListScopesResult } from "../models/components/listscopesresult.js";
+import { ListShadowMCPAccessRulesResult } from "../models/components/listshadowmcpaccessrulesresult.js";
+import { ListShadowMCPApprovalRequestsResult } from "../models/components/listshadowmcpapprovalrequestsresult.js";
+import { ListUserGrantsResult } from "../models/components/listusergrantsresult.js";
+import { RBACStatus } from "../models/components/rbacstatus.js";
+import { ResolveChallengesResult } from "../models/components/resolvechallengesresult.js";
+import { Role } from "../models/components/role.js";
+import { ShadowMCPAccessRule } from "../models/components/shadowmcpaccessrule.js";
+import { ShadowMCPApprovalDecisionResult } from "../models/components/shadowmcpapprovaldecisionresult.js";
+import { ShadowMCPApprovalRequest } from "../models/components/shadowmcpapprovalrequest.js";
+import {
+  ApproveShadowMCPApprovalRequestRequest,
+  ApproveShadowMCPApprovalRequestSecurity,
+} from "../models/operations/approveshadowmcpapprovalrequest.js";
+import {
+  CreateRoleRequest,
+  CreateRoleSecurity,
+} from "../models/operations/createrole.js";
+import {
+  CreateShadowMCPAccessRuleRequest,
+  CreateShadowMCPAccessRuleSecurity,
+} from "../models/operations/createshadowmcpaccessrule.js";
+import {
+  CreateShadowMCPApprovalRequestRequest,
+  CreateShadowMCPApprovalRequestSecurity,
+} from "../models/operations/createshadowmcpapprovalrequest.js";
+import {
+  DeleteRoleRequest,
+  DeleteRoleSecurity,
+} from "../models/operations/deleterole.js";
+import {
+  DeleteShadowMCPAccessRuleRequest,
+  DeleteShadowMCPAccessRuleSecurity,
+} from "../models/operations/deleteshadowmcpaccessrule.js";
+import {
+  DenyShadowMCPApprovalRequestRequest,
+  DenyShadowMCPApprovalRequestSecurity,
+} from "../models/operations/denyshadowmcpapprovalrequest.js";
+import {
+  DisableRBACRequest,
+  DisableRBACSecurity,
+} from "../models/operations/disablerbac.js";
+import {
+  EnableRBACRequest,
+  EnableRBACSecurity,
+} from "../models/operations/enablerbac.js";
+import {
+  GetRBACStatusRequest,
+  GetRBACStatusSecurity,
+} from "../models/operations/getrbacstatus.js";
+import {
+  GetRoleRequest,
+  GetRoleSecurity,
+} from "../models/operations/getrole.js";
+import {
+  ListChallengeBucketsRequest,
+  ListChallengeBucketsSecurity,
+} from "../models/operations/listchallengebuckets.js";
+import {
+  ListChallengesRequest,
+  ListChallengesSecurity,
+} from "../models/operations/listchallenges.js";
+import {
+  ListGrantsRequest,
+  ListGrantsSecurity,
+} from "../models/operations/listgrants.js";
+import {
+  ListMembersRequest,
+  ListMembersSecurity,
+} from "../models/operations/listmembers.js";
+import {
+  ListRolesRequest,
+  ListRolesSecurity,
+} from "../models/operations/listroles.js";
+import {
+  ListScopesRequest,
+  ListScopesSecurity,
+} from "../models/operations/listscopes.js";
+import {
+  ListShadowMCPAccessRulesRequest,
+  ListShadowMCPAccessRulesSecurity,
+} from "../models/operations/listshadowmcpaccessrules.js";
+import {
+  ListShadowMCPApprovalRequestsRequest,
+  ListShadowMCPApprovalRequestsSecurity,
+} from "../models/operations/listshadowmcpapprovalrequests.js";
+import {
+  ResolveChallengeRequest,
+  ResolveChallengeSecurity,
+} from "../models/operations/resolvechallenge.js";
+import {
+  UpdateMemberRolesRequest,
+  UpdateMemberRolesSecurity,
+} from "../models/operations/updatememberroles.js";
+import {
+  UpdateRoleRequest,
+  UpdateRoleSecurity,
+} from "../models/operations/updaterole.js";
+import {
+  UpdateShadowMCPAccessRuleRequest,
+  UpdateShadowMCPAccessRuleSecurity,
+} from "../models/operations/updateshadowmcpaccessrule.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Access extends ClientSDK {
+  /**
+   * approveShadowMCPApprovalRequest access
+   *
+   * @remarks
+   * Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.
+   */
+  async approveShadowMCPApprovalRequest(
+    request: ApproveShadowMCPApprovalRequestRequest,
+    security?: ApproveShadowMCPApprovalRequestSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ShadowMCPApprovalDecisionResult> {
+    return unwrapAsync(accessApproveShadowMCPApprovalRequest(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
   /**
    * createRole access
    *
@@ -38,11 +163,49 @@ export class Access extends ClientSDK {
    * Create a new custom role.
    */
   async createRole(
-    request: operations.CreateRoleRequest,
-    security?: operations.CreateRoleSecurity | undefined,
+    request: CreateRoleRequest,
+    security?: CreateRoleSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Role> {
+  ): Promise<Role> {
     return unwrapAsync(accessCreateRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createShadowMCPApprovalRequest access
+   *
+   * @remarks
+   * Create or return an active Shadow MCP approval request.
+   */
+  async createShadowMCPApprovalRequest(
+    request: CreateShadowMCPApprovalRequestRequest,
+    security?: CreateShadowMCPApprovalRequestSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ShadowMCPApprovalRequest> {
+    return unwrapAsync(accessCreateShadowMCPApprovalRequest(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createShadowMCPAccessRule access
+   *
+   * @remarks
+   * Create a managed Shadow MCP access rule.
+   */
+  async createShadowMCPAccessRule(
+    request: CreateShadowMCPAccessRuleRequest,
+    security?: CreateShadowMCPAccessRuleSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<CreateShadowMCPAccessRuleResult> {
+    return unwrapAsync(accessCreateShadowMCPAccessRule(
       this,
       request,
       security,
@@ -57,11 +220,49 @@ export class Access extends ClientSDK {
    * Delete a custom role (system roles cannot be deleted).
    */
   async deleteRole(
-    request: operations.DeleteRoleRequest,
-    security?: operations.DeleteRoleSecurity | undefined,
+    request: DeleteRoleRequest,
+    security?: DeleteRoleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessDeleteRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * deleteShadowMCPAccessRule access
+   *
+   * @remarks
+   * Delete a managed Shadow MCP access rule.
+   */
+  async deleteShadowMCPAccessRule(
+    request: DeleteShadowMCPAccessRuleRequest,
+    security?: DeleteShadowMCPAccessRuleSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(accessDeleteShadowMCPAccessRule(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * denyShadowMCPApprovalRequest access
+   *
+   * @remarks
+   * Deny a Shadow MCP request and optionally create a deny rule.
+   */
+  async denyShadowMCPApprovalRequest(
+    request: DenyShadowMCPApprovalRequestRequest,
+    security?: DenyShadowMCPApprovalRequestSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ShadowMCPApprovalDecisionResult> {
+    return unwrapAsync(accessDenyShadowMCPApprovalRequest(
       this,
       request,
       security,
@@ -76,8 +277,8 @@ export class Access extends ClientSDK {
    * Disable RBAC enforcement for the current organization.
    */
   async disableRBAC(
-    request?: operations.DisableRBACRequest | undefined,
-    security?: operations.DisableRBACSecurity | undefined,
+    request?: DisableRBACRequest | undefined,
+    security?: DisableRBACSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessDisableRBAC(
@@ -95,8 +296,8 @@ export class Access extends ClientSDK {
    * Enable RBAC for the current organization. Seeds default grants for system roles.
    */
   async enableRBAC(
-    request?: operations.EnableRBACRequest | undefined,
-    security?: operations.EnableRBACSecurity | undefined,
+    request?: EnableRBACRequest | undefined,
+    security?: EnableRBACSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessEnableRBAC(
@@ -114,10 +315,10 @@ export class Access extends ClientSDK {
    * Returns whether RBAC is currently enabled for the current organization.
    */
   async getRBACStatus(
-    request?: operations.GetRBACStatusRequest | undefined,
-    security?: operations.GetRBACStatusSecurity | undefined,
+    request?: GetRBACStatusRequest | undefined,
+    security?: GetRBACStatusSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RBACStatus> {
+  ): Promise<RBACStatus> {
     return unwrapAsync(accessGetRBACStatus(
       this,
       request,
@@ -133,10 +334,10 @@ export class Access extends ClientSDK {
    * Get a role by ID.
    */
   async getRole(
-    request: operations.GetRoleRequest,
-    security?: operations.GetRoleSecurity | undefined,
+    request: GetRoleRequest,
+    security?: GetRoleSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Role> {
+  ): Promise<Role> {
     return unwrapAsync(accessGetRole(
       this,
       request,
@@ -152,10 +353,10 @@ export class Access extends ClientSDK {
    * List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
    */
   async listChallengeBuckets(
-    request?: operations.ListChallengeBucketsRequest | undefined,
-    security?: operations.ListChallengeBucketsSecurity | undefined,
+    request?: ListChallengeBucketsRequest | undefined,
+    security?: ListChallengeBucketsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListChallengeBucketsResult> {
+  ): Promise<ListChallengeBucketsResult> {
     return unwrapAsync(accessListChallengeBuckets(
       this,
       request,
@@ -171,10 +372,10 @@ export class Access extends ClientSDK {
    * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
    */
   async listChallenges(
-    request?: operations.ListChallengesRequest | undefined,
-    security?: operations.ListChallengesSecurity | undefined,
+    request?: ListChallengesRequest | undefined,
+    security?: ListChallengesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListChallengesResult> {
+  ): Promise<ListChallengesResult> {
     return unwrapAsync(accessListChallenges(
       this,
       request,
@@ -190,10 +391,10 @@ export class Access extends ClientSDK {
    * List the current user's effective grants, including inherited role grants.
    */
   async listGrants(
-    request?: operations.ListGrantsRequest | undefined,
-    security?: operations.ListGrantsSecurity | undefined,
+    request?: ListGrantsRequest | undefined,
+    security?: ListGrantsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListUserGrantsResult> {
+  ): Promise<ListUserGrantsResult> {
     return unwrapAsync(accessListGrants(
       this,
       request,
@@ -209,10 +410,10 @@ export class Access extends ClientSDK {
    * List all team members with their role assignments.
    */
   async listMembers(
-    request?: operations.ListMembersRequest | undefined,
-    security?: operations.ListMembersSecurity | undefined,
+    request?: ListMembersRequest | undefined,
+    security?: ListMembersSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListMembersResult> {
+  ): Promise<ListMembersResult> {
     return unwrapAsync(accessListMembers(
       this,
       request,
@@ -228,10 +429,10 @@ export class Access extends ClientSDK {
    * List all roles for the current organization.
    */
   async listRoles(
-    request?: operations.ListRolesRequest | undefined,
-    security?: operations.ListRolesSecurity | undefined,
+    request?: ListRolesRequest | undefined,
+    security?: ListRolesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListRolesResult> {
+  ): Promise<ListRolesResult> {
     return unwrapAsync(accessListRoles(
       this,
       request,
@@ -247,87 +448,11 @@ export class Access extends ClientSDK {
    * List all available scopes and their resource types.
    */
   async listScopes(
-    request?: operations.ListScopesRequest | undefined,
-    security?: operations.ListScopesSecurity | undefined,
+    request?: ListScopesRequest | undefined,
+    security?: ListScopesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListScopesResult> {
+  ): Promise<ListScopesResult> {
     return unwrapAsync(accessListScopes(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * resolveChallenge access
-   *
-   * @remarks
-   * Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
-   */
-  async resolveChallenge(
-    request: operations.ResolveChallengeRequest,
-    security?: operations.ResolveChallengeSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ResolveChallengesResult> {
-    return unwrapAsync(accessResolveChallenge(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * approveShadowMCPApprovalRequest access
-   *
-   * @remarks
-   * Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.
-   */
-  async approveShadowMCPApprovalRequest(
-    request: operations.ApproveShadowMCPApprovalRequestRequest,
-    security?: operations.ApproveShadowMCPApprovalRequestSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ShadowMCPApprovalDecisionResult> {
-    return unwrapAsync(accessApproveShadowMCPApprovalRequest(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * createShadowMCPApprovalRequest access
-   *
-   * @remarks
-   * Create or return an active Shadow MCP approval request.
-   */
-  async createShadowMCPApprovalRequest(
-    request: operations.CreateShadowMCPApprovalRequestRequest,
-    security?: operations.CreateShadowMCPApprovalRequestSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ShadowMCPApprovalRequest> {
-    return unwrapAsync(accessCreateShadowMCPApprovalRequest(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * denyShadowMCPApprovalRequest access
-   *
-   * @remarks
-   * Deny a Shadow MCP request and optionally create a deny rule.
-   */
-  async denyShadowMCPApprovalRequest(
-    request: operations.DenyShadowMCPApprovalRequestRequest,
-    security?: operations.DenyShadowMCPApprovalRequestSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ShadowMCPApprovalDecisionResult> {
-    return unwrapAsync(accessDenyShadowMCPApprovalRequest(
       this,
       request,
       security,
@@ -342,49 +467,11 @@ export class Access extends ClientSDK {
    * List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.
    */
   async listShadowMCPApprovalRequests(
-    request?: operations.ListShadowMCPApprovalRequestsRequest | undefined,
-    security?: operations.ListShadowMCPApprovalRequestsSecurity | undefined,
+    request?: ListShadowMCPApprovalRequestsRequest | undefined,
+    security?: ListShadowMCPApprovalRequestsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListShadowMCPApprovalRequestsResult> {
+  ): Promise<ListShadowMCPApprovalRequestsResult> {
     return unwrapAsync(accessListShadowMCPApprovalRequests(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * createShadowMCPAccessRule access
-   *
-   * @remarks
-   * Create a managed Shadow MCP access rule.
-   */
-  async createShadowMCPAccessRule(
-    request: operations.CreateShadowMCPAccessRuleRequest,
-    security?: operations.CreateShadowMCPAccessRuleSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.CreateShadowMCPAccessRuleResult> {
-    return unwrapAsync(accessCreateShadowMCPAccessRule(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * deleteShadowMCPAccessRule access
-   *
-   * @remarks
-   * Delete a managed Shadow MCP access rule.
-   */
-  async deleteShadowMCPAccessRule(
-    request: operations.DeleteShadowMCPAccessRuleRequest,
-    security?: operations.DeleteShadowMCPAccessRuleSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<void> {
-    return unwrapAsync(accessDeleteShadowMCPAccessRule(
       this,
       request,
       security,
@@ -399,10 +486,10 @@ export class Access extends ClientSDK {
    * List managed Shadow MCP allow and deny rules.
    */
   async listShadowMCPAccessRules(
-    request?: operations.ListShadowMCPAccessRulesRequest | undefined,
-    security?: operations.ListShadowMCPAccessRulesSecurity | undefined,
+    request?: ListShadowMCPAccessRulesRequest | undefined,
+    security?: ListShadowMCPAccessRulesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListShadowMCPAccessRulesResult> {
+  ): Promise<ListShadowMCPAccessRulesResult> {
     return unwrapAsync(accessListShadowMCPAccessRules(
       this,
       request,
@@ -412,17 +499,17 @@ export class Access extends ClientSDK {
   }
 
   /**
-   * updateShadowMCPAccessRule access
+   * resolveChallenge access
    *
    * @remarks
-   * Update a managed Shadow MCP access rule.
+   * Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
    */
-  async updateShadowMCPAccessRule(
-    request: operations.UpdateShadowMCPAccessRuleRequest,
-    security?: operations.UpdateShadowMCPAccessRuleSecurity | undefined,
+  async resolveChallenge(
+    request: ResolveChallengeRequest,
+    security?: ResolveChallengeSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ShadowMCPAccessRule> {
-    return unwrapAsync(accessUpdateShadowMCPAccessRule(
+  ): Promise<ResolveChallengesResult> {
+    return unwrapAsync(accessResolveChallenge(
       this,
       request,
       security,
@@ -437,10 +524,10 @@ export class Access extends ClientSDK {
    * Update a team member's role assignments.
    */
   async updateMemberRoles(
-    request: operations.UpdateMemberRolesRequest,
-    security?: operations.UpdateMemberRolesSecurity | undefined,
+    request: UpdateMemberRolesRequest,
+    security?: UpdateMemberRolesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.AccessMember> {
+  ): Promise<AccessMember> {
     return unwrapAsync(accessUpdateMemberRoles(
       this,
       request,
@@ -456,11 +543,30 @@ export class Access extends ClientSDK {
    * Update an existing custom role.
    */
   async updateRole(
-    request: operations.UpdateRoleRequest,
-    security?: operations.UpdateRoleSecurity | undefined,
+    request: UpdateRoleRequest,
+    security?: UpdateRoleSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Role> {
+  ): Promise<Role> {
     return unwrapAsync(accessUpdateRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateShadowMCPAccessRule access
+   *
+   * @remarks
+   * Update a managed Shadow MCP access rule.
+   */
+  async updateShadowMCPAccessRule(
+    request: UpdateShadowMCPAccessRuleRequest,
+    security?: UpdateShadowMCPAccessRuleSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ShadowMCPAccessRule> {
+    return unwrapAsync(accessUpdateShadowMCPAccessRule(
       this,
       request,
       security,

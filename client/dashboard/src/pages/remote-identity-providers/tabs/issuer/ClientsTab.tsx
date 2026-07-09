@@ -3,11 +3,9 @@ import { DotRow } from "@/components/ui/dot-row";
 import { DotTable } from "@/components/ui/dot-table";
 import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
-import type {
-  OrganizationRemoteSessionClient,
-  RemoteSessionIssuer,
-} from "@gram/client/models/components";
-import { useOrganizationRemoteSessionClients } from "@gram/client/react-query/index.js";
+import type { OrganizationRemoteSessionClient } from "@gram/client/models/components/organizationremotesessionclient.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { useOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
 import {
   Button,
   DropdownMenu,
@@ -18,6 +16,7 @@ import {
 } from "@speakeasy-api/moonshine";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
+import { remoteSessionClientDisplayName } from "../../clientDisplay";
 import { CreateRemoteSessionClientSheet } from "../../CreateRemoteSessionClientSheet";
 import { DeleteClientDialog } from "../../clientDialogs";
 
@@ -67,7 +66,7 @@ export function ClientsTab({
               issuer.id,
               item.client.id,
             )}
-            ariaLabel={`View client ${item.client.clientId}`}
+            ariaLabel={`View client ${remoteSessionClientDisplayName(item.client)}`}
           >
             <td className="px-3 py-3">
               <Type
@@ -75,7 +74,7 @@ export function ClientsTab({
                 as="div"
                 className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
               >
-                {item.client.clientId}
+                {remoteSessionClientDisplayName(item.client)}
               </Type>
             </td>
             <td className="px-3 py-3">
@@ -137,7 +136,7 @@ export function ClientsTab({
       {deleteTarget && (
         <DeleteClientDialog
           clientId={deleteTarget.client.id}
-          clientLabel={deleteTarget.client.clientId}
+          clientLabel={remoteSessionClientDisplayName(deleteTarget.client)}
           onClose={() => setDeleteTarget(null)}
         />
       )}

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetAssistantRequest,
+  GetAssistantSecurity,
+} from "../models/operations/getassistant.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type AssistantsGetQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type AssistantsGetQueryError =
  * Get an assistant by ID.
  */
 export function useAssistantsGet(
-  request: operations.GetAssistantRequest,
-  security?: operations.GetAssistantSecurity | undefined,
+  request: GetAssistantRequest,
+  security?: GetAssistantSecurity | undefined,
   options?: QueryHookOptions<AssistantsGetQueryData, AssistantsGetQueryError>,
 ): UseQueryResult<AssistantsGetQueryData, AssistantsGetQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useAssistantsGet(
  * Get an assistant by ID.
  */
 export function useAssistantsGetSuspense(
-  request: operations.GetAssistantRequest,
-  security?: operations.GetAssistantSecurity | undefined,
+  request: GetAssistantRequest,
+  security?: GetAssistantSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     AssistantsGetQueryData,
     AssistantsGetQueryError

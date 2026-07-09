@@ -9,15 +9,13 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { getPresetRange } from "@gram-ai/elements";
-import type { RiskResult } from "@gram/client/models/components";
-import {
-  useRiskListPolicies,
-  useRiskOverview,
-} from "@gram/client/react-query/index.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { RefreshCw, Share2 } from "lucide-react";
+import { History, Share2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -120,10 +118,26 @@ export default function RiskEvents(): JSX.Element {
     return m;
   }, [policies]);
 
+  // The policy currently selected in the filter, if any. When it's disabled the
+  // list still returns its historical findings (the backend drops the
+  // enabled-only filter for explicit policy selections), so we surface a notice
+  // that the user is viewing data for an inactive policy.
+  const selectedPolicy = useMemo(
+    () => policies.find((p) => p.id === policyFilter),
+    [policies, policyFilter],
+  );
+  const viewingInactivePolicy =
+    selectedPolicy != null && selectedPolicy.enabled === false;
+
   // Page-supplied option lists for the schema's select/text dimensions.
+  // Disabled policies stay selectable — they hold historical findings — but are
+  // labelled "(inactive)" so the distinction is clear in the dropdown.
   const filterOptions = useMemo(
     () => ({
-      policy_id: policies.map((p) => ({ label: p.name, value: p.id })),
+      policy_id: policies.map((p) => ({
+        label: p.enabled === false ? `${p.name} (inactive)` : p.name,
+        value: p.id,
+      })),
       rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
     }),
     [policies, ruleSuggestions],
@@ -195,30 +209,7 @@ export default function RiskEvents(): JSX.Element {
         title="Risk Events"
         stage="beta"
         description="Review policy findings across recent analyzed chats."
-        actions={
-          <div className="flex items-center gap-2">
-            <RevealAllToggle />
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                void resultsQuery.refetch();
-              }}
-              disabled={resultsQuery.isFetching}
-              aria-label="Refresh risk events"
-            >
-              <Button.LeftIcon>
-                <RefreshCw
-                  className={cn(
-                    "h-4 w-4",
-                    resultsQuery.isFetching && "animate-spin",
-                  )}
-                />
-              </Button.LeftIcon>
-              <Button.Text>Refresh</Button.Text>
-            </Button>
-          </div>
-        }
+        actions={<RevealAllToggle />}
         filters={
           <Page.Toolbar>
             <Page.Toolbar.Filters
@@ -229,14 +220,23 @@ export default function RiskEvents(): JSX.Element {
               onClear={clearValue as (id: string) => void}
               onClearAll={clearAll}
             />
+            <Page.Toolbar.Refresh
+              onRefresh={() => void resultsQuery.refetch()}
+              isRefreshing={resultsQuery.isFetching}
+            />
           </Page.Toolbar>
         }
         status={
-          resultsQuery.isFetching && results.length > 0 ? (
-            <div className="bg-primary/20 h-1 shrink-0">
-              <div className="bg-primary h-full animate-pulse" />
-            </div>
-          ) : null
+          <>
+            {viewingInactivePolicy ? (
+              <InactivePolicyNotice policyName={selectedPolicy?.name} />
+            ) : null}
+            {resultsQuery.isFetching && results.length > 0 ? (
+              <div className="bg-primary/20 h-1 shrink-0">
+                <div className="bg-primary h-full animate-pulse" />
+              </div>
+            ) : null}
+          </>
         }
         header={
           <div className="min-w-[1120px]">
@@ -282,12 +282,39 @@ export default function RiskEvents(): JSX.Element {
   );
 }
 
+// Shown when the active policy filter points at a disabled ("turned off")
+// policy. Those policies no longer produce new findings, so the list is purely
+// historical — make that explicit rather than leaving users to assume the data
+// is current.
+function InactivePolicyNotice({
+  policyName,
+}: {
+  policyName: string | undefined;
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-5 py-2 text-sm text-amber-700 dark:text-amber-400">
+      <History className="size-4 shrink-0" />
+      <span>
+        {policyName ? (
+          <>
+            <span className="font-medium">{policyName}</span> is no longer
+            active.
+          </>
+        ) : (
+          "This policy is no longer active."
+        )}{" "}
+        You're viewing historical findings from when it was enabled.
+      </span>
+    </div>
+  );
+}
+
 function RiskEventsHeader() {
   return (
     <div
       className={cn(
         RISK_EVENTS_GRID,
-        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-8 py-2.5 text-xs font-medium tracking-wide uppercase",
+        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase",
       )}
     >
       <div className="min-w-0">Timestamp</div>
@@ -427,7 +454,7 @@ function RiskEventsRow({
       tabIndex={result.chatId ? 0 : undefined}
       className={cn(
         RISK_EVENTS_GRID,
-        "hover:bg-muted/30 w-full items-center border-b px-8 py-3 text-left text-sm transition-colors",
+        "hover:bg-muted/30 w-full items-center border-b px-5 py-3 text-left text-sm transition-colors",
         !result.chatId && "cursor-default",
       )}
       onClick={() => {
@@ -455,12 +482,15 @@ function RiskEventsRow({
       <div className="min-w-0 truncate">{result.chatTitle ?? "Untitled"}</div>
       <div className="min-w-0 truncate">{result.userId ?? "-"}</div>
       <div className="min-w-0 truncate">
-        {isShadowMCP && result.match ? (
-          <span className="font-mono text-xs" title={result.match}>
-            {result.match}
+        {isShadowMCP && result.matchRedacted ? (
+          <span className="font-mono text-xs" title={result.matchRedacted}>
+            {result.matchRedacted}
           </span>
         ) : (
-          <MaskedMatch value={result.match} />
+          <MaskedMatch
+            resultId={result.id}
+            matchRedacted={result.matchRedacted}
+          />
         )}
       </div>
       <div className="min-w-0 truncate" title={policyName}>
@@ -500,7 +530,7 @@ function RiskEventsFooter({
   onLoadMore: () => void;
 }) {
   return (
-    <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center justify-between gap-4 border-t px-8 py-3 text-sm">
+    <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center justify-between gap-4 border-t px-5 py-3 text-sm">
       <span>
         Showing {count.toLocaleString()} of {totalCount.toLocaleString()}{" "}
         {totalCount === 1 ? "finding" : "findings"}

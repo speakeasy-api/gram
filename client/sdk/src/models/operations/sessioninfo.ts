@@ -6,7 +6,10 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
-import * as components from "../components/index.js";
+import {
+  InfoResponseBody,
+  InfoResponseBody$inboundSchema,
+} from "../components/inforesponsebody.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type SessionInfoSecurity = {
@@ -22,7 +25,7 @@ export type SessionInfoRequest = {
 
 export type SessionInfoResponse = {
   headers: { [k: string]: Array<string> };
-  result: components.InfoResponseBody;
+  result: InfoResponseBody;
 };
 
 /** @internal */
@@ -88,7 +91,7 @@ export const SessionInfoResponse$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     Headers: z._default(z.record(z.string(), z.array(z.string())), {}),
-    Result: components.InfoResponseBody$inboundSchema,
+    Result: InfoResponseBody$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

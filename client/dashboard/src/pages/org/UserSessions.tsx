@@ -27,11 +27,9 @@ import { Type } from "@/components/ui/type";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { sessionStatus, subjectLabel } from "@/lib/user-session-status";
-import {
-  useUserSessionFacets,
-  useUserSessionsInfinite,
-} from "@gram/client/react-query";
-import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations";
+import { useUserSessionFacets } from "@gram/client/react-query/userSessionFacets.js";
+import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
+import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
 
 const USER_SESSION_FILTERS = defineFilters([
   { id: "status", label: "Status", kind: "select", pinned: true },
@@ -139,6 +137,7 @@ function UserSessionsInner(): JSX.Element {
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
+    isFetching,
     refetch,
   } = useUserSessionsInfinite({
     gramProject: projectSlug,
@@ -306,6 +305,10 @@ function UserSessionsInner(): JSX.Element {
               {filteredSessions.length} session
               {filteredSessions.length === 1 ? "" : "s"}
             </Page.Toolbar.Count>
+            <Page.Toolbar.Refresh
+              onRefresh={() => void refetch()}
+              isRefreshing={isFetching}
+            />
           </Page.Toolbar>
 
           {selectionEnabled && selectedIds.length > 0 && (

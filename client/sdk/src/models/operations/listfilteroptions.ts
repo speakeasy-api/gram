@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  ListFilterOptionsPayload,
+  ListFilterOptionsPayload$Outbound,
+  ListFilterOptionsPayload$outboundSchema,
+} from "../components/listfilteroptionspayload.js";
 
 export type ListFilterOptionsSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type ListFilterOptionsRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  listFilterOptionsPayload: components.ListFilterOptionsPayload;
+  listFilterOptionsPayload: ListFilterOptionsPayload;
 };
 
 /** @internal */
@@ -143,7 +147,7 @@ export type ListFilterOptionsRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  ListFilterOptionsPayload: components.ListFilterOptionsPayload$Outbound;
+  ListFilterOptionsPayload: ListFilterOptionsPayload$Outbound;
 };
 
 /** @internal */
@@ -155,8 +159,7 @@ export const ListFilterOptionsRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    listFilterOptionsPayload:
-      components.ListFilterOptionsPayload$outboundSchema,
+    listFilterOptionsPayload: ListFilterOptionsPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

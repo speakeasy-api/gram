@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListSessionsRequest,
+  ListSessionsSecurity,
+} from "../models/operations/listsessions.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListSessionsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListSessionsQueryError =
  * Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.
  */
 export function useListSessions(
-  request: operations.ListSessionsRequest,
-  security?: operations.ListSessionsSecurity | undefined,
+  request: ListSessionsRequest,
+  security?: ListSessionsSecurity | undefined,
   options?: QueryHookOptions<ListSessionsQueryData, ListSessionsQueryError>,
 ): UseQueryResult<ListSessionsQueryData, ListSessionsQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useListSessions(
  * Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.
  */
 export function useListSessionsSuspense(
-  request: operations.ListSessionsRequest,
-  security?: operations.ListSessionsSecurity | undefined,
+  request: ListSessionsRequest,
+  security?: ListSessionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListSessionsQueryData,
     ListSessionsQueryError

@@ -8,11 +8,9 @@ import { Type } from "@/components/ui/type";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
-import type {
-  GetObservabilityOverviewResult,
-  McpServer,
-  ObservabilitySummary,
-} from "@gram/client/models/components";
+import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";

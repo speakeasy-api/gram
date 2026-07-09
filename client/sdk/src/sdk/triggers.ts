@@ -11,8 +11,41 @@ import { triggersPause } from "../funcs/triggersPause.js";
 import { triggersResume } from "../funcs/triggersResume.js";
 import { triggersUpdate } from "../funcs/triggersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListTriggerDefinitionsResult } from "../models/components/listtriggerdefinitionsresult.js";
+import { ListTriggerInstancesResult } from "../models/components/listtriggerinstancesresult.js";
+import { TriggerInstance } from "../models/components/triggerinstance.js";
+import {
+  CreateTriggerInstanceRequest,
+  CreateTriggerInstanceSecurity,
+} from "../models/operations/createtriggerinstance.js";
+import {
+  DeleteTriggerInstanceRequest,
+  DeleteTriggerInstanceSecurity,
+} from "../models/operations/deletetriggerinstance.js";
+import {
+  GetTriggerInstanceRequest,
+  GetTriggerInstanceSecurity,
+} from "../models/operations/gettriggerinstance.js";
+import {
+  ListTriggerDefinitionsRequest,
+  ListTriggerDefinitionsSecurity,
+} from "../models/operations/listtriggerdefinitions.js";
+import {
+  ListTriggerInstancesRequest,
+  ListTriggerInstancesSecurity,
+} from "../models/operations/listtriggerinstances.js";
+import {
+  PauseTriggerInstanceRequest,
+  PauseTriggerInstanceSecurity,
+} from "../models/operations/pausetriggerinstance.js";
+import {
+  ResumeTriggerInstanceRequest,
+  ResumeTriggerInstanceSecurity,
+} from "../models/operations/resumetriggerinstance.js";
+import {
+  UpdateTriggerInstanceRequest,
+  UpdateTriggerInstanceSecurity,
+} from "../models/operations/updatetriggerinstance.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Triggers extends ClientSDK {
@@ -23,30 +56,11 @@ export class Triggers extends ClientSDK {
    * Create a trigger instance.
    */
   async create(
-    request: operations.CreateTriggerInstanceRequest,
-    security?: operations.CreateTriggerInstanceSecurity | undefined,
+    request: CreateTriggerInstanceRequest,
+    security?: CreateTriggerInstanceSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.TriggerInstance> {
+  ): Promise<TriggerInstance> {
     return unwrapAsync(triggersCreate(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * listTriggerDefinitions triggers
-   *
-   * @remarks
-   * List static trigger definitions available to a project.
-   */
-  async listDefinitions(
-    request?: operations.ListTriggerDefinitionsRequest | undefined,
-    security?: operations.ListTriggerDefinitionsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ListTriggerDefinitionsResult> {
-    return unwrapAsync(triggersListDefinitions(
       this,
       request,
       security,
@@ -61,8 +75,8 @@ export class Triggers extends ClientSDK {
    * Delete a trigger instance.
    */
   async delete(
-    request: operations.DeleteTriggerInstanceRequest,
-    security?: operations.DeleteTriggerInstanceSecurity | undefined,
+    request: DeleteTriggerInstanceRequest,
+    security?: DeleteTriggerInstanceSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(triggersDelete(
@@ -80,10 +94,10 @@ export class Triggers extends ClientSDK {
    * Get a trigger instance by ID.
    */
   async get(
-    request: operations.GetTriggerInstanceRequest,
-    security?: operations.GetTriggerInstanceSecurity | undefined,
+    request: GetTriggerInstanceRequest,
+    security?: GetTriggerInstanceSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.TriggerInstance> {
+  ): Promise<TriggerInstance> {
     return unwrapAsync(triggersGet(
       this,
       request,
@@ -99,11 +113,30 @@ export class Triggers extends ClientSDK {
    * List trigger instances for the current project.
    */
   async list(
-    request?: operations.ListTriggerInstancesRequest | undefined,
-    security?: operations.ListTriggerInstancesSecurity | undefined,
+    request?: ListTriggerInstancesRequest | undefined,
+    security?: ListTriggerInstancesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListTriggerInstancesResult> {
+  ): Promise<ListTriggerInstancesResult> {
     return unwrapAsync(triggersList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listTriggerDefinitions triggers
+   *
+   * @remarks
+   * List static trigger definitions available to a project.
+   */
+  async listDefinitions(
+    request?: ListTriggerDefinitionsRequest | undefined,
+    security?: ListTriggerDefinitionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListTriggerDefinitionsResult> {
+    return unwrapAsync(triggersListDefinitions(
       this,
       request,
       security,
@@ -118,10 +151,10 @@ export class Triggers extends ClientSDK {
    * Pause a trigger instance.
    */
   async pause(
-    request: operations.PauseTriggerInstanceRequest,
-    security?: operations.PauseTriggerInstanceSecurity | undefined,
+    request: PauseTriggerInstanceRequest,
+    security?: PauseTriggerInstanceSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.TriggerInstance> {
+  ): Promise<TriggerInstance> {
     return unwrapAsync(triggersPause(
       this,
       request,
@@ -137,10 +170,10 @@ export class Triggers extends ClientSDK {
    * Resume a trigger instance.
    */
   async resume(
-    request: operations.ResumeTriggerInstanceRequest,
-    security?: operations.ResumeTriggerInstanceSecurity | undefined,
+    request: ResumeTriggerInstanceRequest,
+    security?: ResumeTriggerInstanceSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.TriggerInstance> {
+  ): Promise<TriggerInstance> {
     return unwrapAsync(triggersResume(
       this,
       request,
@@ -156,10 +189,10 @@ export class Triggers extends ClientSDK {
    * Update a trigger instance.
    */
   async update(
-    request: operations.UpdateTriggerInstanceRequest,
-    security?: operations.UpdateTriggerInstanceSecurity | undefined,
+    request: UpdateTriggerInstanceRequest,
+    security?: UpdateTriggerInstanceSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.TriggerInstance> {
+  ): Promise<TriggerInstance> {
     return unwrapAsync(triggersUpdate(
       this,
       request,

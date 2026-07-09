@@ -1,6 +1,6 @@
 import type { Toolset } from "@/lib/toolTypes";
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
-import type { OAuthProxyProvider } from "@gram/client/models/components";
+import type { OAuthProxyProvider } from "@gram/client/models/components/oauthproxyprovider.js";
 
 // Pure helpers that derive migration defaults from a toolset's first
 // oauth_proxy_provider. Kept separate from React so the logic stays unit

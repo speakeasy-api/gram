@@ -6,7 +6,8 @@ import {
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import { Dimension, type QueryRow } from "@gram/client/models/components";
+import { Dimension } from "@gram/client/models/components/queryfilter.js";
+import { type QueryRow } from "@gram/client/models/components/queryrow.js";
 import { Box, ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -18,6 +19,12 @@ import {
 import { Gutter, SortHeader, SUBGRID_ROW_CLASS } from "./gridTable";
 import { Sparkline } from "./Sparkline";
 import { trendDirection, trendOf } from "./sparkline-math";
+import {
+  costMeasureLabel,
+  ESTIMATED_COST_TOOLTIP,
+  isMeteredBilling,
+} from "@/components/estimated-cost-utils";
+import { isAttributionDim } from "./taxonomy";
 
 function formatCost(value: number): string {
   return `$${value.toLocaleString(undefined, {
@@ -142,6 +149,7 @@ type SortKey =
   | "perSession"
   | "chats"
   | "tools"
+  | "cache"
   | "tokens"
   | "trend";
 type SortDir = "asc" | "desc";
@@ -165,6 +173,8 @@ function sortValue(
       return row.measures.totalChats ?? 0;
     case "tools":
       return row.measures.totalToolCalls ?? 0;
+    case "cache":
+      return row.measures.cacheCreationInputTokens ?? 0;
     case "tokens":
       return row.measures.totalTokens ?? 0;
     case "trend": {
@@ -208,6 +218,9 @@ export type CostTableProps = {
   // Per-group daily cost series for the trend sparkline, keyed by group value.
   seriesByGroup: Map<string, number[]>;
   isLoading: boolean;
+  // The view's resolved billing mode; "metered" shows real cost rather than the
+  // API-rate estimate on the cost headers.
+  billingMode?: string;
 };
 
 export function CostTable({
@@ -218,9 +231,12 @@ export function CostTable({
   onDrill,
   seriesByGroup,
   isLoading,
+  billingMode,
 }: CostTableProps): JSX.Element {
   const [sort, setSort] = useState<Sort>({ key: "cost", dir: "desc" });
   const [page, setPage] = useState(0);
+  // A confidently metered view shows real cost, so the estimate caveat is hidden.
+  const showCostEstimate = !isMeteredBilling(billingMode);
 
   const onSort = (key: SortKey) => {
     setPage(0);
@@ -254,6 +270,9 @@ export function CostTable({
 
   const showModelIcon = groupBy === Dimension.Model;
   const showAgentIcon = groupBy === Dimension.HookSource;
+  // Attribution cuts (MCP server/tool, skill, subagent) replace the tool-calls
+  // column with cache-creation tokens — the context weight they add to a session.
+  const cacheMetric = isAttributionDim(groupBy);
 
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
   const safePage = Math.min(page, Math.max(totalPages - 1, 0));
@@ -295,13 +314,14 @@ export function CostTable({
             onSort={onSort}
           />
         </span>
-        <span className="flex">
+        <span className="flex items-center gap-1">
           <HeaderButton
-            label="Total Cost"
+            label={costMeasureLabel(billingMode)}
             sortKey="cost"
             sort={sort}
             onSort={onSort}
           />
+          {showCostEstimate && <InfoTooltip text={ESTIMATED_COST_TOOLTIP} />}
         </span>
         <span className="flex items-center gap-1">
           <HeaderButton
@@ -314,13 +334,14 @@ export function CostTable({
             text={`Share of total cost across all ${groupLabel.toLowerCase()}s in this view.`}
           />
         </span>
-        <span className="flex">
+        <span className="flex items-center gap-1">
           <HeaderButton
-            label="Cost / session"
+            label={costMeasureLabel(billingMode) + " / session"}
             sortKey="perSession"
             sort={sort}
             onSort={onSort}
           />
+          {showCostEstimate && <InfoTooltip text={ESTIMATED_COST_TOOLTIP} />}
         </span>
         <span className="flex">
           <HeaderButton
@@ -330,13 +351,25 @@ export function CostTable({
             onSort={onSort}
           />
         </span>
-        <span className="flex">
-          <HeaderButton
-            label="Tool calls"
-            sortKey="tools"
-            sort={sort}
-            onSort={onSort}
-          />
+        <span className="flex items-center gap-1">
+          {cacheMetric ? (
+            <>
+              <HeaderButton
+                label="Tokens added"
+                sortKey="cache"
+                sort={sort}
+                onSort={onSort}
+              />
+              <InfoTooltip text="Tokens this MCP server, tool, skill, or subagent adds to a session's context." />
+            </>
+          ) : (
+            <HeaderButton
+              label="Tool calls"
+              sortKey="tools"
+              sort={sort}
+              onSort={onSort}
+            />
+          )}
         </span>
         <span className="flex">
           <HeaderButton
@@ -440,7 +473,11 @@ export function CostTable({
                 {(row.measures.totalChats ?? 0).toLocaleString()}
               </span>
               <span className="text-left tabular-nums whitespace-nowrap">
-                {(row.measures.totalToolCalls ?? 0).toLocaleString()}
+                {cacheMetric
+                  ? (
+                      row.measures.cacheCreationInputTokens ?? 0
+                    ).toLocaleString()
+                  : (row.measures.totalToolCalls ?? 0).toLocaleString()}
               </span>
               <span className="text-left tabular-nums whitespace-nowrap">
                 {(row.measures.totalTokens ?? 0).toLocaleString()}

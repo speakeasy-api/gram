@@ -18,10 +18,14 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListShadowMCPApprovalRequestsRequest,
+  ListShadowMCPApprovalRequestsSecurity,
+  Status,
+} from "../models/operations/listshadowmcpapprovalrequests.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +46,7 @@ export {
 };
 
 export type ShadowMCPApprovalRequestsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +63,8 @@ export type ShadowMCPApprovalRequestsQueryError =
  * List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.
  */
 export function useShadowMCPApprovalRequests(
-  request?: operations.ListShadowMCPApprovalRequestsRequest | undefined,
-  security?: operations.ListShadowMCPApprovalRequestsSecurity | undefined,
+  request?: ListShadowMCPApprovalRequestsRequest | undefined,
+  security?: ListShadowMCPApprovalRequestsSecurity | undefined,
   options?: QueryHookOptions<
     ShadowMCPApprovalRequestsQueryData,
     ShadowMCPApprovalRequestsQueryError
@@ -88,8 +92,8 @@ export function useShadowMCPApprovalRequests(
  * List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.
  */
 export function useShadowMCPApprovalRequestsSuspense(
-  request?: operations.ListShadowMCPApprovalRequestsRequest | undefined,
-  security?: operations.ListShadowMCPApprovalRequestsSecurity | undefined,
+  request?: ListShadowMCPApprovalRequestsRequest | undefined,
+  security?: ListShadowMCPApprovalRequestsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ShadowMCPApprovalRequestsQueryData,
     ShadowMCPApprovalRequestsQueryError
@@ -114,7 +118,7 @@ export function setShadowMCPApprovalRequestsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      status?: operations.Status | undefined;
+      status?: Status | undefined;
       projectId?: string | undefined;
       limit?: number | undefined;
       cursor?: string | undefined;
@@ -132,7 +136,7 @@ export function invalidateShadowMCPApprovalRequests(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      status?: operations.Status | undefined;
+      status?: Status | undefined;
       projectId?: string | undefined;
       limit?: number | undefined;
       cursor?: string | undefined;

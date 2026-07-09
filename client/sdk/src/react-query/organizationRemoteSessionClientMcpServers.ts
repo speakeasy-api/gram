@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListOrganizationRemoteSessionClientMcpServersRequest,
+  ListOrganizationRemoteSessionClientMcpServersSecurity,
+} from "../models/operations/listorganizationremotesessionclientmcpservers.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type OrganizationRemoteSessionClientMcpServersQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -53,16 +56,14 @@ export type OrganizationRemoteSessionClientMcpServersQueryError =
   | SDKValidationError;
 
 /**
- * listClientMcpServers organizationRemoteSessionIssuers
+ * listClientMcpServers organizationRemoteSessionClients
  *
  * @remarks
  * List the MCP servers a remote_session_client is attached to (resolved through user_session_issuers) in the caller's organization. Requires org:read.
  */
 export function useOrganizationRemoteSessionClientMcpServers(
-  request: operations.ListOrganizationRemoteSessionClientMcpServersRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientMcpServersSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientMcpServersRequest,
+  security?: ListOrganizationRemoteSessionClientMcpServersSecurity | undefined,
   options?: QueryHookOptions<
     OrganizationRemoteSessionClientMcpServersQueryData,
     OrganizationRemoteSessionClientMcpServersQueryError
@@ -84,16 +85,14 @@ export function useOrganizationRemoteSessionClientMcpServers(
 }
 
 /**
- * listClientMcpServers organizationRemoteSessionIssuers
+ * listClientMcpServers organizationRemoteSessionClients
  *
  * @remarks
  * List the MCP servers a remote_session_client is attached to (resolved through user_session_issuers) in the caller's organization. Requires org:read.
  */
 export function useOrganizationRemoteSessionClientMcpServersSuspense(
-  request: operations.ListOrganizationRemoteSessionClientMcpServersRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientMcpServersSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientMcpServersRequest,
+  security?: ListOrganizationRemoteSessionClientMcpServersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     OrganizationRemoteSessionClientMcpServersQueryData,
     OrganizationRemoteSessionClientMcpServersQueryError
@@ -149,8 +148,8 @@ export function invalidateOrganizationRemoteSessionClientMcpServers(
     ...filters,
     queryKey: [
       "@gram/client",
-      "organizationRemoteSessionIssuers",
-      "listClientMcpServers",
+      "organizationRemoteSessionClients",
+      "listMcpServers",
       ...queryKeyBase,
     ],
   });
@@ -164,8 +163,8 @@ export function invalidateAllOrganizationRemoteSessionClientMcpServers(
     ...filters,
     queryKey: [
       "@gram/client",
-      "organizationRemoteSessionIssuers",
-      "listClientMcpServers",
+      "organizationRemoteSessionClients",
+      "listMcpServers",
     ],
   });
 }

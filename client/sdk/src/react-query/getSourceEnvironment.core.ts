@@ -11,16 +11,20 @@ import { GramCore } from "../core.js";
 import { environmentsGetBySource } from "../funcs/environmentsGetBySource.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { Environment } from "../models/components/environment.js";
+import {
+  GetSourceEnvironmentRequest,
+  GetSourceEnvironmentSecurity,
+  QueryParamSourceKind,
+} from "../models/operations/getsourceenvironment.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetSourceEnvironmentQueryData = components.Environment;
+export type GetSourceEnvironmentQueryData = Environment;
 
 export function prefetchGetSourceEnvironment(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetSourceEnvironmentRequest,
-  security?: operations.GetSourceEnvironmentSecurity | undefined,
+  request: GetSourceEnvironmentRequest,
+  security?: GetSourceEnvironmentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +39,8 @@ export function prefetchGetSourceEnvironment(
 
 export function buildGetSourceEnvironmentQuery(
   client$: GramCore,
-  request: operations.GetSourceEnvironmentRequest,
-  security?: operations.GetSourceEnvironmentSecurity | undefined,
+  request: GetSourceEnvironmentRequest,
+  security?: GetSourceEnvironmentSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -77,7 +81,7 @@ export function buildGetSourceEnvironmentQuery(
 
 export function queryKeyGetSourceEnvironment(
   parameters: {
-    sourceKind: operations.QueryParamSourceKind;
+    sourceKind: QueryParamSourceKind;
     sourceSlug: string;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

@@ -2,18 +2,19 @@ import { Page } from "@/components/page-layout";
 import { useHideInsightsDock } from "@/components/insights-context";
 import { useProject, useSession } from "@/contexts/Auth";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
+import { DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
 import { getServerURL } from "@/lib/utils";
 import {
   Chat,
   GramElementsProvider,
+  useThreadId,
   type MCPServerEntry,
-  type Model,
 } from "@gram-ai/elements";
-import { useListToolsets } from "@gram/client/react-query";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Loader2 } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AssistantDraftProvider } from "./AssistantDraftContext";
@@ -63,6 +64,21 @@ export function EditAssistantOnboarding(): JSX.Element {
   );
 }
 
+// Elements namespaces tools as `<name>__<tool>` when more than one MCP entry
+// is configured, and completion providers reject tool names over 64
+// characters, so overlong entry names are truncated with a deterministic
+// FNV-1a suffix (mirrors the runtime-side capRuntimeMCPServerID).
+function capMcpEntryName(name: string): string {
+  const maxLen = 24;
+  if (name.length <= maxLen) return name;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < name.length; i++) {
+    hash ^= name.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `${name.slice(0, maxLen - 9)}-${hash.toString(16).padStart(8, "0")}`;
+}
+
 function OnboardingShell() {
   // Hosts its own chat runtime — hide the floating dock and keep the shared
   // runtime out of this tree (no nested RemoteThreadListRuntime).
@@ -109,29 +125,68 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
 
   const initialThreadId = searchParams.get("threadId") ?? undefined;
 
+  // Once the assistant exists (create → after first save, or edit mode), link
+  // setup threads to it: filter the thread list to this assistant's chats and
+  // send the assistant id on completions so the server records a listable
+  // assistant_threads row (source_kind=setup). Before the assistant exists the
+  // draft has no id, so both stay undefined and the setup chat is an ordinary
+  // unlinked chat until creation — reopening then starts a fresh thread, which
+  // is acceptable.
+  const assistantId = draft.assistantId ?? undefined;
+
+  // Scope the onboarding history to this assistant's setup threads only
+  // (source_kind=setup), so runtime threads (Slack/cron/etc.) for the same
+  // assistant never leak into the onboarding list.
+  const threadListFilters = useMemo(
+    () =>
+      assistantId
+        ? { assistant_id: assistantId, source_kind: "setup" }
+        : undefined,
+    [assistantId],
+  );
+
+  const apiHeaders = useMemo<Record<string, string>>(
+    () => ({
+      "X-Gram-Source": "assistant",
+      ...(assistantId ? { "Gram-Assistant-ID": assistantId } : {}),
+    }),
+    [assistantId],
+  );
+
   const onboarding = useOnboardingTools();
 
   const { data: toolsetsData } = useListToolsets();
   const mcps = useMemo<MCPServerEntry[] | undefined>(() => {
-    const refs = draft.assistant?.toolsets;
-    if (!refs?.length) return undefined;
     const fallbackEnv = draft.assistantEnv?.slug;
     const toolsetBySlug = new Map(
       (toolsetsData?.toolsets ?? []).map((t) => [t.slug, t]),
     );
     const entries: MCPServerEntry[] = [];
-    for (const ref of refs) {
+    for (const ref of draft.assistant?.toolsets ?? []) {
       const toolset = toolsetBySlug.get(ref.toolsetSlug);
       if (!toolset) continue;
       entries.push({
         url: internalMcpUrl({ slug: project.slug }, toolset),
-        name: toolset.slug,
+        name: capMcpEntryName(toolset.slug),
         environment: ref.environmentSlug ?? fallbackEnv,
+      });
+    }
+    // Directly-attached MCP servers (no backing toolset) connect through the
+    // same Gram-hosted /mcp/{endpoint} path the assistant runtime dials. No
+    // fallback environment: most remote servers carry their own connection
+    // auth, so only an explicitly bound environment is sent.
+    for (const ref of draft.assistant?.mcpServers ?? []) {
+      if (!ref.endpointSlug) continue;
+      entries.push({
+        url: `${getServerURL()}/mcp/${ref.endpointSlug}`,
+        name: capMcpEntryName(ref.mcpServerSlug),
+        environment: ref.environmentSlug,
       });
     }
     return entries.length ? entries : undefined;
   }, [
     draft.assistant?.toolsets,
+    draft.assistant?.mcpServers,
     draft.assistantEnv?.slug,
     toolsetsData?.toolsets,
     project.slug,
@@ -179,6 +234,10 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
         slug: t.toolsetSlug,
         environmentSlug: t.environmentSlug ?? null,
       })),
+      mcpServers: (draft.assistant.mcpServers ?? []).map((m) => ({
+        slug: m.mcpServerSlug,
+        environmentSlug: m.environmentSlug ?? null,
+      })),
     };
   }
   const snapshot = snapshotRef.current;
@@ -215,11 +274,16 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           api: {
             url: getServerURL(),
             session: getSession,
-            headers: { "X-Gram-Source": "assistant" },
+            headers: apiHeaders,
           },
           history: {
             enabled: true,
-            showThreadList: false,
+            // Surface prior setup/onboarding threads for this assistant so
+            // reopening the page can resurface and revisit them. The list is
+            // scoped to this assistant's chats; before the assistant exists the
+            // filter is omitted and the list stays empty.
+            showThreadList: true,
+            ...(threadListFilters ? { threadListFilters } : {}),
             initialThreadId,
           },
           thread: {
@@ -229,7 +293,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           systemPrompt,
           mcps,
           model: {
-            defaultModel: "anthropic/claude-opus-4.7" as Model,
+            defaultModel: DEFAULT_ASSISTANT_MODEL,
             showModelPicker: false,
           },
           welcome,
@@ -253,10 +317,35 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           },
         }}
       >
+        <SetupThreadSync />
         <div className="h-full overflow-hidden">
           <Chat />
         </div>
       </GramElementsProvider>
     </div>
   );
+}
+
+// SetupThreadSync mirrors the active thread id into the `?threadId=` query
+// param (replace-nav, so it doesn't spam history) so a setup/onboarding thread
+// is URL-addressable and can be reopened via the shareable URL. Must render
+// inside GramElementsProvider so useThreadId can read the active thread.
+function SetupThreadSync() {
+  const { threadId } = useThreadId();
+  const [, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (!threadId) return;
+    setSearchParams(
+      (prev) => {
+        if (prev.get("threadId") === threadId) return prev;
+        const next = new URLSearchParams(prev);
+        next.set("threadId", threadId);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [threadId, setSearchParams]);
+
+  return null;
 }

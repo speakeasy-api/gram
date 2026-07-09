@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpdateAssistantForm,
+  UpdateAssistantForm$Outbound,
+  UpdateAssistantForm$outboundSchema,
+} from "../components/updateassistantform.js";
 
 export type UpdateAssistantSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -20,7 +24,7 @@ export type UpdateAssistantRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  updateAssistantForm: components.UpdateAssistantForm;
+  updateAssistantForm: UpdateAssistantForm;
 };
 
 /** @internal */
@@ -58,7 +62,7 @@ export function updateAssistantSecurityToJSON(
 export type UpdateAssistantRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  UpdateAssistantForm: components.UpdateAssistantForm$Outbound;
+  UpdateAssistantForm: UpdateAssistantForm$Outbound;
 };
 
 /** @internal */
@@ -69,7 +73,7 @@ export const UpdateAssistantRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    updateAssistantForm: components.UpdateAssistantForm$outboundSchema,
+    updateAssistantForm: UpdateAssistantForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

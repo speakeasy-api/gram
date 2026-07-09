@@ -10,8 +10,37 @@ import { collectionsList } from "../funcs/collectionsList.js";
 import { collectionsListServers } from "../funcs/collectionsListServers.js";
 import { collectionsUpdate } from "../funcs/collectionsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListResponseBody } from "../models/components/listresponsebody.js";
+import { ListServersResponseBody } from "../models/components/listserversresponsebody.js";
+import { MCPCollection } from "../models/components/mcpcollection.js";
+import {
+  AttachServerToCollectionRequest,
+  AttachServerToCollectionSecurity,
+} from "../models/operations/attachservertocollection.js";
+import {
+  CreateCollectionRequest,
+  CreateCollectionSecurity,
+} from "../models/operations/createcollection.js";
+import {
+  DeleteCollectionRequest,
+  DeleteCollectionSecurity,
+} from "../models/operations/deletecollection.js";
+import {
+  DetachServerFromCollectionRequest,
+  DetachServerFromCollectionSecurity,
+} from "../models/operations/detachserverfromcollection.js";
+import {
+  ListCollectionsRequest,
+  ListCollectionsSecurity,
+} from "../models/operations/listcollections.js";
+import {
+  ListCollectionServersRequest,
+  ListCollectionServersSecurity,
+} from "../models/operations/listcollectionservers.js";
+import {
+  UpdateCollectionRequest,
+  UpdateCollectionSecurity,
+} from "../models/operations/updatecollection.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Collections extends ClientSDK {
@@ -22,10 +51,10 @@ export class Collections extends ClientSDK {
    * Attach a server to a collection. Provide exactly one of toolset_id or mcp_server_id.
    */
   async attachServer(
-    request: operations.AttachServerToCollectionRequest,
-    security?: operations.AttachServerToCollectionSecurity | undefined,
+    request: AttachServerToCollectionRequest,
+    security?: AttachServerToCollectionSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.MCPCollection> {
+  ): Promise<MCPCollection> {
     return unwrapAsync(collectionsAttachServer(
       this,
       request,
@@ -41,10 +70,10 @@ export class Collections extends ClientSDK {
    * Create an MCP collection within the organization
    */
   async create(
-    request: operations.CreateCollectionRequest,
-    security?: operations.CreateCollectionSecurity | undefined,
+    request: CreateCollectionRequest,
+    security?: CreateCollectionSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.MCPCollection> {
+  ): Promise<MCPCollection> {
     return unwrapAsync(collectionsCreate(
       this,
       request,
@@ -60,8 +89,8 @@ export class Collections extends ClientSDK {
    * Delete an MCP collection
    */
   async delete(
-    request: operations.DeleteCollectionRequest,
-    security?: operations.DeleteCollectionSecurity | undefined,
+    request: DeleteCollectionRequest,
+    security?: DeleteCollectionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(collectionsDelete(
@@ -79,8 +108,8 @@ export class Collections extends ClientSDK {
    * Detach a server from a collection. Provide exactly one of toolset_id or mcp_server_id.
    */
   async detachServer(
-    request: operations.DetachServerFromCollectionRequest,
-    security?: operations.DetachServerFromCollectionSecurity | undefined,
+    request: DetachServerFromCollectionRequest,
+    security?: DetachServerFromCollectionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(collectionsDetachServer(
@@ -98,10 +127,10 @@ export class Collections extends ClientSDK {
    * List MCP collections in the organization
    */
   async list(
-    request?: operations.ListCollectionsRequest | undefined,
-    security?: operations.ListCollectionsSecurity | undefined,
+    request?: ListCollectionsRequest | undefined,
+    security?: ListCollectionsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListResponseBody> {
+  ): Promise<ListResponseBody> {
     return unwrapAsync(collectionsList(
       this,
       request,
@@ -117,10 +146,10 @@ export class Collections extends ClientSDK {
    * List published MCP servers from a collection
    */
   async listServers(
-    request: operations.ListCollectionServersRequest,
-    security?: operations.ListCollectionServersSecurity | undefined,
+    request: ListCollectionServersRequest,
+    security?: ListCollectionServersSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListServersResponseBody> {
+  ): Promise<ListServersResponseBody> {
     return unwrapAsync(collectionsListServers(
       this,
       request,
@@ -136,10 +165,10 @@ export class Collections extends ClientSDK {
    * Update an MCP collection
    */
   async update(
-    request: operations.UpdateCollectionRequest,
-    security?: operations.UpdateCollectionSecurity | undefined,
+    request: UpdateCollectionRequest,
+    security?: UpdateCollectionSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.MCPCollection> {
+  ): Promise<MCPCollection> {
     return unwrapAsync(collectionsUpdate(
       this,
       request,

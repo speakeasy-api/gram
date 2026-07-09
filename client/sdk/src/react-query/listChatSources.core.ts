@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { chatListSources } from "../funcs/chatListSources.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListSourcesResult } from "../models/components/listsourcesresult.js";
+import {
+  ListChatSourcesRequest,
+  ListChatSourcesSecurity,
+} from "../models/operations/listchatsources.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListChatSourcesQueryData = components.ListSourcesResult;
+export type ListChatSourcesQueryData = ListSourcesResult;
 
 export function prefetchListChatSources(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListChatSourcesRequest | undefined,
-  security?: operations.ListChatSourcesSecurity | undefined,
+  request?: ListChatSourcesRequest | undefined,
+  security?: ListChatSourcesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListChatSources(
 
 export function buildListChatSourcesQuery(
   client$: GramCore,
-  request?: operations.ListChatSourcesRequest | undefined,
-  security?: operations.ListChatSourcesSecurity | undefined,
+  request?: ListChatSourcesRequest | undefined,
+  security?: ListChatSourcesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -9,8 +9,33 @@ import { mcpServersList } from "../funcs/mcpServersList.js";
 import { mcpServersListToolFilters } from "../funcs/mcpServersListToolFilters.js";
 import { mcpServersUpdate } from "../funcs/mcpServersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListMcpServersResult } from "../models/components/listmcpserversresult.js";
+import { ListToolFiltersResult } from "../models/components/listtoolfiltersresult.js";
+import { McpServer } from "../models/components/mcpserver.js";
+import {
+  CreateMcpServerRequest,
+  CreateMcpServerSecurity,
+} from "../models/operations/createmcpserver.js";
+import {
+  DeleteMcpServerRequest,
+  DeleteMcpServerSecurity,
+} from "../models/operations/deletemcpserver.js";
+import {
+  GetMcpServerRequest,
+  GetMcpServerSecurity,
+} from "../models/operations/getmcpserver.js";
+import {
+  ListMcpServersRequest,
+  ListMcpServersSecurity,
+} from "../models/operations/listmcpservers.js";
+import {
+  ListMcpServerToolFiltersRequest,
+  ListMcpServerToolFiltersSecurity,
+} from "../models/operations/listmcpservertoolfilters.js";
+import {
+  UpdateMcpServerRequest,
+  UpdateMcpServerSecurity,
+} from "../models/operations/updatemcpserver.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class McpServers extends ClientSDK {
@@ -21,10 +46,10 @@ export class McpServers extends ClientSDK {
    * Create a new MCP server
    */
   async create(
-    request: operations.CreateMcpServerRequest,
-    security?: operations.CreateMcpServerSecurity | undefined,
+    request: CreateMcpServerRequest,
+    security?: CreateMcpServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.McpServer> {
+  ): Promise<McpServer> {
     return unwrapAsync(mcpServersCreate(
       this,
       request,
@@ -40,8 +65,8 @@ export class McpServers extends ClientSDK {
    * Delete an MCP server
    */
   async delete(
-    request: operations.DeleteMcpServerRequest,
-    security?: operations.DeleteMcpServerSecurity | undefined,
+    request: DeleteMcpServerRequest,
+    security?: DeleteMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(mcpServersDelete(
@@ -59,10 +84,10 @@ export class McpServers extends ClientSDK {
    * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
    */
   async get(
-    request?: operations.GetMcpServerRequest | undefined,
-    security?: operations.GetMcpServerSecurity | undefined,
+    request?: GetMcpServerRequest | undefined,
+    security?: GetMcpServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.McpServer> {
+  ): Promise<McpServer> {
     return unwrapAsync(mcpServersGet(
       this,
       request,
@@ -75,13 +100,13 @@ export class McpServers extends ClientSDK {
    * listMcpServers mcpServers
    *
    * @remarks
-   * List MCP servers for a project. Accepts optional remote_mcp_server_id or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the two backends are mutually exclusive.
+   * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
    */
   async list(
-    request?: operations.ListMcpServersRequest | undefined,
-    security?: operations.ListMcpServersSecurity | undefined,
+    request?: ListMcpServersRequest | undefined,
+    security?: ListMcpServersSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListMcpServersResult> {
+  ): Promise<ListMcpServersResult> {
     return unwrapAsync(mcpServersList(
       this,
       request,
@@ -97,10 +122,10 @@ export class McpServers extends ClientSDK {
    * List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
    */
   async listToolFilters(
-    request?: operations.ListMcpServerToolFiltersRequest | undefined,
-    security?: operations.ListMcpServerToolFiltersSecurity | undefined,
+    request?: ListMcpServerToolFiltersRequest | undefined,
+    security?: ListMcpServerToolFiltersSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListToolFiltersResult> {
+  ): Promise<ListToolFiltersResult> {
     return unwrapAsync(mcpServersListToolFilters(
       this,
       request,
@@ -113,13 +138,13 @@ export class McpServers extends ClientSDK {
    * updateMcpServer mcpServers
    *
    * @remarks
-   * Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.
+   * Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.
    */
   async update(
-    request: operations.UpdateMcpServerRequest,
-    security?: operations.UpdateMcpServerSecurity | undefined,
+    request: UpdateMcpServerRequest,
+    security?: UpdateMcpServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.McpServer> {
+  ): Promise<McpServer> {
     return unwrapAsync(mcpServersUpdate(
       this,
       request,

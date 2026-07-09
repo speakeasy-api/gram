@@ -32,21 +32,26 @@ import { telemetryGetEmployeeDataFlowGraph } from "@gram/client/funcs/telemetryG
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetUserMetricsSummary } from "@gram/client/funcs/telemetryGetUserMetricsSummary";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
-import type {
-  EmployeeDataFlowNode,
-  GetEmployeeDataFlowGraphResult,
-  GetObservabilityOverviewResult,
-  ProjectSummary,
-  TimeSeriesBucket,
-  UserSummary,
-} from "@gram/client/models/components";
+import type { EmployeeDataFlowNode } from "@gram/client/models/components/employeedataflownode.js";
+import type { GetEmployeeDataFlowGraphResult } from "@gram/client/models/components/getemployeedataflowgraphresult.js";
+import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
+import type { ProjectSummary } from "@gram/client/models/components/projectsummary.js";
+import type { TimeSeriesBucket } from "@gram/client/models/components/timeseriesbucket.js";
+import type { UserAccount } from "@gram/client/models/components/useraccount.js";
+import type { UserSummary } from "@gram/client/models/components/usersummary.js";
+import { AccountRow } from "@/components/observe/account-display";
+import { providerLabel } from "@/components/observe/account-display-utils";
 import {
-  useGramContext,
-  useListChats,
-  useMembers,
-  useUserSessions,
-} from "@gram/client/react-query";
-import { useRiskOverview } from "@gram/client/react-query/index.js";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useUserSessions } from "@gram/client/react-query/userSessions.js";
+import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import {
   TimeRangePicker,
@@ -224,19 +229,6 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     }
     return `${routes.logs.href()}?${params.toString()}`;
   }, [customRange, dateRange, employeeEmailFilter, from, routes.logs, to]);
-  const agentSessionsQuery = useListChats(
-    {
-      search: employeeEmailFilter ?? undefined,
-      from,
-      to,
-      limit: 1,
-    },
-    undefined,
-    {
-      enabled: employeeEmailFilter != null,
-      throwOnError: false,
-    },
-  );
   const riskEventsHref = useMemo(() => {
     const params = new URLSearchParams();
     if (employeeEmailFilter) {
@@ -311,6 +303,18 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
   });
   const resolvedUserId = member?.id ?? fallbackUserQuery.data?.userId;
 
+  // Optional per-account scoping. Empty string = the cumulative, all-accounts
+  // view (default); otherwise the provider org id of a single selected account,
+  // which re-scopes every query on the page to that one account.
+  const [selectedOrgId, setSelectedOrgId] = useState("");
+  // Reset the account scope when navigating to a different employee.
+  useEffect(() => {
+    setSelectedOrgId("");
+  }, [resolvedUserId]);
+
+  // Always unfiltered: this drives the accounts list/selector and the
+  // cumulative view. The per-user accounts breakdown comes back regardless of
+  // the account filter, so the selector stays stable across selections.
   const summaryQuery = useQuery({
     queryKey: [
       "insights",
@@ -320,8 +324,27 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
       from.toISOString(),
       to.toISOString(),
     ],
-    queryFn: () => fetchUserSummary(client, from, to, resolvedUserId!),
+    queryFn: () => fetchUserSummary(client, from, to, resolvedUserId!, ""),
     enabled: resolvedUserId != null,
+    throwOnError: false,
+  });
+
+  // Scoped summary for the metric cards/breakdowns when a single account is
+  // selected. Only runs when an account is chosen; otherwise the cumulative
+  // summaryQuery above is used.
+  const scopedSummaryQuery = useQuery({
+    queryKey: [
+      "insights",
+      "employee-detail",
+      "summary",
+      resolvedUserId,
+      from.toISOString(),
+      to.toISOString(),
+      selectedOrgId,
+    ],
+    queryFn: () =>
+      fetchUserSummary(client, from, to, resolvedUserId!, selectedOrgId),
+    enabled: resolvedUserId != null && selectedOrgId !== "",
     throwOnError: false,
   });
 
@@ -333,8 +356,10 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
       resolvedUserId,
       from.toISOString(),
       to.toISOString(),
+      selectedOrgId,
     ],
-    queryFn: () => fetchUserMetrics(client, from, to, resolvedUserId!),
+    queryFn: () =>
+      fetchUserMetrics(client, from, to, resolvedUserId!, selectedOrgId),
     enabled: resolvedUserId != null,
     throwOnError: false,
   });
@@ -347,8 +372,10 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
       resolvedUserId,
       from.toISOString(),
       to.toISOString(),
+      selectedOrgId,
     ],
-    queryFn: () => fetchUserOverview(client, from, to, resolvedUserId!),
+    queryFn: () =>
+      fetchUserOverview(client, from, to, resolvedUserId!, selectedOrgId),
     enabled: resolvedUserId != null,
     throwOnError: false,
   });
@@ -361,14 +388,26 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
       resolvedUserId,
       from.toISOString(),
       to.toISOString(),
+      selectedOrgId,
     ],
     queryFn: () =>
-      fetchEmployeeDataFlowGraph(client, from, to, resolvedUserId!),
+      fetchEmployeeDataFlowGraph(
+        client,
+        from,
+        to,
+        resolvedUserId!,
+        selectedOrgId,
+      ),
     enabled: resolvedUserId != null,
     throwOnError: false,
   });
 
-  const summary = summaryQuery.data ?? fallbackUserQuery.data ?? null;
+  // Accounts list/selector is driven by the unfiltered summary; the metric
+  // cards switch to the scoped summary once an account is selected.
+  const accountsSummary = summaryQuery.data ?? fallbackUserQuery.data ?? null;
+  const accounts = accountsSummary?.accounts ?? [];
+  const summary =
+    selectedOrgId !== "" ? (scopedSummaryQuery.data ?? null) : accountsSummary;
   const metrics = metricsQuery.data;
   const overview = overviewQuery.data;
   const dataFlow = dataFlowQuery.data;
@@ -386,8 +425,15 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
   const isLoading =
     membersLoading ||
     (member == null && fallbackUserQuery.isLoading) ||
-    (resolvedUserId != null && summaryQuery.isLoading);
-  const error = summaryQuery.error ?? fallbackUserQuery.error ?? membersError;
+    (resolvedUserId != null && summaryQuery.isLoading) ||
+    // When an account is scoped, the metric cards read the scoped summary — wait
+    // on it too, else they briefly render zeros before it resolves.
+    (selectedOrgId !== "" && scopedSummaryQuery.isLoading);
+  const error =
+    summaryQuery.error ??
+    (selectedOrgId !== "" ? scopedSummaryQuery.error : null) ??
+    fallbackUserQuery.error ??
+    membersError;
 
   return (
     <>
@@ -429,7 +475,18 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                 </p>
               </div>
             </div>
-            <div className={cn(isInsightsOpen ? "justify-start" : "shrink-0")}>
+            <div
+              className={cn(
+                "flex items-center gap-2",
+                isInsightsOpen ? "flex-wrap justify-start" : "shrink-0",
+              )}
+            >
+              <AccountScopeSelector
+                accounts={accounts}
+                value={selectedOrgId}
+                onChange={setSelectedOrgId}
+                disabled={isLoading}
+              />
               <TimeRangePicker
                 preset={customRange ? null : dateRange}
                 customRange={customRange}
@@ -485,12 +542,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                 />
                 <MetricCard
                   title="Agent Sessions"
-                  value={agentSessionsQuery.data?.total ?? 0}
-                  displayValue={
-                    agentSessionsQuery.isLoading || agentSessionsQuery.isError
-                      ? "-"
-                      : undefined
-                  }
+                  value={summary?.totalChats ?? 0}
                   icon="message-square"
                   subtext={`Over ${rangeLabel}`}
                   link={agentSessionsHref}
@@ -512,9 +564,17 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
               <section
                 className={cn(
                   "grid gap-4 transition-all duration-300",
-                  isInsightsOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
+                  isInsightsOpen
+                    ? "grid-cols-1"
+                    : // Drop the accounts card (and its column) once a single
+                      // account is selected — the breakdown is already scoped to
+                      // it, so the full account list is redundant.
+                      selectedOrgId === ""
+                      ? "grid-cols-1 lg:grid-cols-3"
+                      : "grid-cols-1 lg:grid-cols-2",
                 )}
               >
+                {selectedOrgId === "" && <AccountsCard accounts={accounts} />}
                 <BreakdownCard
                   title="Platform Breakdown"
                   rows={(summary?.hookSources ?? []).map((source) => ({
@@ -619,7 +679,14 @@ function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
   return (
     <section className="bg-card border-border rounded-lg border p-5">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-semibold">Active MCP Connections</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold">Active MCP Connections</span>
+          {!isPending && !isError && sessions.length > 0 && (
+            <span className="text-muted-foreground text-xs">
+              {sessions.length}
+            </span>
+          )}
+        </div>
         <div className="bg-muted/50 rounded-lg p-2">
           <Icon name="key-round" className="text-muted-foreground size-4" />
         </div>
@@ -639,7 +706,7 @@ function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
           No active sessions
         </span>
       ) : (
-        <ul className="divide-border divide-y rounded-md border">
+        <ul className="divide-border max-h-80 divide-y overflow-y-auto rounded-md border">
           {sessions.map((s) => (
             <SessionRow
               key={s.id}
@@ -1460,6 +1527,110 @@ function getServerClassCounts(nodes: DataFlowSourceNode[]) {
   }, {});
 }
 
+// Account scope control shown next to the date range. "All accounts" is the
+// cumulative default; picking a single account re-scopes the whole page to it.
+// Only accounts with a provider org id (the telemetry discriminator) can be
+// scoped, so unclassifiable ones are omitted from the options.
+const ALL_ACCOUNTS_VALUE = "all";
+
+function AccountScopeSelector({
+  accounts,
+  value,
+  onChange,
+  disabled,
+}: {
+  accounts: UserAccount[];
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const scopable = accounts.filter((a) => (a.externalOrgId ?? "") !== "");
+  if (scopable.length === 0) return null;
+
+  // Compact single-line label for the trigger; the dropdown list uses the full
+  // two-line AccountRow (the trigger line-clamps, which would mangle it).
+  const selected = scopable.find((a) => a.externalOrgId === value);
+  const triggerLabel = selected
+    ? `${selected.email || "(no email)"} · ${providerLabel(selected.provider)}`
+    : "All accounts";
+
+  return (
+    <Select
+      value={value === "" ? ALL_ACCOUNTS_VALUE : value}
+      onValueChange={(v) => onChange(v === ALL_ACCOUNTS_VALUE ? "" : v)}
+      disabled={disabled}
+    >
+      <SelectTrigger className="w-[240px]">
+        <SelectValue placeholder="All accounts">{triggerLabel}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL_ACCOUNTS_VALUE}>All accounts</SelectItem>
+        {scopable.map((account, i) => (
+          <SelectItem
+            key={`${account.externalOrgId}:${i}`}
+            value={account.externalOrgId!}
+            // The Select wraps item content in a content-width flex-col; force it
+            // full-width so AccountRow's justify-between right-aligns the badge.
+            className="[&>div]:w-full"
+          >
+            <AccountRow
+              account={{
+                email: account.email ?? "",
+                provider: account.provider,
+                accountType: account.accountType ?? "",
+              }}
+              className="w-full"
+            />
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+// Lists every AI account linked to this employee (team + personal, across
+// providers). Mirrors the accounts popover on the employees list, expanded into
+// a full card for the detail page.
+function AccountsCard({ accounts }: { accounts: UserAccount[] }) {
+  const display = accounts.map((a) => ({
+    email: a.email ?? "",
+    provider: a.provider,
+    accountType: a.accountType ?? "",
+  }));
+  const personalCount = display.filter(
+    (a) => a.accountType === "personal",
+  ).length;
+
+  return (
+    <section className="rounded-lg border p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="font-semibold">AI Accounts</h3>
+        {display.length > 0 && (
+          <span className="text-muted-foreground shrink-0 text-xs">
+            {display.length} total
+            {personalCount > 0 ? ` · ${personalCount} personal` : ""}
+          </span>
+        )}
+      </div>
+      {/* Cap the height so the next row is partially visible — a deliberate cue
+          that the list scrolls — without stretching the card out of line with
+          the breakdown cards beside it. */}
+      <div className="mt-4 max-h-[9.5rem] space-y-3 overflow-y-auto pr-1">
+        {display.length > 0 ? (
+          display.map((account, i) => (
+            <AccountRow
+              key={`${account.provider}:${account.email}:${i}`}
+              account={account}
+            />
+          ))
+        ) : (
+          <p className="text-muted-foreground text-sm">No linked accounts</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function BreakdownCard({
   title,
   rows,
@@ -1693,6 +1864,7 @@ async function fetchUserSummary(
   from: Date,
   to: Date,
   userId: string,
+  externalOrgId: string,
 ): Promise<UserSummary | null> {
   const result = await unwrapAsync(
     telemetrySearchUsers(client, {
@@ -1701,6 +1873,7 @@ async function fetchUserSummary(
           from,
           to,
           userIds: [userId],
+          externalOrgId: externalOrgId || undefined,
         },
         limit: 1,
         sort: "desc",
@@ -1717,6 +1890,7 @@ async function fetchUserMetrics(
   from: Date,
   to: Date,
   userId: string,
+  externalOrgId: string,
 ): Promise<ProjectSummary> {
   const result = await unwrapAsync(
     telemetryGetUserMetricsSummary(client, {
@@ -1724,6 +1898,7 @@ async function fetchUserMetrics(
         from,
         to,
         userId,
+        externalOrgId: externalOrgId || undefined,
       },
     }),
   );
@@ -1736,6 +1911,7 @@ async function fetchUserOverview(
   from: Date,
   to: Date,
   userId: string,
+  externalOrgId: string,
 ): Promise<GetObservabilityOverviewResult> {
   return unwrapAsync(
     telemetryGetObservabilityOverview(client, {
@@ -1744,6 +1920,7 @@ async function fetchUserOverview(
         to,
         includeTimeSeries: true,
         userId,
+        externalOrgId: externalOrgId || undefined,
       },
     }),
   );
@@ -1754,6 +1931,7 @@ async function fetchEmployeeDataFlowGraph(
   from: Date,
   to: Date,
   userId: string,
+  externalOrgId: string,
 ): Promise<GetEmployeeDataFlowGraphResult> {
   return unwrapAsync(
     telemetryGetEmployeeDataFlowGraph(client, {
@@ -1761,6 +1939,7 @@ async function fetchEmployeeDataFlowGraph(
         from,
         to,
         userId,
+        externalOrgId: externalOrgId || undefined,
       },
     }),
   );

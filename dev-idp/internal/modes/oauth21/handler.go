@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -70,15 +71,19 @@ type Handler struct {
 	logger   *slog.Logger
 	db       *sql.DB
 	keystore *keystore.Keystore
+	// httpClient dereferences Client ID Metadata Document (CIMD) client_id URLs
+	// during the authorize leg. Short timeout; dev-only (no HTTPS enforcement).
+	httpClient *http.Client
 }
 
 func NewHandler(cfg Config, ks *keystore.Keystore, logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *Handler {
 	return &Handler{
-		cfg:      cfg,
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"),
-		logger:   logger.With(slog.String("component", "devidp."+Mode)),
-		db:       db,
-		keystore: ks,
+		cfg:        cfg,
+		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"),
+		logger:     logger.With(slog.String("component", "devidp."+Mode)),
+		db:         db,
+		keystore:   ks,
+		httpClient: &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
@@ -134,6 +139,11 @@ type asMetadata struct {
 	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
 	ScopesSupported                   []string `json:"scopes_supported"`
+	// ClientIDMetadataDocumentSupported advertises the OAuth CIMD draft
+	// (draft-ietf-oauth-client-id-metadata-document): this AS accepts a hosted
+	// metadata-document URL as the client_id. The dev-idp dereferences it in
+	// handleAuthorize instead of requiring DCR/pre-registration.
+	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
 }
 
 type oidcMetadata struct {
@@ -158,6 +168,7 @@ func (h *Handler) baseMetadata() asMetadata {
 		CodeChallengeMethodsSupported:     []string{"S256"},
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post", "none"},
 		ScopesSupported:                   []string{"openid", "email", "profile"},
+		ClientIDMetadataDocumentSupported: true,
 	}
 }
 
@@ -279,26 +290,45 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, err := repo.New(h.db).GetOAuthClient(ctx, repo.GetOAuthClientParams{
-		ClientID: clientID,
-		Mode:     Mode,
-	})
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			oauthError(w, http.StatusBadRequest, "invalid_client", "client_id is not registered")
+	// A CIMD client_id is a URL to a hosted client metadata document;
+	// dereference and validate it instead of requiring a pre-registered (DCR)
+	// client. Any other client_id resolves against the registered-clients table.
+	var allowedRedirectURIs []string
+	if isCIMDClientID(clientID) {
+		doc, derr := h.fetchClientMetadataDocument(ctx, clientID)
+		if derr != nil {
+			h.logger.WarnContext(ctx, "fetch client metadata document", slog.Any("error", derr))
+			oauthError(w, http.StatusBadRequest, "invalid_client", "could not fetch client metadata document")
 			return
 		}
-		h.logger.ErrorContext(ctx, "load oauth client", slog.Any("error", err))
-		oauthError(w, http.StatusInternalServerError, "server_error", "failed to load client")
-		return
+		// Per the CIMD draft the document's client_id MUST equal the URL it was
+		// fetched from.
+		if doc.ClientID != clientID {
+			oauthError(w, http.StatusBadRequest, "invalid_client", "client metadata document client_id does not match the client_id URL")
+			return
+		}
+		allowedRedirectURIs = doc.RedirectURIs
+	} else {
+		client, cerr := repo.New(h.db).GetOAuthClient(ctx, repo.GetOAuthClientParams{
+			ClientID: clientID,
+			Mode:     Mode,
+		})
+		if cerr != nil {
+			if errors.Is(cerr, sql.ErrNoRows) {
+				oauthError(w, http.StatusBadRequest, "invalid_client", "client_id is not registered")
+				return
+			}
+			h.logger.ErrorContext(ctx, "load oauth client", slog.Any("error", cerr))
+			oauthError(w, http.StatusInternalServerError, "server_error", "failed to load client")
+			return
+		}
+		if uerr := json.Unmarshal([]byte(client.RedirectUris), &allowedRedirectURIs); uerr != nil {
+			h.logger.ErrorContext(ctx, "decode registered redirect uris", slog.Any("error", uerr))
+			oauthError(w, http.StatusInternalServerError, "server_error", "failed to load client")
+			return
+		}
 	}
-	var registeredRedirectURIs []string
-	if err := json.Unmarshal([]byte(client.RedirectUris), &registeredRedirectURIs); err != nil {
-		h.logger.ErrorContext(ctx, "decode registered redirect uris", slog.Any("error", err))
-		oauthError(w, http.StatusInternalServerError, "server_error", "failed to load client")
-		return
-	}
-	if !slices.Contains(registeredRedirectURIs, redirectURI) {
+	if !slices.Contains(allowedRedirectURIs, redirectURI) {
 		oauthError(w, http.StatusBadRequest, "invalid_request", "redirect_uri is not registered for this client")
 		return
 	}
@@ -336,6 +366,47 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 	target.RawQuery = rq.Encode()
 	http.Redirect(w, r, target.String(), http.StatusFound)
+}
+
+// clientMetadataDocument is the subset of an OAuth Client ID Metadata Document
+// (CIMD) the dev-idp validates when a client_id is a URL.
+type clientMetadataDocument struct {
+	ClientID     string   `json:"client_id"`
+	RedirectURIs []string `json:"redirect_uris"`
+}
+
+// isCIMDClientID reports whether a client_id is a Client ID Metadata Document
+// URL (an http or https URL) rather than an opaque registered client id.
+func isCIMDClientID(clientID string) bool {
+	u, err := url.Parse(clientID)
+	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != ""
+}
+
+// fetchClientMetadataDocument dereferences a CIMD client_id URL and parses the
+// hosted metadata document. Dev-only: plain HTTP is allowed (the draft requires
+// HTTPS) so localhost documents work during local development.
+func (h *Handler) fetchClientMetadataDocument(ctx context.Context, clientID string) (clientMetadataDocument, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, clientID, nil)
+	if err != nil {
+		return clientMetadataDocument{}, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return clientMetadataDocument{}, fmt.Errorf("get %s: %w", clientID, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return clientMetadataDocument{}, fmt.Errorf("get %s: status %d", clientID, resp.StatusCode)
+	}
+
+	var doc clientMetadataDocument
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxFormBodyBytes)).Decode(&doc); err != nil {
+		return clientMetadataDocument{}, fmt.Errorf("decode document: %w", err)
+	}
+	return doc, nil
 }
 
 // =============================================================================

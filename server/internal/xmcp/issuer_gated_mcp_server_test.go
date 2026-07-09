@@ -62,7 +62,7 @@ type issuerGatedMcpServerOpts struct {
 	// out of this document and DCR-registers a remote_session_client.
 	UpstreamMetadata []byte
 	// RemoteSessionCallbackBaseURL, when set, registers the static Gram
-	// /x/mcp/remote_login_callback URL. Tests that drive a real upstream
+	// /mcp/remote_login_callback URL. Tests that drive a real upstream
 	// authorize flow should set this to the Gram server URL.
 	RemoteSessionCallbackBaseURL string
 	// AuthnChallengeMode is "chain" or "interactive". Default "interactive".
@@ -133,7 +133,6 @@ func createIssuerGatedMcpServer(
 		IsPublic:                     opts.Visibility == mcpservers.VisibilityPublic,
 		UpstreamMetadata:             opts.UpstreamMetadata,
 		RemoteSessionCallbackBaseURL: opts.RemoteSessionCallbackBaseURL,
-		RouteBase:                    "x/mcp",
 		AuthnChallengeMode:           opts.AuthnChallengeMode,
 	})
 

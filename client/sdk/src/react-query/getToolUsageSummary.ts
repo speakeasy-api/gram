@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetToolUsageSummaryRequest,
+  GetToolUsageSummarySecurity,
+} from "../models/operations/gettoolusagesummary.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetToolUsageSummaryQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetToolUsageSummaryQueryError =
  * Get target-aware MCP and tool usage metrics
  */
 export function useGetToolUsageSummary(
-  request: operations.GetToolUsageSummaryRequest,
-  security?: operations.GetToolUsageSummarySecurity | undefined,
+  request: GetToolUsageSummaryRequest,
+  security?: GetToolUsageSummarySecurity | undefined,
   options?: QueryHookOptions<
     GetToolUsageSummaryQueryData,
     GetToolUsageSummaryQueryError
@@ -85,8 +88,8 @@ export function useGetToolUsageSummary(
  * Get target-aware MCP and tool usage metrics
  */
 export function useGetToolUsageSummarySuspense(
-  request: operations.GetToolUsageSummaryRequest,
-  security?: operations.GetToolUsageSummarySecurity | undefined,
+  request: GetToolUsageSummaryRequest,
+  security?: GetToolUsageSummarySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetToolUsageSummaryQueryData,
     GetToolUsageSummaryQueryError

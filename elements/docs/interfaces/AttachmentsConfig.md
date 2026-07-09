@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.39.0**](../README.md)
+[**@gram-ai/elements v1.41.0**](../README.md)
 
 ***
 
@@ -14,7 +14,7 @@ Note: not yet implemented. Attachments are not supported yet.
 
 ### accept?
 
-> `optional` **accept**: `string`[]
+> `optional` **accept?**: `string`[]
 
 Accepted file types. Can be MIME types or file extensions.
 
@@ -28,7 +28,7 @@ Accepted file types. Can be MIME types or file extensions.
 
 ### maxCount?
 
-> `optional` **maxCount**: `number`
+> `optional` **maxCount?**: `number`
 
 Maximum number of files that can be attached at once.
 
@@ -42,7 +42,7 @@ Maximum number of files that can be attached at once.
 
 ### maxSize?
 
-> `optional` **maxSize**: `number`
+> `optional` **maxSize?**: `number`
 
 Maximum file size in bytes.
 

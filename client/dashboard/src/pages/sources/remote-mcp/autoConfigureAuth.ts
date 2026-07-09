@@ -2,11 +2,11 @@ import type { Gram } from "@gram/client";
 import {
   type McpServer,
   type McpServerVisibility,
-  type ProtectedResourceMetadata,
-  type RemoteMcpServer,
-  type RemoteSessionIssuer,
-  type RemoteSessionIssuerDraft,
-} from "@gram/client/models/components";
+} from "@gram/client/models/components/mcpserver.js";
+import { type ProtectedResourceMetadata } from "@gram/client/models/components/protectedresourcemetadata.js";
+import { type RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
+import { type RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { type RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import {
@@ -189,6 +189,8 @@ export async function autoConfigureRemoteMcpAuth({
           responseTypesSupported: draft.responseTypesSupported ?? [],
           tokenEndpointAuthMethodsSupported:
             draft.tokenEndpointAuthMethodsSupported ?? [],
+          clientIdMetadataDocumentSupported:
+            draft.clientIdMetadataDocumentSupported,
           oidc: draft.oidc,
           passthrough: draft.passthrough,
         },

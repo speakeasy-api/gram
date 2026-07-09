@@ -9,16 +9,14 @@ import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
-import { useIsAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { HumanizeDateTime } from "@/lib/dates";
-import { IntegrationEntry } from "@gram/client/models/components";
-import {
-  useLatestDeployment,
-  useListIntegrations,
-  useListPackagesSuspense,
-} from "@gram/client/react-query";
+import { IntegrationEntry } from "@gram/client/models/components/integrationentry.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useListIntegrations } from "@gram/client/react-query/listIntegrations.js";
+import { useListPackagesSuspense } from "@gram/client/react-query/listPackages.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -27,7 +25,7 @@ import { toast } from "sonner";
 export default function Integrations(): JSX.Element {
   const { data: integrations, refetch } = useListIntegrations();
 
-  const isAdmin = useIsAdmin();
+  const isAdmin = useIsPlatformAdmin();
 
   const [requestIntegrationDialogOpen, setRequestIntegrationDialogOpen] =
     useState(false);

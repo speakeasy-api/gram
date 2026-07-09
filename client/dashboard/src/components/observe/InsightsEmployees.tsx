@@ -1,3 +1,9 @@
+import { AccountRow } from "@/components/observe/account-display";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
@@ -15,9 +21,11 @@ import { cn } from "@/lib/utils";
 import {
   buildEmployees,
   type Employee,
+  type EmployeeAccount,
   type EmployeeStatus,
   isUnattributedEmployee,
 } from "@/components/observe/insightsEmployeesData";
+import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import {
   defineFilters,
   useFilterState,
@@ -25,8 +33,10 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
-import type { UserSummary } from "@gram/client/models/components";
-import { useGramContext, useMembers, useRoles } from "@gram/client/react-query";
+import type { UserSummary } from "@gram/client/models/components/usersummary.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
 import { useQuery } from "@tanstack/react-query";
@@ -73,6 +83,12 @@ const EMPLOYEE_FILTERS = defineFilters([
     defaultPreset: "30d",
   },
   { id: "status", label: "Enrollment status", kind: "multiselect" },
+  {
+    id: "account_type",
+    label: "Account type",
+    kind: "select",
+    allLabel: "All",
+  },
   { id: "role", label: "Role", kind: "select" },
   { id: "user", label: "User", kind: "select" },
 ]);
@@ -151,8 +167,15 @@ export function InsightsEmployeesContent(): JSX.Element {
     data: membersData,
     isLoading: membersLoading,
     error: membersError,
+    refetch: refetchMembers,
+    isFetching: membersFetching,
   } = useMembers();
-  const { data: rolesData, isLoading: rolesLoading } = useRoles();
+  const {
+    data: rolesData,
+    isLoading: rolesLoading,
+    refetch: refetchRoles,
+    isFetching: rolesFetching,
+  } = useRoles();
 
   const { values, setValue, clearValue, clearAll } =
     useFilterState(EMPLOYEE_FILTERS);
@@ -170,6 +193,7 @@ export function InsightsEmployeesContent(): JSX.Element {
   // also holds when the view changes through the URL, e.g. back/forward nav.
   const effectiveRoleId = isUnattributedView ? null : selectedRoleId;
   const selectedUserId = values.user;
+  const selectedAccountType = values.account_type;
 
   const handleViewChange = useCallback(
     (next: EmployeeView) => {
@@ -254,6 +278,15 @@ export function InsightsEmployeesContent(): JSX.Element {
         return false;
       if (selectedUserId && item.id !== selectedUserId) return false;
       if (effectiveRoleId && item.role !== roleName) return false;
+      // Each filter matches employees holding at least one account of that type;
+      // an employee with both a team and a personal account shows under either.
+      if (selectedAccountType === "personal" && !item.hasPersonalAccount)
+        return false;
+      if (
+        selectedAccountType === "team" &&
+        !item.accounts.some((a) => a.accountType === "team")
+      )
+        return false;
       return true;
     });
   }, [
@@ -261,6 +294,7 @@ export function InsightsEmployeesContent(): JSX.Element {
     selectedStatuses,
     selectedUserId,
     effectiveRoleId,
+    selectedAccountType,
     roleNameById,
   ]);
 
@@ -279,6 +313,7 @@ export function InsightsEmployeesContent(): JSX.Element {
   const optionsById = useMemo<OptionsById>(
     () => ({
       status: STATUS_OPTIONS,
+      account_type: ACCOUNT_TYPE_OPTIONS,
       role: roles.map((role) => ({ value: role.id, label: role.name })),
       user: viewEmployees.map((item) => ({ value: item.id, label: item.name })),
     }),
@@ -360,6 +395,16 @@ export function InsightsEmployeesContent(): JSX.Element {
                   disabled={isLoading}
                 />
               </Page.Toolbar.Actions>
+              <Page.Toolbar.Refresh
+                onRefresh={() => {
+                  void refetchMembers();
+                  void refetchRoles();
+                  void usageQuery.refetch();
+                }}
+                isRefreshing={
+                  membersFetching || rolesFetching || usageQuery.isFetching
+                }
+              />
             </Page.Toolbar>
           </div>
 
@@ -517,6 +562,18 @@ function EmployeeTable({
         render: (item) => <StatusPill status={item.status} />,
       },
       {
+        key: "accounts",
+        header: "Accounts",
+        sortable: true,
+        sortLabel: "Accounts",
+        // Personal-holders first (ascending), then more accounts before fewer,
+        // so the rows worth a second look group at the top.
+        sortValue: (item) =>
+          (item.hasPersonalAccount ? 0 : 1_000_000) - item.accounts.length,
+        width: "1fr",
+        render: (item) => <AccountsCell employee={item} />,
+      },
+      {
         key: "tokenCount",
         header: "Token Count",
         sortable: true,
@@ -532,9 +589,7 @@ function EmployeeTable({
         sortable: true,
         sortValue: (item) => item.lastActivityTimestamp,
         width: "1fr",
-        render: (item) => (
-          <span className="text-muted-foreground">{item.lastActivity}</span>
-        ),
+        render: (item) => <LastActivityCell employee={item} />,
       },
       {
         key: "action",
@@ -736,6 +791,92 @@ function StatusPill({ status }: { status: EmployeeStatus }) {
     <Badge variant={meta.variant}>
       <Badge.Text>{meta.label}</Badge.Text>
     </Badge>
+  );
+}
+
+// Shared popover shell for table cells that reveal linked accounts: a clickable
+// trigger (label + chevron) opening a popover that lists each account with its
+// email, provider, and type.
+function AccountsPopover({
+  label,
+  labelClassName,
+  title,
+  accounts,
+}: {
+  label: string;
+  labelClassName?: string;
+  title: string;
+  accounts: EmployeeAccount[];
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          // Don't let the row's navigate handler fire when opening the popover.
+          onClick={(e) => e.stopPropagation()}
+          className="hover:bg-muted/60 -mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors"
+        >
+          <span className={cn("text-muted-foreground", labelClassName)}>
+            {label}
+          </span>
+          <Icon
+            name="chevron-down"
+            className="text-muted-foreground/60 size-3"
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-0">
+        <div className="border-b px-3 py-2">
+          <p className="text-xs font-medium">{title}</p>
+        </div>
+        <ul className="divide-border/60 max-h-64 divide-y overflow-y-auto">
+          {accounts.map((a, i) => (
+            <li key={`${a.provider}:${a.email}:${i}`} className="px-3 py-2">
+              <AccountRow account={a} />
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Per-employee accounts cell: a clickable trigger summarizing the linked
+// accounts (count), opening a popover that lists every account with its email,
+// provider, and type. Robust to any number of accounts across providers.
+function AccountsCell({ employee }: { employee: Employee }) {
+  const { accounts } = employee;
+  if (accounts.length === 0) {
+    return <span className="text-muted-foreground/50 text-sm">—</span>;
+  }
+
+  return (
+    <AccountsPopover
+      label={`${accounts.length} account${accounts.length === 1 ? "" : "s"}`}
+      labelClassName="text-xs"
+      title="Linked accounts"
+      accounts={accounts}
+    />
+  );
+}
+
+// Last-activity cell: when the directory knows which account produced the most
+// recent activity, the timestamp becomes a dropdown identifying that account —
+// the workspace the employee was last working in. Plain text otherwise.
+function LastActivityCell({ employee }: { employee: Employee }) {
+  if (!employee.mostRecentAccount) {
+    return (
+      <span className="text-muted-foreground">{employee.lastActivity}</span>
+    );
+  }
+
+  return (
+    <AccountsPopover
+      label={employee.lastActivity}
+      title="Most recent account"
+      accounts={[employee.mostRecentAccount]}
+    />
   );
 }
 

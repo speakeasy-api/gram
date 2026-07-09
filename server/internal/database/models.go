@@ -35,6 +35,7 @@ type AiIntegrationConfig struct {
 	ExternalOrganizationID pgtype.Text
 	ApiKeyEncrypted        string
 	Enabled                bool
+	BillingMode            pgtype.Text
 	ID                     uuid.UUID
 	Deleted                bool
 }
@@ -119,6 +120,16 @@ type AssistantDashboardMessage struct {
 	Content   string
 	Seq       int64
 	CreatedAt pgtype.Timestamptz
+}
+
+type AssistantMcpServer struct {
+	ID            uuid.UUID
+	AssistantID   uuid.UUID
+	McpServerID   uuid.UUID
+	EnvironmentID uuid.NullUUID
+	ProjectID     uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
 }
 
 type AssistantMemory struct {
@@ -246,16 +257,47 @@ type AuthzChallengeResolution struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type AwsIamCredential struct {
+	ExternalCredentialID        uuid.UUID
+	ExternalCredentialsProvider string
+	AssumeRoleArn               pgtype.Text
+	ExternalID                  pgtype.Text
+	OidcAudience                pgtype.Text
+	OidcSubject                 pgtype.Text
+	StsRegion                   pgtype.Text
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
+}
+
+type AwsKmsKey struct {
+	ExternalKeyID        uuid.UUID
+	ExternalKeysProvider string
+	KeyArn               string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+type BillingCycleUsage struct {
+	ID             uuid.UUID
+	OrganizationID string
+	CycleStart     pgtype.Timestamptz
+	CycleEnd       pgtype.Timestamptz
+	TumTokens      int64
+	FinalizedAt    pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type BillingMetadatum struct {
 	ID                    uuid.UUID
 	OrganizationID        string
 	TumMonthlyTokenLimit  pgtype.Int8
 	AlertEmail            pgtype.Text
 	BillingCycleAnchorDay int32
-	// Contracted org-level cap for tunnelled MCP server sources. NULL means use the finite plan default.
-	TunnelledMcpServerLimit pgtype.Int4
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
+	// Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.
+	TunneledMcpServerLimit pgtype.Int4
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
 }
 
 type Chat struct {
@@ -268,6 +310,7 @@ type Chat struct {
 	Title            pgtype.Text
 	TitleManuallySet bool
 	PinnedAt         pgtype.Timestamptz
+	UserAccountID    uuid.NullUUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	DeletedAt        pgtype.Timestamptz
@@ -437,6 +480,20 @@ type DeploymentsPackage struct {
 	VersionID    uuid.UUID
 }
 
+type DeviceOwner struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Provider       string
+	DeviceID       string
+	LinkedUserID   pgtype.Text
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type DirectoryGroup struct {
 	ID                     uuid.UUID
 	OrganizationID         string
@@ -504,6 +561,33 @@ type EnvironmentEntry struct {
 	EnvironmentID uuid.UUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+}
+
+type ExternalCredential struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	Provider       string
+	Name           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+type ExternalKey struct {
+	ID                     uuid.UUID
+	OrganizationID         pgtype.Text
+	ProjectID              uuid.NullUUID
+	ExternalCredentialID   uuid.UUID
+	Provider               string
+	Algorithm              string
+	Name                   string
+	CustomerGrantReference pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
 type ExternalMcpAttachment struct {
@@ -653,6 +737,25 @@ type FunctionsAccess struct {
 	Deleted       bool
 }
 
+type GcpIamCredential struct {
+	ExternalCredentialID        uuid.UUID
+	ExternalCredentialsProvider string
+	ImpersonateServiceAccount   pgtype.Text
+	WifPoolID                   pgtype.Text
+	WifProviderID               pgtype.Text
+	WifProjectNumber            pgtype.Text
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
+}
+
+type GcpKmsKey struct {
+	ExternalKeyID        uuid.UUID
+	ExternalKeysProvider string
+	ResourceName         string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
 type GlobalRole struct {
 	ID                uuid.UUID
 	WorkosSlug        string
@@ -739,6 +842,37 @@ type HttpToolDefinition struct {
 	Deleted             bool
 }
 
+type JsonWebKey struct {
+	ID                 uuid.UUID
+	OrganizationID     string
+	ProjectID          uuid.NullUUID
+	JsonWebKeySetID    uuid.UUID
+	ExternalKeyID      uuid.UUID
+	ExternalKeyVersion pgtype.Text
+	State              string
+	Kid                string
+	PublicJwk          []byte
+	ActivatedAt        pgtype.Timestamptz
+	RetiredAt          pgtype.Timestamptz
+	RevokedAt          pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
+}
+
+type JsonWebKeySet struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	ExternalKeyID  uuid.UUID
+	Name           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type McpEndpoint struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
@@ -796,8 +930,8 @@ type McpServer struct {
 	EnvironmentID       uuid.NullUUID
 	UserSessionIssuerID uuid.NullUUID
 	RemoteMcpServerID   uuid.NullUUID
-	// Optional backend reference to a tunnelled MCP source. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be set.
-	TunnelledMcpServerID  uuid.NullUUID
+	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be set.
+	TunneledMcpServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
@@ -1071,10 +1205,12 @@ type Plugin struct {
 	Name           string
 	Slug           string
 	Description    pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	// Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).
+	IsDefault pgtype.Bool
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+	Deleted   bool
 }
 
 type PluginAssignment struct {
@@ -1277,6 +1413,9 @@ type RemoteSessionIssuer struct {
 	TokenEndpoint                     pgtype.Text
 	RegistrationEndpoint              pgtype.Text
 	JwksUri                           pgtype.Text
+	ServiceDocumentation              pgtype.Text
+	OpPolicyUri                       pgtype.Text
+	OpTosUri                          pgtype.Text
 	ScopesSupported                   []string
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
@@ -1286,6 +1425,7 @@ type RemoteSessionIssuer struct {
 	Passthrough                       bool
 	Name                              pgtype.Text
 	LogoAssetID                       uuid.NullUUID
+	ClientSetupDocumentationUrl       pgtype.Text
 	CreatedAt                         pgtype.Timestamptz
 	UpdatedAt                         pgtype.Timestamptz
 	DeletedAt                         pgtype.Timestamptz
@@ -1378,6 +1518,43 @@ type RiskPolicyBypassRequest struct {
 	UpdatedAt            pgtype.Timestamptz
 	DeletedAt            pgtype.Timestamptz
 	Deleted              bool
+}
+
+// Interactive warn/challenge lifecycle for warn-action policies: a warn match records a challenged row; the user self-service acknowledges to proceed on retry. Never stores the raw matched value.
+type RiskPolicyChallenge struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.UUID
+	UserID          string
+	ToolName        pgtype.Text
+	Status          string
+	PolicyName      pgtype.Text
+	Entity          pgtype.Text
+	RuleID          pgtype.Text
+	CallFingerprint pgtype.Text
+	ChallengedAt    pgtype.Timestamptz
+	AcknowledgedAt  pgtype.Timestamptz
+	ExpiresAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type RiskPolicyEvalReview struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatID            uuid.UUID
+	Verdict           string
+	ReviewedBy        string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
 }
 
 type RiskResult struct {
@@ -1610,12 +1787,12 @@ type TriggerInstance struct {
 }
 
 // Customer-hosted MCP server sources that connect to Gram through outbound tunnels.
-type TunnelledMcpServer struct {
-	// Stable UUID for the tunnelled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.
+type TunneledMcpServer struct {
+	// Stable UUID for the tunneled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.
 	ID uuid.UUID
-	// Project that owns this tunnelled MCP source. All management queries are scoped by project_id.
+	// Project that owns this tunneled MCP source. All management queries are scoped by project_id.
 	ProjectID uuid.UUID
-	// User-facing display name for the tunnelled MCP source.
+	// User-facing display name for the tunneled MCP source.
 	Name string
 	// Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.
 	KeyHash string
@@ -1627,21 +1804,22 @@ type TunnelledMcpServer struct {
 	AgentVersion pgtype.Text
 	// Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.
 	LastSeenAt pgtype.Timestamptz
-	// Time when the tunnelled MCP source was created.
+	// Time when the tunneled MCP source was created.
 	CreatedAt pgtype.Timestamptz
-	// Time when the durable tunnelled MCP source record was last updated.
+	// Time when the durable tunneled MCP source record was last updated.
 	UpdatedAt pgtype.Timestamptz
-	// Soft-delete timestamp for the tunnelled MCP source. NULL means the source is active.
+	// Soft-delete timestamp for the tunneled MCP source. NULL means the source is active.
 	DeletedAt pgtype.Timestamptz
 	// Generated soft-delete flag derived from deleted_at and used by partial indexes.
 	Deleted bool
 }
 
 type User struct {
-	ID              string
-	Email           string
-	DisplayName     string
-	PhotoUrl        pgtype.Text
+	ID          string
+	Email       string
+	DisplayName string
+	PhotoUrl    pgtype.Text
+	// Maps to the application's platform_admin concept: TRUE marks a Gram/Speakeasy platform admin. Distinct from the org-level admin role.
 	Admin           bool
 	LastLogin       pgtype.Timestamptz
 	WorkosID        pgtype.Text
@@ -1651,6 +1829,26 @@ type User struct {
 	DeletedAt       pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+}
+
+type UserAccount struct {
+	ID                  uuid.UUID
+	OrganizationID      string
+	UserID              pgtype.Text
+	Provider            string
+	ExternalOrgID       pgtype.Text
+	ExternalAccountUuid string
+	ExternalAccountID   pgtype.Text
+	Email               pgtype.Text
+	AccountType         pgtype.Text
+	BillingMode         pgtype.Text
+	PlanType            pgtype.Text
+	FirstSeenAt         pgtype.Timestamptz
+	LastSeenAt          pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
 }
 
 type UserOauthToken struct {
@@ -1724,6 +1922,7 @@ type UserSessionIssuer struct {
 	Slug               string
 	AuthnChallengeMode string
 	SessionDuration    pgtype.Interval
+	Classification     string
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz

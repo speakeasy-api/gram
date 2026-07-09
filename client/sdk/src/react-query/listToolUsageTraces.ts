@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListToolUsageTracesRequest,
+  ListToolUsageTracesSecurity,
+} from "../models/operations/listtoolusagetraces.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListToolUsageTracesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListToolUsageTracesQueryError =
  * List target-aware MCP and tool usage traces
  */
 export function useListToolUsageTraces(
-  request: operations.ListToolUsageTracesRequest,
-  security?: operations.ListToolUsageTracesSecurity | undefined,
+  request: ListToolUsageTracesRequest,
+  security?: ListToolUsageTracesSecurity | undefined,
   options?: QueryHookOptions<
     ListToolUsageTracesQueryData,
     ListToolUsageTracesQueryError
@@ -85,8 +88,8 @@ export function useListToolUsageTraces(
  * List target-aware MCP and tool usage traces
  */
 export function useListToolUsageTracesSuspense(
-  request: operations.ListToolUsageTracesRequest,
-  security?: operations.ListToolUsageTracesSecurity | undefined,
+  request: ListToolUsageTracesRequest,
+  security?: ListToolUsageTracesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListToolUsageTracesQueryData,
     ListToolUsageTracesQueryError

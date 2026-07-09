@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  RiskIDRequestBody,
+  RiskIDRequestBody$Outbound,
+  RiskIDRequestBody$outboundSchema,
+} from "../components/riskidrequestbody.js";
 
 export type RevokeRiskPolicyBypassRequestSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type RevokeRiskPolicyBypassRequestRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  riskIDRequestBody: components.RiskIDRequestBody;
+  riskIDRequestBody: RiskIDRequestBody;
 };
 
 /** @internal */
@@ -154,7 +158,7 @@ export type RevokeRiskPolicyBypassRequestRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  RiskIDRequestBody: components.RiskIDRequestBody$Outbound;
+  RiskIDRequestBody: RiskIDRequestBody$Outbound;
 };
 
 /** @internal */
@@ -166,7 +170,7 @@ export const RevokeRiskPolicyBypassRequestRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    riskIDRequestBody: components.RiskIDRequestBody$outboundSchema,
+    riskIDRequestBody: RiskIDRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

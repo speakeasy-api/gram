@@ -3,18 +3,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
-import type {
-  CreateRemoteSessionClientFormTokenEndpointAuthMethod,
-  RemoteSessionClient,
-} from "@gram/client/models/components";
-import {
-  invalidateAllOrganizationRemoteSessionClient,
-  useUpdateOrganizationRemoteSessionClientMutation,
-} from "@gram/client/react-query/index.js";
+import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
+import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
+import { remoteSessionClientDisplayName } from "../../clientDisplay";
 import { TokenEndpointAuthMethodField } from "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields";
 import {
   narrowTokenEndpointAuthMethod,
@@ -127,7 +124,7 @@ export function SettingsTab({
       {showDelete && (
         <DeleteClientDialog
           clientId={client.id}
-          clientLabel={client.clientId}
+          clientLabel={remoteSessionClientDisplayName(client)}
           onClose={() => setShowDelete(false)}
           onDeleted={() =>
             orgRoutes.remoteIdentityProviders.issuerDetail.goTo(issuerId)

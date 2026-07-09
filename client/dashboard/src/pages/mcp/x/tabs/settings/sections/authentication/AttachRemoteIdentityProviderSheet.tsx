@@ -23,37 +23,34 @@ import {
 } from "@/lib/externalMcpUserSessions";
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
-import type {
-  McpServer,
-  RemoteSessionIssuer,
-  UserSessionIssuer,
-} from "@gram/client/models/components";
-import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
-import {
-  invalidateAllGetMcpServer,
-  invalidateAllMcpServers,
-  invalidateAllRemoteSessionClients,
-  invalidateAllRemoteSessionIssuers,
-  invalidateAllUserSessionIssuers,
-} from "@gram/client/react-query/index.js";
+import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
+import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import type { AuthTarget } from "./authTarget";
 import {
-  ClientCredentialsFields,
-  DcrNotice,
+  ClientTypeFields,
   EndpointsFields,
   IssuerUrlField,
   OverridesFields,
-  TokenEndpointAuthMethodField,
 } from "./IssuerFormFields";
 import {
+  availableClientTypes,
+  type ClientType,
   deriveSlugFromUrl,
   narrowTokenEndpointAuthMethod,
   parseScopes,
   pickPreferredAuthMethod,
 } from "./issuerFormUtils";
+import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
 
 type Mode = "select" | "new";
@@ -61,19 +58,21 @@ type Mode = "select" | "new";
 export function AttachRemoteIdentityProviderSheet({
   open,
   onOpenChange,
-  mcpServer,
+  target,
   userSessionIssuer,
   selectableIssuers,
   initialIssuerUrl,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mcpServer: McpServer;
-  // null when the MCP server has no user_session_issuer linked yet — the
-  // first add also creates one and links it via updateMcpServer.
+  // The MCP server or toolset the issuer gets linked to.
+  target: AuthTarget;
+  // null when the target has no issuer yet — the first add creates one and
+  // links it via target.linkUserSessionIssuer.
   userSessionIssuer: UserSessionIssuer | null;
-  // Project-scope remote_session_issuers that are not already associated with
-  // userSessionIssuer. Empty list hides the "Select existing" mode.
+  // remote_session_issuers (organization-level and same-project) that are not
+  // already associated with userSessionIssuer. Empty list hides the issuer
+  // "Select existing" mode.
   selectableIssuers: RemoteSessionIssuer[];
   // When the caller opens via "Start With Discovered Configuration", this is the
   // authorization_servers[0] entry from the RFC 9728 probe. The sheet starts
@@ -146,6 +145,75 @@ export function AttachRemoteIdentityProviderSheet({
   const [scopeOverride, setScopeOverride] = useState("");
   const [audienceOverride, setAudienceOverride] = useState("");
 
+  // Session Client section state. The client toggle mirrors the issuer toggle:
+  // when the resolved issuer already has attachable clients the operator can
+  // bind an existing one (attachUserSessionIssuer) instead of registering a
+  // new one. clientType drives how a new client is created (DCR / CIMD /
+  // Manual); it is reset to the recommended default in an effect below.
+  const [clientMode, setClientMode] = useState<Mode>("select");
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [clientType, setClientType] = useState<ClientType>("manual");
+
+  // Resolve the issuer record the operator picked in Select-existing mode. We
+  // need it to know whether the picked issuer supports DCR/CIMD and to pull its
+  // registration_endpoint at submit time.
+  const selectedIssuer =
+    mode === "select"
+      ? selectableIssuers.find((issuer) => issuer.id === selectedIssuerId)
+      : undefined;
+
+  // DCR and CIMD availability drive the Client Type selector. In Add-new the
+  // values come from the form (filled by discovery or typed); in
+  // Select-existing they come from the picked issuer record.
+  const dcrAvailable =
+    mode === "new"
+      ? registrationEndpoint.trim().length > 0
+      : !!selectedIssuer?.registrationEndpoint;
+  const cimdAvailable =
+    mode === "new"
+      ? (discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false)
+      : !!selectedIssuer?.clientIdMetadataDocumentSupported;
+  const clientTypes = useMemo(
+    () => availableClientTypes({ dcrAvailable, cimdAvailable }),
+    [dcrAvailable, cimdAvailable],
+  );
+
+  // Existing clients of the picked issuer (this project's clients, whether the
+  // issuer is organization-level or project-level). Only an existing issuer can
+  // have clients, so the walk is disabled in Add-new-issuer mode. Filter out
+  // any already bound to this user_session_issuer — none today, since
+  // selectableIssuers excludes already-associated issuers, but defensive
+  // against that invariant changing.
+  const { items: issuerClients, isLoading: isLoadingIssuerClients } =
+    useAllRemoteSessionClients(
+      { remoteSessionIssuerId: selectedIssuerId },
+      { enabled: mode === "select" && !!selectedIssuerId },
+    );
+  const attachableClients = useMemo(
+    () =>
+      issuerClients.filter(
+        (candidate) =>
+          !userSessionIssuer ||
+          !candidate.userSessionIssuerIds.includes(userSessionIssuer.id),
+      ),
+    [issuerClients, userSessionIssuer],
+  );
+
+  // The Session Client toggle only appears for an existing issuer that has
+  // attachable clients; otherwise the sheet shows the Add-new client form
+  // directly (a brand-new issuer never has clients).
+  const clientToggleVisible = attachableClients.length > 0;
+  const effectiveClientMode: Mode = clientToggleVisible ? clientMode : "new";
+  const selectedClient = attachableClients.find(
+    (candidate) => candidate.id === selectedClientId,
+  );
+
+  // The Session Client section stays hidden until an identity provider is
+  // determined — an existing one is picked, or a new one's Issuer URL has been
+  // entered — since every client choice depends on that provider.
+  const issuerResolved =
+    mode === "select" ? !!selectedIssuerId : issuerUrl.trim().length > 0;
+
   const attachMutation = useMutation({
     mutationFn: async (): Promise<{
       unsupportedDcrAuthMethod: string | null;
@@ -157,7 +225,7 @@ export function AttachRemoteIdentityProviderSheet({
       if (!issuerId) {
         const created = await client.userSessionIssuers.create({
           createUserSessionIssuerForm: {
-            slug: buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
+            slug: buildUserSessionResourceSlug(target.slug),
             authnChallengeMode: "interactive",
             sessionDurationHours: DEFAULT_USER_SESSION_DURATION_HOURS,
           },
@@ -195,100 +263,113 @@ export function AttachRemoteIdentityProviderSheet({
               discoveredSnapshot?.responseTypesSupported ?? [],
             tokenEndpointAuthMethodsSupported:
               discoveredSnapshot?.tokenEndpointAuthMethodsSupported ?? [],
+            // CIMD support parsed during discovery; persisted so the issuer can
+            // offer the CIMD client type. False when discovery did not run.
+            clientIdMetadataDocumentSupported:
+              discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false,
           },
         });
         remoteIssuerId = created.id;
         resolvedIssuer = created;
       }
 
-      // Step 3: obtain client credentials. When DCR is available the proxy
-      // registers Gram with the upstream and hands back client_id /
-      // client_secret; otherwise we use what the operator typed. The scope
-      // override (if set) is forwarded to the registration call so the
-      // upstream registers the client with that scope set. DCR fires in both
-      // modes — in Add-new it uses the form field, in Select-existing it
-      // uses the picked issuer's saved registration_endpoint.
+      // Step 3: bind a remote_session_client to the user_session_issuer.
+      // Either attach an existing client (a join-table insert) or create a new
+      // one in the chosen mode (DCR / CIMD / Manual). Scope/audience overrides
+      // apply only to newly created clients; attaching reuses the selected
+      // client's stored configuration.
       const parsedScopes = parseScopes(scopeOverride);
       const trimmedAudience = audienceOverride.trim();
-      const registrationEndpointForDcr =
-        resolvedIssuer?.registrationEndpoint ?? "";
-      let clientCredentials: {
-        clientId: string;
-        clientSecret?: string;
-        tokenEndpointAuthMethod?: CreateRemoteSessionClientFormTokenEndpointAuthMethod;
-      };
       // Tracks when DCR returns an auth method the SDK enum doesn't model
-      // (e.g. `none`, `private_key_jwt`). We swallow it for the local client
-      // record but warn the operator after success so they understand why
-      // their client may not behave as the upstream advertised.
+      // (e.g. `private_key_jwt`). We swallow it for the local client record
+      // but warn the operator after success so they understand why their
+      // client may not behave as the upstream advertised.
       let unsupportedDcrAuthMethod: string | null = null;
-      if (dcrAvailable && registrationEndpointForDcr) {
-        const registered = await proxyRegisterUpstreamClient(authedFetch, {
-          registrationEndpoint: registrationEndpointForDcr,
-          // RFC 7591 §2: scope is a space-separated string at registration
-          // time. Only forward if the operator typed an override.
-          scope: parsedScopes.length > 0 ? parsedScopes.join(" ") : undefined,
-          // Forward the operator's auth-method preference so DCR registers
-          // the client with that method. Omit when blank so the upstream
-          // picks its own default.
-          tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
-        });
-        const narrowedDcrMethod = narrowTokenEndpointAuthMethod(
-          registered.tokenEndpointAuthMethod,
-        );
-        if (registered.tokenEndpointAuthMethod && !narrowedDcrMethod) {
-          unsupportedDcrAuthMethod = registered.tokenEndpointAuthMethod;
-        }
-        clientCredentials = {
-          clientId: registered.clientId,
-          clientSecret: registered.clientSecret || undefined,
-          // Prefer the upstream-confirmed method when it's one we support;
-          // fall back to the operator's selection so a known-good value
-          // still lands on the client record even if DCR echoed back
-          // something unknown. Treat the operator's "" sentinel (no
-          // selection) as undefined so the API sees an omitted value.
-          tokenEndpointAuthMethod:
-            narrowedDcrMethod ?? (tokenEndpointAuthMethod || undefined),
-        };
-      } else {
-        clientCredentials = {
-          clientId: clientId.trim(),
-          clientSecret: clientSecret.trim() || undefined,
-          tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
-        };
-      }
 
-      // Step 4: create the remote_session_client binding the resolved issuer
-      // to the user_session_issuer. Scope/audience overrides are stored on
-      // the client and consumed at OAuth dance time.
-      await client.remoteSessionClients.create({
-        createRemoteSessionClientForm: {
-          remoteSessionIssuerId: remoteIssuerId,
-          userSessionIssuerIds: [issuerId],
-          clientId: clientCredentials.clientId,
-          clientSecret: clientCredentials.clientSecret,
-          tokenEndpointAuthMethod: clientCredentials.tokenEndpointAuthMethod,
-          scope: parsedScopes.length > 0 ? parsedScopes : undefined,
-          audience: trimmedAudience || undefined,
-        },
-      });
-
-      // Step 5: on first-add, point the MCP server at the freshly-created
-      // user_session_issuer and set visibility to private so the server
-      // begins serving traffic. updateMcpServer is a full-record replace,
-      // so re-send the existing UUID references alongside the update.
-      if (!userSessionIssuer) {
-        await client.mcpServers.update({
-          updateMcpServerForm: {
-            id: mcpServer.id,
-            name: mcpServer.name ?? undefined,
-            remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-            toolsetId: mcpServer.toolsetId ?? undefined,
-            environmentId: mcpServer.environmentId ?? undefined,
-            visibility: "private",
+      if (effectiveClientMode === "select") {
+        // Attach the picked existing client to this user_session_issuer.
+        await client.remoteSessionClients.attachUserSessionIssuer({
+          attachUserSessionIssuerForm: {
+            id: selectedClientId,
             userSessionIssuerId: issuerId,
           },
         });
+      } else if (clientType === "cimd") {
+        // CIMD: the platform generates the client_id and hosts the metadata
+        // document, so there are no credentials to collect.
+        await client.remoteSessionClients.createCimd({
+          createCimdForm: {
+            remoteSessionIssuerId: remoteIssuerId,
+            userSessionIssuerIds: [issuerId],
+            scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+            audience: trimmedAudience || undefined,
+          },
+        });
+      } else {
+        // DCR proxies a registration to the upstream issuer for a fresh
+        // client_id / client_secret; Manual uses what the operator typed.
+        let clientCredentials: {
+          clientId: string;
+          clientSecret?: string;
+          tokenEndpointAuthMethod?: CreateRemoteSessionClientFormTokenEndpointAuthMethod;
+        };
+        if (clientType === "dcr") {
+          const registered = await proxyRegisterUpstreamClient(authedFetch, {
+            registrationEndpoint: resolvedIssuer?.registrationEndpoint ?? "",
+            // RFC 7591 §2: scope is a space-separated string at registration
+            // time. Only forward if the operator typed an override.
+            scope: parsedScopes.length > 0 ? parsedScopes.join(" ") : undefined,
+            // Forward the operator's auth-method preference so DCR registers
+            // the client with that method. Omit when blank so the upstream
+            // picks its own default.
+            tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
+          });
+          const narrowedDcrMethod = narrowTokenEndpointAuthMethod(
+            registered.tokenEndpointAuthMethod,
+          );
+          if (registered.tokenEndpointAuthMethod && !narrowedDcrMethod) {
+            unsupportedDcrAuthMethod = registered.tokenEndpointAuthMethod;
+          }
+          clientCredentials = {
+            clientId: registered.clientId,
+            clientSecret: registered.clientSecret || undefined,
+            // Prefer the upstream-confirmed method when it's one we support;
+            // fall back to the operator's selection so a known-good value
+            // still lands on the client record even if DCR echoed back
+            // something unknown. Treat the operator's "" sentinel (no
+            // selection) as undefined so the API sees an omitted value.
+            tokenEndpointAuthMethod:
+              narrowedDcrMethod ?? (tokenEndpointAuthMethod || undefined),
+          };
+        } else {
+          clientCredentials = {
+            clientId: clientId.trim(),
+            clientSecret: clientSecret.trim() || undefined,
+            tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
+          };
+        }
+
+        // Create the remote_session_client binding the resolved issuer to the
+        // user_session_issuer. Scope/audience overrides are stored on the
+        // client and consumed at OAuth dance time.
+        await client.remoteSessionClients.create({
+          createRemoteSessionClientForm: {
+            remoteSessionIssuerId: remoteIssuerId,
+            userSessionIssuerIds: [issuerId],
+            clientId: clientCredentials.clientId,
+            clientSecret: clientCredentials.clientSecret,
+            tokenEndpointAuthMethod: clientCredentials.tokenEndpointAuthMethod,
+            scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+            audience: trimmedAudience || undefined,
+          },
+        });
+      }
+
+      // Step 4: on first-add, link the target to the new issuer. How the link
+      // is stored (and side effects like flipping a server private) is the
+      // target's business.
+      if (!userSessionIssuer) {
+        await target.linkUserSessionIssuer(issuerId);
       }
 
       return { unsupportedDcrAuthMethod };
@@ -298,8 +379,7 @@ export function AttachRemoteIdentityProviderSheet({
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
-        invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
-        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        target.invalidate(queryClient),
       ]);
 
       toast.success("Identity provider attached");
@@ -328,7 +408,7 @@ export function AttachRemoteIdentityProviderSheet({
     : null;
   const { reset: resetAttachMutation } = attachMutation;
 
-  // Reset transient state whenever the sheet is reopened. The mcpServer slug
+  // Reset transient state whenever the sheet is reopened. The target slug
   // seeds the default new-issuer slug so most operators can submit without
   // touching the field, but we still allow editing.
   useEffect(() => {
@@ -337,11 +417,11 @@ export function AttachRemoteIdentityProviderSheet({
     setSelectedIssuerId("");
     // Seed the slug from the Issuer URL when we have one (the "Start With
     // Discovered Configuration" path). Otherwise fall back to the
-    // mcpServer-based default. Either way slugDirty resets to false so the
+    // target-based default. Either way slugDirty resets to false so the
     // operator's first keystroke in the field starts locking it in.
     setSlug(
       deriveSlugFromUrl(initialIssuerUrl ?? "") ??
-        buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
+        buildUserSessionResourceSlug(target.slug),
     );
     setSlugDirty(false);
     setName(deriveRemoteSessionIssuerNameFromUrl(initialIssuerUrl ?? "") ?? "");
@@ -354,10 +434,12 @@ export function AttachRemoteIdentityProviderSheet({
     setTokenEndpointAuthMethod("");
     setScopeOverride("");
     setAudienceOverride("");
+    setClientMode("select");
+    setSelectedClientId("");
     resetAttachMutation();
   }, [
     open,
-    mcpServer.slug,
+    target.slug,
     initialIssuerUrl,
     hasSelectable,
     setIssuerUrl,
@@ -391,35 +473,98 @@ export function AttachRemoteIdentityProviderSheet({
     }
   }, [discoveredSnapshot, issuerUrl, tokenEndpointAuthMethod]);
 
-  // Resolve the issuer record the operator picked in Select-existing mode.
-  // We need it to know whether the picked issuer supports DCR and to pull
-  // its registration_endpoint at submit time.
-  const selectedIssuer =
-    mode === "select"
-      ? selectableIssuers.find((issuer) => issuer.id === selectedIssuerId)
-      : undefined;
+  // Reset the new-client type to the recommended default whenever the issuer's
+  // DCR/CIMD availability changes (a different issuer pick or a fresh
+  // discovery), so the auto path stays pre-selected against the current issuer.
+  useEffect(() => {
+    setClientType(
+      availableClientTypes({ dcrAvailable, cimdAvailable })[0] ?? "manual",
+    );
+  }, [dcrAvailable, cimdAvailable]);
 
-  // DCR is offered automatically when a registration_endpoint is present.
-  // In Add-new the value comes from the form (filled by discovery or typed);
-  // in Select-existing it comes from the picked issuer record. Either way we
-  // hide the manual client_id / client_secret form and call proxy-register
-  // on submit.
-  const dcrAvailable =
-    mode === "new"
-      ? registrationEndpoint.trim().length > 0
-      : !!selectedIssuer?.registrationEndpoint;
+  // A different issuer (or switching to Add-new issuer) means a different
+  // client list; drop any stale existing-client selection.
+  useEffect(() => {
+    setSelectedClientId("");
+  }, [selectedIssuerId, mode]);
 
   const submittable = useMemo(() => {
-    if (mode === "select") return !!selectedIssuerId;
-    if (!slug.trim() || !issuerUrl.trim()) return false;
-    if (!dcrAvailable && !clientId.trim()) return false;
+    // Issuer must be resolvable: an existing pick, or a complete new-issuer
+    // form.
+    if (mode === "select") {
+      if (!selectedIssuerId) return false;
+    } else if (!slug.trim() || !issuerUrl.trim()) {
+      return false;
+    }
+    // Session client: attach an existing one, or complete the new-client form.
+    if (effectiveClientMode === "select") return !!selectedClientId;
+    // Manual requires a client_id; DCR mints one; CIMD needs none.
+    if (clientType === "manual" && !clientId.trim()) return false;
     return true;
-  }, [mode, selectedIssuerId, slug, issuerUrl, dcrAvailable, clientId]);
+  }, [
+    mode,
+    selectedIssuerId,
+    slug,
+    issuerUrl,
+    effectiveClientMode,
+    selectedClientId,
+    clientType,
+    clientId,
+  ]);
 
   const handleSubmit = () => {
     if (!submittable || submitting) return;
     attachMutation.mutate();
   };
+
+  // The Session Client section body: its loading, select-existing, and add-new
+  // branches, kept out of the JSX so the render stays flat.
+  const clientToggle = clientToggleVisible ? (
+    <ModeSwitch mode={clientMode} onChange={setClientMode} />
+  ) : null;
+  let clientSectionBody: JSX.Element;
+  if (mode === "select" && selectedIssuerId && isLoadingIssuerClients) {
+    clientSectionBody = (
+      <Type muted small>
+        Loading clients…
+      </Type>
+    );
+  } else if (effectiveClientMode === "select") {
+    clientSectionBody = (
+      <Stack gap={4}>
+        {clientToggle}
+        <SelectExistingClientFields
+          clients={attachableClients}
+          selectedClientId={selectedClientId}
+          onChange={setSelectedClientId}
+          selectedClient={selectedClient}
+        />
+      </Stack>
+    );
+  } else {
+    clientSectionBody = (
+      <Stack gap={4}>
+        {clientToggle}
+        <ClientTypeFields
+          availableTypes={clientTypes}
+          clientType={clientType}
+          onClientTypeChange={setClientType}
+          clientId={clientId}
+          clientSecret={clientSecret}
+          tokenEndpointAuthMethod={tokenEndpointAuthMethod}
+          onClientIdChange={setClientId}
+          onClientSecretChange={setClientSecret}
+          onTokenEndpointAuthMethodChange={setTokenEndpointAuthMethod}
+        />
+        <OverridesFields
+          scopeOverride={scopeOverride}
+          audienceOverride={audienceOverride}
+          onScopeOverrideChange={setScopeOverride}
+          onAudienceOverrideChange={setAudienceOverride}
+        />
+      </Stack>
+    );
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -434,144 +579,130 @@ export function AttachRemoteIdentityProviderSheet({
         </SheetHeader>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
-          {hasSelectable && <ModeSwitch mode={mode} onChange={setMode} />}
-
-          {mode === "select" ? (
-            <SelectExistingFields
-              selectableIssuers={selectableIssuers}
-              selectedIssuerId={selectedIssuerId}
-              onChange={setSelectedIssuerId}
+          <Stack gap={4}>
+            <SectionHeading
+              title="Identity Provider"
+              description="The upstream OAuth authorization server Gram delegates to."
             />
-          ) : (
-            <Stack gap={4}>
-              <IssuerUrlField
-                issuerUrl={issuerUrl}
-                onIssuerUrlChange={(value) => {
-                  setIssuerUrl(value);
-                  // A stale error from a previous URL would be misleading once
-                  // the operator starts typing a new target; clear it so the
-                  // next Discover click starts fresh.
-                  clearDiscoverError();
-                  // Auto-derive the slug from the hostname while the operator
-                  // hasn't customized it. We swallow URL parse failures so the
-                  // slug stays stable while a partial URL is being typed.
-                  if (!slugDirty) {
-                    const derived = deriveSlugFromUrl(value);
-                    if (derived) setSlug(derived);
-                  }
-                  // Same auto-derive-until-edited behavior for the Display name,
-                  // seeded from the URL hostname.
-                  if (!nameDirty) {
-                    const derivedName =
-                      deriveRemoteSessionIssuerNameFromUrl(value);
-                    if (derivedName) setName(derivedName);
-                  }
-                  // When the URL diverges from a settled discovery, every
-                  // downstream field (endpoints, credentials, scope/audience,
-                  // DCR-vs-manual decision) was tied to that prior URL and is
-                  // now stale. Reset the form so the operator runs Discover
-                  // again against the new target and gets a coherent state.
-                  if (
-                    discoveredSnapshot &&
-                    value.trim() !== discoveredSnapshot.url
-                  ) {
-                    resetEndpointState();
-                    setClientId("");
-                    setClientSecret("");
-                    setTokenEndpointAuthMethod("");
-                    setScopeOverride("");
-                    setAudienceOverride("");
-                  }
-                }}
+            {hasSelectable && <ModeSwitch mode={mode} onChange={setMode} />}
+
+            {mode === "select" ? (
+              <SelectExistingFields
+                selectableIssuers={selectableIssuers}
+                selectedIssuerId={selectedIssuerId}
+                onChange={setSelectedIssuerId}
               />
-
-              <Stack gap={2}>
-                <Label className="text-muted-foreground text-xs">Slug</Label>
-                <Input
-                  value={slug}
-                  onChange={(value) => {
-                    setSlug(value);
-                    setSlugDirty(true);
+            ) : (
+              <Stack gap={4}>
+                <IssuerUrlField
+                  issuerUrl={issuerUrl}
+                  onIssuerUrlChange={(value) => {
+                    setIssuerUrl(value);
+                    // A stale error from a previous URL would be misleading once
+                    // the operator starts typing a new target; clear it so the
+                    // next Discover click starts fresh.
+                    clearDiscoverError();
+                    // Auto-derive the slug from the hostname while the operator
+                    // hasn't customized it. We swallow URL parse failures so the
+                    // slug stays stable while a partial URL is being typed.
+                    if (!slugDirty) {
+                      const derived = deriveSlugFromUrl(value);
+                      if (derived) setSlug(derived);
+                    }
+                    // Same auto-derive-until-edited behavior for the Display
+                    // name, seeded from the URL hostname.
+                    if (!nameDirty) {
+                      const derivedName =
+                        deriveRemoteSessionIssuerNameFromUrl(value);
+                      if (derivedName) setName(derivedName);
+                    }
+                    // When the URL diverges from a settled discovery, every
+                    // downstream field (endpoints, credentials, scope/audience,
+                    // DCR-vs-manual decision) was tied to that prior URL and is
+                    // now stale. Reset the form so the operator runs Discover
+                    // again against the new target and gets a coherent state.
+                    if (
+                      discoveredSnapshot &&
+                      value.trim() !== discoveredSnapshot.url
+                    ) {
+                      resetEndpointState();
+                      setClientId("");
+                      setClientSecret("");
+                      setTokenEndpointAuthMethod("");
+                      setScopeOverride("");
+                      setAudienceOverride("");
+                    }
                   }}
-                  placeholder="my-identity-provider"
                 />
-                <Type muted small>
-                  Project-unique identifier for this identity provider.
-                  Auto-derived from the Issuer URL until you edit it.
-                </Type>
-              </Stack>
 
-              <Stack gap={2}>
-                <Label className="text-muted-foreground text-xs">
-                  Display name (optional)
-                </Label>
-                <Input
-                  value={name}
-                  onChange={(value) => {
-                    setName(value);
-                    setNameDirty(true);
+                <Stack gap={2}>
+                  <Label className="text-muted-foreground text-xs">Slug</Label>
+                  <Input
+                    value={slug}
+                    onChange={(value) => {
+                      setSlug(value);
+                      setSlugDirty(true);
+                    }}
+                    placeholder="my-identity-provider"
+                  />
+                  <Type muted small>
+                    Project-unique identifier for this identity provider.
+                    Auto-derived from the Issuer URL until you edit it.
+                  </Type>
+                </Stack>
+
+                <Stack gap={2}>
+                  <Label className="text-muted-foreground text-xs">
+                    Display name (optional)
+                  </Label>
+                  <Input
+                    value={name}
+                    onChange={(value) => {
+                      setName(value);
+                      setNameDirty(true);
+                    }}
+                    placeholder="My Identity Provider"
+                  />
+                  <Type muted small>
+                    Friendly label shown in the dashboard. Auto-derived from the
+                    Issuer URL until you edit it; falls back to the Issuer URL
+                    when left blank.
+                  </Type>
+                </Stack>
+
+                <EndpointsFields
+                  issuerUrl={issuerUrl}
+                  authorizationEndpoint={authorizationEndpoint}
+                  tokenEndpoint={tokenEndpoint}
+                  registrationEndpoint={registrationEndpoint}
+                  jwksUri={jwksUri}
+                  endpointWarnings={endpointWarnings}
+                  discoverPending={discoverPending}
+                  discoverError={discoverError}
+                  showDiscoverControls={showDiscoverControls}
+                  showResetControls={showResetControls}
+                  onAuthorizationEndpointChange={setAuthorizationEndpoint}
+                  onTokenEndpointChange={setTokenEndpoint}
+                  onRegistrationEndpointChange={setRegistrationEndpoint}
+                  onJwksUriChange={setJwksUri}
+                  onDiscover={() => {
+                    runDiscover(issuerUrl);
                   }}
-                  placeholder="My Identity Provider"
+                  onResetEndpoints={handleResetEndpoints}
                 />
-                <Type muted small>
-                  Friendly label shown in the dashboard. Auto-derived from the
-                  Issuer URL until you edit it; falls back to the Issuer URL
-                  when left blank.
-                </Type>
               </Stack>
+            )}
+          </Stack>
 
-              <EndpointsFields
-                issuerUrl={issuerUrl}
-                authorizationEndpoint={authorizationEndpoint}
-                tokenEndpoint={tokenEndpoint}
-                registrationEndpoint={registrationEndpoint}
-                jwksUri={jwksUri}
-                endpointWarnings={endpointWarnings}
-                discoverPending={discoverPending}
-                discoverError={discoverError}
-                showDiscoverControls={showDiscoverControls}
-                showResetControls={showResetControls}
-                onAuthorizationEndpointChange={setAuthorizationEndpoint}
-                onTokenEndpointChange={setTokenEndpoint}
-                onRegistrationEndpointChange={setRegistrationEndpoint}
-                onJwksUriChange={setJwksUri}
-                onDiscover={() => {
-                  runDiscover(issuerUrl);
-                }}
-                onResetEndpoints={handleResetEndpoints}
+          {issuerResolved && (
+            <Stack gap={4} className="border-t pt-6">
+              <SectionHeading
+                title="Session Client"
+                description="The OAuth client Gram registers and uses with this provider."
               />
+              {clientSectionBody}
             </Stack>
           )}
-
-          {dcrAvailable ? (
-            <>
-              <DcrNotice />
-              {/* token_endpoint_auth_method stays editable even in DCR so
-                  operators can override the upstream-assigned default. The
-                  selected value is forwarded into the proxy-register call so
-                  the upstream registers the client with the desired method. */}
-              <TokenEndpointAuthMethodField
-                value={tokenEndpointAuthMethod}
-                onChange={setTokenEndpointAuthMethod}
-              />
-            </>
-          ) : (
-            <ClientCredentialsFields
-              clientId={clientId}
-              clientSecret={clientSecret}
-              tokenEndpointAuthMethod={tokenEndpointAuthMethod}
-              onClientIdChange={setClientId}
-              onClientSecretChange={setClientSecret}
-              onTokenEndpointAuthMethodChange={setTokenEndpointAuthMethod}
-            />
-          )}
-
-          <OverridesFields
-            scopeOverride={scopeOverride}
-            audienceOverride={audienceOverride}
-            onScopeOverrideChange={setScopeOverride}
-            onAudienceOverrideChange={setAudienceOverride}
-          />
 
           {submitError && (
             <Alert variant="error" dismissible={false}>
@@ -600,6 +731,25 @@ export function AttachRemoteIdentityProviderSheet({
         </SheetFooter>
       </SheetContent>
     </Sheet>
+  );
+}
+
+// SectionHeading labels each half of the sheet (Identity Provider vs Session
+// Client) so the two Select/Add toggles read as distinct steps.
+function SectionHeading({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <Stack gap={1}>
+      <Label className="text-sm font-medium">{title}</Label>
+      <Type muted small>
+        {description}
+      </Type>
+    </Stack>
   );
 }
 
@@ -653,8 +803,85 @@ function SelectExistingFields({
         </SelectContent>
       </Select>
       <Type muted small>
-        Pick an identity provider already configured on this project.
+        Pick an organization-level or project identity provider already
+        configured on this project.
       </Type>
+    </Stack>
+  );
+}
+
+function SelectExistingClientFields({
+  clients,
+  selectedClientId,
+  onChange,
+  selectedClient,
+}: {
+  clients: RemoteSessionClient[];
+  selectedClientId: string;
+  onChange: (id: string) => void;
+  selectedClient: RemoteSessionClient | undefined;
+}) {
+  return (
+    <Stack gap={4}>
+      <Stack gap={2}>
+        <Label className="text-muted-foreground text-xs">Client</Label>
+        <Select value={selectedClientId} onValueChange={onChange}>
+          <SelectTrigger>
+            <SelectValue placeholder="Choose a client…" />
+          </SelectTrigger>
+          <SelectContent>
+            {clients.map((candidate) => (
+              <SelectItem key={candidate.id} value={candidate.id}>
+                {remoteSessionClientDisplayName(candidate)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Type muted small>
+          Bind an existing client of this provider to this MCP server. The
+          client's stored configuration is reused as-is.
+        </Type>
+      </Stack>
+
+      {selectedClient && <SelectedClientDetails client={selectedClient} />}
+    </Stack>
+  );
+}
+
+// SelectedClientDetails shows the picked client's stored configuration
+// read-only — attaching reuses it, so there is nothing to edit here.
+function SelectedClientDetails({
+  client,
+}: {
+  client: RemoteSessionClient;
+}): JSX.Element {
+  let typeValue = "OAuth credentials";
+  if (client.clientIdMetadataUri) {
+    typeValue = "Client ID Metadata Document (CIMD)";
+  }
+  const scopeValue =
+    client.scope && client.scope.length > 0 ? client.scope.join(", ") : "—";
+  const rows: { label: string; value: string; mono: boolean }[] = [
+    { label: "Client ID", value: client.clientId, mono: true },
+    { label: "Type", value: typeValue, mono: false },
+    {
+      label: "Token Endpoint Auth Method",
+      value: client.tokenEndpointAuthMethod ?? "—",
+      mono: false,
+    },
+    { label: "Scope", value: scopeValue, mono: false },
+    { label: "Audience", value: client.audience || "—", mono: false },
+  ];
+  return (
+    <Stack gap={3} className="border-t pt-4">
+      {rows.map((row) => (
+        <Stack key={row.label} gap={1}>
+          <Label className="text-muted-foreground text-xs">{row.label}</Label>
+          <Type small mono={row.mono} className="break-all">
+            {row.value}
+          </Type>
+        </Stack>
+      ))}
     </Stack>
   );
 }

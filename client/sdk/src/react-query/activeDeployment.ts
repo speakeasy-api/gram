@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetActiveDeploymentRequest,
+  GetActiveDeploymentSecurity,
+} from "../models/operations/getactivedeployment.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ActiveDeploymentQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ActiveDeploymentQueryError =
  * Get the active deployment for a project.
  */
 export function useActiveDeployment(
-  request?: operations.GetActiveDeploymentRequest | undefined,
-  security?: operations.GetActiveDeploymentSecurity | undefined,
+  request?: GetActiveDeploymentRequest | undefined,
+  security?: GetActiveDeploymentSecurity | undefined,
   options?: QueryHookOptions<
     ActiveDeploymentQueryData,
     ActiveDeploymentQueryError
@@ -85,8 +88,8 @@ export function useActiveDeployment(
  * Get the active deployment for a project.
  */
 export function useActiveDeploymentSuspense(
-  request?: operations.GetActiveDeploymentRequest | undefined,
-  security?: operations.GetActiveDeploymentSecurity | undefined,
+  request?: GetActiveDeploymentRequest | undefined,
+  security?: GetActiveDeploymentSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ActiveDeploymentQueryData,
     ActiveDeploymentQueryError

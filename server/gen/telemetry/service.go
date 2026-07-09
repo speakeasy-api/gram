@@ -198,6 +198,11 @@ type GetEmployeeDataFlowGraphPayload struct {
 	UserID *string
 	// External user ID to get the graph for (mutually exclusive with user_id)
 	ExternalUserID *string
+	// Optional account type filter ('team' or 'personal')
+	AccountType *string
+	// Optional filter to a single AI account by its provider org id; scopes the
+	// graph to that one account
+	ExternalOrgID *string
 }
 
 // GetEmployeeDataFlowGraphResult is the result type of the telemetry service
@@ -282,6 +287,11 @@ type GetObservabilityOverviewPayload struct {
 	EventSource *string
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')
 	HookSource *string
+	// Optional account type filter ('team' or 'personal')
+	AccountType *string
+	// Optional filter to a single AI account by its provider org id; scopes the
+	// overview to that one account
+	ExternalOrgID *string
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries bool
 }
@@ -384,6 +394,8 @@ type GetToolUsageSummaryPayload struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
 }
 
 // GetToolUsageSummaryResult is the result type of the telemetry service
@@ -423,6 +435,11 @@ type GetUserMetricsSummaryPayload struct {
 	EventSource *string
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')
 	HookSource *string
+	// Optional account type filter ('team' or 'personal')
+	AccountType *string
+	// Optional filter to a single AI account by its provider org id; scopes
+	// metrics to that one account
+	ExternalOrgID *string
 }
 
 // GetUserMetricsSummaryResult is the result type of the telemetry service
@@ -661,6 +678,12 @@ type ListToolUsageTracesPayload struct {
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
+	// Optional account type filter ('team' or 'personal'). 'team' includes
+	// unclassified traces.
+	AccountType *string
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []ToolUsageStatus
 	// Free-text attribute search string from the q URL param. Matches useful
 	// identifier attributes such as Gram URN, conversation ID, and trigger
 	// instance ID.
@@ -1104,6 +1127,11 @@ type SearchUsersFilter struct {
 	EventSource *string
 	// Optional hook source filter (e.g. 'cursor', 'claude-code').
 	HookSource *string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+	// Optional filter to a single AI account by its provider org id (the
+	// per-account discriminator); scopes results to that one account.
+	ExternalOrgID *string
 }
 
 // SearchUsersPayload is the payload type of the telemetry service searchUsers
@@ -1341,6 +1369,9 @@ type ToolUsageShadowServerFilterOption struct {
 	EventCount int64
 }
 
+// Tool usage trace outcome
+type ToolUsageStatus string
+
 // Tool usage aggregation target kind
 type ToolUsageTargetKind string
 
@@ -1480,6 +1511,9 @@ type ToolUsageTraceSummary struct {
 	HookStatus *string
 	// Hook block reason when hook_status is blocked
 	BlockReason *string
+	// AI account classification ('team' or 'personal'); empty/absent when
+	// unclassified
+	AccountType *string
 }
 
 // Typed user identity filter
@@ -1582,6 +1616,26 @@ type TopUser struct {
 	ActivityCount int64
 }
 
+// A linked AI account for a user. The identity is (provider, email): the same
+// email registered on two providers is two distinct accounts.
+type UserAccount struct {
+	// Account record id (user_accounts.id); used to scope chat/session views to
+	// this account
+	ID *string
+	// AI provider the account belongs to ('anthropic', 'openai', 'cursor')
+	Provider string
+	// Email associated with the account; may differ from the user's work email for
+	// personal accounts
+	Email *string
+	// 'team' (enterprise) or 'personal' (individual); empty when not yet classified
+	AccountType *string
+	// Provider org id for this account; the per-account discriminator used to
+	// scope telemetry to this one account
+	ExternalOrgID *string
+	// Latest activity timestamp for this account in Unix nanoseconds
+	LastSeenUnixNano *string
+}
+
 // Aggregated usage summary for a single user
 type UserSummary struct {
 	// User identifier (user_id or external_user_id depending on group_by)
@@ -1620,6 +1674,10 @@ type UserSummary struct {
 	Tools []*ToolUsage
 	// Per-hook-source usage breakdown
 	HookSources []*HookSourceUsage
+	// Distinct account types observed for this user ('team', 'personal')
+	AccountTypes []string
+	// Linked AI accounts for this user (team and personal, across providers)
+	Accounts []*UserAccount
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

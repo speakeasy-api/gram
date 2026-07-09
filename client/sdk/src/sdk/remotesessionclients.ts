@@ -5,14 +5,51 @@
 import { remoteSessionClientsAttachUserSessionIssuer } from "../funcs/remoteSessionClientsAttachUserSessionIssuer.js";
 import { remoteSessionClientsCloneClientFromOAuthProxyProvider } from "../funcs/remoteSessionClientsCloneClientFromOAuthProxyProvider.js";
 import { remoteSessionClientsCreate } from "../funcs/remoteSessionClientsCreate.js";
+import { remoteSessionClientsCreateCimd } from "../funcs/remoteSessionClientsCreateCimd.js";
 import { remoteSessionClientsDelete } from "../funcs/remoteSessionClientsDelete.js";
 import { remoteSessionClientsDetachUserSessionIssuer } from "../funcs/remoteSessionClientsDetachUserSessionIssuer.js";
 import { remoteSessionClientsGet } from "../funcs/remoteSessionClientsGet.js";
 import { remoteSessionClientsList } from "../funcs/remoteSessionClientsList.js";
 import { remoteSessionClientsUpdate } from "../funcs/remoteSessionClientsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
+import {
+  AttachUserSessionIssuerRequest,
+  AttachUserSessionIssuerSecurity,
+} from "../models/operations/attachusersessionissuer.js";
+import {
+  CloneClientFromOAuthProxyProviderRequest,
+  CloneClientFromOAuthProxyProviderSecurity,
+} from "../models/operations/cloneclientfromoauthproxyprovider.js";
+import {
+  CreateCimdRemoteSessionClientRequest,
+  CreateCimdRemoteSessionClientSecurity,
+} from "../models/operations/createcimdremotesessionclient.js";
+import {
+  CreateRemoteSessionClientRequest,
+  CreateRemoteSessionClientSecurity,
+} from "../models/operations/createremotesessionclient.js";
+import {
+  DeleteRemoteSessionClientRequest,
+  DeleteRemoteSessionClientSecurity,
+} from "../models/operations/deleteremotesessionclient.js";
+import {
+  DetachUserSessionIssuerRequest,
+  DetachUserSessionIssuerSecurity,
+} from "../models/operations/detachusersessionissuer.js";
+import {
+  GetRemoteSessionClientRequest,
+  GetRemoteSessionClientSecurity,
+} from "../models/operations/getremotesessionclient.js";
+import {
+  ListRemoteSessionClientsRequest,
+  ListRemoteSessionClientsResponse,
+  ListRemoteSessionClientsSecurity,
+} from "../models/operations/listremotesessionclients.js";
+import {
+  UpdateRemoteSessionClientRequest,
+  UpdateRemoteSessionClientSecurity,
+} from "../models/operations/updateremotesessionclient.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -24,10 +61,10 @@ export class RemoteSessionClients extends ClientSDK {
    * Attach a user_session_issuer to a remote_session_client by recording the binding in the join table. Rejected when another client is already bound to the same user_session_issuer for this client's remote_session_issuer.
    */
   async attachUserSessionIssuer(
-    request: operations.AttachUserSessionIssuerRequest,
-    security?: operations.AttachUserSessionIssuerSecurity | undefined,
+    request: AttachUserSessionIssuerRequest,
+    security?: AttachUserSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionClient> {
+  ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsAttachUserSessionIssuer(
       this,
       request,
@@ -43,10 +80,10 @@ export class RemoteSessionClients extends ClientSDK {
    * Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider's stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.
    */
   async cloneClientFromOAuthProxyProvider(
-    request: operations.CloneClientFromOAuthProxyProviderRequest,
-    security?: operations.CloneClientFromOAuthProxyProviderSecurity | undefined,
+    request: CloneClientFromOAuthProxyProviderRequest,
+    security?: CloneClientFromOAuthProxyProviderSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionClient> {
+  ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsCloneClientFromOAuthProxyProvider(
       this,
       request,
@@ -62,11 +99,30 @@ export class RemoteSessionClients extends ClientSDK {
    * Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.
    */
   async create(
-    request: operations.CreateRemoteSessionClientRequest,
-    security?: operations.CreateRemoteSessionClientSecurity | undefined,
+    request: CreateRemoteSessionClientRequest,
+    security?: CreateRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionClient> {
+  ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsCreate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createCimd remoteSessionClients
+   *
+   * @remarks
+   * Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.
+   */
+  async createCimd(
+    request: CreateCimdRemoteSessionClientRequest,
+    security?: CreateCimdRemoteSessionClientSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionClient> {
+    return unwrapAsync(remoteSessionClientsCreateCimd(
       this,
       request,
       security,
@@ -81,8 +137,8 @@ export class RemoteSessionClients extends ClientSDK {
    * Soft-delete a remote_session_client. Cascades to remote_sessions rows pointing at this client; affected principals are forced to re-authenticate.
    */
   async delete(
-    request: operations.DeleteRemoteSessionClientRequest,
-    security?: operations.DeleteRemoteSessionClientSecurity | undefined,
+    request: DeleteRemoteSessionClientRequest,
+    security?: DeleteRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(remoteSessionClientsDelete(
@@ -100,10 +156,10 @@ export class RemoteSessionClients extends ClientSDK {
    * Detach a user_session_issuer from a remote_session_client by removing the binding from the join table. A no-op when the binding does not exist.
    */
   async detachUserSessionIssuer(
-    request: operations.DetachUserSessionIssuerRequest,
-    security?: operations.DetachUserSessionIssuerSecurity | undefined,
+    request: DetachUserSessionIssuerRequest,
+    security?: DetachUserSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionClient> {
+  ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsDetachUserSessionIssuer(
       this,
       request,
@@ -119,10 +175,10 @@ export class RemoteSessionClients extends ClientSDK {
    * Get a remote_session_client by id.
    */
   async get(
-    request: operations.GetRemoteSessionClientRequest,
-    security?: operations.GetRemoteSessionClientSecurity | undefined,
+    request: GetRemoteSessionClientRequest,
+    security?: GetRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionClient> {
+  ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsGet(
       this,
       request,
@@ -138,14 +194,11 @@ export class RemoteSessionClients extends ClientSDK {
    * List remote_session_clients in the caller's project.
    */
   async list(
-    request?: operations.ListRemoteSessionClientsRequest | undefined,
-    security?: operations.ListRemoteSessionClientsSecurity | undefined,
+    request?: ListRemoteSessionClientsRequest | undefined,
+    security?: ListRemoteSessionClientsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<
-    PageIterator<
-      operations.ListRemoteSessionClientsResponse,
-      { cursor: string }
-    >
+    PageIterator<ListRemoteSessionClientsResponse, { cursor: string }>
   > {
     return unwrapResultIterator(remoteSessionClientsList(
       this,
@@ -162,10 +215,10 @@ export class RemoteSessionClients extends ClientSDK {
    * Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.
    */
   async update(
-    request: operations.UpdateRemoteSessionClientRequest,
-    security?: operations.UpdateRemoteSessionClientSecurity | undefined,
+    request: UpdateRemoteSessionClientRequest,
+    security?: UpdateRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.RemoteSessionClient> {
+  ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsUpdate(
       this,
       request,

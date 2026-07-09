@@ -11,17 +11,20 @@ import { GramCore } from "../core.js";
 import { organizationsVerifyOnboardingHooksSetup } from "../funcs/organizationsVerifyOnboardingHooksSetup.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { VerifyOnboardingHooksSetupResult } from "../models/components/verifyonboardinghookssetupresult.js";
+import {
+  VerifyOnboardingHooksSetupRequest,
+  VerifyOnboardingHooksSetupSecurity,
+} from "../models/operations/verifyonboardinghookssetup.js";
 import { unwrapAsync } from "../types/fp.js";
 export type VerifyOnboardingHooksSetupQueryData =
-  components.VerifyOnboardingHooksSetupResult;
+  VerifyOnboardingHooksSetupResult;
 
 export function prefetchVerifyOnboardingHooksSetup(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.VerifyOnboardingHooksSetupRequest | undefined,
-  security?: operations.VerifyOnboardingHooksSetupSecurity | undefined,
+  request?: VerifyOnboardingHooksSetupRequest | undefined,
+  security?: VerifyOnboardingHooksSetupSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +39,8 @@ export function prefetchVerifyOnboardingHooksSetup(
 
 export function buildVerifyOnboardingHooksSetupQuery(
   client$: GramCore,
-  request?: operations.VerifyOnboardingHooksSetupRequest | undefined,
-  security?: operations.VerifyOnboardingHooksSetupSecurity | undefined,
+  request?: VerifyOnboardingHooksSetupRequest | undefined,
+  security?: VerifyOnboardingHooksSetupSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

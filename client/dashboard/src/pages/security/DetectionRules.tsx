@@ -28,11 +28,9 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryState } from "nuqs";
 import { toast } from "sonner";
-import {
-  useListChats,
-  useRiskSuggestCustomRuleMutation,
-  useRiskTestDetectionRuleMutation,
-} from "@gram/client/react-query/index.js";
+import { useListChats } from "@gram/client/react-query/listChats.js";
+import { useRiskSuggestCustomRuleMutation } from "@gram/client/react-query/riskSuggestCustomRule.js";
+import { useRiskTestDetectionRuleMutation } from "@gram/client/react-query/riskTestDetectionRule.js";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import type { TestDetectionRuleMatch } from "@gram/client/models/components/testdetectionrulematch.js";
 import type { TestDetectionRuleResult } from "@gram/client/models/components/testdetectionruleresult.js";
@@ -72,6 +70,7 @@ const BUILTIN_CATEGORY_ORDER: RuleCategory[] = [
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
+  "account_identity",
   "prompt_injection",
 ];
 

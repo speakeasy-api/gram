@@ -4,7 +4,7 @@ import {
   getSelectedCollectionCount,
   type CollectionGroup,
 } from "./computePanelState";
-import type { Selector } from "./types";
+import type { Selector } from "@gram/client/models/components/selector.js";
 
 // --- Helpers ---
 

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetRiskUserBreakdownRequest,
+  GetRiskUserBreakdownSecurity,
+} from "../models/operations/getriskuserbreakdown.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskUserBreakdownQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskUserBreakdownQueryError =
  * Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.
  */
 export function useRiskUserBreakdown(
-  request: operations.GetRiskUserBreakdownRequest,
-  security?: operations.GetRiskUserBreakdownSecurity | undefined,
+  request: GetRiskUserBreakdownRequest,
+  security?: GetRiskUserBreakdownSecurity | undefined,
   options?: QueryHookOptions<
     RiskUserBreakdownQueryData,
     RiskUserBreakdownQueryError
@@ -85,8 +88,8 @@ export function useRiskUserBreakdown(
  * Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.
  */
 export function useRiskUserBreakdownSuspense(
-  request: operations.GetRiskUserBreakdownRequest,
-  security?: operations.GetRiskUserBreakdownSecurity | undefined,
+  request: GetRiskUserBreakdownRequest,
+  security?: GetRiskUserBreakdownSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskUserBreakdownQueryData,
     RiskUserBreakdownQueryError

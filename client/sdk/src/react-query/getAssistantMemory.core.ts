@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { assistantMemoriesGet } from "../funcs/assistantMemoriesGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { AssistantMemory } from "../models/components/assistantmemory.js";
+import {
+  GetAssistantMemoryRequest,
+  GetAssistantMemorySecurity,
+} from "../models/operations/getassistantmemory.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetAssistantMemoryQueryData = components.AssistantMemory;
+export type GetAssistantMemoryQueryData = AssistantMemory;
 
 export function prefetchGetAssistantMemory(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetAssistantMemoryRequest,
-  security?: operations.GetAssistantMemorySecurity | undefined,
+  request: GetAssistantMemoryRequest,
+  security?: GetAssistantMemorySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGetAssistantMemory(
 
 export function buildGetAssistantMemoryQuery(
   client$: GramCore,
-  request: operations.GetAssistantMemoryRequest,
-  security?: operations.GetAssistantMemorySecurity | undefined,
+  request: GetAssistantMemoryRequest,
+  security?: GetAssistantMemorySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

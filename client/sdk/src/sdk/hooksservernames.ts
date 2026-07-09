@@ -6,8 +6,19 @@ import { hooksServerNamesDeleteServerNameOverride } from "../funcs/hooksServerNa
 import { hooksServerNamesListServerNameOverrides } from "../funcs/hooksServerNamesListServerNameOverrides.js";
 import { hooksServerNamesUpsertServerNameOverride } from "../funcs/hooksServerNamesUpsertServerNameOverride.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ServerNameOverride } from "../models/components/servernameoverride.js";
+import {
+  DeleteServerNameOverrideRequest,
+  DeleteServerNameOverrideSecurity,
+} from "../models/operations/deleteservernameoverride.js";
+import {
+  ListServerNameOverridesRequest,
+  ListServerNameOverridesSecurity,
+} from "../models/operations/listservernameoverrides.js";
+import {
+  UpsertServerNameOverrideRequest,
+  UpsertServerNameOverrideSecurity,
+} from "../models/operations/upsertservernameoverride.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class HooksServerNames extends ClientSDK {
@@ -18,8 +29,8 @@ export class HooksServerNames extends ClientSDK {
    * Delete a server name display override
    */
   async deleteServerNameOverride(
-    request: operations.DeleteServerNameOverrideRequest,
-    security?: operations.DeleteServerNameOverrideSecurity | undefined,
+    request: DeleteServerNameOverrideRequest,
+    security?: DeleteServerNameOverrideSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(hooksServerNamesDeleteServerNameOverride(
@@ -37,10 +48,10 @@ export class HooksServerNames extends ClientSDK {
    * List all server name display overrides for a project
    */
   async listServerNameOverrides(
-    request?: operations.ListServerNameOverridesRequest | undefined,
-    security?: operations.ListServerNameOverridesSecurity | undefined,
+    request?: ListServerNameOverridesRequest | undefined,
+    security?: ListServerNameOverridesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<Array<components.ServerNameOverride>> {
+  ): Promise<Array<ServerNameOverride>> {
     return unwrapAsync(hooksServerNamesListServerNameOverrides(
       this,
       request,
@@ -56,10 +67,10 @@ export class HooksServerNames extends ClientSDK {
    * Create or update a server name display override
    */
   async upsertServerNameOverride(
-    request: operations.UpsertServerNameOverrideRequest,
-    security?: operations.UpsertServerNameOverrideSecurity | undefined,
+    request: UpsertServerNameOverrideRequest,
+    security?: UpsertServerNameOverrideSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ServerNameOverride> {
+  ): Promise<ServerNameOverride> {
     return unwrapAsync(hooksServerNamesUpsertServerNameOverride(
       this,
       request,

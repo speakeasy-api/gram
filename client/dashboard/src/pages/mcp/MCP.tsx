@@ -12,10 +12,8 @@ import { Type } from "@/components/ui/type";
 import { useViewMode } from "@/components/ui/use-view-mode";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
-import {
-  useMcpEndpoints,
-  useMcpServers,
-} from "@gram/client/react-query/index.js";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -82,24 +80,33 @@ function MCPOverview() {
   const {
     data: mcpServersResult,
     isLoading: isLoadingMcpServers,
+    isFetching: isFetchingMcpServers,
     isError: isMcpServersError,
+    refetch: refetchMcpServers,
   } = useMcpServers({ gramProject }, undefined, {
     throwOnError: false,
   });
   const {
     data: endpointsResult,
     isLoading: isLoadingEndpoints,
+    isFetching: isFetchingEndpoints,
     isError: isEndpointsError,
+    refetch: refetchEndpoints,
   } = useMcpEndpoints({ gramProject }, undefined, {
     throwOnError: false,
   });
-  // Filter the listing to Remote-MCP-backed rows for now — the AGE-1902
-  // cutover will introduce toolset-backed rows that today still render
-  // through the existing Hosted MCPCard path via useToolsets().
+  const handleRefresh = () => {
+    void toolsets.refetch();
+    void refetchMcpServers();
+    void refetchEndpoints();
+  };
+  const isRefreshing =
+    isFetchingMcpServers || isFetchingEndpoints || toolsets.isFetching;
+  // Until AGE-1902 moves hosted rows here, this grid only renders mcp_servers-backed MCPs.
   const mcpServers = useMemo(
     () =>
       (mcpServersResult?.mcpServers ?? []).filter(
-        (server) => !!server.remoteMcpServerId,
+        (server) => !!server.remoteMcpServerId || !!server.tunneledMcpServerId,
       ),
     [mcpServersResult],
   );
@@ -294,6 +301,10 @@ function MCPOverview() {
                 onClearAll={mcpFilters.clearAll}
               />
               <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
+              <Page.Toolbar.Refresh
+                onRefresh={handleRefresh}
+                isRefreshing={isRefreshing}
+              />
             </Page.Toolbar>
           )}
           {showNoMatches ? (

@@ -62,7 +62,7 @@ func TestRemoteLoginCallback_NoExpiresIn_NoRefresh_NonExpiring(t *testing.T) {
 	// The gate treats NULL-with-no-refresh as non-expiring and keeps returning
 	// the token, rather than rejecting it as ErrNoValidToken once a synthetic
 	// hour lapses.
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject)
+	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, upstreamAccessToken, resolved, "non-expiring token must keep resolving")
 }
@@ -96,7 +96,7 @@ func TestRemoteLoginCallback_NoExpiresIn_WithRefresh_HourlyCadence(t *testing.T)
 
 	// Inside the cadence window (updated_at ≈ now): the stored token is served
 	// and no refresh is attempted.
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject)
+	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, initialAccess, resolved)
 	require.Equal(t, int64(0), refreshCount.Load(), "must not refresh inside the cadence window")
@@ -108,7 +108,7 @@ func TestRemoteLoginCallback_NoExpiresIn_WithRefresh_HourlyCadence(t *testing.T)
 		ProjectID: conv.ToNullUUID(env.projectID),
 		UpdatedAt: conv.ToPGTimestamptz(time.Now().Add(-2 * time.Hour)),
 	}))
-	resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject)
+	resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, rotatedAccess, resolved, "past the cadence window the token is refreshed")
 	require.Equal(t, int64(1), refreshCount.Load(), "exactly one refresh attempt past the window")
@@ -203,7 +203,7 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 		UserSessionIssuerID:   userIssuer,
 	}))
 
-	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, userIssuer)
+	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
 	require.NoError(t, err)
 	require.Len(t, clients, 1)
 

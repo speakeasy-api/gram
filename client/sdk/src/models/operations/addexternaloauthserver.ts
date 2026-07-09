@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  AddExternalOAuthServerRequestBody,
+  AddExternalOAuthServerRequestBody$Outbound,
+  AddExternalOAuthServerRequestBody$outboundSchema,
+} from "../components/addexternaloauthserverrequestbody.js";
 
 export type AddExternalOAuthServerSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -38,8 +42,7 @@ export type AddExternalOAuthServerRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  addExternalOAuthServerRequestBody:
-    components.AddExternalOAuthServerRequestBody;
+  addExternalOAuthServerRequestBody: AddExternalOAuthServerRequestBody;
 };
 
 /** @internal */
@@ -153,8 +156,7 @@ export type AddExternalOAuthServerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  AddExternalOAuthServerRequestBody:
-    components.AddExternalOAuthServerRequestBody$Outbound;
+  AddExternalOAuthServerRequestBody: AddExternalOAuthServerRequestBody$Outbound;
 };
 
 /** @internal */
@@ -168,7 +170,7 @@ export const AddExternalOAuthServerRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     addExternalOAuthServerRequestBody:
-      components.AddExternalOAuthServerRequestBody$outboundSchema,
+      AddExternalOAuthServerRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

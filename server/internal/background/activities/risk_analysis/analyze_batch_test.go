@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -39,7 +40,15 @@ type recordingPromptJudge struct {
 
 func (j *recordingPromptJudge) Evaluate(_ context.Context, in risk_analysis.JudgeInput) *risk_analysis.JudgeVerdict {
 	j.inputs = append(j.inputs, in)
-	return &risk_analysis.JudgeVerdict{Confidence: 0.9, Rationale: "matched tool call"}
+	return &risk_analysis.JudgeVerdict{
+		Matched:          true,
+		Confidence:       0.9,
+		Rationale:        "matched tool call",
+		CostUSD:          0,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+	}
 }
 
 // newPresidioPub returns a mock presidio publisher that accepts any publish
@@ -61,15 +70,28 @@ func mustCELEngine(t *testing.T) *celenv.Engine {
 	return eng
 }
 
+func mustCustomRuleScanner(t *testing.T, db riskrepo.DBTX) *customruleanalyzer.Scanner {
+	t.Helper()
+	s, err := customruleanalyzer.NewScanner(db)
+	require.NoError(t, err)
+	return s
+}
+
 func newGitleaksPub() *gcp.MockPublisher[*riskv1.GitleaksAnalysis] {
 	pub := gcp.NewMockPublisher[*riskv1.GitleaksAnalysis]()
 	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
 	return pub
 }
 
+func newCustomRulesPub() *gcp.MockPublisher[*riskv1.CustomRulesAnalysis] {
+	pub := gcp.NewMockPublisher[*riskv1.CustomRulesAnalysis]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+	return pub
+}
+
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), mustCELEngine(t))
+	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newCustomRulesPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil)
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -125,7 +147,10 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		nil,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 	)
 
 	// Execute via Temporal test activity environment to satisfy activity.RecordHeartbeat
@@ -216,7 +241,10 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		nil,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -319,7 +347,10 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		flags,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -402,7 +433,10 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		flags,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -648,6 +682,54 @@ func TestAnalyzeBatch_CustomDetectionRuleFinding(t *testing.T) {
 	assert.Equal(t, "ACME-ABC12345", rows[0].Match.String)
 }
 
+// A configured exclusion must suppress a message-level content finding through
+// the full Do() path. TestAnalyzeBatch_CustomDetectionRuleFinding is the control
+// (identical setup, no exclusion -> 1 finding). The ExclusionSet predicate is
+// unit-tested in isolation; the wiring the session-level work reshaped —
+// policyExclusionSet's DB fetch and threading into scanStandardPolicy — is only
+// exercised end-to-end here.
+func TestAnalyzeBatch_ExclusionSuppressesMessageFinding(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `content.matchRegex("ACME-[A-Z0-9]{8}")`)
+
+	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "deploy with ACME-ABC12345 today",
+	})
+	require.NoError(t, err)
+
+	_, err = riskrepo.New(conn).CreateRiskExclusion(t.Context(), riskrepo.CreateRiskExclusionParams{
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		RiskPolicyID:   uuid.NullUUID{UUID: td.policyID, Valid: true},
+		MatchType:      "exact",
+		MatchValue:     "ACME-ABC12345",
+		Enabled:        true,
+	})
+	require.NoError(t, err)
+
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil)
+	require.Equal(t, 1, result.Processed)
+	require.Equal(t, 0, result.Findings, "excluded content finding must be suppressed end-to-end through Do()")
+
+	// No active finding remains. The scanned message still records the empty
+	// sentinel row buildRows writes, but that row is found=false, which this
+	// active-findings query filters out — so the list is empty, as in
+	// TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex.
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows, "no active finding should survive the exclusion")
+}
+
 func TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
@@ -860,7 +942,10 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		nil,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite

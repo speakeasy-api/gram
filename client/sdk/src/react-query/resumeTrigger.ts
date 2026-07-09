@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { triggersResume } from "../funcs/triggersResume.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { TriggerInstance } from "../models/components/triggerinstance.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ResumeTriggerInstanceRequest,
+  ResumeTriggerInstanceSecurity,
+} from "../models/operations/resumetriggerinstance.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type ResumeTriggerMutationVariables = {
-  request: operations.ResumeTriggerInstanceRequest;
-  security?: operations.ResumeTriggerInstanceSecurity | undefined;
+  request: ResumeTriggerInstanceRequest;
+  security?: ResumeTriggerInstanceSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type ResumeTriggerMutationData = components.TriggerInstance;
+export type ResumeTriggerMutationData = TriggerInstance;
 
 export type ResumeTriggerMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

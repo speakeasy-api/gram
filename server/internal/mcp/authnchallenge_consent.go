@@ -447,7 +447,7 @@ func (s *Service) buildRemoteSessionCards(
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 ) ([]remoteSessionCard, error) {
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.UserSessionIssuerID)
+	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
@@ -470,11 +470,13 @@ func (s *Service) buildRemoteSessionCards(
 	parent := remotesessions.ParentChallenge{
 		ID:                  challengeState.ID,
 		ProjectID:           endpoint.ProjectID,
+		OrganizationID:      endpoint.OrganizationID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		Subject:             challengeState.Subject,
 		McpSlug:             endpoint.Slug,
 		RouteBase:           endpoint.RouteBase,
 		FinalRedirectURI:    "",
+		Resource:            endpoint.UpstreamResource,
 	}
 
 	cards := make([]remoteSessionCard, 0, len(clients))

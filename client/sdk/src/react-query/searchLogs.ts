@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { SearchLogsResult } from "../models/components/searchlogsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  SearchLogsRequest,
+  SearchLogsSecurity,
+} from "../models/operations/searchlogs.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type SearchLogsMutationVariables = {
-  request: operations.SearchLogsRequest;
-  security?: operations.SearchLogsSecurity | undefined;
+  request: SearchLogsRequest;
+  security?: SearchLogsSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type SearchLogsMutationData = components.SearchLogsResult;
+export type SearchLogsMutationData = SearchLogsResult;
 
 export type SearchLogsMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

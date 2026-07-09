@@ -18,11 +18,13 @@ import (
 type Client struct {
 	CreateRiskPolicyEndpoint               goa.Endpoint
 	ListRiskPoliciesEndpoint               goa.Endpoint
+	ListBuiltinExclusionsEndpoint          goa.Endpoint
 	GetRiskPolicyEndpoint                  goa.Endpoint
 	UpdateRiskPolicyEndpoint               goa.Endpoint
 	DeleteRiskPolicyEndpoint               goa.Endpoint
 	ListRiskResultsEndpoint                goa.Endpoint
 	ListRiskResultsForAgentEndpoint        goa.Endpoint
+	UnmaskRiskResultEndpoint               goa.Endpoint
 	ListRiskResultsByChatEndpoint          goa.Endpoint
 	GetRiskOverviewEndpoint                goa.Endpoint
 	ListRiskCategoriesEndpoint             goa.Endpoint
@@ -49,18 +51,24 @@ type Client struct {
 	DeleteRiskExclusionEndpoint            goa.Endpoint
 	SuggestCustomDetectionRuleEndpoint     goa.Endpoint
 	TestDetectionRuleEndpoint              goa.Endpoint
+	EvaluatePromptGuardrailEndpoint        goa.Endpoint
+	SaveRiskEvalReviewEndpoint             goa.Endpoint
+	ListRiskEvalReviewsEndpoint            goa.Endpoint
+	DeleteRiskEvalReviewEndpoint           goa.Endpoint
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, compileExpr, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, getRiskBlock, submitRiskBlockFeedback, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, listRiskPolicies, listBuiltinExclusions, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, unmaskRiskResult, listRiskResultsByChat, getRiskOverview, listRiskCategories, compileExpr, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, getRiskBlock, submitRiskBlockFeedback, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule, evaluatePromptGuardrail, saveRiskEvalReview, listRiskEvalReviews, deleteRiskEvalReview goa.Endpoint) *Client {
 	return &Client{
 		CreateRiskPolicyEndpoint:               createRiskPolicy,
 		ListRiskPoliciesEndpoint:               listRiskPolicies,
+		ListBuiltinExclusionsEndpoint:          listBuiltinExclusions,
 		GetRiskPolicyEndpoint:                  getRiskPolicy,
 		UpdateRiskPolicyEndpoint:               updateRiskPolicy,
 		DeleteRiskPolicyEndpoint:               deleteRiskPolicy,
 		ListRiskResultsEndpoint:                listRiskResults,
 		ListRiskResultsForAgentEndpoint:        listRiskResultsForAgent,
+		UnmaskRiskResultEndpoint:               unmaskRiskResult,
 		ListRiskResultsByChatEndpoint:          listRiskResultsByChat,
 		GetRiskOverviewEndpoint:                getRiskOverview,
 		ListRiskCategoriesEndpoint:             listRiskCategories,
@@ -87,6 +95,10 @@ func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPoli
 		DeleteRiskExclusionEndpoint:            deleteRiskExclusion,
 		SuggestCustomDetectionRuleEndpoint:     suggestCustomDetectionRule,
 		TestDetectionRuleEndpoint:              testDetectionRule,
+		EvaluatePromptGuardrailEndpoint:        evaluatePromptGuardrail,
+		SaveRiskEvalReviewEndpoint:             saveRiskEvalReview,
+		ListRiskEvalReviewsEndpoint:            listRiskEvalReviews,
+		DeleteRiskEvalReviewEndpoint:           deleteRiskEvalReview,
 	}
 }
 
@@ -132,6 +144,29 @@ func (c *Client) ListRiskPolicies(ctx context.Context, p *ListRiskPoliciesPayloa
 		return
 	}
 	return ires.(*ListRiskPoliciesResult), nil
+}
+
+// ListBuiltinExclusions calls the "listBuiltinExclusions" endpoint of the
+// "risk" service.
+// ListBuiltinExclusions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListBuiltinExclusions(ctx context.Context, p *ListBuiltinExclusionsPayload) (res *ListBuiltinExclusionsResult, err error) {
+	var ires any
+	ires, err = c.ListBuiltinExclusionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListBuiltinExclusionsResult), nil
 }
 
 // GetRiskPolicy calls the "getRiskPolicy" endpoint of the "risk" service.
@@ -239,6 +274,28 @@ func (c *Client) ListRiskResultsForAgent(ctx context.Context, p *ListRiskResults
 		return
 	}
 	return ires.(*ListRiskResultsForAgentResult), nil
+}
+
+// UnmaskRiskResult calls the "unmaskRiskResult" endpoint of the "risk" service.
+// UnmaskRiskResult may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UnmaskRiskResult(ctx context.Context, p *UnmaskRiskResultPayload) (res *RiskUnmaskResultResult, err error) {
+	var ires any
+	ires, err = c.UnmaskRiskResultEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RiskUnmaskResultResult), nil
 }
 
 // ListRiskResultsByChat calls the "listRiskResultsByChat" endpoint of the
@@ -822,4 +879,92 @@ func (c *Client) TestDetectionRule(ctx context.Context, p *TestDetectionRulePayl
 		return
 	}
 	return ires.(*TestDetectionRuleResult), nil
+}
+
+// EvaluatePromptGuardrail calls the "evaluatePromptGuardrail" endpoint of the
+// "risk" service.
+// EvaluatePromptGuardrail may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) EvaluatePromptGuardrail(ctx context.Context, p *EvaluatePromptGuardrailPayload) (res *PromptGuardrailEvalResult, err error) {
+	var ires any
+	ires, err = c.EvaluatePromptGuardrailEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*PromptGuardrailEvalResult), nil
+}
+
+// SaveRiskEvalReview calls the "saveRiskEvalReview" endpoint of the "risk"
+// service.
+// SaveRiskEvalReview may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SaveRiskEvalReview(ctx context.Context, p *SaveRiskEvalReviewPayload) (res *types.RiskPolicyEvalReview, err error) {
+	var ires any
+	ires, err = c.SaveRiskEvalReviewEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RiskPolicyEvalReview), nil
+}
+
+// ListRiskEvalReviews calls the "listRiskEvalReviews" endpoint of the "risk"
+// service.
+// ListRiskEvalReviews may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListRiskEvalReviews(ctx context.Context, p *ListRiskEvalReviewsPayload) (res *ListRiskEvalReviewsResult, err error) {
+	var ires any
+	ires, err = c.ListRiskEvalReviewsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListRiskEvalReviewsResult), nil
+}
+
+// DeleteRiskEvalReview calls the "deleteRiskEvalReview" endpoint of the "risk"
+// service.
+// DeleteRiskEvalReview may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteRiskEvalReview(ctx context.Context, p *DeleteRiskEvalReviewPayload) (err error) {
+	_, err = c.DeleteRiskEvalReviewEndpoint(ctx, p)
+	return
 }

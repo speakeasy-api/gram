@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DeleteRiskPolicyRequest,
+  DeleteRiskPolicySecurity,
+} from "../models/operations/deleteriskpolicy.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RiskPoliciesDeleteMutationVariables = {
-  request: operations.DeleteRiskPolicyRequest;
-  security?: operations.DeleteRiskPolicySecurity | undefined;
+  request: DeleteRiskPolicyRequest;
+  security?: DeleteRiskPolicySecurity | undefined;
   options?: RequestOptions;
 };
 
 export type RiskPoliciesDeleteMutationData = void;
 
 export type RiskPoliciesDeleteMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

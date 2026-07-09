@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpdateTriggerInstanceForm,
+  UpdateTriggerInstanceForm$Outbound,
+  UpdateTriggerInstanceForm$outboundSchema,
+} from "../components/updatetriggerinstanceform.js";
 
 export type UpdateTriggerInstanceSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -20,7 +24,7 @@ export type UpdateTriggerInstanceRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  updateTriggerInstanceForm: components.UpdateTriggerInstanceForm;
+  updateTriggerInstanceForm: UpdateTriggerInstanceForm;
 };
 
 /** @internal */
@@ -60,7 +64,7 @@ export function updateTriggerInstanceSecurityToJSON(
 export type UpdateTriggerInstanceRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  UpdateTriggerInstanceForm: components.UpdateTriggerInstanceForm$Outbound;
+  UpdateTriggerInstanceForm: UpdateTriggerInstanceForm$Outbound;
 };
 
 /** @internal */
@@ -71,8 +75,7 @@ export const UpdateTriggerInstanceRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    updateTriggerInstanceForm:
-      components.UpdateTriggerInstanceForm$outboundSchema,
+    updateTriggerInstanceForm: UpdateTriggerInstanceForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

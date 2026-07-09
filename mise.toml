@@ -6,32 +6,32 @@
 # well as overriding environment variables.
 [tools]
 "aqua:ariga/atlas" = "1.0.0"
-"github:speakeasy-api/openapi" = "1.19.2"
-"github:speakeasy-api/speakeasy" = "1.761.5"
+"github:speakeasy-api/openapi" = "1.24.0"
+"github:speakeasy-api/speakeasy" = "1.788.0"
 "github:FiloSottile/mkcert" = "1.4.4"
-apko = "1.1.3"
-flyctl = "0.4.6"
-go = "1.26.3"
-golangci-lint = "2.11.2"
+apko = "1.2.20"
+flyctl = "0.4.62"
+go = "1.26.4"
+golangci-lint = "2.12.2"
 gomigrate = "4.19.1"
 gum = "0.17.0"
-jq = "1.8.1"
-melange = "0.40.4"
+jq = "1.8.2"
+melange = "0.55.0"
 nodejs = "24.16.0"
-"github:pnpm/pnpm" = "11.3.0"
-watchexec = "2.5.0"
-uv = "0.11.21"
-yq = "4.52.4"
+"github:pnpm/pnpm" = "11.10.0"
+watchexec = "2.5.1"
+uv = "0.11.25"
+yq = "4.53.3"
 hk = "1.46.0"
-pkl = "0.31.0"
+pkl = "0.31.1"
 "github:speakeasy-api/madprocs" = "0.1.33"
-"github:temporalio/cli" = "1.6.1"
-"github:pb33f/openapi-changes" = "0.2.7"
+"github:temporalio/cli" = "1.7.2"
+"github:pb33f/openapi-changes" = "0.2.9"
 "github:sqlc-dev/sqlc" = "1.31.1"
 "github:gotestyourself/gotestsum" = "1.13.0"
-buf = "1.69.0"
-ruff = "0.15.16"
-"github:ast-grep/ast-grep" = "0.43.0"
+buf = "1.71.0"
+ruff = "0.15.20"
+"github:ast-grep/ast-grep" = "0.44.0"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
@@ -55,6 +55,7 @@ DB_PORT = "5439"
 ## static connection string. In this case, we use interpolation to point to the
 ## local development database configured above.
 GRAM_DATABASE_URL = "postgres://{{env.DB_USER}}:{{env.DB_PASSWORD}}@{{env.DB_HOST}}:{{env.DB_PORT}}/{{env.DB_NAME}}?sslmode=disable&search_path=public"
+GRAM_DATABASE_READ_REPLICA_URL = "{{env.GRAM_DATABASE_URL}}"
 
 ##############################
 ## ClickHouse configuration ##
@@ -116,6 +117,8 @@ GRAM_REDIS_CACHE_PORT = "5445"
 GRAM_REDIS_CACHE_ADDR = "{{env.GRAM_REDIS_CACHE_HOST}}:{{env.GRAM_REDIS_CACHE_PORT}}"
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
 GRAM_REDIS_ENABLE_TRACING = "false"
+## Local-only value; real deployments inject this via secrets.
+GRAM_TUNNEL_FORWARD_TOKEN = "local-dev-tunnel-forward-token"
 OPENROUTER_DEV_KEY = "unset"
 ## The dev-idp is a top-level project (dev-idp/) backed by SQLite.
 ## GRAM_DEVIDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.
@@ -186,7 +189,7 @@ GRAM_LOG_PRETTY = 1
 ## This config is used by the Elements SDK and CLI to point to the correct Gram
 ## API server
 GRAM_API_URL = "{{env.GRAM_SERVER_URL}}"
-VITE_DEV_HOSTNAMES = "localhost,gram.local"
+VITE_DEV_HOSTNAMES = "localhost"
 TEMPORAL_WEB_PORT = "8233"
 ## If you want to enable/disable certain feature flags during local development,
 ## copy the following line to mise.local.toml and point to a CSV file containing
@@ -232,10 +235,6 @@ GRAM_ASSISTANT_RUNTIME_PROVIDER = "flyio"
 ##################
 ## MCP Registry ##
 ##################
-## Options below configure where your optional local registry container will be
-## discoverable by the Gram application.
-LOCAL_MCP_REGISTRY_PORT = "9847"
-LOCAL_MCP_REGISTRY_URL = "http://localhost:{{env.LOCAL_MCP_REGISTRY_PORT}}"
 PULSE_REGISTRY_TENANT = "unset"
 PULSE_REGISTRY_KEY = "unset"
 

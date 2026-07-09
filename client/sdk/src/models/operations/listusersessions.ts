@@ -7,7 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
-import * as components from "../components/index.js";
+import {
+  ListUserSessionsResult,
+  ListUserSessionsResult$inboundSchema,
+} from "../components/listusersessionsresult.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ListUserSessionsSecurityOption1 = {
@@ -81,7 +84,7 @@ export type ListUserSessionsRequest = {
 };
 
 export type ListUserSessionsResponse = {
-  result: components.ListUserSessionsResult;
+  result: ListUserSessionsResult;
 };
 
 /** @internal */
@@ -245,7 +248,7 @@ export const ListUserSessionsResponse$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    Result: components.ListUserSessionsResult$inboundSchema,
+    Result: ListUserSessionsResult$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

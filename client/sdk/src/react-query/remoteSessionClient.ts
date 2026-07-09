@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetRemoteSessionClientRequest,
+  GetRemoteSessionClientSecurity,
+} from "../models/operations/getremotesessionclient.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RemoteSessionClientQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RemoteSessionClientQueryError =
  * Get a remote_session_client by id.
  */
 export function useRemoteSessionClient(
-  request: operations.GetRemoteSessionClientRequest,
-  security?: operations.GetRemoteSessionClientSecurity | undefined,
+  request: GetRemoteSessionClientRequest,
+  security?: GetRemoteSessionClientSecurity | undefined,
   options?: QueryHookOptions<
     RemoteSessionClientQueryData,
     RemoteSessionClientQueryError
@@ -85,8 +88,8 @@ export function useRemoteSessionClient(
  * Get a remote_session_client by id.
  */
 export function useRemoteSessionClientSuspense(
-  request: operations.GetRemoteSessionClientRequest,
-  security?: operations.GetRemoteSessionClientSecurity | undefined,
+  request: GetRemoteSessionClientRequest,
+  security?: GetRemoteSessionClientSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RemoteSessionClientQueryData,
     RemoteSessionClientQueryError

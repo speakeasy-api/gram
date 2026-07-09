@@ -1,14 +1,14 @@
 import type {
   FilterChip,
+  ObserveStatusFilterValue,
   ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
 import type { MultiSelectGroup } from "@/components/ui/multi-select";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
-import type {
-  ToolUsageHostedServerFilterOption,
-  ToolUsageShadowServerFilterOption,
-} from "@gram/client/models/components";
+import type { ToolUsageHostedServerFilterOption } from "@gram/client/models/components/toolusagehostedserverfilteroption.js";
+import type { ToolUsageShadowServerFilterOption } from "@gram/client/models/components/toolusageshadowserverfilteroption.js";
 import type { TargetTypes } from "@gram/client/models/components/gettoolusagesummarypayload";
+import type { Statuses } from "@gram/client/models/components/listtoolusagetracespayload";
 import { normalizeUserEmailFilter } from "./observeUserFilters";
 
 export const SERVER_FILTER_PATH = "gram.tool_call.source";
@@ -21,6 +21,7 @@ const SHADOW_SERVER_PREFIX = "shadow:";
 export const TOOL_USAGE_DEFAULT_TYPES: ObserveTypeFilterValue[] = [];
 export const TOOL_USAGE_VALID_TYPES: ObserveTypeFilterValue[] = [
   "hosted_mcp_server",
+  "tunneled_mcp_server",
   "shadow_mcp_server",
   "local_tool",
   "skill",
@@ -30,10 +31,36 @@ export const TOOL_USAGE_TYPE_OPTIONS: Array<{
   value: ObserveTypeFilterValue;
 }> = [
   { label: "Hosted MCP Servers", value: "hosted_mcp_server" },
+  { label: "Tunneled MCP Servers", value: "tunneled_mcp_server" },
   { label: "Shadow MCP Servers", value: "shadow_mcp_server" },
   { label: "Local Tools", value: "local_tool" },
   { label: "Skills", value: "skill" },
 ];
+
+export const TOOL_USAGE_VALID_STATUSES: ObserveStatusFilterValue[] = [
+  "error",
+  "success",
+  "blocked",
+  "pending",
+];
+export const TOOL_USAGE_STATUS_OPTIONS: Array<{
+  label: string;
+  value: ObserveStatusFilterValue;
+}> = [
+  { label: "Error", value: "error" },
+  { label: "Success", value: "success" },
+  { label: "Blocked", value: "blocked" },
+  { label: "Pending", value: "pending" },
+];
+
+export function toStatuses(
+  selectedStatuses: ObserveStatusFilterValue[],
+): Statuses[] | undefined {
+  const mapped = selectedStatuses.filter((status): status is Statuses =>
+    TOOL_USAGE_VALID_STATUSES.includes(status),
+  );
+  return mapped.length > 0 ? mapped : undefined;
+}
 
 export type ParsedTargetFilter =
   | { type: "hosted"; id: string }

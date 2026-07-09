@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.39.0**](../README.md)
+[**@gram-ai/elements v1.41.0**](../README.md)
 
 ***
 
@@ -22,7 +22,7 @@ const config: ElementsConfig = {
 
 ### systemPrompt?
 
-> `optional` **systemPrompt**: `string`
+> `optional` **systemPrompt?**: `string`
 
 The system prompt to use for the Elements library.
 
@@ -30,7 +30,7 @@ The system prompt to use for the Elements library.
 
 ### transport?
 
-> `optional` **transport**: `ChatTransport`\<`UIMessage`\<`unknown`, `UIDataTypes`, `UITools`\>\> \| [`ElementsTransportFactory`](../type-aliases/ElementsTransportFactory.md)
+> `optional` **transport?**: `ChatTransport`\<`UIMessage`\<`unknown`, `UIDataTypes`, `UITools`\>\> \| [`ElementsTransportFactory`](../type-aliases/ElementsTransportFactory.md)
 
 Optional chat transport override. When provided, Elements uses this
 transport instead of its built-in client-side streaming transport — e.g.
@@ -46,7 +46,7 @@ the factory form when the transport needs the active chat id at send time.
 
 ### allowMessageEdit?
 
-> `optional` **allowMessageEdit**: `boolean`
+> `optional` **allowMessageEdit?**: `boolean`
 
 Whether to expose the inline message-edit affordance on user messages.
 Edit relies on assistant-ui's local branch rewriting; transports backed by a
@@ -63,7 +63,7 @@ true
 
 ### plugins?
 
-> `optional` **plugins**: [`Plugin`](Plugin.md)[]
+> `optional` **plugins?**: [`Plugin`](Plugin.md)[]
 
 Any plugins to use for the Elements library.
 
@@ -77,7 +77,7 @@ import { recommended } from '@gram-ai/elements/plugins'
 
 ### components?
 
-> `optional` **components**: [`ComponentOverrides`](ComponentOverrides.md)
+> `optional` **components?**: [`ComponentOverrides`](ComponentOverrides.md)
 
 Override the default components used by the Elements library.
 
@@ -128,7 +128,7 @@ const config: ElementsConfig = {
 
 ### mcp?
 
-> `optional` **mcp**: `string`
+> `optional` **mcp?**: `string`
 
 The Gram Server URL to use for the Elements library.
 Can be retrieved from https://app.getgram.ai/{team}/{project}/mcp/{mcp_slug}
@@ -148,7 +148,7 @@ const config: ElementsConfig = {
 
 ### mcps?
 
-> `optional` **mcps**: [`MCPServerEntry`](MCPServerEntry.md)[]
+> `optional` **mcps?**: [`MCPServerEntry`](MCPServerEntry.md)[]
 
 One or more Gram MCP servers to connect to in a single chat. Tools from
 each server are merged and namespaced as `<name>__<tool>` to avoid
@@ -170,7 +170,7 @@ const config: ElementsConfig = {
 
 ### environment?
 
-> `optional` **environment**: `Record`\<`string`, `unknown`\>
+> `optional` **environment?**: `Record`\<`string`, `unknown`\>
 
 Custom environment variable overrides for the Elements library.
 Will be used to override the environment variables for the MCP server.
@@ -181,7 +181,7 @@ For more documentation on passing through different kinds of environment variabl
 
 ### gramEnvironment?
 
-> `optional` **gramEnvironment**: `string`
+> `optional` **gramEnvironment?**: `string`
 
 The environment slug to use for resolving secrets.
 When specified, this is sent as the Gram-Environment header to select
@@ -191,7 +191,7 @@ which environment's secrets to use for tool execution.
 
 ### variant?
 
-> `optional` **variant**: `"widget"` \| `"sidecar"` \| `"standalone"`
+> `optional` **variant?**: `"widget"` \| `"sidecar"` \| `"standalone"`
 
 The layout variant for the chat interface.
 
@@ -209,7 +209,7 @@ The layout variant for the chat interface.
 
 ### model?
 
-> `optional` **model**: [`ModelConfig`](ModelConfig.md)
+> `optional` **model?**: [`ModelConfig`](ModelConfig.md)
 
 LLM model configuration.
 
@@ -228,7 +228,7 @@ const config: ElementsConfig = {
 
 ### theme?
 
-> `optional` **theme**: [`ThemeConfig`](ThemeConfig.md)
+> `optional` **theme?**: [`ThemeConfig`](ThemeConfig.md)
 
 Visual appearance configuration options.
 Similar to OpenAI ChatKit's ThemeOption.\
@@ -249,7 +249,7 @@ const config: ElementsConfig = {
 
 ### welcome?
 
-> `optional` **welcome**: [`WelcomeConfig`](WelcomeConfig.md)
+> `optional` **welcome?**: [`WelcomeConfig`](WelcomeConfig.md)
 
 The configuration for the welcome message and initial suggestions.
 
@@ -271,7 +271,7 @@ const config: ElementsConfig = {
 
 ### composer?
 
-> `optional` **composer**: [`ComposerConfig`](ComposerConfig.md)
+> `optional` **composer?**: [`ComposerConfig`](ComposerConfig.md)
 
 The configuration for the composer.
 
@@ -289,7 +289,7 @@ const config: ElementsConfig = {
 
 ### languageModel?
 
-> `optional` **languageModel**: `LanguageModel`
+> `optional` **languageModel?**: `LanguageModel`
 
 Optional property to override the LLM provider. If you override the model,
 then logs & usage metrics will not be tracked directly via Gram.
@@ -314,7 +314,7 @@ const config: ElementsConfig = {
 
 ### modal?
 
-> `optional` **modal**: [`ModalConfig`](ModalConfig.md)
+> `optional` **modal?**: [`ModalConfig`](ModalConfig.md)
 
 The configuration for the modal window.
 Only applicable if variant is 'widget'.
@@ -342,7 +342,7 @@ const config: ElementsConfig = {
 
 ### sidecar?
 
-> `optional` **sidecar**: [`SidecarConfig`](SidecarConfig.md)
+> `optional` **sidecar?**: [`SidecarConfig`](SidecarConfig.md)
 
 The configuration for the sidecar panel.
 Only applies if variant is 'sidecar'.
@@ -369,7 +369,7 @@ const config: ElementsConfig = {
 
 ### tools?
 
-> `optional` **tools**: [`ToolsConfig`](ToolsConfig.md)
+> `optional` **tools?**: [`ToolsConfig`](ToolsConfig.md)
 
 The configuration for the tools.
 
@@ -393,7 +393,7 @@ const config: ElementsConfig = {
 
 ### contextCompaction?
 
-> `optional` **contextCompaction**: `ContextCompactionConfig`
+> `optional` **contextCompaction?**: `ContextCompactionConfig`
 
 Configuration for automatic conversation compaction when the estimated
 input size approaches the model's context window. Defaults are safe for
@@ -403,7 +403,7 @@ all models; override per-page to tighten or disable.
 
 ### history?
 
-> `optional` **history**: [`HistoryConfig`](HistoryConfig.md)
+> `optional` **history?**: [`HistoryConfig`](HistoryConfig.md)
 
 Configuration for chat history and thread persistence.
 When enabled, conversations are saved and the thread list is shown.
@@ -423,7 +423,7 @@ const config: ElementsConfig = {
 
 ### api?
 
-> `optional` **api**: `ApiConfig`
+> `optional` **api?**: `ApiConfig`
 
 The API configuration to use for the Elements library.
 
@@ -443,7 +443,7 @@ const config: ElementsConfig = {
 
 ### errorTracking?
 
-> `optional` **errorTracking**: [`ErrorTrackingConfigOption`](ErrorTrackingConfigOption.md)
+> `optional` **errorTracking?**: [`ErrorTrackingConfigOption`](ErrorTrackingConfigOption.md)
 
 Error tracking configuration.
 By default, errors are reported to help improve the Elements library.
@@ -462,7 +462,7 @@ const config: ElementsConfig = {
 
 ### thread?
 
-> `optional` **thread**: `ThreadConfig`
+> `optional` **thread?**: `ThreadConfig`
 
 Configuration for the chat thread display and behavior.
 

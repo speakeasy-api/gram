@@ -119,6 +119,12 @@ type htttpClientOptions struct {
 	allowedCIDRBlocks []*net.IPNet
 }
 
+// ClientOption configures a single [Policy.Client] / [Policy.PooledClient]
+// call. Values are produced by the With* helpers in this package (e.g.
+// [WithAllowedCIDRBlocks]); callers outside the package hold and pass them
+// but cannot construct new ones.
+type ClientOption = func(*htttpClientOptions)
+
 // WithOTelHTTPOptions appends additional [otelhttp.Option] values to the
 // OpenTelemetry transport instrumentation. Use this to configure trace
 // propagation, filters, or span name formatters on a per-client basis.

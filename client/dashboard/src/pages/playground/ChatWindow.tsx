@@ -23,6 +23,7 @@ import {
 import { HttpRoute } from "@/components/http-route";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { DEFAULT_MODEL } from "@/lib/models";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { extractStreamError } from "@/lib/chat-error";
 import { CustomChatTransport } from "@/lib/CustomChatTransport";
@@ -35,7 +36,7 @@ import {
 } from "@/lib/toolTypes";
 import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useChat } from "@ai-sdk/react";
-import { useInstance } from "@gram/client/react-query/index.js";
+import { useInstance } from "@gram/client/react-query/instance.js";
 import {
   jsonSchema,
   lastAssistantMessageIsCompleteWithToolCalls,
@@ -61,8 +62,8 @@ type CoreTool = {
 };
 
 const defaultModel = {
-  label: "Claude 4.5 Sonnet",
-  value: "anthropic/claude-sonnet-4.5",
+  label: "Claude Sonnet 5",
+  value: DEFAULT_MODEL,
 };
 
 export type ChatConfig = React.RefObject<{

@@ -5,13 +5,17 @@
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
 import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import * as components from "../models/components/index.js";
+import {
+  ListRiskResultsResult,
+  ListRiskResultsResult$inboundSchema,
+} from "../models/components/listriskresultsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,10 +24,17 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ServiceError,
+  ServiceError$inboundSchema,
+} from "../models/errors/serviceerror.js";
+import {
+  ListRiskResultsRequest,
+  ListRiskResultsRequest$outboundSchema,
+  ListRiskResultsSecurity,
+} from "../models/operations/listriskresults.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -35,13 +46,13 @@ import { Result } from "../types/fp.js";
  */
 export function riskResultsList(
   client: GramCore,
-  request?: operations.ListRiskResultsRequest | undefined,
-  security?: operations.ListRiskResultsSecurity | undefined,
+  request?: ListRiskResultsRequest | undefined,
+  security?: ListRiskResultsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ListRiskResultsResult,
-    | errors.ServiceError
+    ListRiskResultsResult,
+    | ServiceError
     | GramError
     | ResponseValidationError
     | ConnectionError
@@ -62,14 +73,14 @@ export function riskResultsList(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListRiskResultsRequest | undefined,
-  security?: operations.ListRiskResultsSecurity | undefined,
+  request?: ListRiskResultsRequest | undefined,
+  security?: ListRiskResultsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.ListRiskResultsResult,
-      | errors.ServiceError
+      ListRiskResultsResult,
+      | ServiceError
       | GramError
       | ResponseValidationError
       | ConnectionError
@@ -85,10 +96,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        z.optional(operations.ListRiskResultsRequest$outboundSchema),
-        value,
-      ),
+      z.parse(z.optional(ListRiskResultsRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -97,7 +105,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.results.list")();
+  const path = pathToFunc("/rpc/risk.listResults")();
 
   const query = encodeFormQuery({
     "category": payload?.category,
@@ -188,19 +196,8 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    errorCodes: [
-      "400",
-      "401",
-      "403",
-      "404",
-      "409",
-      "415",
-      "422",
-      "4XX",
-      "500",
-      "502",
-      "5XX",
-    ],
+    isErrorStatusCode: (statusCode: number) =>
+      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });
@@ -214,8 +211,8 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ListRiskResultsResult,
-    | errors.ServiceError
+    ListRiskResultsResult,
+    | ServiceError
     | GramError
     | ResponseValidationError
     | ConnectionError
@@ -225,12 +222,9 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.ListRiskResultsResult$inboundSchema),
-    M.jsonErr(
-      [400, 401, 403, 404, 409, 415, 422],
-      errors.ServiceError$inboundSchema,
-    ),
-    M.jsonErr([500, 502], errors.ServiceError$inboundSchema),
+    M.json(200, ListRiskResultsResult$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

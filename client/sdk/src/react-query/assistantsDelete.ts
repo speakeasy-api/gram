@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DeleteAssistantRequest,
+  DeleteAssistantSecurity,
+} from "../models/operations/deleteassistant.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type AssistantsDeleteMutationVariables = {
-  request: operations.DeleteAssistantRequest;
-  security?: operations.DeleteAssistantSecurity | undefined;
+  request: DeleteAssistantRequest;
+  security?: DeleteAssistantSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type AssistantsDeleteMutationData = void;
 
 export type AssistantsDeleteMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

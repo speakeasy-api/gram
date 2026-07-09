@@ -13,7 +13,7 @@ import (
 )
 
 const getBillingMetadata = `-- name: GetBillingMetadata :one
-SELECT id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunnelled_mcp_server_limit, created_at, updated_at
+SELECT id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 FROM billing_metadata
 WHERE organization_id = $1
 `
@@ -27,7 +27,7 @@ func (q *Queries) GetBillingMetadata(ctx context.Context, organizationID string)
 		&i.TumMonthlyTokenLimit,
 		&i.AlertEmail,
 		&i.BillingCycleAnchorDay,
-		&i.TunnelledMcpServerLimit,
+		&i.TunneledMcpServerLimit,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -49,15 +49,53 @@ func (q *Queries) GetEnabledServerCount(ctx context.Context, organizationID stri
 	return count, err
 }
 
-const listProjectIDsByOrganization = `-- name: ListProjectIDsByOrganization :many
+const listBillingCycleUsage = `-- name: ListBillingCycleUsage :many
+SELECT id, organization_id, cycle_start, cycle_end, tum_tokens, finalized_at, created_at, updated_at
+FROM billing_cycle_usage
+WHERE organization_id = $1
+ORDER BY cycle_start
+`
+
+func (q *Queries) ListBillingCycleUsage(ctx context.Context, organizationID string) ([]BillingCycleUsage, error) {
+	rows, err := q.db.Query(ctx, listBillingCycleUsage, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BillingCycleUsage
+	for rows.Next() {
+		var i BillingCycleUsage
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.CycleStart,
+			&i.CycleEnd,
+			&i.TumTokens,
+			&i.FinalizedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBillingProjectIDsByOrganization = `-- name: ListBillingProjectIDsByOrganization :many
 SELECT id
 FROM projects
 WHERE organization_id = $1
-  AND deleted IS FALSE
 `
 
-func (q *Queries) ListProjectIDsByOrganization(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listProjectIDsByOrganization, organizationID)
+// Intentionally includes soft-deleted projects: usage recorded while a
+// project was live is still billable, and deleting a project mid-cycle must
+// not shrink the cycle's tokens-under-management total.
+func (q *Queries) ListBillingProjectIDsByOrganization(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listBillingProjectIDsByOrganization, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -76,31 +114,107 @@ func (q *Queries) ListProjectIDsByOrganization(ctx context.Context, organization
 	return items, nil
 }
 
+const listFinalizedBillingCycleStarts = `-- name: ListFinalizedBillingCycleStarts :many
+SELECT cycle_start
+FROM billing_cycle_usage
+WHERE organization_id = $1
+  AND finalized_at IS NOT NULL
+`
+
+func (q *Queries) ListFinalizedBillingCycleStarts(ctx context.Context, organizationID string) ([]pgtype.Timestamptz, error) {
+	rows, err := q.db.Query(ctx, listFinalizedBillingCycleStarts, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Timestamptz
+	for rows.Next() {
+		var cycle_start pgtype.Timestamptz
+		if err := rows.Scan(&cycle_start); err != nil {
+			return nil, err
+		}
+		items = append(items, cycle_start)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertBillingCycleUsage = `-- name: UpsertBillingCycleUsage :exec
+INSERT INTO billing_cycle_usage (
+    organization_id
+  , cycle_start
+  , cycle_end
+  , tum_tokens
+  , finalized_at
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+)
+ON CONFLICT (organization_id, cycle_start) DO UPDATE SET
+    cycle_end = EXCLUDED.cycle_end
+  , tum_tokens = EXCLUDED.tum_tokens
+  , finalized_at = EXCLUDED.finalized_at
+  , updated_at = clock_timestamp()
+WHERE billing_cycle_usage.finalized_at IS NULL
+`
+
+type UpsertBillingCycleUsageParams struct {
+	OrganizationID string
+	CycleStart     pgtype.Timestamptz
+	CycleEnd       pgtype.Timestamptz
+	TumTokens      int64
+	FinalizedAt    pgtype.Timestamptz
+}
+
+// Finalized rows are the permanent billing record and must never be
+// overwritten by later refreshes.
+func (q *Queries) UpsertBillingCycleUsage(ctx context.Context, arg UpsertBillingCycleUsageParams) error {
+	_, err := q.db.Exec(ctx, upsertBillingCycleUsage,
+		arg.OrganizationID,
+		arg.CycleStart,
+		arg.CycleEnd,
+		arg.TumTokens,
+		arg.FinalizedAt,
+	)
+	return err
+}
+
 const upsertBillingMetadata = `-- name: UpsertBillingMetadata :one
 INSERT INTO billing_metadata (
     organization_id
   , tum_monthly_token_limit
   , alert_email
   , billing_cycle_anchor_day
+  , tunneled_mcp_server_limit
 ) VALUES (
     $1
   , $2
   , $3
   , $4
+  , $5
 )
 ON CONFLICT (organization_id) DO UPDATE SET
     tum_monthly_token_limit = EXCLUDED.tum_monthly_token_limit
   , alert_email = EXCLUDED.alert_email
   , billing_cycle_anchor_day = EXCLUDED.billing_cycle_anchor_day
+  -- Omitted (NULL) preserves the configured cap: callers that predate the
+  -- field (dashboard TUM form, older SDKs) must not silently clear it.
+  , tunneled_mcp_server_limit = COALESCE(EXCLUDED.tunneled_mcp_server_limit, billing_metadata.tunneled_mcp_server_limit)
   , updated_at = clock_timestamp()
-RETURNING id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunnelled_mcp_server_limit, created_at, updated_at
+RETURNING id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 `
 
 type UpsertBillingMetadataParams struct {
-	OrganizationID        string
-	TumMonthlyTokenLimit  pgtype.Int8
-	AlertEmail            pgtype.Text
-	BillingCycleAnchorDay int32
+	OrganizationID         string
+	TumMonthlyTokenLimit   pgtype.Int8
+	AlertEmail             pgtype.Text
+	BillingCycleAnchorDay  int32
+	TunneledMcpServerLimit pgtype.Int4
 }
 
 func (q *Queries) UpsertBillingMetadata(ctx context.Context, arg UpsertBillingMetadataParams) (BillingMetadatum, error) {
@@ -109,6 +223,7 @@ func (q *Queries) UpsertBillingMetadata(ctx context.Context, arg UpsertBillingMe
 		arg.TumMonthlyTokenLimit,
 		arg.AlertEmail,
 		arg.BillingCycleAnchorDay,
+		arg.TunneledMcpServerLimit,
 	)
 	var i BillingMetadatum
 	err := row.Scan(
@@ -117,7 +232,7 @@ func (q *Queries) UpsertBillingMetadata(ctx context.Context, arg UpsertBillingMe
 		&i.TumMonthlyTokenLimit,
 		&i.AlertEmail,
 		&i.BillingCycleAnchorDay,
-		&i.TunnelledMcpServerLimit,
+		&i.TunneledMcpServerLimit,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

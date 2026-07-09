@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  VerifyOnboardingHooksSetupRequest,
+  VerifyOnboardingHooksSetupSecurity,
+} from "../models/operations/verifyonboardinghookssetup.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type VerifyOnboardingHooksSetupQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type VerifyOnboardingHooksSetupQueryError =
  * Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
  */
 export function useVerifyOnboardingHooksSetup(
-  request?: operations.VerifyOnboardingHooksSetupRequest | undefined,
-  security?: operations.VerifyOnboardingHooksSetupSecurity | undefined,
+  request?: VerifyOnboardingHooksSetupRequest | undefined,
+  security?: VerifyOnboardingHooksSetupSecurity | undefined,
   options?: QueryHookOptions<
     VerifyOnboardingHooksSetupQueryData,
     VerifyOnboardingHooksSetupQueryError
@@ -88,8 +91,8 @@ export function useVerifyOnboardingHooksSetup(
  * Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
  */
 export function useVerifyOnboardingHooksSetupSuspense(
-  request?: operations.VerifyOnboardingHooksSetupRequest | undefined,
-  security?: operations.VerifyOnboardingHooksSetupSecurity | undefined,
+  request?: VerifyOnboardingHooksSetupRequest | undefined,
+  security?: VerifyOnboardingHooksSetupSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     VerifyOnboardingHooksSetupQueryData,
     VerifyOnboardingHooksSetupQueryError

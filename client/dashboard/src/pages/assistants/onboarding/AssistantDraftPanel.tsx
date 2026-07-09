@@ -12,11 +12,9 @@ import {
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
-import {
-  invalidateAllAssistantsList,
-  useAssistantsDeleteMutation,
-  useTriggers,
-} from "@gram/client/react-query/index.js";
+import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
+import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
+import { useTriggers } from "@gram/client/react-query/triggers.js";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -193,9 +191,13 @@ export function AssistantDraftPanel(): JSX.Element {
               </Section>
 
               <Section
-                title={`MCP Servers (${a.toolsets.length})`}
+                title={`MCP Servers (${
+                  a.toolsets.length + (a.mcpServers ?? []).length
+                })`}
                 empty="No MCP servers attached."
-                isEmpty={a.toolsets.length === 0}
+                isEmpty={
+                  a.toolsets.length === 0 && (a.mcpServers ?? []).length === 0
+                }
               >
                 <Stack gap={2}>
                   {a.toolsets.map((t) => (
@@ -219,6 +221,28 @@ export function AssistantDraftPanel(): JSX.Element {
                         className="text-muted-foreground h-4 w-4 shrink-0"
                       />
                     </routes.mcp.details.Link>
+                  ))}
+                  {(a.mcpServers ?? []).map((m) => (
+                    <routes.mcp.x.Link
+                      key={m.mcpServerSlug}
+                      params={[m.mcpServerSlug]}
+                      className="border-border hover:bg-surface-secondary flex items-center justify-between rounded-md border px-3 py-2 transition-colors hover:no-underline"
+                    >
+                      <Stack gap={0} className="min-w-0">
+                        <code className="truncate text-xs">
+                          {m.mcpServerSlug}
+                        </code>
+                        {m.environmentSlug && (
+                          <Type small muted className="text-[11px]">
+                            env: {m.environmentSlug}
+                          </Type>
+                        )}
+                      </Stack>
+                      <Icon
+                        name="chevron-right"
+                        className="text-muted-foreground h-4 w-4 shrink-0"
+                      />
+                    </routes.mcp.x.Link>
                   ))}
                 </Stack>
               </Section>

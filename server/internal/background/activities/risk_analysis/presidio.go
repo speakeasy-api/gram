@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/presidiofp"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // SourcePresidio is the source label written on every risk_results row
@@ -45,13 +46,13 @@ func DescribePresidioEntity(rawEntityType string) (string, string) {
 	if !ok {
 		desc = "Identified potentially sensitive personal information."
 	}
-	return guard(ruleID), desc
+	return scanners.GuardRuleID(ruleID), desc
 }
 
 // DescribePresidioDeadLetter returns the canonical (rule_id, description)
 // for a Presidio dead-letter sentinel row.
 func DescribePresidioDeadLetter() (string, string) {
-	return guard(DeadLetterRuleID), "Presidio could not analyze this message after exhausting its retry budget."
+	return scanners.GuardRuleID(DeadLetterRuleID), "Presidio could not analyze this message after exhausting its retry budget."
 }
 
 // presidioEntityDescriptions maps canonical Presidio rule ids to their
@@ -115,7 +116,7 @@ type PIIScanner interface {
 	// Permanent per-message failures surface as a single Finding with
 	// DeadLetterReason populated rather than as an error; the returned
 	// error is non-nil only on outer-ctx cancellation.
-	AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) ([][]Finding, error)
+	AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) ([][]scanners.Finding, error)
 }
 
 // DefaultPresidioScoreThreshold is the minimum recognizer confidence applied
@@ -195,7 +196,7 @@ type presidioResult struct {
 	Score      float64 `json:"score"`
 }
 
-// presidioEntityBlacklist is the set of Presidio entity types we refuse to
+// presidioEntityBlocklist is the set of Presidio entity types we refuse to
 // scan for regardless of what's stored on the policy.
 //
 //   - PERSON: Presidio's NER-backed person detection trips on common
@@ -208,23 +209,49 @@ type presidioResult struct {
 //     and any text containing "lic" via substring context boosting (e.g.
 //     "public", "duplicate"). See microsoft/presidio#1063 — open since 2023.
 //     Re-enable once the upstream regex is tightened.
-var presidioEntityBlacklist = map[string]struct{}{
+var presidioEntityBlocklist = map[string]struct{}{
 	"PERSON":            {},
 	"US_DRIVER_LICENSE": {},
 }
 
-// filterEntities removes blacklisted entity types from the caller's list.
+// findingLevelDropEntities is the subset of the blocklist that must never
+// surface even when a policy pins no entities. filterEntities trims the full
+// blocklist from a caller-pinned list, but a policy that pins nothing makes
+// Presidio scan its full default set, so those types have to be dropped after
+// the scan too (see convertPresidioFindings) or the blocklist is silently
+// bypassed for every default scan.
+//
+// Only US_DRIVER_LICENSE is here — its recognizer is pure noise
+// (microsoft/presidio#1063). PERSON is deliberately excluded: person-name
+// detection on unpinned scans is intended behaviour (see
+// TestPresidio_DetectsPersonName), so it is only trimmed from pinned lists.
+var findingLevelDropEntities = map[string]struct{}{
+	"US_DRIVER_LICENSE": {},
+}
+
+// isFindingLevelDropped reports whether a finding of this Presidio entity type
+// must be dropped regardless of how the scan was scoped.
+func isFindingLevelDropped(entityType string) bool {
+	_, drop := findingLevelDropEntities[entityType]
+	return drop
+}
+
+// filterEntities removes blocklisted entity types from the caller's list.
 // Returns nil unchanged so Presidio's default entity set still applies for
 // callers that didn't pin a list. Returns an empty (non-nil) slice when the
-// caller pinned a list and every entry was blacklisted, so AnalyzeBatch can
+// caller pinned a list and every entry was blocklisted, so AnalyzeBatch can
 // short-circuit instead of falling back to the unbounded default scan.
+//
+// This only bounds what Presidio scans for; the finding-level
+// isFindingLevelDropped gate in convertPresidioFindings is what guarantees
+// US_DRIVER_LICENSE never surfaces even from an unpinned (default) scan.
 func filterEntities(entities []string) []string {
 	if entities == nil {
 		return nil
 	}
 	out := make([]string, 0, len(entities))
 	for _, e := range entities {
-		if _, blocked := presidioEntityBlacklist[e]; blocked {
+		if _, blocked := presidioEntityBlocklist[e]; blocked {
 			continue
 		}
 		out = append(out, e)
@@ -350,7 +377,7 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 // Returns a non-nil error only on outer-ctx cancellation. Per-message
 // failures surface as DeadLetterReason sentinels so the rest of the batch
 // can still write.
-func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) (_ [][]Finding, err error) {
+func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) (_ [][]scanners.Finding, err error) {
 	n := len(texts)
 	if n == 0 {
 		return nil, nil
@@ -369,15 +396,15 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 		}
 	}
 	if allEmpty {
-		return make([][]Finding, n), nil
+		return make([][]scanners.Finding, n), nil
 	}
 
-	// Apply the entity blacklist at the lowest level so every caller (hook
+	// Apply the entity blocklist at the lowest level so every caller (hook
 	// scanner + Temporal drain activity) inherits the same policy.
 	filtered := filterEntities(entities)
 	if len(entities) > 0 && len(filtered) == 0 {
-		// Caller pinned only blacklisted entities; nothing to scan for.
-		return make([][]Finding, n), nil
+		// Caller pinned only blocklisted entities; nothing to scan for.
+		return make([][]scanners.Finding, n), nil
 	}
 	entities = filtered
 
@@ -392,7 +419,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 		span.End()
 	}()
 
-	results := make([][]Finding, n)
+	results := make([][]scanners.Finding, n)
 	var deadLetters atomic.Int64
 
 	var wg sync.WaitGroup
@@ -418,7 +445,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 // analyzeOne runs the retry loop for a single text. Returns the per-text
 // findings slice (real findings, or a single dead-letter sentinel) and a
 // boolean indicating whether the result was a dead letter.
-func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, entities []string, scoreThreshold float64, onProgress func()) ([]Finding, bool) {
+func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, entities []string, scoreThreshold float64, onProgress func()) ([]scanners.Finding, bool) {
 	if onProgress != nil {
 		onProgress()
 	}
@@ -494,7 +521,7 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 	}
 
 	ruleID, description := DescribePresidioDeadLetter()
-	return []Finding{{
+	return []scanners.Finding{{
 		Source:              SourcePresidio,
 		RuleID:              ruleID,
 		Description:         description,
@@ -504,17 +531,17 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 		Tags:                []string{},
 		Confidence:          0,
 		DeadLetterReason:    lastErr.Error(),
-		mcpLookupToolCallID: "",
-		spanGroupKey:        "",
-		field:               "",
-		path:                "",
+		McpLookupToolCallID: "",
+		SpanGroupKey:        "",
+		Field:               "",
+		Path:                "",
 	}}, true
 }
 
 // analyzeOnce issues a single POST /analyze for one text, gated by the
 // byte-budget semaphore. Returns Presidio's findings on 200, or an error
 // (HTTP failure, non-200, decode failure) on anything else. No retry.
-func (p *PresidioClient) analyzeOnce(ctx context.Context, text string, entities []string, scoreThreshold float64, onProgress func()) ([]Finding, error) {
+func (p *PresidioClient) analyzeOnce(ctx context.Context, text string, entities []string, scoreThreshold float64, onProgress func()) ([]scanners.Finding, error) {
 	cost := requestByteCost(text, p.throttleBudget)
 	if err := p.acquireThrottle(ctx, cost, onProgress); err != nil {
 		return nil, err
@@ -556,7 +583,7 @@ func (p *PresidioClient) acquireThrottle(ctx context.Context, cost int64, onProg
 	}
 }
 
-func (p *PresidioClient) analyze(ctx context.Context, text string, entities []string, scoreThreshold float64) (_ []Finding, err error) {
+func (p *PresidioClient) analyze(ctx context.Context, text string, entities []string, scoreThreshold float64) (_ []scanners.Finding, err error) {
 	ctx, span := p.tracer.Start(ctx, "presidio.analyze")
 	start := time.Now()
 	defer func() {
@@ -619,18 +646,26 @@ func (p *PresidioClient) analyze(ctx context.Context, text string, entities []st
 	return findings, nil
 }
 
-func convertPresidioFindings(text string, results []presidioResult) []Finding {
+func convertPresidioFindings(text string, results []presidioResult) []scanners.Finding {
 	// Presidio returns character (rune) offsets, not byte offsets.
 	// Convert to runes for correct slicing, then map back to byte positions.
 	runes := []rune(text)
 
-	findings := make([]Finding, 0, len(results))
+	findings := make([]scanners.Finding, 0, len(results))
 	for _, r := range results {
 		// Clamp offsets to valid rune range to prevent out-of-bounds panics.
 		start := max(0, min(r.Start, len(runes)))
 		end := max(start, min(r.End, len(runes)))
 
 		match := string(runes[start:end])
+
+		// Drop US_DRIVER_LICENSE regardless of how the scan was scoped.
+		// filterEntities only trims a caller-pinned list; an unpinned policy
+		// scans Presidio's full default set, so without this gate its noisy
+		// license-number findings surface (AIS-158).
+		if isFindingLevelDropped(r.EntityType) {
+			continue
+		}
 
 		if isPresidioFalsePositive(r.EntityType, match) {
 			continue
@@ -641,7 +676,7 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 		endByte := len(string(runes[:end]))
 
 		ruleID, description := DescribePresidioEntity(r.EntityType)
-		findings = append(findings, Finding{
+		findings = append(findings, scanners.Finding{
 			RuleID:              ruleID,
 			Description:         description,
 			Match:               match,
@@ -651,10 +686,10 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 			Source:              SourcePresidio,
 			Confidence:          r.Score,
 			DeadLetterReason:    "",
-			mcpLookupToolCallID: "",
-			spanGroupKey:        "",
-			field:               "",
-			path:                "",
+			McpLookupToolCallID: "",
+			SpanGroupKey:        "",
+			Field:               "",
+			Path:                "",
 		})
 	}
 	return findings
@@ -805,6 +840,6 @@ func isCancelErr(err error) bool {
 // StubPIIScanner is a no-op implementation for environments without Presidio.
 type StubPIIScanner struct{}
 
-func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([][]Finding, error) {
-	return make([][]Finding, len(texts)), nil
+func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([][]scanners.Finding, error) {
+	return make([][]scanners.Finding, len(texts)), nil
 }

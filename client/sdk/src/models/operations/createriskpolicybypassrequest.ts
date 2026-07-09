@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateShadowMCPApprovalRequestForm,
+  CreateShadowMCPApprovalRequestForm$Outbound,
+  CreateShadowMCPApprovalRequestForm$outboundSchema,
+} from "../components/createshadowmcpapprovalrequestform.js";
 
 export type CreateRiskPolicyBypassRequestSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,8 +19,7 @@ export type CreateRiskPolicyBypassRequestRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  createShadowMCPApprovalRequestForm:
-    components.CreateShadowMCPApprovalRequestForm;
+  createShadowMCPApprovalRequestForm: CreateShadowMCPApprovalRequestForm;
 };
 
 /** @internal */
@@ -54,7 +57,7 @@ export function createRiskPolicyBypassRequestSecurityToJSON(
 export type CreateRiskPolicyBypassRequestRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   CreateShadowMCPApprovalRequestForm:
-    components.CreateShadowMCPApprovalRequestForm$Outbound;
+    CreateShadowMCPApprovalRequestForm$Outbound;
 };
 
 /** @internal */
@@ -65,7 +68,7 @@ export const CreateRiskPolicyBypassRequestRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     createShadowMCPApprovalRequestForm:
-      components.CreateShadowMCPApprovalRequestForm$outboundSchema,
+      CreateShadowMCPApprovalRequestForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

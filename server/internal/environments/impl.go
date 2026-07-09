@@ -72,6 +72,22 @@ func NewService(logger *slog.Logger,
 	}
 }
 
+// requireProjectEnvironmentWrite gates on an environment:write grant when
+// there is no concrete environment id to check against: the project id stands
+// in as the check resource id (env and project UUIDs never collide) and the
+// project_id dimension confines the check to this project. A wildcard
+// env:write grant satisfies it; a single-env grant does not. Used for create
+// and for slug-miss paths in update/delete/clone, where authorizing before
+// reporting not-found keeps the response from becoming an existence oracle.
+func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, projectID uuid.UUID) error {
+	return s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeEnvironmentWrite,
+		ResourceKind: "environment",
+		ResourceID:   projectID.String(),
+		Dimensions:   map[string]string{"project_id": projectID.String()},
+	})
+}
+
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
@@ -88,7 +104,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectEnvironmentWrite(ctx, *authCtx.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -191,11 +207,32 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogEnvironmentSlug(string(payload.Slug)))
+
+	// Fetch the environment before the authz check so we can gate on its resource
+	// id. The lookup is project-bounded at the SQL layer.
+	environment, err := s.repo.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			if authErr := s.requireProjectEnvironmentWrite(ctx, *authCtx.ProjectID); authErr != nil {
+				return nil, authErr
+			}
+			return nil, oops.E(oops.CodeNotFound, err, "environment not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch environment").LogError(ctx, logger)
 	}
 
-	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogEnvironmentSlug(string(payload.Slug)))
+	if err := s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeEnvironmentWrite,
+		ResourceKind: "environment",
+		ResourceID:   environment.ID.String(),
+		Dimensions:   map[string]string{"project_id": authCtx.ProjectID.String()},
+	}); err != nil {
+		return nil, err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -205,14 +242,6 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 
 	er := s.repo.WithTx(dbtx)
 	entriesRepo := NewEnvironmentEntries(logger, dbtx, s.entries.enc, s.entries.mcpMetadataRepo)
-
-	environment, err := er.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
-		Slug:      conv.ToLower(payload.Slug),
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "environment not found").LogError(ctx, logger)
-	}
 
 	beforeEntries, err := entriesRepo.ListEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID, true)
 	if err != nil {
@@ -317,6 +346,9 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			if authErr := s.requireProjectEnvironmentWrite(ctx, *authCtx.ProjectID); authErr != nil {
+				return nil, authErr
+			}
 			return nil, oops.E(oops.CodeNotFound, err, "environment not found")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch source environment").LogError(ctx, logger)
@@ -418,11 +450,33 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return err
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogEnvironmentSlug(string(payload.Slug)))
+
+	// Fetch the environment before the authz check so we can gate on its resource
+	// id. Deletion is idempotent, so a missing environment is a no-op for
+	// authorized callers.
+	environment, err := s.repo.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			if authErr := s.requireProjectEnvironmentWrite(ctx, *authCtx.ProjectID); authErr != nil {
+				return authErr
+			}
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "failed to fetch environment").LogError(ctx, logger)
 	}
 
-	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogEnvironmentSlug(string(payload.Slug)))
+	if err := s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeEnvironmentWrite,
+		ResourceKind: "environment",
+		ResourceID:   environment.ID.String(),
+		Dimensions:   map[string]string{"project_id": authCtx.ProjectID.String()},
+	}); err != nil {
+		return err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {

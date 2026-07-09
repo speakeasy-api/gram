@@ -43,11 +43,13 @@ typescript:
       '@tanstack/react-query': 'catalog:'
       '@types/react': 'catalog:'
       '@types/react-dom': 'catalog:'
+      typescript: 'catalog:'
     peerDependencies: {}
   additionalPackageJSON:
     private: true
   additionalScripts: {}
   alwaysIncludeInboundAndOutbound: false
+  apiPromiseHelpers: false
   author: Speakeasy
   baseErrorName: GramError
   clientServerStatusCodesAsErrors: true
@@ -60,6 +62,7 @@ typescript:
   enableReactQuery: true
   enumFormat: union
   envVarPrefix: GRAM
+  eventStreamClassName: EventStream
   exportZodModelNamespace: false
   fixEnumNameSanitization: false
   flatAdditionalProperties: false
@@ -91,12 +94,14 @@ typescript:
   packageName: '@gram/client'
   preApplyUnionDiscriminators: true
   preserveModelFieldNames: false
+  privateIdentifierPrefix: '#'
+  requestExtras: false
   responseFormat: flat
   sseFlatResponse: false
   templateVersion: v2
   unionStrategy: left-to-right
   usageSDKInitImports: []
-  useIndexModules: true
-  useOxlint: false
+  useIndexModules: false
+  useOxlint: true
   useTsgo: false
   zodVersion: v4-mini

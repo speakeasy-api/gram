@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ValidateAPIKeyRequest,
+  ValidateAPIKeySecurity,
+} from "../models/operations/validateapikey.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ValidateAPIKeyQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ValidateAPIKeyQueryError =
  * Verify an api key
  */
 export function useValidateAPIKey(
-  request?: operations.ValidateAPIKeyRequest | undefined,
-  security?: operations.ValidateAPIKeySecurity | undefined,
+  request?: ValidateAPIKeyRequest | undefined,
+  security?: ValidateAPIKeySecurity | undefined,
   options?: QueryHookOptions<ValidateAPIKeyQueryData, ValidateAPIKeyQueryError>,
 ): UseQueryResult<ValidateAPIKeyQueryData, ValidateAPIKeyQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useValidateAPIKey(
  * Verify an api key
  */
 export function useValidateAPIKeySuspense(
-  request?: operations.ValidateAPIKeyRequest | undefined,
-  security?: operations.ValidateAPIKeySecurity | undefined,
+  request?: ValidateAPIKeyRequest | undefined,
+  security?: ValidateAPIKeySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ValidateAPIKeyQueryData,
     ValidateAPIKeyQueryError

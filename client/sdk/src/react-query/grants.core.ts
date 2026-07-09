@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListUserGrantsResult } from "../models/components/listusergrantsresult.js";
+import {
+  ListGrantsRequest,
+  ListGrantsSecurity,
+} from "../models/operations/listgrants.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GrantsQueryData = components.ListUserGrantsResult;
+export type GrantsQueryData = ListUserGrantsResult;
 
 export function prefetchGrants(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListGrantsRequest | undefined,
-  security?: operations.ListGrantsSecurity | undefined,
+  request?: ListGrantsRequest | undefined,
+  security?: ListGrantsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGrants(
 
 export function buildGrantsQuery(
   client$: GramCore,
-  request?: operations.ListGrantsRequest | undefined,
-  security?: operations.ListGrantsSecurity | undefined,
+  request?: ListGrantsRequest | undefined,
+  security?: ListGrantsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

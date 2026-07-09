@@ -53,6 +53,7 @@ type Service struct {
 	policyBypass       *risk.PolicyBypassEvaluator
 	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
+	serverURL          *url.URL
 	siteURL            *url.URL
 	jwtSecret          string
 }
@@ -61,15 +62,51 @@ type authorizer interface {
 	Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error)
 }
 
-// SessionMetadata contains validated session information from the Logs endpoint
+// SessionMetadata contains validated session information from the Logs endpoint.
+//
+// Beyond the Gram identity (UserID/GramOrgID/ProjectID) it carries the provider's
+// own account identity, normalized into provider-agnostic fields, so personal vs
+// team AI-account usage can be attributed and tracked. For Claude these map from
+// organization.id, user.account_uuid, user.account_id, and the per-device user.id.
 type SessionMetadata struct {
 	SessionID   string
 	ServiceName string
 	UserEmail   string
 	UserID      string
-	ClaudeOrgID string
-	GramOrgID   string
-	ProjectID   string
+	// Provider is the AI provider this session's account belongs to (e.g.
+	// "anthropic"). Empty for sources that don't track personal accounts yet.
+	Provider string
+	// ExternalOrgID is the provider's organization id (Claude organization.id):
+	// the personal-vs-team discriminator, distinct from GramOrgID.
+	ExternalOrgID string
+	// ExternalAccountUUID is the provider's stable per-account id (Claude
+	// user.account_uuid) — the user_accounts entity key.
+	ExternalAccountUUID string
+	// ExternalAccountID is the provider's tagged account id (Claude user.account_id).
+	ExternalAccountID string
+	// DeviceID is the per-device anonymous id (Claude user.id), stable across the
+	// accounts logged in on one machine — the device bridge that links a personal
+	// account to the employee learned from a team session on the same device.
+	DeviceID string
+	// AccountType is "team" or "personal" once classified, else empty.
+	AccountType string
+	// BillingMode is the admin-declared billing mode for the provider org this
+	// session's account belongs to (ai_integration_configs.billing_mode), resolved
+	// at attribution time. Well-known values: "metered", "flat_rate", "unknown";
+	// empty when no declaration covers the session's provider org. Cost figures
+	// are real spend only for "metered" — everything else is an estimate.
+	BillingMode string
+	// UserAccountID is the user_accounts row id for this session's account, set
+	// once the account entity has been upserted.
+	UserAccountID string
+	// ObservedUserEmail is the email the AI account itself reported (Claude
+	// OTEL user.email) — the value persisted on user_accounts.email. Kept
+	// separate from UserEmail, the authenticated actor, so adopting cached
+	// attribution never rewrites the canonical user identity; telemetry
+	// carries it as the gram.account_email attribute.
+	ObservedUserEmail string
+	GramOrgID         string
+	ProjectID         string
 }
 
 // HookSpecificOutput is the structure for hook-specific output in responses
@@ -110,6 +147,7 @@ func NewService(
 	policyBypass *risk.PolicyBypassEvaluator,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
+	serverURL *url.URL,
 	siteURL *url.URL,
 	jwtSecret string,
 ) *Service {
@@ -130,6 +168,7 @@ func NewService(
 		policyBypass:       policyBypass,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
+		serverURL:          serverURL,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,
 	}

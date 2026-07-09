@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { organizationsSendEnterpriseAdminOnboardingEmail } from "../funcs/organizationsSendEnterpriseAdminOnboardingEmail.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { SendEnterpriseAdminOnboardingEmailResult } from "../models/components/sendenterpriseadminonboardingemailresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,25 +20,28 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  SendEnterpriseAdminOnboardingEmailRequest,
+  SendEnterpriseAdminOnboardingEmailSecurity,
+} from "../models/operations/sendenterpriseadminonboardingemail.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type SendEnterpriseAdminOnboardingEmailMutationVariables = {
-  request: operations.SendEnterpriseAdminOnboardingEmailRequest;
-  security?: operations.SendEnterpriseAdminOnboardingEmailSecurity | undefined;
+  request: SendEnterpriseAdminOnboardingEmailRequest;
+  security?: SendEnterpriseAdminOnboardingEmailSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type SendEnterpriseAdminOnboardingEmailMutationData =
-  components.SendEnterpriseAdminOnboardingEmailResult;
+  SendEnterpriseAdminOnboardingEmailResult;
 
 export type SendEnterpriseAdminOnboardingEmailMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -52,7 +55,7 @@ export type SendEnterpriseAdminOnboardingEmailMutationError =
  * sendEnterpriseAdminOnboardingEmail organizations
  *
  * @remarks
- * Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the super-admin Onboarding tab.
+ * Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the Platform Admin onboarding tools.
  */
 export function useSendEnterpriseAdminOnboardingEmailMutation(
   options?: MutationHookOptions<

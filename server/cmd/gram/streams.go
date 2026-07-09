@@ -29,11 +29,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ping"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
@@ -55,9 +56,9 @@ func newStreamsCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
 		},
 		&cli.StringFlag{
-			Name:     "database-url",
-			Usage:    "Database URL",
-			EnvVars:  []string{"GRAM_DATABASE_URL"},
+			Name:     "database-read-replica-url",
+			Usage:    "Database read replica URL",
+			EnvVars:  []string{"GRAM_DATABASE_READ_REPLICA_URL"},
 			Required: true,
 		},
 		&cli.BoolFlag{
@@ -149,18 +150,13 @@ func newStreamsCommand() *cli.Command {
 			}
 			_ = guardianPolicy
 
-			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
+			replicaDB, err := newDBClient(ctx, logger, meterProvider, c.String("database-read-replica-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
-			// Ping the database to ensure connectivity
-			if err := db.Ping(ctx); err != nil {
-				logger.ErrorContext(ctx, "failed to ping database", attr.SlogError(err))
-				return fmt.Errorf("database ping failed: %w", err)
-			}
-			defer db.Close()
+			defer replicaDB.Close()
 
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
@@ -209,10 +205,16 @@ func newStreamsCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, findingsPub.Stop)
 
-			gitleaksHandler, err := gitleaks.NewHandler(logger, findingsPub)
+			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub)
+
+			// Custom-rules shadow-mode subscriber: loads a project's selected CEL
+			// detection rules from the read replica (caching their compilation) and
+			// publishes any matches into the shared Finding topic.
+			scanner, err := customruleanalyzer.NewScanner(replicaDB)
 			if err != nil {
-				return fmt.Errorf("failed to create gitleaks handler: %w", err)
+				return fmt.Errorf("failed to create custom rules scanner: %w", err)
 			}
+			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub)
 
 			{
 				controlServer := control.Server{
@@ -223,7 +225,7 @@ func newStreamsCommand() *cli.Command {
 
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
 					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{},
-					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
+					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "read-replica", Resource: replicaDB}},
 					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
 					[]*o11y.NamedResource[client.Client]{},
 				))
@@ -259,6 +261,7 @@ func newStreamsCommand() *cli.Command {
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, pingLogLevel))
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
+				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
 
 				mustReceiveBatch(
 					rg, &riskv1.Finding{}, &riskv1.FindingBQWriter{},

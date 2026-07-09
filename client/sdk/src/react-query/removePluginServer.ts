@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  RemovePluginServerRequest,
+  RemovePluginServerSecurity,
+} from "../models/operations/removepluginserver.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RemovePluginServerMutationVariables = {
-  request: operations.RemovePluginServerRequest;
-  security?: operations.RemovePluginServerSecurity | undefined;
+  request: RemovePluginServerRequest;
+  security?: RemovePluginServerSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type RemovePluginServerMutationData = void;
 
 export type RemovePluginServerMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

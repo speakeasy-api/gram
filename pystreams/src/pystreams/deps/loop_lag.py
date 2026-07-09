@@ -28,7 +28,7 @@ _meter = metrics.get_meter("github.com/speakeasy-api/gram/pystreams")
 
 # Distribution of event-loop scheduling delay, in seconds.
 _lag_histogram = _meter.create_histogram(
-    "pystreams.event_loop.lag",
+    "python.event_loop.lag",
     unit="s",
     description=(
         "Delay between when a loop timer was scheduled to fire and when the "

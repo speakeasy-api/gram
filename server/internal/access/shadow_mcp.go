@@ -128,7 +128,7 @@ func (s *Service) CreateShadowMCPApprovalRequest(ctx context.Context, payload *g
 
 	summary := shadowMCPSummaryFromClaims(claims)
 	now := time.Now().UTC()
-	request, wasCreated, err := s.accessStore.UpsertRequest(ctx, accesscontrol.AccessApprovalRequest{
+	request, wasCreated, err := s.upsertAccessRequest(ctx, accesscontrol.AccessApprovalRequest{
 		ID:                   "",
 		OrganizationID:       ac.ActiveOrganizationID,
 		ProjectID:            projectID.String(),

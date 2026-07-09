@@ -18,8 +18,70 @@ import { toolsetsSetUserSessionIssuer } from "../funcs/toolsetsSetUserSessionIss
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
 import { toolsetsUpdateOAuthProxyServer } from "../funcs/toolsetsUpdateOAuthProxyServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListToolFiltersResult } from "../models/components/listtoolfiltersresult.js";
+import { ListToolsetsResult } from "../models/components/listtoolsetsresult.js";
+import { ListToolsetSummariesResult } from "../models/components/listtoolsetsummariesresult.js";
+import { Toolset } from "../models/components/toolset.js";
+import {
+  AddExternalOAuthServerRequest,
+  AddExternalOAuthServerSecurity,
+} from "../models/operations/addexternaloauthserver.js";
+import {
+  AddOAuthProxyServerRequest,
+  AddOAuthProxyServerSecurity,
+} from "../models/operations/addoauthproxyserver.js";
+import {
+  CheckMCPSlugAvailabilityRequest,
+  CheckMCPSlugAvailabilitySecurity,
+} from "../models/operations/checkmcpslugavailability.js";
+import {
+  CloneToolsetRequest,
+  CloneToolsetSecurity,
+} from "../models/operations/clonetoolset.js";
+import {
+  CreateToolsetRequest,
+  CreateToolsetSecurity,
+} from "../models/operations/createtoolset.js";
+import {
+  DeleteToolsetRequest,
+  DeleteToolsetSecurity,
+} from "../models/operations/deletetoolset.js";
+import {
+  GetToolsetRequest,
+  GetToolsetSecurity,
+} from "../models/operations/gettoolset.js";
+import {
+  ListToolsetsRequest,
+  ListToolsetsSecurity,
+} from "../models/operations/listtoolsets.js";
+import {
+  ListToolsetsForOrgRequest,
+  ListToolsetsForOrgSecurity,
+} from "../models/operations/listtoolsetsfororg.js";
+import {
+  ListToolsetToolFiltersRequest,
+  ListToolsetToolFiltersSecurity,
+} from "../models/operations/listtoolsettoolfilters.js";
+import {
+  RemoveOAuthServerRequest,
+  RemoveOAuthServerSecurity,
+} from "../models/operations/removeoauthserver.js";
+import {
+  SetToolsetToolVariationsGroupRequest,
+  SetToolsetToolVariationsGroupSecurity,
+} from "../models/operations/settoolsettoolvariationsgroup.js";
+import {
+  SetToolsetUserSessionIssuerRequest,
+  SetToolsetUserSessionIssuerSecurity,
+} from "../models/operations/settoolsetusersessionissuer.js";
+import {
+  UpdateOAuthProxyServerRequest,
+  UpdateOAuthProxyServerSecurity,
+} from "../models/operations/updateoauthproxyserver.js";
+import {
+  UpdateToolsetRequest,
+  UpdateToolsetSecurity,
+} from "../models/operations/updatetoolset.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Toolsets extends ClientSDK {
@@ -30,10 +92,10 @@ export class Toolsets extends ClientSDK {
    * Associate an external OAuth server with a toolset
    */
   async addExternalOAuthServer(
-    request: operations.AddExternalOAuthServerRequest,
-    security?: operations.AddExternalOAuthServerSecurity | undefined,
+    request: AddExternalOAuthServerRequest,
+    security?: AddExternalOAuthServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Toolset> {
+  ): Promise<Toolset> {
     return unwrapAsync(toolsetsAddExternalOAuthServer(
       this,
       request,
@@ -49,10 +111,10 @@ export class Toolsets extends ClientSDK {
    * Associate an OAuth proxy server with a toolset (admin only)
    */
   async addOAuthProxyServer(
-    request: operations.AddOAuthProxyServerRequest,
-    security?: operations.AddOAuthProxyServerSecurity | undefined,
+    request: AddOAuthProxyServerRequest,
+    security?: AddOAuthProxyServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Toolset> {
+  ): Promise<Toolset> {
     return unwrapAsync(toolsetsAddOAuthProxyServer(
       this,
       request,
@@ -68,8 +130,8 @@ export class Toolsets extends ClientSDK {
    * Check if a MCP slug is available
    */
   async checkMCPSlugAvailability(
-    request: operations.CheckMCPSlugAvailabilityRequest,
-    security?: operations.CheckMCPSlugAvailabilitySecurity | undefined,
+    request: CheckMCPSlugAvailabilityRequest,
+    security?: CheckMCPSlugAvailabilitySecurity | undefined,
     options?: RequestOptions,
   ): Promise<boolean> {
     return unwrapAsync(toolsetsCheckMCPSlugAvailability(
@@ -87,10 +149,10 @@ export class Toolsets extends ClientSDK {
    * Clone an existing toolset with a new name
    */
   async cloneBySlug(
-    request: operations.CloneToolsetRequest,
-    security?: operations.CloneToolsetSecurity | undefined,
+    request: CloneToolsetRequest,
+    security?: CloneToolsetSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Toolset> {
+  ): Promise<Toolset> {
     return unwrapAsync(toolsetsCloneBySlug(
       this,
       request,
@@ -106,10 +168,10 @@ export class Toolsets extends ClientSDK {
    * Create a new toolset with associated tools
    */
   async create(
-    request: operations.CreateToolsetRequest,
-    security?: operations.CreateToolsetSecurity | undefined,
+    request: CreateToolsetRequest,
+    security?: CreateToolsetSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Toolset> {
+  ): Promise<Toolset> {
     return unwrapAsync(toolsetsCreate(
       this,
       request,
@@ -125,8 +187,8 @@ export class Toolsets extends ClientSDK {
    * Delete a toolset by its ID
    */
   async deleteBySlug(
-    request: operations.DeleteToolsetRequest,
-    security?: operations.DeleteToolsetSecurity | undefined,
+    request: DeleteToolsetRequest,
+    security?: DeleteToolsetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(toolsetsDeleteBySlug(
@@ -144,10 +206,10 @@ export class Toolsets extends ClientSDK {
    * Get detailed information about a toolset including full HTTP tool definitions
    */
   async getBySlug(
-    request: operations.GetToolsetRequest,
-    security?: operations.GetToolsetSecurity | undefined,
+    request: GetToolsetRequest,
+    security?: GetToolsetSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Toolset> {
+  ): Promise<Toolset> {
     return unwrapAsync(toolsetsGetBySlug(
       this,
       request,
@@ -163,10 +225,10 @@ export class Toolsets extends ClientSDK {
    * List all toolsets for a project
    */
   async list(
-    request?: operations.ListToolsetsRequest | undefined,
-    security?: operations.ListToolsetsSecurity | undefined,
+    request?: ListToolsetsRequest | undefined,
+    security?: ListToolsetsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListToolsetsResult> {
+  ): Promise<ListToolsetsResult> {
     return unwrapAsync(toolsetsList(
       this,
       request,
@@ -182,10 +244,10 @@ export class Toolsets extends ClientSDK {
    * List all toolsets across the organization (summary view)
    */
   async listForOrg(
-    request?: operations.ListToolsetsForOrgRequest | undefined,
-    security?: operations.ListToolsetsForOrgSecurity | undefined,
+    request?: ListToolsetsForOrgRequest | undefined,
+    security?: ListToolsetsForOrgSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListToolsetSummariesResult> {
+  ): Promise<ListToolsetSummariesResult> {
     return unwrapAsync(toolsetsListForOrg(
       this,
       request,
@@ -201,10 +263,10 @@ export class Toolsets extends ClientSDK {
    * List the tool filter scopes (tags) available on a toolset-backed MCP server and the tools under each, including tools excluded from all filters. Read-only; reflects the explicit tool variations group configured on the toolset, deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
    */
   async listToolFilters(
-    request: operations.ListToolsetToolFiltersRequest,
-    security?: operations.ListToolsetToolFiltersSecurity | undefined,
+    request: ListToolsetToolFiltersRequest,
+    security?: ListToolsetToolFiltersSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListToolFiltersResult> {
+  ): Promise<ListToolFiltersResult> {
     return unwrapAsync(toolsetsListToolFilters(
       this,
       request,
@@ -220,10 +282,10 @@ export class Toolsets extends ClientSDK {
    * Remove OAuth server association from a toolset
    */
   async removeOAuthServer(
-    request: operations.RemoveOAuthServerRequest,
-    security?: operations.RemoveOAuthServerSecurity | undefined,
+    request: RemoveOAuthServerRequest,
+    security?: RemoveOAuthServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Toolset> {
+  ): Promise<Toolset> {
     return unwrapAsync(toolsetsRemoveOAuthServer(
       this,
       request,
@@ -239,10 +301,10 @@ export class Toolsets extends ClientSDK {
    * Assign a tool variations group to a toolset to enable MCP tool filtering (or pass null to disable). The group must already exist in the caller's project.
    */
   async setToolVariationsGroup(
-    request: operations.SetToolsetToolVariationsGroupRequest,
-    security?: operations.SetToolsetToolVariationsGroupSecurity | undefined,
+    request: SetToolsetToolVariationsGroupRequest,
+    security?: SetToolsetToolVariationsGroupSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Toolset> {
+  ): Promise<Toolset> {
     return unwrapAsync(toolsetsSetToolVariationsGroup(
       this,
       request,
@@ -258,10 +320,10 @@ export class Toolsets extends ClientSDK {
    * Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
    */
   async setUserSessionIssuer(
-    request: operations.SetToolsetUserSessionIssuerRequest,
-    security?: operations.SetToolsetUserSessionIssuerSecurity | undefined,
+    request: SetToolsetUserSessionIssuerRequest,
+    security?: SetToolsetUserSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Toolset> {
+  ): Promise<Toolset> {
     return unwrapAsync(toolsetsSetUserSessionIssuer(
       this,
       request,
@@ -277,10 +339,10 @@ export class Toolsets extends ClientSDK {
    * Update a toolset's properties including name, description, and HTTP tools
    */
   async updateBySlug(
-    request: operations.UpdateToolsetRequest,
-    security?: operations.UpdateToolsetSecurity | undefined,
+    request: UpdateToolsetRequest,
+    security?: UpdateToolsetSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Toolset> {
+  ): Promise<Toolset> {
     return unwrapAsync(toolsetsUpdateBySlug(
       this,
       request,
@@ -296,10 +358,10 @@ export class Toolsets extends ClientSDK {
    * Update an existing OAuth proxy server associated with a toolset
    */
   async updateOAuthProxyServer(
-    request: operations.UpdateOAuthProxyServerRequest,
-    security?: operations.UpdateOAuthProxyServerSecurity | undefined,
+    request: UpdateOAuthProxyServerRequest,
+    security?: UpdateOAuthProxyServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Toolset> {
+  ): Promise<Toolset> {
     return unwrapAsync(toolsetsUpdateOAuthProxyServer(
       this,
       request,

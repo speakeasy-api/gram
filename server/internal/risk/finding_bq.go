@@ -79,6 +79,7 @@ func (w *FindingBQWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 		createdAt, err := time.Parse(time.RFC3339, rawCreatedAt)
 		if err != nil {
 			logger.ErrorContext(ctx, "finding has invalid rfc3339 timestamp", attr.SlogError(err), attr.SlogValueString(rawCreatedAt))
+			w.metrics.RecordFindingSkipped(ctx, "invalid_timestamp")
 			continue
 		}
 

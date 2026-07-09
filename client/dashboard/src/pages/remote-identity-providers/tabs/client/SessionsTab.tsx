@@ -2,13 +2,13 @@ import { RequireScope } from "@/components/require-scope";
 import { DotRow } from "@/components/ui/dot-row";
 import { DotTable } from "@/components/ui/dot-table";
 import { Type } from "@/components/ui/type";
-import type { RemoteSession } from "@gram/client/models/components";
+import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import {
   invalidateAllOrganizationRemoteSessionClientSessions,
   useOrganizationRemoteSessionClientSessions,
-  useRefreshOrganizationRemoteSessionMutation,
-  useRevokeOrganizationRemoteSessionMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/organizationRemoteSessionClientSessions.js";
+import { useRefreshOrganizationRemoteSessionMutation } from "@gram/client/react-query/refreshOrganizationRemoteSession.js";
+import { useRevokeOrganizationRemoteSessionMutation } from "@gram/client/react-query/revokeOrganizationRemoteSession.js";
 import {
   Button,
   DropdownMenu,
@@ -141,7 +141,7 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
                             onClick={() =>
                               refresh.mutate({
                                 request: {
-                                  riskIDRequestBody: { id: session.id },
+                                  id: session.id,
                                 },
                               })
                             }
@@ -153,7 +153,7 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
                           onClick={() =>
                             revoke.mutate({
                               request: {
-                                riskIDRequestBody: { id: session.id },
+                                id: session.id,
                               },
                             })
                           }

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateAssistantForm,
+  CreateAssistantForm$Outbound,
+  CreateAssistantForm$outboundSchema,
+} from "../components/createassistantform.js";
 
 export type CreateAssistantSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -20,7 +24,7 @@ export type CreateAssistantRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  createAssistantForm: components.CreateAssistantForm;
+  createAssistantForm: CreateAssistantForm;
 };
 
 /** @internal */
@@ -58,7 +62,7 @@ export function createAssistantSecurityToJSON(
 export type CreateAssistantRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  CreateAssistantForm: components.CreateAssistantForm$Outbound;
+  CreateAssistantForm: CreateAssistantForm$Outbound;
 };
 
 /** @internal */
@@ -69,7 +73,7 @@ export const CreateAssistantRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    createAssistantForm: components.CreateAssistantForm$outboundSchema,
+    createAssistantForm: CreateAssistantForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

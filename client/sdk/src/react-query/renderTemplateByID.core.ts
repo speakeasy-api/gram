@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { templatesRenderByID } from "../funcs/templatesRenderByID.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RenderTemplateResult } from "../models/components/rendertemplateresult.js";
+import {
+  RenderTemplateByIDRequest,
+  RenderTemplateByIDSecurity,
+} from "../models/operations/rendertemplatebyid.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RenderTemplateByIDQueryData = components.RenderTemplateResult;
+export type RenderTemplateByIDQueryData = RenderTemplateResult;
 
 export function prefetchRenderTemplateByID(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.RenderTemplateByIDRequest,
-  security?: operations.RenderTemplateByIDSecurity | undefined,
+  request: RenderTemplateByIDRequest,
+  security?: RenderTemplateByIDSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchRenderTemplateByID(
 
 export function buildRenderTemplateByIDQuery(
   client$: GramCore,
-  request: operations.RenderTemplateByIDRequest,
-  security?: operations.RenderTemplateByIDSecurity | undefined,
+  request: RenderTemplateByIDRequest,
+  security?: RenderTemplateByIDSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

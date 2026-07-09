@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListMCPRegistriesRequest,
+  ListMCPRegistriesSecurity,
+} from "../models/operations/listmcpregistries.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListMCPRegistriesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListMCPRegistriesQueryError =
  * List all MCP registries (admin only)
  */
 export function useListMCPRegistries(
-  request?: operations.ListMCPRegistriesRequest | undefined,
-  security?: operations.ListMCPRegistriesSecurity | undefined,
+  request?: ListMCPRegistriesRequest | undefined,
+  security?: ListMCPRegistriesSecurity | undefined,
   options?: QueryHookOptions<
     ListMCPRegistriesQueryData,
     ListMCPRegistriesQueryError
@@ -85,8 +88,8 @@ export function useListMCPRegistries(
  * List all MCP registries (admin only)
  */
 export function useListMCPRegistriesSuspense(
-  request?: operations.ListMCPRegistriesRequest | undefined,
-  security?: operations.ListMCPRegistriesSecurity | undefined,
+  request?: ListMCPRegistriesRequest | undefined,
+  security?: ListMCPRegistriesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListMCPRegistriesQueryData,
     ListMCPRegistriesQueryError

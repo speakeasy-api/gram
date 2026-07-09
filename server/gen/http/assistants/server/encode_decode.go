@@ -1765,6 +1765,18 @@ func marshalTypesAssistantToAssistantResponseBody(v *types.Assistant) *Assistant
 	} else {
 		res.Toolsets = []*AssistantToolsetRefResponseBody{}
 	}
+	if v.McpServers != nil {
+		res.McpServers = make([]*AssistantMCPServerRefResponseBody, len(v.McpServers))
+		for i, val := range v.McpServers {
+			if val == nil {
+				res.McpServers[i] = nil
+				continue
+			}
+			res.McpServers[i] = marshalTypesAssistantMCPServerRefToAssistantMCPServerRefResponseBody(val)
+		}
+	} else {
+		res.McpServers = []*AssistantMCPServerRefResponseBody{}
+	}
 
 	return res
 }
@@ -1781,6 +1793,19 @@ func marshalTypesAssistantToolsetRefToAssistantToolsetRefResponseBody(v *types.A
 	return res
 }
 
+// marshalTypesAssistantMCPServerRefToAssistantMCPServerRefResponseBody builds
+// a value of type *AssistantMCPServerRefResponseBody from a value of type
+// *types.AssistantMCPServerRef.
+func marshalTypesAssistantMCPServerRefToAssistantMCPServerRefResponseBody(v *types.AssistantMCPServerRef) *AssistantMCPServerRefResponseBody {
+	res := &AssistantMCPServerRefResponseBody{
+		McpServerSlug:   v.McpServerSlug,
+		EnvironmentSlug: v.EnvironmentSlug,
+		EndpointSlug:    v.EndpointSlug,
+	}
+
+	return res
+}
+
 // unmarshalAssistantToolsetRefRequestBodyToTypesAssistantToolsetRef builds a
 // value of type *types.AssistantToolsetRef from a value of type
 // *AssistantToolsetRefRequestBody.
@@ -1788,6 +1813,22 @@ func unmarshalAssistantToolsetRefRequestBodyToTypesAssistantToolsetRef(v *Assist
 	res := &types.AssistantToolsetRef{
 		ToolsetSlug:     *v.ToolsetSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
+	}
+
+	return res
+}
+
+// unmarshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef builds
+// a value of type *types.AssistantMCPServerRef from a value of type
+// *AssistantMCPServerRefRequestBody.
+func unmarshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef(v *AssistantMCPServerRefRequestBody) *types.AssistantMCPServerRef {
+	if v == nil {
+		return nil
+	}
+	res := &types.AssistantMCPServerRef{
+		McpServerSlug:   *v.McpServerSlug,
+		EnvironmentSlug: v.EnvironmentSlug,
+		EndpointSlug:    v.EndpointSlug,
 	}
 
 	return res

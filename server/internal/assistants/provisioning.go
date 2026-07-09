@@ -31,8 +31,8 @@ var managedAssistantInstructions string
 
 const (
 	// managedAssistantModel is the default model for the platform-managed
-	// assistant. Upgraded to Opus 4.7 for the Assistants beta (DNO-264).
-	managedAssistantModel = "anthropic/claude-opus-4.7"
+	// assistant. Defaulted to Sonnet 5, matching the in-app default chat model.
+	managedAssistantModel = "anthropic/claude-sonnet-5"
 
 	// Schema defaults for the assistants table, applied explicitly so the
 	// managed assistant's intent is visible at the call site.
@@ -115,18 +115,16 @@ func (s *ServiceCore) EnableManagedAssistant(
 }
 
 // GetManagedAssistant resolves a project's managed assistant and hydrates its
-// toolsets. Returns pgx.ErrNoRows when the feature isn't enabled for the project.
+// tool sources. Returns pgx.ErrNoRows when the feature isn't enabled for the project.
 func (s *ServiceCore) GetManagedAssistant(ctx context.Context, projectID uuid.UUID) (assistantRecord, error) {
 	row, err := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, projectID)
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("get managed assistant: %w", err)
 	}
 	record := assistantRecordFromManagedRow(row)
-	refs, err := s.loadAssistantToolsets(ctx, projectID, []uuid.UUID{record.ID})
-	if err != nil {
+	if err := s.hydrateAssistantToolSources(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
-	record.Toolsets = refs[record.ID]
 	return record, nil
 }
 
@@ -283,6 +281,7 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 		Model:           row.Model,
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
+		MCPServers:      nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,

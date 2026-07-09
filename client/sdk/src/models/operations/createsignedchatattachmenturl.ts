@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateSignedChatAttachmentURLForm2,
+  CreateSignedChatAttachmentURLForm2$Outbound,
+  CreateSignedChatAttachmentURLForm2$outboundSchema,
+} from "../components/createsignedchatattachmenturlform2.js";
 
 export type CreateSignedChatAttachmentURLSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -44,8 +48,7 @@ export type CreateSignedChatAttachmentURLRequest = {
    * Chat Sessions token header
    */
   gramChatSession?: string | undefined;
-  createSignedChatAttachmentURLForm2:
-    components.CreateSignedChatAttachmentURLForm2;
+  createSignedChatAttachmentURLForm2: CreateSignedChatAttachmentURLForm2;
 };
 
 /** @internal */
@@ -210,7 +213,7 @@ export type CreateSignedChatAttachmentURLRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
   CreateSignedChatAttachmentURLForm2:
-    components.CreateSignedChatAttachmentURLForm2$Outbound;
+    CreateSignedChatAttachmentURLForm2$Outbound;
 };
 
 /** @internal */
@@ -224,7 +227,7 @@ export const CreateSignedChatAttachmentURLRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
     createSignedChatAttachmentURLForm2:
-      components.CreateSignedChatAttachmentURLForm2$outboundSchema,
+      CreateSignedChatAttachmentURLForm2$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

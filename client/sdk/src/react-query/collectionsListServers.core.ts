@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { collectionsListServers } from "../funcs/collectionsListServers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListServersResponseBody } from "../models/components/listserversresponsebody.js";
+import {
+  ListCollectionServersRequest,
+  ListCollectionServersSecurity,
+} from "../models/operations/listcollectionservers.js";
 import { unwrapAsync } from "../types/fp.js";
-export type CollectionsListServersQueryData =
-  components.ListServersResponseBody;
+export type CollectionsListServersQueryData = ListServersResponseBody;
 
 export function prefetchCollectionsListServers(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListCollectionServersRequest,
-  security?: operations.ListCollectionServersSecurity | undefined,
+  request: ListCollectionServersRequest,
+  security?: ListCollectionServersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchCollectionsListServers(
 
 export function buildCollectionsListServersQuery(
   client$: GramCore,
-  request: operations.ListCollectionServersRequest,
-  security?: operations.ListCollectionServersSecurity | undefined,
+  request: ListCollectionServersRequest,
+  security?: ListCollectionServersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

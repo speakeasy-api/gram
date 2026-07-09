@@ -9,12 +9,10 @@ import {
   useTelemetry,
 } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
-import {
-  useDeleteEnvironmentMutation,
-  useListToolsets,
-  useToolset,
-  useUpdateEnvironmentMutation,
-} from "@gram/client/react-query/index.js";
+import { useDeleteEnvironmentMutation } from "@gram/client/react-query/deleteEnvironment.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { useToolset } from "@gram/client/react-query/toolset.js";
+import { useUpdateEnvironmentMutation } from "@gram/client/react-query/updateEnvironment.js";
 import { AlertCircle, Eye, EyeOff, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
@@ -173,7 +171,9 @@ function EnvironmentPageInner() {
   const navigate = useNavigate();
   const telemetry = useTelemetry();
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("project:write");
+  const canWrite = hasScope("environment:write");
+  // "Fill for MCP Server" links an environment to a toolset, which remains project:write.
+  const canLinkToolset = hasScope("project:write");
 
   const [toolsetDialogOpen, setToolsetDialogOpen] = useState(false);
   const [selectedToolsetSlug, setSelectedToolsetSlug] = useState<string>("");
@@ -470,7 +470,7 @@ function EnvironmentPageInner() {
         <Page.Section>
           <Page.Section.Title>{environment.name}</Page.Section.Title>
           <Page.Section.CTA>
-            <RequireScope scope="project:write" level="component">
+            <RequireScope scope="environment:write" level="component">
               <Button
                 onClick={handleAddNewEntry}
                 disabled={isSaving || isAddingNew}
@@ -485,7 +485,7 @@ function EnvironmentPageInner() {
                 label: "Fill for MCP Server",
                 onClick: () => setToolsetDialogOpen(true),
                 icon: "copy-plus",
-                disabled: !canWrite,
+                disabled: !canLinkToolset,
               },
               {
                 label: "Delete Environment",

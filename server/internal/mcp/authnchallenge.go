@@ -237,23 +237,24 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	return contextvalues.SetAuthContext(ctx, authCtx), &subject, true
 }
 
+// AuthenticateChallengeHeader builds the WWW-Authenticate value (RFC 9728
+// §5.3): `Bearer resource_metadata="<protectedResourceURL>"`. The remote-MCP
+// proxy also uses it to replace upstream challenges on relayed 401/403
+// responses.
+func AuthenticateChallengeHeader(protectedResourceURL string) string {
+	return fmt.Sprintf(`Bearer resource_metadata="%s"`, protectedResourceURL)
+}
+
 // WriteAuthenticateChallenge sets the WWW-Authenticate header and returns an
 // oops.CodeUnauthorized error. The 401 status and response body come from
 // the oops error middleware; the helper owns only the header.
-//
-// Header shape (RFC 9728 §5.3):
-//
-//	Bearer resource_metadata="<protectedResourceURL>"
 //
 // Callers build the URL — the canonical RFC 9728 path is
 // `<base>/.well-known/oauth-protected-resource/<routeBase>/<slug>`, which is
 // exactly what a spec-compliant client constructs from a resource URL of
 // `<base>/<routeBase>/<slug>`.
 func WriteAuthenticateChallenge(w http.ResponseWriter, protectedResourceURL, message string) error {
-	w.Header().Set(
-		"WWW-Authenticate",
-		fmt.Sprintf(`Bearer resource_metadata="%s"`, protectedResourceURL),
-	)
+	w.Header().Set("WWW-Authenticate", AuthenticateChallengeHeader(protectedResourceURL))
 	if message == "" {
 		return oops.C(oops.CodeUnauthorized)
 	}
@@ -334,7 +335,7 @@ func (s *Service) ApplyIssuerGate(
 	// user resolves by re-linking via {routeBase}/{slug}/connect.
 	var upstreamTokens map[uuid.UUID]string
 	if subject != nil {
-		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.UserSessionIssuerID, *subject)
+		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, *subject, endpoint.UpstreamResource)
 		switch {
 		case errors.Is(rerr, remotesessions.ErrNoValidToken):
 			return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "")

@@ -13,9 +13,9 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useIsAdmin } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Scope, useRBAC } from "@/hooks/useRBAC";
+import { useRBAC } from "@/hooks/useRBAC";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { AppRoute, useOrgRoutes } from "@/routes";
 import { Icon } from "@speakeasy-api/moonshine";
 import * as React from "react";
@@ -66,7 +66,6 @@ export function OrgSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const orgRoutes = useOrgRoutes();
-  const isAdmin = useIsAdmin();
   const { isRbacEnabled, isLoading: rbacLoading } = useRBAC();
   const telemetry = useTelemetry();
   const isDeviceAgentEnabled =
@@ -80,7 +79,6 @@ export function OrgSidebar({
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.webhooks,
-    orgRoutes.adminSettings,
   ].some((r) => r.active);
 
   const secureActive = [
@@ -112,7 +110,6 @@ export function OrgSidebar({
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.webhooks,
-    orgRoutes.adminSettings,
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
     orgRoutes.access,
@@ -188,9 +185,6 @@ export function OrgSidebar({
                   item={orgRoutes.webhooks}
                   scope={["org:read", "org:admin"]}
                 />
-                {isAdmin && (
-                  <CollapsibleNavItem item={orgRoutes.adminSettings} />
-                )}
               </CollapsibleNavGroup>
 
               {/* Secure group */}

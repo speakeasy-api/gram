@@ -18,10 +18,14 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListRiskPolicyBypassRequestsRequest,
+  ListRiskPolicyBypassRequestsSecurity,
+  QueryParamStatus,
+} from "../models/operations/listriskpolicybypassrequests.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +46,7 @@ export {
 };
 
 export type RiskListPolicyBypassRequestsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +63,8 @@ export type RiskListPolicyBypassRequestsQueryError =
  * List current risk policy bypass request workflow records.
  */
 export function useRiskListPolicyBypassRequests(
-  request?: operations.ListRiskPolicyBypassRequestsRequest | undefined,
-  security?: operations.ListRiskPolicyBypassRequestsSecurity | undefined,
+  request?: ListRiskPolicyBypassRequestsRequest | undefined,
+  security?: ListRiskPolicyBypassRequestsSecurity | undefined,
   options?: QueryHookOptions<
     RiskListPolicyBypassRequestsQueryData,
     RiskListPolicyBypassRequestsQueryError
@@ -88,8 +92,8 @@ export function useRiskListPolicyBypassRequests(
  * List current risk policy bypass request workflow records.
  */
 export function useRiskListPolicyBypassRequestsSuspense(
-  request?: operations.ListRiskPolicyBypassRequestsRequest | undefined,
-  security?: operations.ListRiskPolicyBypassRequestsSecurity | undefined,
+  request?: ListRiskPolicyBypassRequestsRequest | undefined,
+  security?: ListRiskPolicyBypassRequestsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskListPolicyBypassRequestsQueryData,
     RiskListPolicyBypassRequestsQueryError
@@ -115,7 +119,7 @@ export function setRiskListPolicyBypassRequestsData(
   queryKeyBase: [
     parameters: {
       policyId?: string | undefined;
-      status?: operations.QueryParamStatus | undefined;
+      status?: QueryParamStatus | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -133,7 +137,7 @@ export function invalidateRiskListPolicyBypassRequests(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       policyId?: string | undefined;
-      status?: operations.QueryParamStatus | undefined;
+      status?: QueryParamStatus | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;

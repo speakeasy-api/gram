@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  RemoveClientFromMcpServerRequestBody,
+  RemoveClientFromMcpServerRequestBody$Outbound,
+  RemoveClientFromMcpServerRequestBody$outboundSchema,
+} from "../components/removeclientfrommcpserverrequestbody.js";
 
 export type RemoveOrganizationRemoteSessionClientFromMcpServerSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -20,8 +24,7 @@ export type RemoveOrganizationRemoteSessionClientFromMcpServerRequest = {
    * API Key header
    */
   gramKey?: string | undefined;
-  removeClientFromMcpServerRequestBody:
-    components.RemoveClientFromMcpServerRequestBody;
+  removeClientFromMcpServerRequestBody: RemoveClientFromMcpServerRequestBody;
 };
 
 /** @internal */
@@ -65,7 +68,7 @@ export type RemoveOrganizationRemoteSessionClientFromMcpServerRequest$Outbound =
     "Gram-Session"?: string | undefined;
     "Gram-Key"?: string | undefined;
     RemoveClientFromMcpServerRequestBody:
-      components.RemoveClientFromMcpServerRequestBody$Outbound;
+      RemoveClientFromMcpServerRequestBody$Outbound;
   };
 
 /** @internal */
@@ -78,7 +81,7 @@ export const RemoveOrganizationRemoteSessionClientFromMcpServerRequest$outboundS
       gramSession: z.optional(z.string()),
       gramKey: z.optional(z.string()),
       removeClientFromMcpServerRequestBody:
-        components.RemoveClientFromMcpServerRequestBody$outboundSchema,
+        RemoveClientFromMcpServerRequestBody$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {

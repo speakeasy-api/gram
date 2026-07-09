@@ -37,6 +37,7 @@ Pass section bodies WITHOUT a leading heading — the tool adds it. Inside a sec
 - Warm TTL — runtime keep-alive secs after last request. Default 60. 0 disables. \`update_assistant(warm_ttl_seconds)\`.
 - System instructions — runtime prompt. \`# Personality\` (\`set_personality\`), \`# Behavior\` (auto), \`# Tasks\` (\`set_tasks\`). See "System prompt sections".
 - Toolset — bundle of tools. \`list_toolsets\` / \`create_toolset\` / \`attach_toolset\` / \`detach_toolset\` / \`add_tools_to_toolset\`. When attached, toolsets bind to the assistant's shared env by default. Toolset mutations recompute \`# Behavior\`.
+- MCP server — a remote (external-SaaS) MCP server registered in this project, with no backing toolset. \`list_mcp_servers\` / \`attach_mcp_server\` / \`detach_mcp_server\`. This is how you add "an MCP server" the user gives you (e.g. an external SaaS integration) that isn't a toolset — attach it by its slug, not \`attach_toolset\`. Tunnelled or disabled servers can't be attached; the attach call rejects them. Most remote servers carry their own connection auth, so omit \`environment_slug\`.
 - Tool — URN \`tools:http:<source>:<op>\` / \`tools:function:<source>:<op>\`. \`<source>\` is project-specific, not the integration brand. Discover via \`list_available_tools\`; never guess.
 - Environment — the single credential bag owned by this assistant. Auto-created the first time \`update_assistant\` sets a name; auto-renamed when the assistant is renamed; auto-recreated if it gets deleted out of band. Every toolset and trigger on this assistant binds to it by default. Extend it with \`add_environment_keys\` (declare required vars, empty allowed). Populate it with \`request_environment_secrets\` (never accept secrets in chat). Tool responses include a \`notes\` field when the env was implicitly created, adopted, or recreated — read those and relay to the user if toolsets/triggers need re-attach. Fallback tools (\`create_environment\`, explicit \`environment_slug\`/\`environment_id\` args) exist for escape hatches only; don't reach for them unless the shared-env path has failed.
 - Trigger — kinds: \`cron\` (schedule), \`slack\` (Slack events, delivered via webhook). \`create_trigger\`; \`update_trigger\` for pause/resume/reconfig. Bound to the assistant's env by default.
@@ -44,18 +45,19 @@ Pass section bodies WITHOUT a leading heading — the tool adds it. Inside a sec
 - Integration — packaged toolset from the catalog. \`list_integrations\`.
 
 # Models (pass full id to \`update_assistant\`)
-- Anthropic: \`anthropic/claude-opus-4.8\`, \`anthropic/claude-opus-4.7\` (default), \`anthropic/claude-sonnet-4.6\`, \`anthropic/claude-haiku-4.5\`, \`anthropic/claude-sonnet-4.5\`, \`anthropic/claude-opus-4.6\`, \`anthropic/claude-opus-4.5\`, \`anthropic/claude-sonnet-4\`
+- Anthropic: \`anthropic/claude-sonnet-5\` (default), \`anthropic/claude-opus-4.8\`, \`anthropic/claude-opus-4.7\`, \`anthropic/claude-sonnet-4.6\`, \`anthropic/claude-haiku-4.5\`, \`anthropic/claude-sonnet-4.5\`, \`anthropic/claude-opus-4.6\`, \`anthropic/claude-opus-4.5\`, \`anthropic/claude-sonnet-4\`
 - OpenAI: \`openai/gpt-5.5\`, \`openai/gpt-5.5-pro\`, \`openai/gpt-5.4\`, \`openai/gpt-5.4-mini\`, \`openai/gpt-5.4-nano\`, \`openai/gpt-5.3-codex\`, \`openai/gpt-5.1\`, \`openai/gpt-5\`, \`openai/gpt-4.1\`, \`openai/o4-mini\`, \`openai/o3\`
 - Google: \`google/gemini-3.5-flash\`, \`google/gemini-3.1-pro-preview\`, \`google/gemini-3.1-flash-lite\`, \`google/gemini-2.5-pro\`, \`google/gemini-2.5-flash\`
 - Others: \`deepseek/deepseek-v4-pro\`, \`deepseek/deepseek-v4-flash\`, \`deepseek/deepseek-v3.2\`, \`deepseek/deepseek-r1\`, \`meta-llama/llama-4-maverick\`, \`x-ai/grok-4.3\`, \`x-ai/grok-4.20\`, \`qwen/qwen3.7-max\`, \`qwen/qwen3-coder\`, \`moonshotai/kimi-k2.6\`, \`moonshotai/kimi-k2.5\`, \`mistralai/mistral-medium-3-5\`, \`mistralai/codestral-2508\`, \`mistralai/devstral-2512\`, \`mistralai/mistral-medium-3.1\`
 
 Recommend:
-- Agentic / tool-heavy → \`anthropic/claude-opus-4.7\` (default) or \`anthropic/claude-opus-4.8\` (hardest reasoning, pricier).
+- General default → \`anthropic/claude-sonnet-5\` (strong all-rounder, good price/performance).
+- Agentic / tool-heavy → \`anthropic/claude-sonnet-5\` or \`anthropic/claude-opus-4.8\` (hardest reasoning, pricier).
 - Cheap / fast / high-volume → \`anthropic/claude-haiku-4.5\` or \`openai/gpt-5.4-mini\`.
 - Coding → \`openai/gpt-5.3-codex\`, \`qwen/qwen3-coder\`, \`mistralai/codestral-2508\`.
 - Deep reasoning / math → \`openai/o3\` or \`openai/o4-mini\`.
 - Fast Google → \`google/gemini-2.5-flash\`.
-- Unsure → \`anthropic/claude-opus-4.7\`.
+- Unsure → \`anthropic/claude-sonnet-5\`.
 
 # "How do I connect X?" decision tree
 1. \`list_docs\` — if X has a doc (currently: \`slack\`, \`cron\`), follow it. Slack: route through \`propose_slack_setup\` (the user picks capabilities + events; the tool creates a per-assistant Slack toolset and slack trigger — never reuse a catalog toolset). Then \`add_environment_keys\` → \`show_slack_app_guide\` with the returned webhook_url (skip if SLACK_BOT_TOKEN is already populated; check via \`list_environments\` → \`populated_entry_names\`) → \`request_environment_secrets\`.
@@ -110,6 +112,7 @@ export type AssistantSnapshot = {
   status: string;
   instructions: string;
   toolsets: { slug: string; environmentSlug?: string | null }[];
+  mcpServers: { slug: string; environmentSlug?: string | null }[];
 };
 
 export function buildSystemPrompt(args: {
@@ -131,7 +134,7 @@ Never restate or re-paste the Assistant spec — the user can see the live Draft
 
   const stateBlock = isEdit
     ? `\n\n# Current Assistant state (page-load snapshot)
-This is a snapshot taken when the user opened this chat — it bootstraps the edit flow so you don't need to call read tools just to know who you are. During the session, prefer the most recent tool results in this conversation over this snapshot; if you need authoritative live state, call \`list_toolsets\` / \`list_triggers\` / \`list_environments\`.
+This is a snapshot taken when the user opened this chat — it bootstraps the edit flow so you don't need to call read tools just to know who you are. During the session, prefer the most recent tool results in this conversation over this snapshot; if you need authoritative live state, call \`list_toolsets\` / \`list_mcp_servers\` / \`list_triggers\` / \`list_environments\`.
 
 - Name: ${snapshot.name}
 - Model: \`${snapshot.model}\`
@@ -143,6 +146,16 @@ This is a snapshot taken when the user opened this chat — it bootstraps the ed
               .map(
                 (t) =>
                   `\`${t.slug}\`${t.environmentSlug ? ` (env: \`${t.environmentSlug}\`)` : ""}`,
+              )
+              .join(", ")
+      }
+- MCP servers (directly attached): ${
+        snapshot.mcpServers.length === 0
+          ? "none attached"
+          : snapshot.mcpServers
+              .map(
+                (m) =>
+                  `\`${m.slug}\`${m.environmentSlug ? ` (env: \`${m.environmentSlug}\`)` : ""}`,
               )
               .join(", ")
       }

@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersRevokeSession } from "../funcs/organizationRemoteSessionIssuersRevokeSession.js";
+import { organizationRemoteSessionsRevoke } from "../funcs/organizationRemoteSessionsRevoke.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GramError } from "../models/errors/gramerror.js";
@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  RevokeOrganizationRemoteSessionRequest,
+  RevokeOrganizationRemoteSessionSecurity,
+} from "../models/operations/revokeorganizationremotesession.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RevokeOrganizationRemoteSessionMutationVariables = {
-  request: operations.RevokeOrganizationRemoteSessionRequest;
-  security?: operations.RevokeOrganizationRemoteSessionSecurity | undefined;
+  request: RevokeOrganizationRemoteSessionRequest;
+  security?: RevokeOrganizationRemoteSessionSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type RevokeOrganizationRemoteSessionMutationData = void;
 
 export type RevokeOrganizationRemoteSessionMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -47,7 +50,7 @@ export type RevokeOrganizationRemoteSessionMutationError =
   | SDKValidationError;
 
 /**
- * revokeSession organizationRemoteSessionIssuers
+ * revokeSession organizationRemoteSessions
  *
  * @remarks
  * Revoke (soft-delete) a single remote_session in the caller's organization. Requires org:admin.
@@ -71,7 +74,7 @@ export function useRevokeOrganizationRemoteSessionMutation(
 }
 
 export function mutationKeyRevokeOrganizationRemoteSession(): MutationKey {
-  return ["@gram/client", "organizationRemoteSessionIssuers", "revokeSession"];
+  return ["@gram/client", "organizationRemoteSessions", "revoke"];
 }
 
 export function buildRevokeOrganizationRemoteSessionMutation(
@@ -102,7 +105,7 @@ export function buildRevokeOrganizationRemoteSessionMutation(
           ),
         },
       };
-      return unwrapAsync(organizationRemoteSessionIssuersRevokeSession(
+      return unwrapAsync(organizationRemoteSessionsRevoke(
         client$,
         request,
         security,

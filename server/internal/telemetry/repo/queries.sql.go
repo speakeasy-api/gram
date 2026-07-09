@@ -31,6 +31,25 @@ func userIdentifierExpr(col string) string {
 	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
 }
 
+// withAccountTypeFilter applies the shared account-type filter semantics:
+// "personal" is an exact match, while "team" matches everything not personal —
+// unclassified (empty) rows count as team so the team view keeps
+// pre-classification and non-attributed data (same convention as the chats
+// list filter and the schema comment on attribute_metrics_summaries). An empty
+// filter is a no-op.
+func withAccountTypeFilter(sb squirrel.SelectBuilder, accountType string) squirrel.SelectBuilder {
+	switch accountType {
+	case "":
+		return sb
+	case "team":
+		// ifNull is a no-op on the non-nullable String columns and keeps
+		// NULL-projected CTE paths counting as team.
+		return sb.Where("ifNull(account_type, '') != 'personal'")
+	default:
+		return sb.Where(squirrel.Eq{"account_type": accountType})
+	}
+}
+
 // SearchUsers powers employee enrollment lists, so internal users are grouped by
 // email first to collapse rows that mix email-only and opaque user.id identity.
 func searchUsersGroupExpr(groupBy string) string {
@@ -99,6 +118,85 @@ func resolveAttributeColumn(path string) string {
 	default:
 		return fmt.Sprintf("toString(attributes.%s)", path)
 	}
+}
+
+// toolUsageHTTPStatusPath is the attribute path the Tool Logs UI uses to filter by
+// HTTP response status ("Non-2xx responses" etc.). A trace's status is a per-trace
+// aggregate (the max status code across all of the trace's rows), so this filter must
+// be applied to the aggregated normalized_traces column rather than pushed down to
+// individual telemetry_logs rows. Pushed down, a "!= 200" predicate is satisfied by any
+// status-less row of an otherwise-successful trace (e.g. a hook row that carries no
+// http.response.status_code, whose stringified attribute is empty and so is trivially
+// unequal to "200"), leaking the whole trace back into the result set after grouping
+// where it shows up as a success/200. See DNO-447.
+const toolUsageHTTPStatusPath = "http.response.status_code"
+
+// toolUsageStatusPredicate builds a trace-level predicate on the aggregated
+// http_status_code column (Nullable(Int32)) for an http.response.status_code filter.
+// Comparisons are numeric so they match the max-status-code aggregation the query uses
+// for the trace's status. Returns nil when the filter carries no usable value (numeric
+// ops whose values don't parse as integers are skipped rather than erroring the query).
+func toolUsageStatusPredicate(f AttributeFilter) squirrel.Sqlizer {
+	const col = "http_status_code"
+	switch f.Op {
+	case "exists":
+		return squirrel.Expr(col + " IS NOT NULL")
+	case "not_exists":
+		return squirrel.Expr(col + " IS NULL")
+	case "contains":
+		if len(f.Values) == 0 {
+			return nil
+		}
+		return squirrel.Expr("position(toString("+col+"), ?) > 0", f.Values[0])
+	}
+
+	// Remaining ops (eq, not_eq, in, and the default) compare numerically.
+	codes := make([]int32, 0, len(f.Values))
+	for _, v := range f.Values {
+		n, err := strconv.Atoi(strings.TrimSpace(v))
+		if err != nil {
+			continue
+		}
+		codes = append(codes, int32(n)) //nolint:gosec // HTTP status codes are small
+	}
+	if len(codes) == 0 {
+		return nil
+	}
+	switch f.Op {
+	case "not_eq":
+		return squirrel.Expr(col+" != ?", codes[0])
+	case "in":
+		return squirrel.Eq{col: codes}
+	default: // eq and fallback
+		return squirrel.Expr(col+" = ?", codes[0])
+	}
+}
+
+// toolUsageOutcomePredicate builds a trace-level predicate for the first-class Tool Logs
+// "Status" filter. It ORs together the selected outcomes, evaluated against the
+// aggregated per-trace hook_status (Nullable String) and http_status_code (Nullable
+// Int32) columns projected by both normalized_traces paths. The mapping mirrors the
+// dashboard badge logic (getStatusConfig): hook_status wins when present, otherwise the
+// HTTP status code decides. Unknown/empty selections yield nil so the query is
+// unaffected.
+func toolUsageOutcomePredicate(statuses []string) squirrel.Sqlizer {
+	or := squirrel.Or{}
+	for _, status := range statuses {
+		switch status {
+		case "blocked":
+			or = append(or, squirrel.Expr("hook_status = 'blocked'"))
+		case "failure", "error":
+			or = append(or, squirrel.Expr("(hook_status = 'failure' OR (hook_status IS NULL AND http_status_code >= 400))"))
+		case "success":
+			or = append(or, squirrel.Expr("(hook_status = 'success' OR (hook_status IS NULL AND http_status_code >= 200 AND http_status_code < 400))"))
+		case "pending":
+			or = append(or, squirrel.Expr("hook_status = 'pending'"))
+		}
+	}
+	if len(or) == 0 {
+		return nil
+	}
+	return or
 }
 
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
@@ -631,6 +729,8 @@ type GetTimeSeriesMetricsParams struct {
 	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
+	AccountType       string // Optional filter - filters by account_type
+	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
 }
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
@@ -698,6 +798,10 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
+	}
 
 	// ClickHouse fills missing buckets with zeros via WITH FILL.
 	// FROM/TO use aligned nanosecond boundaries; TO is exclusive so we add one step.
@@ -746,6 +850,8 @@ type GetToolMetricsBreakdownParams struct {
 	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
+	AccountType       string // Optional filter - filters by account_type
+	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
 	Limit             int
 	SortBy            string // "count" or "failure_rate"
 }
@@ -792,6 +898,10 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	sb = sb.GroupBy("gram_urn")
@@ -845,6 +955,8 @@ type GetOverviewSummaryParams struct {
 	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
+	AccountType       string // Optional filter - filters by account_type
+	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
 }
 
 // GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
@@ -853,7 +965,7 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != ""
+	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -974,6 +1086,10 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	return sb
@@ -1389,6 +1505,8 @@ type SearchUsersParams struct {
 	GramDeploymentID string // optional
 	EventSource      string // optional; e.g. "hook"
 	HookSource       string // optional; e.g. "cursor"
+	AccountType      string // optional; e.g. "personal"
+	ExternalOrgID    string // optional; scopes to a single account by provider org id
 	GroupBy          string // "user_id" or "external_user_id"
 	UserIDs          []string
 	SortOrder        string // "asc" or "desc"
@@ -1445,6 +1563,9 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 		// Hook source breakdowns (maps of hook source -> count)
 		"sumMapIf(map(hook_source, toUInt64(1)), hook_source != '') AS hook_source_counts",
+
+		// Distinct account types observed (powers the employees personal-account indicator)
+		"groupUniqArrayIf(account_type, account_type != '') AS account_types",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -1461,6 +1582,10 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where("hook_source = ?", arg.HookSource)
+	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where("external_org_id = ?", arg.ExternalOrgID)
 	}
 	if len(arg.UserIDs) > 0 {
 		if arg.GroupBy == "external_user_id" {
@@ -1519,6 +1644,8 @@ type GetUserMetricsSummaryParams struct {
 	ExternalUserID string // external_user_id (mutually exclusive with UserID)
 	EventSource    string // Optional filter - filters by event_source
 	HookSource     string // Optional filter - filters by hook_source
+	AccountType    string // Optional filter - filters by account_type
+	ExternalOrgID  string // Optional filter - scopes to a single account by provider org id
 }
 
 // GetUserMetricsSummary retrieves aggregated metrics for a specific user.
@@ -1589,6 +1716,10 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 	}
 	if arg.HookSource != "" {
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
+	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	query, args, err := sb.ToSql()
@@ -1679,6 +1810,8 @@ type GetEmployeeDataFlowGraphParams struct {
 	TimeEnd        int64
 	UserID         string // user_id (mutually exclusive with ExternalUserID)
 	ExternalUserID string // external_user_id (mutually exclusive with UserID)
+	AccountType    string // Optional filter - filters by account_type
+	ExternalOrgID  string // Optional filter - scopes to a single account by provider org id
 }
 
 const employeeDataFlowMaxPathTuples uint64 = 100
@@ -1777,6 +1910,10 @@ func (q *Queries) GetEmployeeDataFlowGraph(ctx context.Context, arg GetEmployeeD
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
 	} else if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
+	}
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+	if arg.ExternalOrgID != "" {
+		sb = sb.Where(squirrel.Eq{"external_org_id": arg.ExternalOrgID})
 	}
 
 	sb = sb.GroupBy("origin", "client", "server", "server_class", "tool").
@@ -1941,10 +2078,11 @@ type HooksServerSummaryRow struct {
 }
 
 const (
-	ToolUsageTargetTypeHostedMCP = "hosted_mcp_server"
-	ToolUsageTargetTypeShadowMCP = "shadow_mcp_server"
-	ToolUsageTargetTypeLocalTool = "local_tool"
-	ToolUsageTargetTypeSkill     = "skill"
+	ToolUsageTargetTypeHostedMCP   = "hosted_mcp_server"
+	ToolUsageTargetTypeTunneledMCP = "tunneled_mcp_server"
+	ToolUsageTargetTypeShadowMCP   = "shadow_mcp_server"
+	ToolUsageTargetTypeLocalTool   = "local_tool"
+	ToolUsageTargetTypeSkill       = "skill"
 
 	toolUsageTargetKindServer     = "server"
 	toolUsageTargetKindLocalTools = "local_tools"
@@ -1969,6 +2107,16 @@ type HostedMCPMatcher struct {
 	McpSlug     string
 }
 
+// MCPServerMatcher maps direct MCP server source ids from telemetry to their
+// fronting mcp_servers target. Remote-backed servers stay hosted MCP; tunneled
+// servers receive their own target type.
+type MCPServerMatcher struct {
+	SourceID    string
+	TargetType  string
+	TargetID    string
+	TargetLabel string
+}
+
 // GetToolUsageSummaryParams defines the parameters for target-aware tool usage.
 type GetToolUsageSummaryParams struct {
 	GramProjectID      string
@@ -1976,11 +2124,13 @@ type GetToolUsageSummaryParams struct {
 	TimeEnd            int64
 	BucketSizeNs       int64
 	HostedMCPMatchers  []HostedMCPMatcher
+	MCPServerMatchers  []MCPServerMatcher
 	TargetTypes        []string
 	HostedToolsetSlugs []string
 	ShadowServerNames  []string
 	UserFilters        []ToolUsageUserFilter
 	HookSources        []string
+	AccountType        string // Optional filter - filters by account_type (team|personal)
 	TargetLimit        uint64
 	UserLimit          uint64
 	UsersByTargetLimit uint64
@@ -1994,11 +2144,14 @@ type ListToolUsageTracesParams struct {
 	TimeStart          int64
 	TimeEnd            int64
 	HostedMCPMatchers  []HostedMCPMatcher
+	MCPServerMatchers  []MCPServerMatcher
 	TargetTypes        []string
 	HostedToolsetSlugs []string
 	ShadowServerNames  []string
 	UserFilters        []ToolUsageUserFilter
 	HookSources        []string
+	AccountType        string   // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
+	Statuses           []string // Optional trace-outcome filter: error, success, blocked, pending. Empty means all.
 	Query              string
 	Filters            []AttributeFilter
 	SortOrder          string
@@ -2039,6 +2192,7 @@ type ToolUsageTraceSummary struct {
 	HTTPStatusCode    *int32  `ch:"http_status_code"`
 	HookStatus        *string `ch:"hook_status"`
 	BlockReason       *string `ch:"block_reason"`
+	AccountType       *string `ch:"account_type"`
 }
 
 // GetToolUsageFilterOptionsParams defines the parameters for tool usage filter option queries.
@@ -2047,6 +2201,7 @@ type GetToolUsageFilterOptionsParams struct {
 	TimeStart         int64
 	TimeEnd           int64
 	HostedMCPMatchers []HostedMCPMatcher
+	MCPServerMatchers []MCPServerMatcher
 }
 
 // ToolUsageFilterOptions contains all selectable usage-derived filter options for a time window.
@@ -2205,11 +2360,13 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		TimeEnd:            arg.TimeEnd,
 		BucketSizeNs:       0,
 		HostedMCPMatchers:  arg.HostedMCPMatchers,
+		MCPServerMatchers:  arg.MCPServerMatchers,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: nil,
 		ShadowServerNames:  nil,
 		UserFilters:        nil,
 		HookSources:        nil,
+		AccountType:        "", // filter options enumerate all values, never scoped
 		TargetLimit:        0,
 		UserLimit:          0,
 		UsersByTargetLimit: 0,
@@ -2270,6 +2427,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		"http_status_code",
 		"hook_status",
 		"block_reason",
+		"account_type",
 	).From("normalized_traces")
 
 	if len(arg.TargetTypes) > 0 {
@@ -2297,6 +2455,11 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSources})
 	}
 
+	// account_type is carried on trace_summaries (fast path) and materialized on
+	// telemetry_logs (raw path), so this filters on the projected column either
+	// way.
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+
 	if len(arg.UserFilters) > 0 {
 		userFilters := squirrel.Or{}
 		for _, filter := range arg.UserFilters {
@@ -2306,6 +2469,23 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 			})
 		}
 		sb = sb.Where(userFilters)
+	}
+
+	// http.response.status_code filters are applied here, against the aggregated
+	// per-trace http_status_code column, instead of being pushed down to raw rows in
+	// toolUsageTraceRowsCTE. See toolUsageHTTPStatusPath for why.
+	for _, filter := range arg.Filters {
+		if filter.Path != toolUsageHTTPStatusPath || !validJSONPath.MatchString(filter.Path) {
+			continue
+		}
+		if pred := toolUsageStatusPredicate(filter); pred != nil {
+			sb = sb.Where(pred)
+		}
+	}
+
+	// First-class Status filter, applied to the aggregated per-trace outcome columns.
+	if pred := toolUsageOutcomePredicate(arg.Statuses); pred != nil {
+		sb = sb.Where(pred)
 	}
 
 	if arg.CursorID != "" {
@@ -2846,6 +3026,9 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSources})
 	}
 
+	// account_type is carried on trace_summaries and projected through the CTE.
+	sb = withAccountTypeFilter(sb, arg.AccountType)
+
 	return sb, nil
 }
 
@@ -2864,6 +3047,27 @@ func toolUsageHostedMatcherArrays(matchers []HostedMCPMatcher) (toolsetSlugs []s
 	return toolsetSlugs, mcpSlugs, urlSuffixes
 }
 
+func toolUsageMCPServerMatcherArrays(matchers []MCPServerMatcher) (sourceIDs []string, targetTypes []string, targetIDs []string, targetLabels []string) {
+	sourceIDs = make([]string, 0, len(matchers))
+	targetTypes = make([]string, 0, len(matchers))
+	targetIDs = make([]string, 0, len(matchers))
+	targetLabels = make([]string, 0, len(matchers))
+	for _, matcher := range matchers {
+		if matcher.SourceID == "" || matcher.TargetType == "" || matcher.TargetID == "" {
+			continue
+		}
+		sourceIDs = append(sourceIDs, matcher.SourceID)
+		targetTypes = append(targetTypes, matcher.TargetType)
+		targetIDs = append(targetIDs, matcher.TargetID)
+		if matcher.TargetLabel != "" {
+			targetLabels = append(targetLabels, matcher.TargetLabel)
+		} else {
+			targetLabels = append(targetLabels, matcher.TargetID)
+		}
+	}
+	return sourceIDs, targetTypes, targetIDs, targetLabels
+}
+
 func toolUsageHostedMatchIndexExpr(matchExpr, serverURLExpr string) string {
 	matchIndex := "indexOf(?, " + matchExpr + ")"
 	urlIndex := "arrayFirstIndex(suffix -> endsWith(" + serverURLExpr + ", suffix), ?)"
@@ -2872,6 +3076,10 @@ func toolUsageHostedMatchIndexExpr(matchExpr, serverURLExpr string) string {
 		urlIndex+" > 0", urlIndex,
 		"0",
 	)
+}
+
+func toolUsageMCPServerMatchIndexExpr(sourceExpr string) string {
+	return "indexOf(?, " + sourceExpr + ")"
 }
 
 // toolUsageTraceRowsFromSummariesCTE builds the normalized_traces CTE from the
@@ -2904,13 +3112,14 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		// than max()-ing each boolean independently.
 		"max(hook_status_rank) AS g_hook_status_rank",
 		"max(block_reason) AS g_block_reason",
+		"max(account_type) AS g_account_type",
 	).
 		From("(SELECT *, multiIf(has_block = 1, 3, has_error = 1, 2, has_result = 1, 1, 0) AS hook_status_rank FROM trace_summaries)").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		GroupBy("trace_id").
 		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
-		Having("((startsWith(g_gram_urn, 'tools:') AND g_toolset_slug != '') OR (g_event_source = 'hook' AND (g_tool_name != '' OR g_skill_name != '')))")
+		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (g_event_source = 'hook' AND (g_tool_name != '' OR g_skill_name != '')))")
 
 	groupedSQL, groupedArgs, err := groupedSB.ToSql()
 	if err != nil {
@@ -2921,10 +3130,22 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 	sourceArgs := groupedArgs
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
 	hasMatchers := len(hostedToolsetSlugs) > 0
-	if hasMatchers {
-		hostedIndex := toolUsageHostedMatchIndexExpr("g_mcp_match", "g_mcp_server_url")
-		sourceSQL = fmt.Sprintf("SELECT *, %s AS hosted_match_index FROM (%s)", hostedIndex, groupedSQL)
-		sourceArgs = []any{hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes}
+	mcpSourceIDs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels := toolUsageMCPServerMatcherArrays(arg.MCPServerMatchers)
+	hasMCPServerMatchers := len(mcpSourceIDs) > 0
+	if hasMatchers || hasMCPServerMatchers {
+		columns := []string{"*"}
+		prefixArgs := []any{}
+		if hasMatchers {
+			hostedIndex := toolUsageHostedMatchIndexExpr("g_mcp_match", "g_mcp_server_url")
+			columns = append(columns, hostedIndex+" AS hosted_match_index")
+			prefixArgs = append(prefixArgs, hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes)
+		}
+		if hasMCPServerMatchers {
+			columns = append(columns, toolUsageMCPServerMatchIndexExpr("g_tool_source")+" AS mcp_server_match_index")
+			prefixArgs = append(prefixArgs, mcpSourceIDs)
+		}
+		sourceSQL = fmt.Sprintf("SELECT %s FROM (%s)", strings.Join(columns, ", "), groupedSQL)
+		sourceArgs = prefixArgs
 		sourceArgs = append(sourceArgs, groupedArgs...)
 	}
 
@@ -2933,36 +3154,57 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 	toolName := chMultiIf(isSkillCall, skillLabel, "g_tool_name")
 
 	var targetType, targetKind, targetID, targetLabel string
-	if hasMatchers {
-		hostedMatch := "hosted_match_index > 0"
-		targetType = chMultiIf(
-			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
-			hostedMatch, "'"+ToolUsageTargetTypeHostedMCP+"'",
+	if hasMatchers || hasMCPServerMatchers {
+		targetTypeArgs := []string{
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "'" + ToolUsageTargetTypeHostedMCP + "'",
+		}
+		targetKindArgs := []string{
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "'" + toolUsageTargetKindServer + "'",
+		}
+		targetIDArgs := []string{
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
+		}
+		targetLabelArgs := []string{
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
+		}
+		if hasMCPServerMatchers {
+			mcpServerMatch := "mcp_server_match_index > 0"
+			targetTypeArgs = append(targetTypeArgs, mcpServerMatch, "arrayElement(?, mcp_server_match_index)")
+			targetKindArgs = append(targetKindArgs, mcpServerMatch, "'"+toolUsageTargetKindServer+"'")
+			targetIDArgs = append(targetIDArgs, mcpServerMatch, "arrayElement(?, mcp_server_match_index)")
+			targetLabelArgs = append(targetLabelArgs, mcpServerMatch, "arrayElement(?, mcp_server_match_index)")
+		}
+		if hasMatchers {
+			hostedMatch := "hosted_match_index > 0"
+			targetTypeArgs = append(targetTypeArgs, hostedMatch, "'"+ToolUsageTargetTypeHostedMCP+"'")
+			targetKindArgs = append(targetKindArgs, hostedMatch, "'"+toolUsageTargetKindServer+"'")
+			targetIDArgs = append(targetIDArgs, hostedMatch, "arrayElement(?, hosted_match_index)")
+			targetLabelArgs = append(targetLabelArgs, hostedMatch, "arrayElement(?, hosted_match_index)")
+		}
+		targetTypeArgs = append(targetTypeArgs,
 			isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
 			"g_tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
 			"'"+ToolUsageTargetTypeLocalTool+"'",
 		)
-		targetKind = chMultiIf(
-			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+toolUsageTargetKindServer+"'",
-			hostedMatch, "'"+toolUsageTargetKindServer+"'",
+		targetKindArgs = append(targetKindArgs,
 			isSkillCall, "'"+toolUsageTargetKindSkill+"'",
 			"g_tool_source != ''", "'"+toolUsageTargetKindServer+"'",
 			"'"+toolUsageTargetKindLocalTools+"'",
 		)
-		targetID = chMultiIf(
-			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
-			hostedMatch, "arrayElement(?, hosted_match_index)",
+		targetIDArgs = append(targetIDArgs,
 			isSkillCall, skillLabel,
 			"g_tool_source != ''", "g_tool_source",
 			"'local'",
 		)
-		targetLabel = chMultiIf(
-			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
-			hostedMatch, "arrayElement(?, hosted_match_index)",
+		targetLabelArgs = append(targetLabelArgs,
 			isSkillCall, skillLabel,
 			"g_tool_source != ''", "g_tool_source",
 			"'Local Tools'",
 		)
+		targetType = chMultiIf(targetTypeArgs...)
+		targetKind = chMultiIf(targetKindArgs...)
+		targetID = chMultiIf(targetIDArgs...)
+		targetLabel = chMultiIf(targetLabelArgs...)
 	} else {
 		targetType = chMultiIf(
 			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
@@ -3020,7 +3262,8 @@ SELECT
 	g_event_source AS event_source,
 	g_http_status_code AS http_status_code,
 	%s AS hook_status,
-	nullIf(g_block_reason, '') AS block_reason
+	nullIf(g_block_reason, '') AS block_reason,
+	nullIf(g_account_type, '') AS account_type
 FROM (%s)`,
 		toolName,
 		targetType,
@@ -3035,9 +3278,20 @@ FROM (%s)`,
 	)
 
 	finalArgs := make([]any, 0, 2+len(sourceArgs))
+	if hasMCPServerMatchers {
+		finalArgs = append(finalArgs, mcpTargetTypes)
+	}
+	if hasMCPServerMatchers {
+		finalArgs = append(finalArgs, mcpTargetIDs)
+	}
 	if hasMatchers {
-		// arrayElement(?, hosted_match_index) appears in target_id and target_label.
-		finalArgs = append(finalArgs, hostedToolsetSlugs, hostedToolsetSlugs)
+		finalArgs = append(finalArgs, hostedToolsetSlugs)
+	}
+	if hasMCPServerMatchers {
+		finalArgs = append(finalArgs, mcpTargetLabels)
+	}
+	if hasMatchers {
+		finalArgs = append(finalArgs, hostedToolsetSlugs)
 	}
 	finalArgs = append(finalArgs, sourceArgs...)
 
@@ -3074,6 +3328,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"user_email",
 		"external_user_id",
 		"user_id",
+		"account_type",
 		chAttr("gram.hook.source")+" AS hook_source",
 		chAttr("gen_ai.tool.call.result")+" AS tool_result",
 		chAttr("gram.hook.error")+" AS hook_error",
@@ -3092,7 +3347,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 
-	sourceCondition := "((startsWith(gram_urn, 'tools:') AND toolset_slug != '') OR (event_source = 'hook' AND (tool_name != '' OR skill_name != '' OR " + toolCallSkillName + " != '')))"
+	sourceCondition := "((startsWith(gram_urn, 'tools:') AND (toolset_slug != '' OR tool_source != '')) OR (event_source = 'hook' AND (tool_name != '' OR skill_name != '' OR " + toolCallSkillName + " != '')))"
 	includeTriggerRows := arg.Query != ""
 	for _, filter := range arg.Filters {
 		if strings.HasPrefix(filter.Path, "gram.trigger.") {
@@ -3118,6 +3373,12 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		if !validJSONPath.MatchString(filter.Path) {
 			continue
 		}
+		// http.response.status_code is a per-trace status, applied at the aggregated
+		// trace level in ListToolUsageTraces — never pushed down to raw rows here. See
+		// toolUsageHTTPStatusPath.
+		if filter.Path == toolUsageHTTPStatusPath {
+			continue
+		}
 		pred := filter.Predicate(resolveAttributeColumn(filter.Path))
 		if pred != nil {
 			rawSB = rawSB.Where(pred)
@@ -3130,12 +3391,23 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 	}
 
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
+	mcpSourceIDs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels := toolUsageMCPServerMatcherArrays(arg.MCPServerMatchers)
 	sourceSQL := rawSQL
 	sourceArgs := rawArgs
-	if len(hostedToolsetSlugs) > 0 {
-		hostedIndex := toolUsageHostedMatchIndexExpr("mcp_match", "mcp_server_url")
-		sourceSQL = fmt.Sprintf("SELECT *, %s AS hosted_match_index FROM (%s)", hostedIndex, rawSQL)
-		sourceArgs = []any{hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes}
+	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 {
+		columns := []string{"*"}
+		prefixArgs := []any{}
+		if len(hostedToolsetSlugs) > 0 {
+			hostedIndex := toolUsageHostedMatchIndexExpr("mcp_match", "mcp_server_url")
+			columns = append(columns, hostedIndex+" AS hosted_match_index")
+			prefixArgs = append(prefixArgs, hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes)
+		}
+		if len(mcpSourceIDs) > 0 {
+			columns = append(columns, toolUsageMCPServerMatchIndexExpr("tool_source")+" AS mcp_server_match_index")
+			prefixArgs = append(prefixArgs, mcpSourceIDs)
+		}
+		sourceSQL = fmt.Sprintf("SELECT %s FROM (%s)", strings.Join(columns, ", "), rawSQL)
+		sourceArgs = prefixArgs
 		sourceArgs = append(sourceArgs, rawArgs...)
 	}
 
@@ -3187,36 +3459,57 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"tool_source != ''", "tool_source",
 		"'Local Tools'",
 	)
-	if len(hostedToolsetSlugs) > 0 {
-		hostedMatchCondition := "hosted_match_index > 0"
-		targetType = chMultiIf(
-			"event_source != 'hook' AND toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
-			hostedMatchCondition, "'"+ToolUsageTargetTypeHostedMCP+"'",
+	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 {
+		targetTypeArgs := []string{
+			"event_source != 'hook' AND toolset_slug != ''", "'" + ToolUsageTargetTypeHostedMCP + "'",
+		}
+		targetKindArgs := []string{
+			"event_source != 'hook' AND toolset_slug != ''", "'" + toolUsageTargetKindServer + "'",
+		}
+		targetIDArgs := []string{
+			"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
+		}
+		targetLabelArgs := []string{
+			"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
+		}
+		if len(mcpSourceIDs) > 0 {
+			mcpServerMatchCondition := "mcp_server_match_index > 0"
+			targetTypeArgs = append(targetTypeArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
+			targetKindArgs = append(targetKindArgs, mcpServerMatchCondition, "'"+toolUsageTargetKindServer+"'")
+			targetIDArgs = append(targetIDArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
+			targetLabelArgs = append(targetLabelArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
+		}
+		if len(hostedToolsetSlugs) > 0 {
+			hostedMatchCondition := "hosted_match_index > 0"
+			targetTypeArgs = append(targetTypeArgs, hostedMatchCondition, "'"+ToolUsageTargetTypeHostedMCP+"'")
+			targetKindArgs = append(targetKindArgs, hostedMatchCondition, "'"+toolUsageTargetKindServer+"'")
+			targetIDArgs = append(targetIDArgs, hostedMatchCondition, "arrayElement(?, hosted_match_index)")
+			targetLabelArgs = append(targetLabelArgs, hostedMatchCondition, "arrayElement(?, hosted_match_index)")
+		}
+		targetTypeArgs = append(targetTypeArgs,
 			isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
 			"tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
 			"'"+ToolUsageTargetTypeLocalTool+"'",
 		)
-		targetKind = chMultiIf(
-			"event_source != 'hook' AND toolset_slug != ''", "'"+toolUsageTargetKindServer+"'",
-			hostedMatchCondition, "'"+toolUsageTargetKindServer+"'",
+		targetKindArgs = append(targetKindArgs,
 			isSkillCall, "'"+toolUsageTargetKindSkill+"'",
 			"tool_source != ''", "'"+toolUsageTargetKindServer+"'",
 			"'"+toolUsageTargetKindLocalTools+"'",
 		)
-		targetID = chMultiIf(
-			"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
-			hostedMatchCondition, "arrayElement(?, hosted_match_index)",
+		targetIDArgs = append(targetIDArgs,
 			isSkillCall, skillLabel,
 			"tool_source != ''", "tool_source",
 			"'local'",
 		)
-		targetLabel = chMultiIf(
-			"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
-			hostedMatchCondition, "arrayElement(?, hosted_match_index)",
+		targetLabelArgs = append(targetLabelArgs,
 			isSkillCall, skillLabel,
 			"tool_source != ''", "tool_source",
 			"'Local Tools'",
 		)
+		targetType = chMultiIf(targetTypeArgs...)
+		targetKind = chMultiIf(targetKindArgs...)
+		targetID = chMultiIf(targetIDArgs...)
+		targetLabel = chMultiIf(targetLabelArgs...)
 	}
 	normalizedSQL := fmt.Sprintf(`
 SELECT
@@ -3239,12 +3532,25 @@ SELECT
 	toInt32OrNull(http_status_code_raw) AS http_status_code,
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 'blocked', hook_error != '', 'failure', tool_result != '', 'success', 'pending') AS Nullable(String)), CAST(NULL AS Nullable(String))) AS hook_status,
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 3, hook_error != '', 2, tool_result != '', 1, 0) AS Nullable(UInt8)), CAST(NULL AS Nullable(UInt8))) AS hook_status_rank,
-	nullIf(block_reason, '') AS block_reason
+	nullIf(block_reason, '') AS block_reason,
+	account_type
 FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, "raw_tool_name"), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
 
 	normalizedArgs := make([]any, 0, 2+len(sourceArgs))
+	if len(mcpSourceIDs) > 0 {
+		normalizedArgs = append(normalizedArgs, mcpTargetTypes)
+	}
+	if len(mcpSourceIDs) > 0 {
+		normalizedArgs = append(normalizedArgs, mcpTargetIDs)
+	}
 	if len(hostedToolsetSlugs) > 0 {
-		normalizedArgs = append(normalizedArgs, hostedToolsetSlugs, hostedToolsetSlugs)
+		normalizedArgs = append(normalizedArgs, hostedToolsetSlugs)
+	}
+	if len(mcpSourceIDs) > 0 {
+		normalizedArgs = append(normalizedArgs, mcpTargetLabels)
+	}
+	if len(hostedToolsetSlugs) > 0 {
+		normalizedArgs = append(normalizedArgs, hostedToolsetSlugs)
 	}
 	normalizedArgs = append(normalizedArgs, sourceArgs...)
 
@@ -3277,7 +3583,8 @@ normalized_traces AS (
 			ifNull(max(hook_status_rank), toUInt8(255)) = 0, CAST('pending' AS Nullable(String)),
 			CAST(NULL AS Nullable(String))
 		) AS hook_status,
-		nullIf(anyIf(ifNull(block_reason, ''), ifNull(hook_status_rank, toUInt8(0)) = 3 AND ifNull(block_reason, '') != ''), '') AS block_reason
+		nullIf(anyIf(ifNull(block_reason, ''), ifNull(hook_status_rank, toUInt8(0)) = 3 AND ifNull(block_reason, '') != ''), '') AS block_reason,
+		nullIf(any(account_type), '') AS account_type
 	FROM raw_normalized_events
 	GROUP BY log_group_kind, log_group_value, target_type, target_kind, target_id, target_label, tool_name, user_kind, user_key, user_label
 )`
@@ -3307,15 +3614,17 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	)
 	userKey := chFirstNonEmpty("g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
 
-	hostedGroupedSB := sq.Select(
+	directGroupedSB := sq.Select(
 		"min(start_time_unix_nano) AS event_time_ns",
 		"max(toolset_slug) AS g_toolset_slug",
+		"any(tool_source) AS g_tool_source",
 		"any(tool_name) AS g_tool_name",
 		"any(gram_urn) AS g_gram_urn",
 		"any(user_email) AS g_user_email",
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
 		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
+		"max(account_type) AS g_account_type",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -3324,7 +3633,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
 		Having("any(event_source) != 'hook'").
 		Having("startsWith(g_gram_urn, 'tools:')").
-		Having("g_toolset_slug != ''")
+		Having("(g_toolset_slug != '' OR g_tool_source != '')")
 
 	hookGroupedSB := sq.Select(
 		"min(start_time_unix_nano) AS event_time_ns",
@@ -3339,6 +3648,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"any(hook_source) AS g_hook_source",
 		"max(has_result) AS g_has_result",
 		"max(has_error) AS g_has_error",
+		"max(account_type) AS g_account_type",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -3348,32 +3658,84 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("any(event_source) = 'hook'").
 		Having("(g_tool_name != '' OR g_skill_name != '')")
 
-	hostedGroupedSQL, hostedArgs, err := hostedGroupedSB.ToSql()
+	directGroupedSQL, directGroupedArgs, err := directGroupedSB.ToSql()
 	if err != nil {
-		return "", nil, fmt.Errorf("building hosted tool usage source: %w", err)
+		return "", nil, fmt.Errorf("building direct tool usage source: %w", err)
 	}
-	hostedSQL := fmt.Sprintf(`
+
+	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
+	mcpSourceIDs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels := toolUsageMCPServerMatcherArrays(arg.MCPServerMatchers)
+
+	directSourceSQL := directGroupedSQL
+	directSourceArgs := directGroupedArgs
+	if len(mcpSourceIDs) > 0 {
+		directSourceSQL = fmt.Sprintf("SELECT *, %s AS mcp_server_match_index FROM (%s)", toolUsageMCPServerMatchIndexExpr("g_tool_source"), directGroupedSQL)
+		directSourceArgs = []any{mcpSourceIDs}
+		directSourceArgs = append(directSourceArgs, directGroupedArgs...)
+	}
+
+	directTargetType := chMultiIf(
+		"g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
+		"g_tool_source != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
+		"'"+ToolUsageTargetTypeLocalTool+"'",
+	)
+	directTargetID := chMultiIf(
+		"g_toolset_slug != ''", "g_toolset_slug",
+		"g_tool_source != ''", "g_tool_source",
+		"'local'",
+	)
+	directTargetLabel := chMultiIf(
+		"g_toolset_slug != ''", "g_toolset_slug",
+		"g_tool_source != ''", "g_tool_source",
+		"'Local Tools'",
+	)
+	if len(mcpSourceIDs) > 0 {
+		mcpServerMatchCondition := "mcp_server_match_index > 0"
+		directTargetType = chMultiIf(
+			"g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
+			mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)",
+			"g_tool_source != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
+			"'"+ToolUsageTargetTypeLocalTool+"'",
+		)
+		directTargetID = chMultiIf(
+			"g_toolset_slug != ''", "g_toolset_slug",
+			mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)",
+			"g_tool_source != ''", "g_tool_source",
+			"'local'",
+		)
+		directTargetLabel = chMultiIf(
+			"g_toolset_slug != ''", "g_toolset_slug",
+			mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)",
+			"g_tool_source != ''", "g_tool_source",
+			"'Local Tools'",
+		)
+	}
+
+	directSQL := fmt.Sprintf(`
 SELECT
 	event_time_ns,
-	'%s' AS target_type,
+	%s AS target_type,
 	'%s' AS target_kind,
-	g_toolset_slug AS target_id,
-	g_toolset_slug AS target_label,
+	%s AS target_id,
+	%s AS target_label,
 	%s AS tool_name,
 	%s AS user_key,
 	%s AS user_label,
 	%s AS user_kind,
 	toUInt8(g_http_status_code >= 200 AND g_http_status_code < 400) AS success,
 	toUInt8(g_http_status_code >= 400) AS failure,
-	'' AS hook_source
+	'' AS hook_source,
+	g_account_type AS account_type
 FROM (%s)`,
-		ToolUsageTargetTypeHostedMCP,
+		directTargetType,
 		toolUsageTargetKindServer,
+		directTargetID,
+		directTargetLabel,
 		chFirstNonEmpty("g_tool_name", "g_gram_urn"),
 		userKey,
 		userKey,
 		userKind,
-		hostedGroupedSQL,
+		directSourceSQL,
 	)
 
 	hookGroupedSQL, hookGroupedArgs, err := hookGroupedSB.ToSql()
@@ -3383,11 +3745,20 @@ FROM (%s)`,
 
 	hookSourceSQL := hookGroupedSQL
 	hookSourceArgs := hookGroupedArgs
-	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
-	if len(hostedToolsetSlugs) > 0 {
-		hostedIndex := toolUsageHostedMatchIndexExpr("g_mcp_match", "g_mcp_server_url")
-		hookSourceSQL = fmt.Sprintf("SELECT *, %s AS hosted_match_index FROM (%s)", hostedIndex, hookGroupedSQL)
-		hookSourceArgs = []any{hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes}
+	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 {
+		columns := []string{"*"}
+		prefixArgs := []any{}
+		if len(hostedToolsetSlugs) > 0 {
+			hostedIndex := toolUsageHostedMatchIndexExpr("g_mcp_match", "g_mcp_server_url")
+			columns = append(columns, hostedIndex+" AS hosted_match_index")
+			prefixArgs = append(prefixArgs, hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes)
+		}
+		if len(mcpSourceIDs) > 0 {
+			columns = append(columns, toolUsageMCPServerMatchIndexExpr("g_tool_source")+" AS mcp_server_match_index")
+			prefixArgs = append(prefixArgs, mcpSourceIDs)
+		}
+		hookSourceSQL = fmt.Sprintf("SELECT %s FROM (%s)", strings.Join(columns, ", "), hookGroupedSQL)
+		hookSourceArgs = prefixArgs
 		hookSourceArgs = append(hookSourceArgs, hookGroupedArgs...)
 	}
 
@@ -3411,32 +3782,49 @@ FROM (%s)`,
 		"g_tool_source != ''", "g_tool_source",
 		"'Local Tools'",
 	)
-	if len(hostedToolsetSlugs) > 0 {
-		hostedMatchCondition := "hosted_match_index > 0"
-		hookTargetType = chMultiIf(
-			hostedMatchCondition, "'"+ToolUsageTargetTypeHostedMCP+"'",
+	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 {
+		hookTargetTypeArgs := []string{}
+		hookTargetKindArgs := []string{}
+		hookTargetIDArgs := []string{}
+		hookTargetLabelArgs := []string{}
+		if len(mcpSourceIDs) > 0 {
+			mcpServerMatchCondition := "mcp_server_match_index > 0"
+			hookTargetTypeArgs = append(hookTargetTypeArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
+			hookTargetKindArgs = append(hookTargetKindArgs, mcpServerMatchCondition, "'"+toolUsageTargetKindServer+"'")
+			hookTargetIDArgs = append(hookTargetIDArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
+			hookTargetLabelArgs = append(hookTargetLabelArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
+		}
+		if len(hostedToolsetSlugs) > 0 {
+			hostedMatchCondition := "hosted_match_index > 0"
+			hookTargetTypeArgs = append(hookTargetTypeArgs, hostedMatchCondition, "'"+ToolUsageTargetTypeHostedMCP+"'")
+			hookTargetKindArgs = append(hookTargetKindArgs, hostedMatchCondition, "'"+toolUsageTargetKindServer+"'")
+			hookTargetIDArgs = append(hookTargetIDArgs, hostedMatchCondition, "arrayElement(?, hosted_match_index)")
+			hookTargetLabelArgs = append(hookTargetLabelArgs, hostedMatchCondition, "arrayElement(?, hosted_match_index)")
+		}
+		hookTargetTypeArgs = append(hookTargetTypeArgs,
 			"g_skill_name != ''", "'"+ToolUsageTargetTypeSkill+"'",
 			"g_tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
 			"'"+ToolUsageTargetTypeLocalTool+"'",
 		)
-		hookTargetKind = chMultiIf(
-			hostedMatchCondition, "'"+toolUsageTargetKindServer+"'",
+		hookTargetKindArgs = append(hookTargetKindArgs,
 			"g_skill_name != ''", "'"+toolUsageTargetKindSkill+"'",
 			"g_tool_source != ''", "'"+toolUsageTargetKindServer+"'",
 			"'"+toolUsageTargetKindLocalTools+"'",
 		)
-		hookTargetID = chMultiIf(
-			hostedMatchCondition, "arrayElement(?, hosted_match_index)",
+		hookTargetIDArgs = append(hookTargetIDArgs,
 			"g_skill_name != ''", "g_skill_name",
 			"g_tool_source != ''", "g_tool_source",
 			"'local'",
 		)
-		hookTargetLabel = chMultiIf(
-			hostedMatchCondition, "arrayElement(?, hosted_match_index)",
+		hookTargetLabelArgs = append(hookTargetLabelArgs,
 			"g_skill_name != ''", "g_skill_name",
 			"g_tool_source != ''", "g_tool_source",
 			"'Local Tools'",
 		)
+		hookTargetType = chMultiIf(hookTargetTypeArgs...)
+		hookTargetKind = chMultiIf(hookTargetKindArgs...)
+		hookTargetID = chMultiIf(hookTargetIDArgs...)
+		hookTargetLabel = chMultiIf(hookTargetLabelArgs...)
 	}
 	hookToolName := chMultiIf("g_skill_name != ''", "g_skill_name", "g_tool_name")
 
@@ -3453,20 +3841,36 @@ SELECT
 	%s AS user_kind,
 	toUInt8(g_has_result = 1 AND g_has_error = 0) AS success,
 	toUInt8(g_has_error = 1) AS failure,
-	g_hook_source AS hook_source
+	g_hook_source AS hook_source,
+	g_account_type AS account_type
 FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userKey, userKind, hookSourceSQL)
 
-	hookArgs := make([]any, 0, 2+len(hookSourceArgs))
+	directArgs := make([]any, 0, 3+len(directSourceArgs))
+	if len(mcpSourceIDs) > 0 {
+		directArgs = append(directArgs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels)
+	}
+	directArgs = append(directArgs, directSourceArgs...)
+
+	hookArgs := make([]any, 0, 5+len(hookSourceArgs))
+	if len(mcpSourceIDs) > 0 {
+		hookArgs = append(hookArgs, mcpTargetTypes, mcpTargetIDs)
+	}
 	if len(hostedToolsetSlugs) > 0 {
-		hookArgs = append(hookArgs, hostedToolsetSlugs, hostedToolsetSlugs)
+		hookArgs = append(hookArgs, hostedToolsetSlugs)
+	}
+	if len(mcpSourceIDs) > 0 {
+		hookArgs = append(hookArgs, mcpTargetLabels)
+	}
+	if len(hostedToolsetSlugs) > 0 {
+		hookArgs = append(hookArgs, hostedToolsetSlugs)
 	}
 	hookArgs = append(hookArgs, hookSourceArgs...)
 
-	args := make([]any, 0, len(hostedArgs)+len(hookArgs))
-	args = append(args, hostedArgs...)
+	args := make([]any, 0, len(directArgs)+len(hookArgs))
+	args = append(args, directArgs...)
 	args = append(args, hookArgs...)
 
-	return "WITH normalized_events AS (" + hostedSQL + " UNION ALL " + hookSQL + ")", args, nil
+	return "WITH normalized_events AS (" + directSQL + " UNION ALL " + hookSQL + ")", args, nil
 }
 
 func nonZeroLimit(value, fallback uint64) uint64 {

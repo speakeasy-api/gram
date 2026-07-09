@@ -55,6 +55,10 @@ export type RiskPolicy = {
    */
   action: RiskPolicyAction;
   /**
+   * For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty means the domain rule is inert.
+   */
+  approvedEmailDomains?: Array<string> | undefined;
+  /**
    * Principal URNs the policy applies to. Contains user:all when audience_type is everyone.
    */
   audiencePrincipalUrns: Array<string>;
@@ -173,6 +177,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
   .pipe(
     z.object({
       action: z._default(RiskPolicyAction$inboundSchema, "flag"),
+      approved_email_domains: z.optional(z.array(z.string())),
       audience_principal_urns: z.array(z.string()),
       audience_type: z._default(
         RiskPolicyAudienceType$inboundSchema,
@@ -210,6 +215,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "approved_email_domains": "approvedEmailDomains",
         "audience_principal_urns": "audiencePrincipalUrns",
         "audience_type": "audienceType",
         "auto_name": "autoName",

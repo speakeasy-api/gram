@@ -1,7 +1,7 @@
 import { useOrganization, useProject } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { cn } from "@/lib/utils.ts";
-import { ProjectEntry } from "@gram/client/models/components";
+import { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 import { PlusIcon } from "lucide-react";
 import React from "react";
 import { InputDialog } from "./input-dialog.tsx";

@@ -23,7 +23,7 @@ var _ = Service("triggers", func() {
 		Result(ListTriggerDefinitionsResult)
 
 		HTTP(func() {
-			GET("/rpc/triggers.definitions.list")
+			GET("/rpc/triggers.listDefinitions")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)

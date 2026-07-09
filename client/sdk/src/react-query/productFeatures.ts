@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetProductFeaturesRequest,
+  GetProductFeaturesSecurity,
+} from "../models/operations/getproductfeatures.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ProductFeaturesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ProductFeaturesQueryError =
  * Get the current state of all product feature flags.
  */
 export function useProductFeatures(
-  request?: operations.GetProductFeaturesRequest | undefined,
-  security?: operations.GetProductFeaturesSecurity | undefined,
+  request?: GetProductFeaturesRequest | undefined,
+  security?: GetProductFeaturesSecurity | undefined,
   options?: QueryHookOptions<
     ProductFeaturesQueryData,
     ProductFeaturesQueryError
@@ -85,8 +88,8 @@ export function useProductFeatures(
  * Get the current state of all product feature flags.
  */
 export function useProductFeaturesSuspense(
-  request?: operations.GetProductFeaturesRequest | undefined,
-  security?: operations.GetProductFeaturesSecurity | undefined,
+  request?: GetProductFeaturesRequest | undefined,
+  security?: GetProductFeaturesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ProductFeaturesQueryData,
     ProductFeaturesQueryError

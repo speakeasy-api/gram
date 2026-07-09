@@ -29,19 +29,21 @@ Import `Page` from `@/components/page-layout` and render the toolbar on its **ow
   <Page.Toolbar.Count>{count} items</Page.Toolbar.Count>
   <Page.Toolbar.ViewAs value={view} onChange={setView} />
   <Page.Toolbar.Actions>{/* page-specific extras, e.g. a SegmentedControl */}</Page.Toolbar.Actions>
+  <Page.Toolbar.Refresh onRefresh={() => void refetch()} isRefreshing={isFetching} />
 </Page.Toolbar>
 ```
 
 The pieces (all optional, written in any order — the toolbar sorts them):
 
-| Piece     | Side  | What it is                                                                             |
-| --------- | ----- | -------------------------------------------------------------------------------------- |
-| `Search`  | left  | Debounced white search box (`debounceMs` optional, built-in clear button)              |
-| `Filters` | left  | Filter chips + "More filters" sheet + "Reset to default"                               |
-| `SortBy`  | right | Sort dropdown, optionally with a built-in asc/desc direction toggle (one bordered box) |
-| `Count`   | right | Result-count text                                                                      |
-| `ViewAs`  | right | Grid/table toggle (grid/table only)                                                    |
-| `Actions` | right | Page-specific right-aligned extras                                                     |
+| Piece     | Side  | What it is                                                                                                                                                                                        |
+| --------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Search`  | left  | Debounced white search box (`debounceMs` optional, built-in clear button)                                                                                                                         |
+| `Filters` | left  | Filter chips + "More filters" sheet + "Reset to default"                                                                                                                                          |
+| `SortBy`  | right | Sort dropdown, optionally with a built-in asc/desc direction toggle (one bordered box)                                                                                                            |
+| `Count`   | right | Result-count text                                                                                                                                                                                 |
+| `ViewAs`  | right | Grid/table toggle (grid/table only)                                                                                                                                                               |
+| `Actions` | right | Page-specific right-aligned extras                                                                                                                                                                |
+| `Refresh` | right | Manual refresh button (`onRefresh` required, `isRefreshing` optional); spins/disables while refreshing and enforces a ~2s minimum visible spin so a fast/cached refetch doesn't look like a no-op |
 
 Layout, height (40px), the grey bar, the search↔filters divider, and the left/right `justify-between` split are all handled by the component — don't re-create them.
 

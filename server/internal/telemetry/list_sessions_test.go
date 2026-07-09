@@ -45,7 +45,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	chatID3 := uuid.NewString()
 	chatID4 := uuid.NewString()
 
-	insertListSessionCompletionLog(t, ctx, listSessionLogParams{
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
 		projectID:    projectID,
 		timestamp:    now.Add(-10 * time.Minute),
 		chatID:       chatID1,
@@ -59,7 +59,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 		totalTokens:  150,
 		cost:         1.25,
 	})
-	insertListSessionCompletionLog(t, ctx, listSessionLogParams{
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
 		projectID:    projectID,
 		timestamp:    now.Add(-9 * time.Minute),
 		chatID:       chatID1,
@@ -84,7 +84,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 		statusCode: 200,
 		toolURN:    "tools:http:petstore:listPets",
 	})
-	insertListSessionCompletionLog(t, ctx, listSessionLogParams{
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
 		projectID:    otherProject.ID.String(),
 		timestamp:    now.Add(-7 * time.Minute),
 		chatID:       chatID2,
@@ -253,9 +253,10 @@ func TestListSessions_CrossRowDirectoryAndHookFilters(t *testing.T) {
 	now := time.Now().UTC()
 	chatID := uuid.NewString()
 
-	// Usage row carries cost + hook_source but NOT the directory attribute
-	// (mirrors production: usage/OTEL rows aren't enriched with WorkOS attrs).
-	insertListSessionCompletionLog(t, ctx, listSessionLogParams{
+	// Cost-bearing api_request row carries cost + hook_source but NOT the
+	// directory attribute (mirrors production: usage/OTEL rows aren't enriched
+	// with WorkOS attrs).
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
 		projectID:    projectID,
 		timestamp:    now.Add(-10 * time.Minute),
 		chatID:       chatID,
@@ -309,6 +310,96 @@ func TestListSessions_CrossRowDirectoryAndHookFilters(t *testing.T) {
 	require.InDelta(t, 2.5, session.TotalCost, 1e-9)
 	require.Equal(t, int64(1), session.ToolCallCount)
 	require.Equal(t, int64(1), session.MessageCount)
+}
+
+func TestListSessions_CoLocatesAttributionFilters(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Now().UTC()
+	matchingChatID := uuid.NewString()
+	nonMatchingChatID := uuid.NewString()
+
+	// This row is the aggregate slice the UI drills into: skill=golang with no
+	// subagent attribution.
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    now.Add(-10 * time.Minute),
+		chatID:       matchingChatID,
+		email:        "skill@example.com",
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  100,
+		outputTokens: 50,
+		totalTokens:  150,
+		cost:         1.0,
+		skillName:    "golang",
+	})
+	// The same chat later carries a subagent. An independent agent_name=""
+	// HAVING would wrongly reject the whole chat even though the skill row above
+	// belongs to the drilled aggregate slice.
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    now.Add(-9 * time.Minute),
+		chatID:       matchingChatID,
+		email:        "skill@example.com",
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  50,
+		outputTokens: 25,
+		totalTokens:  75,
+		cost:         0.5,
+		skillName:    "claude-api",
+		agentName:    "Explore",
+	})
+	// Another chat has the requested skill, but only on a row with an agent. It
+	// must not match the co-located skill=golang AND agent="" slice.
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    now.Add(-8 * time.Minute),
+		chatID:       nonMatchingChatID,
+		email:        "skill@example.com",
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  200,
+		outputTokens: 50,
+		totalTokens:  250,
+		cost:         2.0,
+		skillName:    "golang",
+		agentName:    "Explore",
+	})
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	res := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		From: from,
+		To:   to,
+		Filters: []*gen.QueryFilter{
+			{Dimension: "skill_name", Values: []string{"golang"}},
+			{Dimension: "agent_name", Values: []string{""}},
+		},
+		SortBy: "total_cost",
+		Limit:  10,
+	}, func(res *gen.ListSessionsResult) bool {
+		return len(res.Sessions) == 1 && res.Sessions[0].GramChatID == matchingChatID
+	})
+
+	require.Len(t, res.Sessions, 1)
+	session := res.Sessions[0]
+	require.Equal(t, matchingChatID, session.GramChatID)
+	require.InDelta(t, 1.5, session.TotalCost, 1e-9)
+	require.Equal(t, int64(2), session.MessageCount)
 }
 
 func TestListSessions_IncludesCostBearingAssistantChatCompletions(t *testing.T) {
@@ -383,7 +474,7 @@ func TestListSessions_CursorPagination(t *testing.T) {
 	chatIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	costs := []float64{3.0, 2.0, 1.0}
 	for i, chatID := range chatIDs {
-		insertListSessionCompletionLog(t, ctx, listSessionLogParams{
+		insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
 			projectID:    projectID,
 			timestamp:    now.Add(time.Duration(i) * time.Minute),
 			chatID:       chatID,
@@ -500,6 +591,8 @@ type listSessionLogParams struct {
 	cost         float64
 	statusCode   int32
 	toolURN      string
+	skillName    string
+	agentName    string
 }
 
 func insertListSessionCompletionLog(t *testing.T, ctx context.Context, p listSessionLogParams) {
@@ -538,6 +631,56 @@ func insertListSessionCompletionLog(t *testing.T, ctx context.Context, p listSes
 	`, id.String(), p.timestamp.UnixNano(), p.timestamp.UnixNano(), "INFO", "chat completion",
 		nil, nil, string(attrsJSON), "{}",
 		p.projectID, usageURN, "gram-server", p.chatID)
+	require.NoError(t, err)
+}
+
+// insertListSessionClaudeAPIRequestLog inserts a Claude Code api_request row —
+// the authoritative source of Claude token/cost now that claude-code:usage rows
+// are excluded (mirrors insertAttributeClaudeAPIRequestLog in query_test.go and
+// the sessionClaudeAPIRequestPredicate the session query keys off).
+func insertListSessionClaudeAPIRequestLog(t *testing.T, ctx context.Context, p listSessionLogParams) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gen_ai.conversation.id":          p.chatID,
+		"prompt.id":                       uuid.NewString(),
+		"event.name":                      "api_request",
+		"input_tokens":                    p.inputTokens,
+		"output_tokens":                   p.outputTokens,
+		"cost_usd":                        p.cost,
+		"model":                           p.model,
+		"gen_ai.request.model":            p.model,
+		"gram.hook.source":                p.hookSource,
+		"user.email":                      p.email,
+		"user.attributes.department_name": p.department,
+	}
+	if p.skillName != "" {
+		attributes["skill.name"] = p.skillName
+	}
+	if p.agentName != "" {
+		attributes["agent.name"] = p.agentName
+	}
+	if p.roles != nil {
+		attributes["user.roles"] = p.roles
+	}
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name, gram_chat_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), p.timestamp.UnixNano(), p.timestamp.UnixNano(), "INFO", "claude_code.api_request",
+		nil, nil, string(attrsJSON), "{}",
+		p.projectID, "claude-code:api_request", "claude-code", p.chatID)
 	require.NoError(t, err)
 }
 

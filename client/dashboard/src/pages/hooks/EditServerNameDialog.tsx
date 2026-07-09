@@ -3,7 +3,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ServerNameMappings } from "@/hooks/useServerNameMappings";
-import type { ServerNameOverride } from "@gram/client/models/components";
+import type { ServerNameOverride } from "@gram/client/models/components/servernameoverride.js";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useCallback, useMemo, useState } from "react";
 

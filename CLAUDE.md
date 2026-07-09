@@ -54,6 +54,7 @@ Contains the main application code for the Gram server:
 
 - `mise go:tidy`: Run `go mod tidy` across the codebase
 - `mise build:server`: Build the server binary
+- `mise build:tunnel-gateway`: Build the tunnel gateway binary
 - `mise lint:server`: Run linters on the server code
 - `mise start:server --dev-single-process`: Run the server locally
 - `hk fix`: Runs formatters across changed files in the current branch.
@@ -74,18 +75,7 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 ### Database Migrations
 
-<important>
-
-These rules apply any time you touch `server/migrations/`, `atlas.sum`, or `server/database/schema.sql`. They are non-negotiable.
-
-</important>
-
-- **Migrations ship in their own PR.** No app code, no backfills, no unrelated changes alongside.
-- **Migration files and `atlas.sum` are produced only by the Atlas CLI.** Never hand-edit, rename, or rehash them. They must contain only DDL emitted by `mise db:diff`.
-- **Follow expand-contract.** Never drop a column or table in the same migration that adds others. If a column is unwanted, mark it nullable with a comment and leave it for a later contract migration; sticking around for a few days is fine.
-- **Never run agents (or any tooling) against dev or prod databases.** Local databases only.
-- **Out-of-order timestamps:** if `mise lint:migrations` (or CI) reports a migration timestamp at or before the latest on `main`, do NOT rename the file. Delete the offending migration on your branch, rebase/merge `main`, then re-run `mise db:diff <name>` so the migration is regenerated on top with a fresh timestamp.
-- **Migration merge conflicts:** never resolve them by hand. Delete your migrations, rebase/merge `main`, then re-run `mise db:diff` so your changes are recreated on top.
+Migration rules live in the `postgresql` skill (`.agents/skills/postgresql/SKILL.md`, "Database migrations" section). Activate that skill any time you touch `server/migrations/`, `atlas.sum`, or `server/database/schema.sql`.
 
 ## Mise CLI
 
@@ -136,6 +126,7 @@ Activate a skill when your task falls within its scope.
 | `pr`                              | Creating a Pull Request for current changes                                     |
 | `spec`                            | Interviewing user in-depth to produce a detailed spec before building           |
 | `page-toolbar`                    | Dashboard list page search, filters, sort, or view controls                     |
+| `pr-demo-gif`                     | Recording a demo GIF of a user-visible frontend change for a PR comment         |
 
 # Plan Mode
 

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetToolsetEnvironmentRequest,
+  GetToolsetEnvironmentSecurity,
+} from "../models/operations/gettoolsetenvironment.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetToolsetEnvironmentQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetToolsetEnvironmentQueryError =
  * Get the environment linked to a toolset
  */
 export function useGetToolsetEnvironment(
-  request: operations.GetToolsetEnvironmentRequest,
-  security?: operations.GetToolsetEnvironmentSecurity | undefined,
+  request: GetToolsetEnvironmentRequest,
+  security?: GetToolsetEnvironmentSecurity | undefined,
   options?: QueryHookOptions<
     GetToolsetEnvironmentQueryData,
     GetToolsetEnvironmentQueryError
@@ -88,8 +91,8 @@ export function useGetToolsetEnvironment(
  * Get the environment linked to a toolset
  */
 export function useGetToolsetEnvironmentSuspense(
-  request: operations.GetToolsetEnvironmentRequest,
-  security?: operations.GetToolsetEnvironmentSecurity | undefined,
+  request: GetToolsetEnvironmentRequest,
+  security?: GetToolsetEnvironmentSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetToolsetEnvironmentQueryData,
     GetToolsetEnvironmentQueryError

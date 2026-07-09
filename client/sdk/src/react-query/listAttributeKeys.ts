@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListAttributeKeysRequest,
+  ListAttributeKeysSecurity,
+} from "../models/operations/listattributekeys.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListAttributeKeysQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListAttributeKeysQueryError =
  * List distinct attribute keys available for filtering
  */
 export function useListAttributeKeys(
-  request: operations.ListAttributeKeysRequest,
-  security?: operations.ListAttributeKeysSecurity | undefined,
+  request: ListAttributeKeysRequest,
+  security?: ListAttributeKeysSecurity | undefined,
   options?: QueryHookOptions<
     ListAttributeKeysQueryData,
     ListAttributeKeysQueryError
@@ -85,8 +88,8 @@ export function useListAttributeKeys(
  * List distinct attribute keys available for filtering
  */
 export function useListAttributeKeysSuspense(
-  request: operations.ListAttributeKeysRequest,
-  security?: operations.ListAttributeKeysSecurity | undefined,
+  request: ListAttributeKeysRequest,
+  security?: ListAttributeKeysSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListAttributeKeysQueryData,
     ListAttributeKeysQueryError

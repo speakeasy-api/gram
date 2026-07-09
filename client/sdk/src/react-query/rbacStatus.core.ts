@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { accessGetRBACStatus } from "../funcs/accessGetRBACStatus.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RBACStatus } from "../models/components/rbacstatus.js";
+import {
+  GetRBACStatusRequest,
+  GetRBACStatusSecurity,
+} from "../models/operations/getrbacstatus.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RbacStatusQueryData = components.RBACStatus;
+export type RbacStatusQueryData = RBACStatus;
 
 export function prefetchRbacStatus(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetRBACStatusRequest | undefined,
-  security?: operations.GetRBACStatusSecurity | undefined,
+  request?: GetRBACStatusRequest | undefined,
+  security?: GetRBACStatusSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchRbacStatus(
 
 export function buildRbacStatusQuery(
   client$: GramCore,
-  request?: operations.GetRBACStatusRequest | undefined,
-  security?: operations.GetRBACStatusSecurity | undefined,
+  request?: GetRBACStatusRequest | undefined,
+  security?: GetRBACStatusSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

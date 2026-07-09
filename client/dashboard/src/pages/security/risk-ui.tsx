@@ -1,4 +1,4 @@
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useRiskUnmaskResultMutation } from "@gram/client/react-query/riskUnmaskResult.js";
 import { RULE_CATEGORY_META } from "./policy-data";
 import { getCategoryForFinding, getRuleTitleFallback } from "./risk-utils";
 import { Badge } from "@speakeasy-api/moonshine";
@@ -16,6 +17,16 @@ import {
   useRevealAll,
   type RevealAllContextValue,
 } from "./reveal-all-context";
+import { useRBAC } from "@/hooks/useRBAC";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
+
+// Revealing a flagged secret exposes the raw value captured from agent/chat
+// traffic, so it is gated behind the same `chat:read` scope that grants access
+// to other members' session transcripts. hasScope short-circuits to true when
+// RBAC is disabled, preserving existing behavior for non-RBAC orgs.
+const REVEAL_SCOPE: Scope = "chat:read";
+const REVEAL_DENIED_REASON =
+  "You need the chat:read scope to reveal flagged values.";
 
 export function CategoryLabel({
   source,
@@ -85,8 +96,11 @@ export function RevealAllToggle({
 }: {
   className?: string;
 }): JSX.Element | null {
+  const { hasScope } = useRBAC();
   const ctx = useRevealAll();
   if (!ctx) return null;
+  // No point offering a reveal-all control when every value stays masked.
+  if (!hasScope(REVEAL_SCOPE)) return null;
   const { revealAll, setRevealAll } = ctx;
   return (
     <SimpleTooltip
@@ -109,40 +123,91 @@ export function RevealAllToggle({
   );
 }
 
+// useUnmaskedMatch backs a single MaskedMatch row: it calls risk.unmaskResult
+// on reveal and caches the plaintext locally so re-toggling visibility (or a
+// second "reveal all" pass) never re-fetches or re-audits an already-seen
+// value. Each reveal is a real, audited server call — there is no client-side
+// stand-in for the plaintext until this resolves.
+function useUnmaskedMatch(resultId: string): {
+  value: string | null;
+  isLoading: boolean;
+  reveal: () => void;
+} {
+  const { mutate, isPending } = useRiskUnmaskResultMutation();
+  const [value, setValue] = useState<string | null>(null);
+  const reveal = useCallback(() => {
+    if (value !== null || isPending) return;
+    mutate(
+      { request: { riskIDRequestBody: { id: resultId } } },
+      { onSuccess: (res) => setValue(res.match) },
+    );
+  }, [mutate, resultId, value, isPending]);
+  return { value, isLoading: isPending, reveal };
+}
+
 export function MaskedMatch({
-  value,
+  resultId,
+  matchRedacted,
 }: {
-  value: string | undefined;
+  resultId: string | undefined;
+  matchRedacted: string | undefined;
 }): JSX.Element {
+  const { hasScope } = useRBAC();
+  const canReveal = hasScope(REVEAL_SCOPE);
   const ctx = useRevealAll();
   const generation = ctx?.generation;
   const revealAll = ctx?.revealAll ?? false;
   const [revealed, setRevealed] = useState(revealAll);
+  const { value, isLoading, reveal } = useUnmaskedMatch(resultId ?? "");
   // Only sync when the global toggle actually fires (generation changes).
   // Depending on the context object would clobber per-row clicks on every
-  // render.
-  const lastSyncedGeneration = useRef(generation);
+  // render. Starts at `undefined` (never equal to a real generation number)
+  // rather than the current `generation`, so a row that mounts *after*
+  // "reveal all" is already on (e.g. a paginated page loading more rows)
+  // still runs this sync once on mount and picks up the active reveal-all
+  // state, instead of staying masked until the next explicit toggle.
+  const lastSyncedGeneration = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (generation === undefined) return;
     if (lastSyncedGeneration.current === generation) return;
     lastSyncedGeneration.current = generation;
     setRevealed(revealAll);
-  }, [generation, revealAll]);
+    if (revealAll) reveal();
+  }, [generation, revealAll, reveal]);
 
-  if (!value) return <span>-</span>;
+  if (!resultId || !matchRedacted) return <span>-</span>;
 
-  if (!revealed) {
+  // Without chat:read the value can never be revealed — render a static,
+  // non-interactive placeholder so reveal-all can't flip it open either.
+  if (!canReveal) {
+    return (
+      <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+        <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+          <Lock className="h-3 w-3" />
+          <span>Hidden</span>
+        </span>
+      </SimpleTooltip>
+    );
+  }
+
+  if (!revealed || value === null) {
     return (
       <button
         type="button"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
+        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs disabled:opacity-60"
+        disabled={isLoading}
         onClick={(e) => {
           e.stopPropagation();
           setRevealed(true);
+          reveal();
         }}
       >
-        <EyeOff className="h-3 w-3" />
-        <span>Click to reveal</span>
+        {isLoading ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          <EyeOff className="h-3 w-3" />
+        )}
+        <span>{isLoading ? "Revealing…" : "Click to reveal"}</span>
       </button>
     );
   }

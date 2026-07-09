@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { pluginsGetMarketplaceSettings } from "../funcs/pluginsGetMarketplaceSettings.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { MarketplaceSettingsResult } from "../models/components/marketplacesettingsresult.js";
+import {
+  GetMarketplaceSettingsRequest,
+  GetMarketplaceSettingsSecurity,
+} from "../models/operations/getmarketplacesettings.js";
 import { unwrapAsync } from "../types/fp.js";
-export type MarketplaceSettingsQueryData = components.MarketplaceSettingsResult;
+export type MarketplaceSettingsQueryData = MarketplaceSettingsResult;
 
 export function prefetchMarketplaceSettings(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetMarketplaceSettingsRequest | undefined,
-  security?: operations.GetMarketplaceSettingsSecurity | undefined,
+  request?: GetMarketplaceSettingsRequest | undefined,
+  security?: GetMarketplaceSettingsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchMarketplaceSettings(
 
 export function buildMarketplaceSettingsQuery(
   client$: GramCore,
-  request?: operations.GetMarketplaceSettingsRequest | undefined,
-  security?: operations.GetMarketplaceSettingsSecurity | undefined,
+  request?: GetMarketplaceSettingsRequest | undefined,
+  security?: GetMarketplaceSettingsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

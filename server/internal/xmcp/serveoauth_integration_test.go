@@ -34,7 +34,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -224,7 +223,7 @@ func TestHandleRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	clients, err := mgr.ListClients(ctx, result.McpServer.ProjectID, result.UserSessionIssuer.ID)
+	clients, err := mgr.ListClients(ctx, result.McpServer.ProjectID, authCtx.ActiveOrganizationID, result.UserSessionIssuer.ID)
 	require.NoError(t, err)
 	require.Len(t, clients, 1)
 
@@ -267,7 +266,7 @@ func TestHandleRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	require.Contains(t, cbW.Header().Get("Location"), parentID)
 
 	sessions, err := remotesessions_repo.New(ti.conn).ListRemoteSessionsByProjectID(ctx, remotesessions_repo.ListRemoteSessionsByProjectIDParams{
-		ProjectID:  conv.ToNullUUID(result.McpServer.ProjectID),
+		ProjectID:  result.McpServer.ProjectID,
 		LimitValue: 10,
 	})
 	require.NoError(t, err)

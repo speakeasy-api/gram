@@ -18,10 +18,14 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DownloadPluginPackageRequest,
+  DownloadPluginPackageSecurity,
+  QueryParamPlatform,
+} from "../models/operations/downloadpluginpackage.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +46,7 @@ export {
 };
 
 export type PluginsDownloadPluginPackageQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +63,8 @@ export type PluginsDownloadPluginPackageQueryError =
  * Download a ZIP of a single plugin package for direct installation.
  */
 export function usePluginsDownloadPluginPackage(
-  request: operations.DownloadPluginPackageRequest,
-  security?: operations.DownloadPluginPackageSecurity | undefined,
+  request: DownloadPluginPackageRequest,
+  security?: DownloadPluginPackageSecurity | undefined,
   options?: QueryHookOptions<
     PluginsDownloadPluginPackageQueryData,
     PluginsDownloadPluginPackageQueryError
@@ -88,8 +92,8 @@ export function usePluginsDownloadPluginPackage(
  * Download a ZIP of a single plugin package for direct installation.
  */
 export function usePluginsDownloadPluginPackageSuspense(
-  request: operations.DownloadPluginPackageRequest,
-  security?: operations.DownloadPluginPackageSecurity | undefined,
+  request: DownloadPluginPackageRequest,
+  security?: DownloadPluginPackageSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     PluginsDownloadPluginPackageQueryData,
     PluginsDownloadPluginPackageQueryError
@@ -115,7 +119,7 @@ export function setPluginsDownloadPluginPackageData(
   queryKeyBase: [
     parameters: {
       pluginId: string;
-      platform: operations.QueryParamPlatform;
+      platform: QueryParamPlatform;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -132,7 +136,7 @@ export function invalidatePluginsDownloadPluginPackage(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       pluginId: string;
-      platform: operations.QueryParamPlatform;
+      platform: QueryParamPlatform;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]

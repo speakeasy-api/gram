@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.39.0**](../README.md)
+[**@gram-ai/elements v1.41.0**](../README.md)
 
 ***
 
@@ -16,7 +16,7 @@
 
 ### expanded?
 
-> `optional` **expanded**: `object`
+> `optional` **expanded?**: `object`
 
 #### width
 

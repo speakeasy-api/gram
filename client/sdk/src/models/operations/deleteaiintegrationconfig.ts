@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  DeleteConfigRequestBody,
+  DeleteConfigRequestBody$Outbound,
+  DeleteConfigRequestBody$outboundSchema,
+} from "../components/deleteconfigrequestbody.js";
 
 export type DeleteAIIntegrationConfigSecurity = {
   apikeyHeaderGramKey?: string | undefined;
@@ -20,7 +24,7 @@ export type DeleteAIIntegrationConfigRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  deleteAIIntegrationConfigRequest: components.DeleteAIIntegrationConfigRequest;
+  deleteConfigRequestBody: DeleteConfigRequestBody;
 };
 
 /** @internal */
@@ -60,8 +64,7 @@ export function deleteAIIntegrationConfigSecurityToJSON(
 export type DeleteAIIntegrationConfigRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
-  DeleteAIIntegrationConfigRequest:
-    components.DeleteAIIntegrationConfigRequest$Outbound;
+  DeleteConfigRequestBody: DeleteConfigRequestBody$Outbound;
 };
 
 /** @internal */
@@ -72,14 +75,13 @@ export const DeleteAIIntegrationConfigRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-    deleteAIIntegrationConfigRequest:
-      components.DeleteAIIntegrationConfigRequest$outboundSchema,
+    deleteConfigRequestBody: DeleteConfigRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
-      deleteAIIntegrationConfigRequest: "DeleteAIIntegrationConfigRequest",
+      deleteConfigRequestBody: "DeleteConfigRequestBody",
     });
   }),
 );

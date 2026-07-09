@@ -16,6 +16,7 @@ import {
  */
 export const TargetTypes = {
   HostedMcpServer: "hosted_mcp_server",
+  TunneledMcpServer: "tunneled_mcp_server",
   ShadowMcpServer: "shadow_mcp_server",
   LocalTool: "local_tool",
   Skill: "skill",
@@ -29,6 +30,10 @@ export type TargetTypes = ClosedEnum<typeof TargetTypes>;
  * Payload for target-aware MCP and tool usage metrics
  */
 export type GetToolUsageSummaryPayload = {
+  /**
+   * Optional account type filter ('team' or 'personal').
+   */
+  accountType?: string | undefined;
   /**
    * Start time in ISO 8601 format
    */
@@ -65,6 +70,7 @@ export const TargetTypes$outboundSchema: z.ZodMiniEnum<typeof TargetTypes> = z
 
 /** @internal */
 export type GetToolUsageSummaryPayload$Outbound = {
+  account_type?: string | undefined;
   from: string;
   hook_sources?: Array<string> | undefined;
   hosted_toolset_slugs?: Array<string> | undefined;
@@ -80,6 +86,7 @@ export const GetToolUsageSummaryPayload$outboundSchema: z.ZodMiniType<
   GetToolUsageSummaryPayload
 > = z.pipe(
   z.object({
+    accountType: z.optional(z.string()),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     hookSources: z.optional(z.array(z.string())),
     hostedToolsetSlugs: z.optional(z.array(z.string())),
@@ -90,6 +97,7 @@ export const GetToolUsageSummaryPayload$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      accountType: "account_type",
       hookSources: "hook_sources",
       hostedToolsetSlugs: "hosted_toolset_slugs",
       shadowServerNames: "shadow_server_names",

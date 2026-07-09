@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { Toolset } from "../models/components/toolset.js";
+import {
+  GetToolsetRequest,
+  GetToolsetSecurity,
+} from "../models/operations/gettoolset.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ToolsetQueryData = components.Toolset;
+export type ToolsetQueryData = Toolset;
 
 export function prefetchToolset(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetToolsetRequest,
-  security?: operations.GetToolsetSecurity | undefined,
+  request: GetToolsetRequest,
+  security?: GetToolsetSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchToolset(
 
 export function buildToolsetQuery(
   client$: GramCore,
-  request: operations.GetToolsetRequest,
-  security?: operations.GetToolsetSecurity | undefined,
+  request: GetToolsetRequest,
+  security?: GetToolsetSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

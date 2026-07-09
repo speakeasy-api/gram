@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CreateCustomerSessionRequest,
+  CreateCustomerSessionSecurity,
+} from "../models/operations/createcustomersession.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type CreateCustomerSessionMutationVariables = {
-  request?: operations.CreateCustomerSessionRequest | undefined;
-  security?: operations.CreateCustomerSessionSecurity | undefined;
+  request?: CreateCustomerSessionRequest | undefined;
+  security?: CreateCustomerSessionSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type CreateCustomerSessionMutationData = string;
 
 export type CreateCustomerSessionMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

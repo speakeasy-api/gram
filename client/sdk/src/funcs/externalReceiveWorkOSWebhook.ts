@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
 import { encodeSimple } from "../lib/encodings.js";
+import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -20,7 +21,10 @@ import {
 } from "../models/errors/httpclienterrors.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ReceiveWorkOSWebhookRequest,
+  ReceiveWorkOSWebhookRequest$outboundSchema,
+} from "../models/operations/receiveworkoswebhook.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -32,7 +36,7 @@ import { Result } from "../types/fp.js";
  */
 export function externalReceiveWorkOSWebhook(
   client: GramCore,
-  request?: operations.ReceiveWorkOSWebhookRequest | undefined,
+  request?: ReceiveWorkOSWebhookRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -56,7 +60,7 @@ export function externalReceiveWorkOSWebhook(
 
 async function $do(
   client: GramCore,
-  request?: operations.ReceiveWorkOSWebhookRequest | undefined,
+  request?: ReceiveWorkOSWebhookRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -77,10 +81,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        z.optional(operations.ReceiveWorkOSWebhookRequest$outboundSchema),
-        value,
-      ),
+      z.parse(z.optional(ReceiveWorkOSWebhookRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -131,7 +132,8 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    errorCodes: ["4XX", "5XX"],
+    isErrorStatusCode: (statusCode: number) =>
+      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });

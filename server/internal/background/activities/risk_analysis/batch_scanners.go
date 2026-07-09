@@ -10,10 +10,12 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.temporal.io/sdk/activity"
 
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
-func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRules []CompiledCELRule, exclusions ExclusionSet, outOfPolicyScope []bool) ([][]Finding, error) {
+func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, exclusions ExclusionSet, outOfPolicyScope []bool) ([][]scanners.Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
@@ -27,13 +29,13 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 
 	sources := newSourceSet(args.Sources)
 	n := len(messages)
-	gitleaksFindings := make([][]Finding, n)
-	presidioFindings := make([][]Finding, n)
-	shadowMCPFindings := make([][]Finding, n)
-	destructiveToolFindings := make([][]Finding, n)
-	cliDestructiveFindings := make([][]Finding, n)
-	promptInjectionFindings := make([][]Finding, n)
-	customFindings := make([][]Finding, n)
+	gitleaksFindings := make([][]scanners.Finding, n)
+	presidioFindings := make([][]scanners.Finding, n)
+	shadowMCPFindings := make([][]scanners.Finding, n)
+	destructiveToolFindings := make([][]scanners.Finding, n)
+	cliDestructiveFindings := make([][]scanners.Finding, n)
+	promptInjectionFindings := make([][]scanners.Finding, n)
+	customFindings := make([][]scanners.Finding, n)
 
 	var wg sync.WaitGroup
 	var gitleaksErr error
@@ -67,9 +69,9 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		})
 	}
 
-	if len(customRules) > 0 {
+	if len(customRuleIDs) > 0 {
 		wg.Go(func() {
-			findings, err := a.scanCustomRules(ctx, messages, customRules)
+			findings, err := a.scanCustomRules(ctx, args, requestID, messages, customRuleIDs)
 			if err != nil {
 				customErr = err
 				return
@@ -110,9 +112,15 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		activity.RecordHeartbeat(ctx, SourceCLIDestructive)
 	}
 
+	// Note: SourceAccountIdentity is deliberately absent here — it is
+	// session-scoped and evaluated in Do over the batch's full message-id set,
+	// bypassing the message-type filter and CEL scope that shape `messages`.
+
 	return mergeFindings(mergeFindingsInput{
 		outOfPolicyScope:        outOfPolicyScope,
 		exclusions:              exclusions,
+		builtinEnabled:          args.BuiltinPresetsEnabled,
+		builtinPresets:          a.builtinPresets,
 		gitleaksFindings:        gitleaksFindings,
 		presidioFindings:        presidioFindings,
 		shadowMCPFindings:       shadowMCPFindings,
@@ -126,17 +134,19 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 type mergeFindingsInput struct {
 	outOfPolicyScope        []bool
 	exclusions              ExclusionSet
-	gitleaksFindings        [][]Finding
-	presidioFindings        [][]Finding
-	shadowMCPFindings       [][]Finding
-	destructiveToolFindings [][]Finding
-	cliDestructiveFindings  [][]Finding
-	promptInjectionFindings [][]Finding
-	customFindings          [][]Finding
+	builtinEnabled          bool
+	builtinPresets          *presetlib.Library
+	gitleaksFindings        [][]scanners.Finding
+	presidioFindings        [][]scanners.Finding
+	shadowMCPFindings       [][]scanners.Finding
+	destructiveToolFindings [][]scanners.Finding
+	cliDestructiveFindings  [][]scanners.Finding
+	promptInjectionFindings [][]scanners.Finding
+	customFindings          [][]scanners.Finding
 }
 
-func mergeFindings(in mergeFindingsInput) [][]Finding {
-	merged := make([][]Finding, len(in.gitleaksFindings))
+func mergeFindings(in mergeFindingsInput) [][]scanners.Finding {
+	merged := make([][]scanners.Finding, len(in.gitleaksFindings))
 	for i := range merged {
 		if len(in.outOfPolicyScope) > 0 && in.outOfPolicyScope[i] {
 			continue
@@ -153,6 +163,9 @@ func mergeFindings(in mergeFindingsInput) [][]Finding {
 		if !in.exclusions.Empty() {
 			combined = in.exclusions.FilterFindings(combined)
 		}
+		if in.builtinEnabled {
+			combined = dropBuiltinFalsePositives(in.builtinPresets, combined)
+		}
 		merged[i] = dedup(combined)
 	}
 	return merged
@@ -166,12 +179,12 @@ func messageContents(messages []batchMessage) []string {
 	return contents
 }
 
-func concatFindings(groups ...[]Finding) []Finding {
+func concatFindings(groups ...[]scanners.Finding) []scanners.Finding {
 	total := 0
 	for _, group := range groups {
 		total += len(group)
 	}
-	out := make([]Finding, 0, total)
+	out := make([]scanners.Finding, 0, total)
 	for _, group := range groups {
 		out = append(out, group...)
 	}

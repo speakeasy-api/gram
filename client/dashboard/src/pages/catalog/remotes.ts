@@ -1,5 +1,5 @@
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
-import type { ExternalMCPRemote } from "@gram/client/models/components";
+import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 
 export function filterToHttpRemotes(server: PulseMCPServer): PulseMCPServer {
   const httpRemotes = server.remotes?.filter(

@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { projectsRead } from "../funcs/projectsRead.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetProjectResult } from "../models/components/getprojectresult.js";
+import {
+  GetProjectRequest,
+  GetProjectSecurity,
+} from "../models/operations/getproject.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ProjectQueryData = components.GetProjectResult;
+export type ProjectQueryData = GetProjectResult;
 
 export function prefetchProject(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetProjectRequest,
-  security?: operations.GetProjectSecurity | undefined,
+  request: GetProjectRequest,
+  security?: GetProjectSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchProject(
 
 export function buildProjectQuery(
   client$: GramCore,
-  request: operations.GetProjectRequest,
-  security?: operations.GetProjectSecurity | undefined,
+  request: GetProjectRequest,
+  security?: GetProjectSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

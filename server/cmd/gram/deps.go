@@ -241,6 +241,14 @@ func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.
 		return nil, fmt.Errorf("unable to record pgx metrics: %w", err)
 	}
 
+	// Ping the database to ensure connectivity
+	pingCtx, pingCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer pingCancel()
+	if err := pool.Ping(pingCtx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("database ping failed: %w", err)
+	}
+
 	return pool, nil
 }
 
@@ -990,6 +998,12 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "gitleaksAnalysis", pub: gitleaksAnalysis})
 
+	customRulesAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.CustomRulesAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for custom rules analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "customRulesAnalysis", pub: customRulesAnalysis})
+
 	shutdown := func(ctx context.Context) error {
 		var err error
 		for _, pub := range pubs {
@@ -1001,8 +1015,9 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 
 	return &background.Publishers{
-		PresidioAnalysis: presidioAnalysis,
-		GitleaksAnalysis: gitleaksAnalysis,
+		PresidioAnalysis:    presidioAnalysis,
+		GitleaksAnalysis:    gitleaksAnalysis,
+		CustomRulesAnalysis: customRulesAnalysis,
 	}, shutdown, nil
 }
 

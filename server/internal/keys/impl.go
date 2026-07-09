@@ -96,8 +96,35 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+	scopes := map[string]struct{}{}
+	for _, rawscope := range payload.Scopes {
+		scope, ok := auth.APIKeyScopes[rawscope]
+		if !ok || scope == auth.APIKeyScopeInvalid {
+			return nil, oops.E(oops.CodeBadRequest, nil, "invalid api key scope: %s", scope).LogError(ctx, s.logger)
+		}
+
+		scopes[scope.String()] = struct{}{}
+	}
+
+	if len(scopes) == 0 {
+		scopes = map[string]struct{}{
+			auth.APIKeyScopeConsumer.String(): {},
+		}
+	}
+
+	finalScopes := slices.Sorted(maps.Keys(scopes))
+
+	// A hooks key only attributes a developer's own coding-agent telemetry and
+	// carries no write powers, so any authenticated member of the org can mint
+	// one as part of the self-serve browser sign-in the hook plugins run — no
+	// role grant required. Directory-synced (SCIM) members frequently hold no
+	// scope grant at all, not even org:read, so gating this on any scope locks
+	// them out of hooks entirely. Every other scope (and any mix) stays
+	// admin-only.
+	if !slices.Equal(finalScopes, []string{auth.APIKeyScopeHooks.String()}) {
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+			return nil, err
+		}
 	}
 
 	token, err := s.generateToken()
@@ -118,24 +145,6 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	} else {
 		projectID = uuid.NullUUID{UUID: uuid.UUID{}, Valid: false}
 	}
-
-	scopes := map[string]struct{}{}
-	for _, rawscope := range payload.Scopes {
-		scope, ok := auth.APIKeyScopes[rawscope]
-		if !ok || scope == auth.APIKeyScopeInvalid {
-			return nil, oops.E(oops.CodeBadRequest, nil, "invalid api key scope: %s", scope).LogError(ctx, s.logger)
-		}
-
-		scopes[scope.String()] = struct{}{}
-	}
-
-	if len(scopes) == 0 {
-		scopes = map[string]struct{}{
-			auth.APIKeyScopeConsumer.String(): {},
-		}
-	}
-
-	finalScopes := slices.Sorted(maps.Keys(scopes))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {

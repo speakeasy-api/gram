@@ -25,7 +25,11 @@ const (
 // testServerIdentity pairs the remote_mcp_servers id with a distinct fronting
 // mcp_servers id for the telemetry interceptor tests, so assertions can tell
 // the two correlation dimensions apart.
-var testServerIdentity = proxy.ServerIdentity{RemoteMCPServerID: testServerID, McpServerID: testMcpServerID}
+var testServerIdentity = proxy.ServerIdentity{
+	RemoteMCPServerID:   testServerID,
+	TunneledMCPServerID: "",
+	McpServerID:         testMcpServerID,
+}
 
 func newAuthzEngineForTest(t *testing.T) *authz.Engine {
 	t.Helper()

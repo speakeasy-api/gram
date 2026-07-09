@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  Chat,
-  ChatMessage,
-  RiskSegment,
-} from "@gram/client/models/components";
+import type { Chat } from "@gram/client/models/components/chat.js";
+import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
+import type { RiskSegment } from "@gram/client/models/components/risksegment.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
-import { useLoadChat } from "@gram/client/react-query";
+import { useLoadChat } from "@gram/client/react-query/loadChat.js";
 import { useSdkClient } from "@/contexts/Sdk";
 import { TRANSCRIPT_PAGE_SIZE } from "./useChatTranscript";
 
@@ -28,6 +26,10 @@ export interface WindowedTranscript {
   loadingKey: WindowLoadKey | null;
   isLoading: boolean;
   isError: boolean;
+  /** True when the load failed specifically because the caller lacks
+   * chat:read for this chat, so callers can show a permission message
+   * instead of a generic error. */
+  isForbidden: boolean;
 }
 
 interface WindowState {
@@ -89,8 +91,15 @@ export function useWindowedTranscript(
     undefined,
     {
       enabled,
+      // Let 404s and 403s fall through to the panel's "Not found" /
+      // "Permission denied" UI instead of throwing to the nearest error
+      // boundary — both are anticipated outcomes of opening an arbitrary
+      // chat_id, not unexpected failures.
       throwOnError: (error) =>
-        !(error instanceof GramError && error.statusCode === 404),
+        !(
+          error instanceof GramError &&
+          (error.statusCode === 404 || error.statusCode === 403)
+        ),
     },
   );
 
@@ -210,6 +219,8 @@ export function useWindowedTranscript(
     gaps: state?.gaps ?? new Set(),
     hasMoreBefore: state?.hasMoreBefore ?? false,
     hasMoreAfter: state?.hasMoreAfter ?? false,
+    isForbidden:
+      base.error instanceof GramError && base.error.statusCode === 403,
     loadBefore,
     loadAfter,
     loadGap,

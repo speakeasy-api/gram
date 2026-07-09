@@ -1,11 +1,12 @@
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
-import { useListToolsets } from "@gram/client/react-query/index.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 
 export function useToolsets(): NonNullable<
   ReturnType<typeof useListToolsets>["data"]
 >["toolsets"] & {
   refetch: ReturnType<typeof useListToolsets>["refetch"];
   isLoading: ReturnType<typeof useListToolsets>["isLoading"];
+  isFetching: ReturnType<typeof useListToolsets>["isFetching"];
   isError: ReturnType<typeof useListToolsets>["isError"];
 } {
   const gramProject = useProjectSlugForRequests();
@@ -13,6 +14,7 @@ export function useToolsets(): NonNullable<
     data: toolsets,
     refetch,
     isLoading,
+    isFetching,
     isError,
   } = useListToolsets({ gramProject }, undefined, {
     // toolsets.list is non-critical for the MCP screens — degrade to the last
@@ -24,6 +26,7 @@ export function useToolsets(): NonNullable<
   return Object.assign(toolsets?.toolsets || [], {
     refetch,
     isLoading,
+    isFetching,
     isError,
   });
 }

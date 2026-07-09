@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SetUserSessionIssuerRequestBody,
+  SetUserSessionIssuerRequestBody$Outbound,
+  SetUserSessionIssuerRequestBody$outboundSchema,
+} from "../components/setusersessionissuerrequestbody.js";
 
 export type SetToolsetUserSessionIssuerSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -38,7 +42,7 @@ export type SetToolsetUserSessionIssuerRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  setUserSessionIssuerRequestBody: components.SetUserSessionIssuerRequestBody;
+  setUserSessionIssuerRequestBody: SetUserSessionIssuerRequestBody;
 };
 
 /** @internal */
@@ -154,8 +158,7 @@ export type SetToolsetUserSessionIssuerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  SetUserSessionIssuerRequestBody:
-    components.SetUserSessionIssuerRequestBody$Outbound;
+  SetUserSessionIssuerRequestBody: SetUserSessionIssuerRequestBody$Outbound;
 };
 
 /** @internal */
@@ -169,7 +172,7 @@ export const SetToolsetUserSessionIssuerRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     setUserSessionIssuerRequestBody:
-      components.SetUserSessionIssuerRequestBody$outboundSchema,
+      SetUserSessionIssuerRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

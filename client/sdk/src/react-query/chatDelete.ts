@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DeleteChatRequest,
+  DeleteChatSecurity,
+} from "../models/operations/deletechat.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type ChatDeleteMutationVariables = {
-  request: operations.DeleteChatRequest;
-  security?: operations.DeleteChatSecurity | undefined;
+  request: DeleteChatRequest;
+  security?: DeleteChatSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type ChatDeleteMutationData = void;
 
 export type ChatDeleteMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

@@ -21,18 +21,20 @@ import {
   SquarePen,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ChatOverview } from "@gram/client/models/components";
+import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import {
   Pinned,
   SortBy,
   SortOrder,
 } from "@gram/client/models/operations/listchats";
+import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
 import {
   invalidateAllListChats,
-  useChatSetPinnedMutation,
   useListChats,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/listChats.js";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   useHideInsightsDock,
   useInsightsState,
@@ -607,6 +609,64 @@ function RecentEntryView({ entry }: { entry: RecentEntry }): ReactElement {
   return <RecentRow chat={entry.chat} pinned={false} />;
 }
 
+/**
+ * Two-letter initials from a display name or email handle: first letter of
+ * the first and last word for a multi-word name ("Adam Bull" -> "AB"), or
+ * the first two characters of the email's local part / a single-word name
+ * otherwise ("adam@..." -> "AD").
+ */
+function initialsOf(identifier: string): string {
+  const handle = identifier.includes("@")
+    ? (identifier.split("@")[0] ?? identifier)
+    : identifier;
+  const words = handle.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return (
+      words[0]!.charAt(0) + words[words.length - 1]!.charAt(0)
+    ).toUpperCase();
+  }
+  return handle.trim().slice(0, 2).toUpperCase();
+}
+
+// Row icon: the chat creator's avatar when it resolves against the org
+// member list, otherwise the default message icon (e.g. chats with no
+// internal user attached, or before members have loaded). Chats started from
+// the dashboard itself have no `userId` at capture time and stash the
+// caller's email in `externalUserId` instead — fall back to an email match so
+// those still resolve.
+function RecentRowIcon({
+  userId,
+  externalUserId,
+}: {
+  userId?: string;
+  externalUserId?: string;
+}): ReactElement {
+  const { data: membersData } = useMembers();
+  const member = membersData?.members.find(
+    (m) => m.id === userId || (!!externalUserId && m.email === externalUserId),
+  );
+
+  if (member) {
+    const display = member.name || member.email;
+    return (
+      <Avatar className="size-9 shrink-0">
+        {member.photoUrl ? (
+          <AvatarImage src={member.photoUrl} alt={display} />
+        ) : null}
+        <AvatarFallback className="border-border bg-card text-muted-foreground border text-xs font-medium">
+          {initialsOf(display)}
+        </AvatarFallback>
+      </Avatar>
+    );
+  }
+
+  return (
+    <span className="border-border bg-card text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg border">
+      <MessageCircle className="size-4" />
+    </span>
+  );
+}
+
 function RecentRow({
   chat,
   pinned,
@@ -624,9 +684,10 @@ function RecentRow({
         to={routes.chat.conversation.href(chat.id)}
         className="flex min-w-0 flex-1 items-center gap-3"
       >
-        <span className="border-border bg-card text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg border">
-          <MessageCircle className="size-4" />
-        </span>
+        <RecentRowIcon
+          userId={chat.userId}
+          externalUserId={chat.externalUserId}
+        />
         <span className="text-foreground min-w-0 flex-1 truncate text-sm">
           {chat.title || "New chat"}
         </span>

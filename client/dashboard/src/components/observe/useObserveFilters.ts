@@ -1,6 +1,6 @@
 import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
 import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
-import type { TypesToInclude } from "@gram/client/models/components";
+import type { TypesToInclude } from "@gram/client/models/components/gethookssummarypayload.js";
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import type { FilterChip } from "@/components/observe/ObserveFilterBar";
@@ -13,10 +13,14 @@ import {
   safeBase64Encode,
 } from "./observeFilterUtils";
 import { DEFAULT_HOOK_TYPES, VALID_HOOK_TYPES } from "./observeFilterConstants";
-import type { ObserveTypeFilterValue } from "@/components/observe/ObserveFilterBar";
+import type {
+  ObserveStatusFilterValue,
+  ObserveTypeFilterValue,
+} from "@/components/observe/ObserveFilterBar";
+import { TOOL_USAGE_VALID_STATUSES } from "./observeTargetFilters";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { useGramContext } from "@gram/client/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
 
@@ -368,7 +372,72 @@ function useObserveFiltersImpl<
     [defaultTypes, setSearchParams, validTypes],
   );
 
+  // status filter (error | success | blocked | pending); empty = no filter.
+  // Opt-in: only pages backed by the tool-usage traces query surface it.
+  const selectedStatuses = useMemo<ObserveStatusFilterValue[]>(() => {
+    const raw = searchParams.get("status");
+    if (!raw) return [];
+    return [
+      ...new Set(
+        raw
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s): s is ObserveStatusFilterValue =>
+            TOOL_USAGE_VALID_STATUSES.includes(s as ObserveStatusFilterValue),
+          ),
+      ),
+    ];
+  }, [searchParams]);
+  const handleStatusesChange = useCallback(
+    (statuses: ObserveStatusFilterValue[]) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (statuses.length > 0) {
+            next.set("status", statuses.join(","));
+          } else {
+            next.delete("status");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  // account_type filter (team | personal); empty string = no filter. Opt-in:
+  // only pages that pass these to ObserveFilterBar surface the control.
+  const urlAccountType = searchParams.get("account_type");
+  const accountType: string =
+    urlAccountType === "team" || urlAccountType === "personal"
+      ? urlAccountType
+      : "";
+  const handleAccountTypeChange = useCallback(
+    (value: string) => {
+      // Match the other filter handlers: replace (don't push) so toggling the
+      // filter doesn't stack history entries.
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) {
+            next.set("account_type", value);
+          } else {
+            next.delete("account_type");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   return {
+    accountType,
+    handleAccountTypeChange,
+    selectedStatuses,
+    handleStatusesChange,
     activeFilters,
     selectedHookTypes,
     dateRange,

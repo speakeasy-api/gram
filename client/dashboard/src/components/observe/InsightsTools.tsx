@@ -34,15 +34,13 @@ import { useOrgRoutes } from "@/routes";
 import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
 import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
 import { telemetryGetToolUsageSummary } from "@gram/client/funcs/telemetryGetToolUsageSummary";
-import type {
-  GetToolUsageSummaryResult,
-  ToolUsageTargetTimeSeriesPoint,
-  ToolUsageTargetToolBreakdownRow,
-  ToolUsageUserSummary,
-  ToolUsageUserTimeSeriesPoint,
-  ToolUsageUsersByTargetRow,
-} from "@gram/client/models/components";
-import { useGramContext } from "@gram/client/react-query";
+import type { GetToolUsageSummaryResult } from "@gram/client/models/components/gettoolusagesummaryresult.js";
+import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
+import type { ToolUsageTargetToolBreakdownRow } from "@gram/client/models/components/toolusagetargettoolbreakdownrow.js";
+import type { ToolUsageUsersByTargetRow } from "@gram/client/models/components/toolusageusersbytargetrow.js";
+import type { ToolUsageUserSummary } from "@gram/client/models/components/toolusageusersummary.js";
+import type { ToolUsageUserTimeSeriesPoint } from "@gram/client/models/components/toolusageusertimeseriespoint.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import { ChartCard } from "@/components/chart/ChartCard";
@@ -129,7 +127,7 @@ const COLLAPSED_BAR_CHART_MAX_ROWS = 6;
 const BAR_THICKNESS = { collapsed: 18, expanded: 24 };
 const BAR_ROW_HEIGHT = { collapsed: 18, expanded: 24 };
 const BAR_ROW_SPACER = { collapsed: 8, expanded: 12 };
-const BAR_BORDER_RADIUS = 5;
+const BAR_BORDER_RADIUS = 0;
 const LINE_CHART_HEIGHT = { collapsed: 250, expanded: 600 };
 
 function displayTargetLabel(
@@ -230,6 +228,8 @@ export function InsightsToolsContent(): JSX.Element {
     handleRoleSelectionChange,
     roleFilterPending,
     roleEmails,
+    accountType,
+    handleAccountTypeChange,
   } = useObserveFilters({
     defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
     validTypes: TOOL_USAGE_VALID_TYPES,
@@ -285,6 +285,7 @@ export function InsightsToolsContent(): JSX.Element {
         userFilters,
         hookSourceFilters,
         selectedHookTypes,
+        accountType,
       ],
       queryFn: () =>
         unwrapAsync(
@@ -300,6 +301,7 @@ export function InsightsToolsContent(): JSX.Element {
               userFilters: userFilters.length > 0 ? userFilters : undefined,
               hookSources:
                 hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
+              accountType: accountType || undefined,
             },
           }),
         ),
@@ -422,6 +424,10 @@ export function InsightsToolsContent(): JSX.Element {
           summaryData={summaryData}
           summaryPending={summaryPending}
           summaryIsError={summaryIsError}
+          accountType={accountType}
+          onAccountTypeChange={handleAccountTypeChange}
+          onRefresh={refetch}
+          isRefreshing={summaryFetching}
         />
       )}
     </>
@@ -457,6 +463,10 @@ function HooksInnerContent({
   summaryData,
   summaryPending,
   summaryIsError,
+  accountType,
+  onAccountTypeChange,
+  onRefresh,
+  isRefreshing,
 }: {
   isLogsDisabled: boolean;
   isLoading: boolean;
@@ -487,6 +497,10 @@ function HooksInnerContent({
   summaryData: GetToolUsageSummaryResult | undefined;
   summaryPending: boolean;
   summaryIsError: boolean;
+  accountType: string;
+  onAccountTypeChange: (value: string) => void;
+  onRefresh: () => void;
+  isRefreshing: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
   const { from, to } = useMemo(
@@ -552,6 +566,10 @@ function HooksInnerContent({
           onClearCustomRange={onClearCustomRange}
           projectSlug={projectSlug}
           serverNameMappings={serverNameMappings}
+          accountType={accountType}
+          onAccountTypeChange={onAccountTypeChange}
+          onRefresh={onRefresh}
+          isRefreshing={isRefreshing}
         />
 
         <div className="flex min-h-0 flex-1 overflow-hidden">

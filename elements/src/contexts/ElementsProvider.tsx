@@ -756,6 +756,8 @@ const ElementsProviderWithHistory = ({
     threadListFilters: contextValue?.config.history?.threadListFilters,
     deferThreadIdMinting: contextValue?.config.history?.deferThreadIdMinting,
     transformChatMessage: contextValue?.config.history?.transformChatMessage,
+    resolveCreator: contextValue?.config.history?.resolveCreator,
+    isOwnChat: contextValue?.config.history?.isOwnChat,
   });
   const initialThreadId = contextValue?.config.history?.initialThreadId;
 
@@ -780,19 +782,24 @@ const ElementsProviderWithHistory = ({
     runtimeRef.current = runtime as ReturnType<typeof useChatRuntime>;
   }, [runtime, runtimeRef]);
 
-  // Switch to initial thread if provided (for shared chat URLs)
+  // Switch to initial thread if provided (for shared chat URLs). The switched
+  // flag must only be set once the switch actually fires: the effect cleanup
+  // cancels a still-pending timeout (StrictMode double-mount, dep identity
+  // churn), and marking up-front would record a switch that never happened.
   const initialThreadSwitched = useRef(false);
   useEffect(() => {
-    if (initialThreadId && !initialThreadSwitched.current) {
+    if (!initialThreadId || initialThreadSwitched.current) return;
+    // Use setTimeout to ensure runtime is fully initialized
+    const timeoutId = setTimeout(() => {
       initialThreadSwitched.current = true;
-      // Use setTimeout to ensure runtime is fully initialized
-      const timeoutId = setTimeout(() => {
-        runtime.threads.switchToThread(initialThreadId).catch((error) => {
-          console.error("Failed to switch to initial thread:", error);
+      runtime.threads.switchToThread(initialThreadId).catch((error) => {
+        trackError(error, {
+          source: "custom",
+          operation: "switch-initial-thread",
         });
-      }, 100);
-      return () => clearTimeout(timeoutId);
-    }
+      });
+    }, 100);
+    return () => clearTimeout(timeoutId);
   }, [initialThreadId, runtime]);
 
   // Get the Provider from our adapter to wrap the content

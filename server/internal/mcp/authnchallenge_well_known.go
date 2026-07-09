@@ -22,6 +22,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
@@ -29,6 +30,12 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
+
+// metadataCacheMaxAgeSeconds is the Cache-Control max-age for public well-known
+// OAuth-metadata responses. Deliberately short: the documents change rarely but
+// an issuer's config can, so a 60s TTL caps how long a stale document lingers
+// while still absorbing bursts.
+const metadataCacheMaxAgeSeconds = 60
 
 // supportedBearerMethods advertises what the MCP resource-server surface
 // accepts in the WWW-Authenticate challenge (RFC 9728). The AS-level
@@ -120,7 +127,7 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build legacy resource URL").LogError(ctx, s.logger)
 	}
-	return s.serveLegacyToolsetProtectedResource(ctx, w, logger, toolset, resourceURL)
+	return s.serveLegacyToolsetProtectedResource(ctx, w, r, logger, toolset, resourceURL)
 }
 
 // HandleGetAuthorizationServer serves RFC 8414 authorization-server metadata
@@ -205,6 +212,8 @@ func (s *Service) ServeWellKnownProtectedResourceForServer(
 	switch {
 	case mcpServer.RemoteMcpServerID.Valid:
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+	case mcpServer.TunneledMcpServerID.Valid:
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 	case mcpServer.ToolsetID.Valid:
 		toolset, err := s.loadToolsetForServer(ctx, logger, mcpServer.ToolsetID.UUID, mcpEndpoint.ProjectID)
 		if err != nil {
@@ -214,7 +223,7 @@ func (s *Service) ServeWellKnownProtectedResourceForServer(
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)
 		}
-		return s.serveLegacyToolsetProtectedResource(ctx, w, logger, toolset, resourceURL)
+		return s.serveLegacyToolsetProtectedResource(ctx, w, r, logger, toolset, resourceURL)
 	default:
 		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").LogError(ctx, logger)
 	}
@@ -244,6 +253,8 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 
 	switch {
 	case mcpServer.RemoteMcpServerID.Valid:
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+	case mcpServer.TunneledMcpServerID.Valid:
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 	case mcpServer.ToolsetID.Valid:
 		toolset, err := s.loadToolsetForServer(ctx, logger, mcpServer.ToolsetID.UUID, mcpEndpoint.ProjectID)
@@ -285,7 +296,7 @@ func (s *Service) loadToolsetForServer(ctx context.Context, logger *slog.Logger,
 // resolver. A nil result means the toolset carries no OAuth configuration —
 // 404. resourceURL is the runtime URL the caller addressed; it is emitted
 // verbatim as both `resource` and `authorization_servers`.
-func (s *Service) serveLegacyToolsetProtectedResource(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, toolset *toolsets_repo.Toolset, resourceURL string) error {
+func (s *Service) serveLegacyToolsetProtectedResource(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, toolset *toolsets_repo.Toolset, resourceURL string) error {
 	metadata, err := wellknown.ResolveOAuthProtectedResourceFromToolset(ctx, logger, s.db, &s.toolsetCache, toolset, resourceURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth protected resource metadata").LogError(ctx, logger)
@@ -293,7 +304,7 @@ func (s *Service) serveLegacyToolsetProtectedResource(ctx context.Context, w htt
 	if metadata == nil {
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 	}
-	return writeOAuthProtectedResourceMetadataResponse(ctx, logger, w, metadata)
+	return writeOAuthProtectedResourceMetadataResponse(ctx, logger, w, r, metadata)
 }
 
 // serveLegacyToolsetAuthorizationServer resolves and writes RFC 8414
@@ -332,7 +343,7 @@ func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w h
 		return nil
 	}
 
-	return writeOAuthServerMetadataResponse(ctx, logger, w, result)
+	return writeOAuthServerMetadataResponse(ctx, logger, w, r, result)
 }
 
 // ServeGetProtectedResource is the post-resolution entry point for the
@@ -348,7 +359,7 @@ func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, s.logger)
 	}
-	return writeJSONMetadata(ctx, w, s.logger, oauthProtectedResourceMetadata{
+	return writeJSONMetadata(ctx, w, r, s.logger, oauthProtectedResourceMetadata{
 		Resource:               resource,
 		AuthorizationServers:   []string{resource},
 		ScopesSupported:        nil,
@@ -369,7 +380,7 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, s.logger)
 	}
-	return writeJSONMetadata(ctx, w, s.logger, oauthAuthorizationServerMetadata{
+	return writeJSONMetadata(ctx, w, r, s.logger, oauthAuthorizationServerMetadata{
 		Issuer:                            urls.Issuer,
 		AuthorizationEndpoint:             urls.Authorize,
 		TokenEndpoint:                     urls.Token,
@@ -384,16 +395,12 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 }
 
 // writeJSONMetadata is the shared write path for issuer-gated metadata
-// responses. Marshals the value, sets Content-Type, then commits 200.
-func writeJSONMetadata(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, v any) error {
+// responses. Marshals the value, then commits a public, cacheable 200 (or a 304
+// when the caller's If-None-Match matches).
+func writeJSONMetadata(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, v any) error {
 	body, err := json.Marshal(v)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal metadata").LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "marshal metadata").LogError(ctx, logger)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(body); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write response body").LogError(ctx, logger)
-	}
-	return nil
+	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }

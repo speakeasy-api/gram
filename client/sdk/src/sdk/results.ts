@@ -5,24 +5,43 @@
 import { riskResultsByChat } from "../funcs/riskResultsByChat.js";
 import { riskResultsList } from "../funcs/riskResultsList.js";
 import { riskResultsListForAgent } from "../funcs/riskResultsListForAgent.js";
+import { riskResultsUnmask } from "../funcs/riskResultsUnmask.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListRiskResultsByChatResult } from "../models/components/listriskresultsbychatresult.js";
+import { ListRiskResultsForAgentResult } from "../models/components/listriskresultsforagentresult.js";
+import { ListRiskResultsResult } from "../models/components/listriskresultsresult.js";
+import { RiskUnmaskResultResult } from "../models/components/riskunmaskresultresult.js";
+import {
+  ListRiskResultsRequest,
+  ListRiskResultsSecurity,
+} from "../models/operations/listriskresults.js";
+import {
+  ListRiskResultsByChatRequest,
+  ListRiskResultsByChatSecurity,
+} from "../models/operations/listriskresultsbychat.js";
+import {
+  ListRiskResultsForAgentRequest,
+  ListRiskResultsForAgentSecurity,
+} from "../models/operations/listriskresultsforagent.js";
+import {
+  UnmaskRiskResultRequest,
+  UnmaskRiskResultSecurity,
+} from "../models/operations/unmaskriskresult.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Results extends ClientSDK {
   /**
-   * listRiskResultsByChat risk
+   * listRiskResults risk
    *
    * @remarks
-   * List risk results grouped by chat session for the current project.
+   * List risk analysis results for the current project.
    */
-  async byChat(
-    request?: operations.ListRiskResultsByChatRequest | undefined,
-    security?: operations.ListRiskResultsByChatSecurity | undefined,
+  async list(
+    request?: ListRiskResultsRequest | undefined,
+    security?: ListRiskResultsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListRiskResultsByChatResult> {
-    return unwrapAsync(riskResultsByChat(
+  ): Promise<ListRiskResultsResult> {
+    return unwrapAsync(riskResultsList(
       this,
       request,
       security,
@@ -31,17 +50,17 @@ export class Results extends ClientSDK {
   }
 
   /**
-   * listRiskResults risk
+   * listRiskResultsByChat risk
    *
    * @remarks
-   * List risk analysis results for the current project.
+   * List risk results grouped by chat session for the current project.
    */
-  async list(
-    request?: operations.ListRiskResultsRequest | undefined,
-    security?: operations.ListRiskResultsSecurity | undefined,
+  async byChat(
+    request?: ListRiskResultsByChatRequest | undefined,
+    security?: ListRiskResultsByChatSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListRiskResultsResult> {
-    return unwrapAsync(riskResultsList(
+  ): Promise<ListRiskResultsByChatResult> {
+    return unwrapAsync(riskResultsByChat(
       this,
       request,
       security,
@@ -56,11 +75,30 @@ export class Results extends ClientSDK {
    * List risk analysis results with the `match` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `match` value — a non-sensitive server URL or command identifier — is passed through verbatim.
    */
   async listForAgent(
-    request?: operations.ListRiskResultsForAgentRequest | undefined,
-    security?: operations.ListRiskResultsForAgentSecurity | undefined,
+    request?: ListRiskResultsForAgentRequest | undefined,
+    security?: ListRiskResultsForAgentSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListRiskResultsForAgentResult> {
+  ): Promise<ListRiskResultsForAgentResult> {
     return unwrapAsync(riskResultsListForAgent(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * unmaskRiskResult risk
+   *
+   * @remarks
+   * Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.
+   */
+  async unmask(
+    request: UnmaskRiskResultRequest,
+    security?: UnmaskRiskResultSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RiskUnmaskResultResult> {
+    return unwrapAsync(riskResultsUnmask(
       this,
       request,
       security,

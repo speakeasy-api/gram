@@ -27,13 +27,11 @@ import {
   isDisplayableBucket,
 } from "@/pages/access/challengeHelpers";
 import { useOrgRoutes } from "@/routes";
-import type {
-  AccessMember,
-  AuditLog,
-  ChallengeBucket,
-} from "@gram/client/models/components";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { AuditLog } from "@gram/client/models/components/auditlog.js";
+import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
-import { useAuditLogs } from "@gram/client/react-query";
+import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import {

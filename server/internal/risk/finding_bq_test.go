@@ -269,7 +269,7 @@ func TestFindingBQWriter_HandleBatch_CapturesMatchWhenFlagEnabled(t *testing.T) 
 	require.Equal(t, bigquery.NullString{StringVal: "hunter2", Valid: true}, rows(t, ins)[0].Match)
 }
 
-func TestFindingBQWriter_HandleBatch_RecordsRowsInsertedMetric(t *testing.T) {
+func TestFindingBQWriter_HandleBatch_RecordsMessagesInsertedMetric(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -291,11 +291,11 @@ func TestFindingBQWriter_HandleBatch_RecordsRowsInsertedMetric(t *testing.T) {
 			w, ins, _ := newWriterWithMeter(t, &feature.InMemory{}, mp)
 			ins.err = tt.inserterErr
 
-			// Two findings produce two rows in a single insert.
+			// Two findings produce two messages in a single insert.
 			require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{finding(), finding()}, nil))
 
-			point := rowsInsertedPoint(t, reader)
-			require.Equal(t, int64(2), point.Value, "counter should track the number of rows submitted")
+			point := messagesInsertedPoint(t, reader)
+			require.Equal(t, int64(2), point.Value, "counter should track the number of messages submitted")
 
 			outcome, ok := point.Attributes.Value(attr.OutcomeKey)
 			require.True(t, ok, "outcome attribute should be present")
@@ -317,7 +317,32 @@ func TestFindingBQWriter_HandleBatch_NoInsertRecordsNoMetric(t *testing.T) {
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(context.Background(), &rm))
-	require.Empty(t, rm.ScopeMetrics, "no insert means no rows_inserted metric")
+	require.Empty(t, rm.ScopeMetrics, "no insert means no messages_inserted metric")
+}
+
+func TestFindingBQWriter_HandleBatch_RecordsSkippedMessagesMetric(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+
+	w, ins, _ := newWriterWithMeter(t, &feature.InMemory{}, mp)
+
+	// One finding has an unparseable timestamp and is skipped; the other is
+	// valid and inserted.
+	bad := finding()
+	bad.SetCreatedAt("not-a-timestamp")
+
+	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{bad, finding()}, nil))
+
+	require.Len(t, rows(t, ins), 1, "only the valid finding should be inserted")
+
+	point := messagesSkippedPoint(t, reader)
+	require.Equal(t, int64(1), point.Value, "one message should be counted as skipped")
+
+	reason, ok := point.Attributes.Value(attr.ReasonKey)
+	require.True(t, ok, "reason attribute should be present")
+	require.Equal(t, "invalid_timestamp", reason.AsString())
 }
 
 func TestFindingBQWriter_HandleBatch_FlagScopedPerOrganization(t *testing.T) {
@@ -520,12 +545,38 @@ func TestFindingBQWriter_HandleBatch_MetadataLengthMismatch(t *testing.T) {
 	require.Len(t, rows(t, ins), 1)
 }
 
-// rowsInsertedPoint collects metrics and returns the single data point for the
-// rows-inserted counter, failing the test if it is missing.
-func rowsInsertedPoint(t *testing.T, reader *sdkmetric.ManualReader) metricdata.DataPoint[int64] {
+// messagesInsertedPoint collects metrics and returns the single data point for
+// the messages-inserted counter, failing the test if it is missing.
+func messagesInsertedPoint(t *testing.T, reader *sdkmetric.ManualReader) metricdata.DataPoint[int64] {
 	t.Helper()
 
-	const metricName = "gram.risk_findings.bq_rows_inserted"
+	const metricName = "gram.risk_findings.bq_messages_inserted"
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(context.Background(), &rm))
+
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != metricName {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.Truef(t, ok, "metric %q is %T, not Sum[int64]", metricName, m.Data)
+			require.Len(t, sum.DataPoints, 1)
+			return sum.DataPoints[0]
+		}
+	}
+
+	require.Failf(t, "metric not found", "missing metric %q", metricName)
+	return metricdata.DataPoint[int64]{}
+}
+
+// messagesSkippedPoint collects metrics and returns the single data point for
+// the messages-skipped counter, failing the test if it is missing.
+func messagesSkippedPoint(t *testing.T, reader *sdkmetric.ManualReader) metricdata.DataPoint[int64] {
+	t.Helper()
+
+	const metricName = "gram.risk_findings.bq_messages_skipped"
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(context.Background(), &rm))

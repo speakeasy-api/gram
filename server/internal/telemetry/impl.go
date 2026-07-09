@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -377,12 +378,29 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 }
 
 func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.SearchUsersPayload) (*telem_gen.SearchUsersResult, error) {
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.Filter.From, &payload.Filter.To)
+	// Filter is required by the Goa design, but direct callers (e.g. platform
+	// tools) bypass transport validation and may pass a nil filter. Normalize to
+	// an empty filter to avoid a nil pointer dereference.
+	filter := payload.Filter
+	if filter == nil {
+		filter = &telem_gen.SearchUsersFilter{
+			From:          "",
+			To:            "",
+			DeploymentID:  nil,
+			UserIds:       nil,
+			EventSource:   nil,
+			HookSource:    nil,
+			AccountType:   nil,
+			ExternalOrgID: nil,
+		}
+	}
+
+	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
 	if err != nil {
 		return nil, err
 	}
 
-	deploymentID := conv.PtrValOr(payload.Filter.DeploymentID, "")
+	deploymentID := conv.PtrValOr(filter.DeploymentID, "")
 
 	groupBy := "user_id"
 	if payload.UserType == "external" {
@@ -394,10 +412,12 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		TimeStart:        params.timeStart,
 		TimeEnd:          params.timeEnd,
 		GramDeploymentID: deploymentID,
-		EventSource:      conv.PtrValOr(payload.Filter.EventSource, ""),
-		HookSource:       conv.PtrValOr(payload.Filter.HookSource, ""),
+		EventSource:      conv.PtrValOr(filter.EventSource, ""),
+		HookSource:       conv.PtrValOr(filter.HookSource, ""),
+		AccountType:      conv.PtrValOr(filter.AccountType, ""),
+		ExternalOrgID:    conv.PtrValOr(filter.ExternalOrgID, ""),
 		GroupBy:          groupBy,
-		UserIDs:          payload.Filter.UserIds,
+		UserIDs:          filter.UserIds,
 		SortOrder:        params.sortOrder,
 		Cursor:           params.cursor,
 		Limit:            params.limit + 1,
@@ -456,6 +476,17 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 			ToolCallFailure:          int64(item.ToolCallFailure),
 			Tools:                    tools,
 			HookSources:              hookSources,
+			AccountTypes:             item.AccountTypes,
+			Accounts:                 nil,
+		}
+	}
+
+	// Attach each user's linked AI accounts (team + personal, across providers)
+	// from the user_accounts directory. Only meaningful when grouping by internal
+	// user_id — external ids don't map to a directory owner.
+	if payload.UserType != "external" {
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+			s.attachUserAccounts(ctx, authCtx.ActiveOrganizationID, users)
 		}
 	}
 
@@ -466,15 +497,83 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	}, nil
 }
 
+// attachUserAccounts populates UserSummary.Accounts from the user_accounts
+// directory for the given internal user ids. Best-effort: a lookup failure
+// leaves accounts empty rather than failing the listing.
+func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []*telem_gen.UserSummary) {
+	userIDs := make([]string, 0, len(users))
+	for _, u := range users {
+		if u.UserID != "" {
+			userIDs = append(userIDs, u.UserID)
+		}
+	}
+	if len(userIDs) == 0 {
+		return
+	}
+
+	rows, err := s.hooksRepo.ListUserAccountsByUsers(ctx, hooksRepo.ListUserAccountsByUsersParams{
+		OrganizationID: orgID,
+		UserIds:        userIDs,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to load user accounts for employees list", attr.SlogError(err))
+		return
+	}
+
+	byUser := make(map[string][]*telem_gen.UserAccount, len(rows))
+	for _, row := range rows {
+		if !row.UserID.Valid || row.UserID.String == "" {
+			continue
+		}
+		var lastSeen *string
+		if row.LastSeenAt.Valid {
+			ns := strconv.FormatInt(row.LastSeenAt.Time.UnixNano(), 10)
+			lastSeen = &ns
+		}
+		idStr := row.ID.String()
+		byUser[row.UserID.String] = append(byUser[row.UserID.String], &telem_gen.UserAccount{
+			ID:               &idStr,
+			Provider:         row.Provider,
+			Email:            conv.FromPGText[string](row.Email),
+			AccountType:      conv.FromPGText[string](row.AccountType),
+			ExternalOrgID:    conv.FromPGText[string](row.ExternalOrgID),
+			LastSeenUnixNano: lastSeen,
+		})
+	}
+
+	for _, u := range users {
+		if accts, ok := byUser[u.UserID]; ok {
+			u.Accounts = accts
+		}
+	}
+}
+
 // searchUsersByRole fetches all per-user costs from ClickHouse, joins with role
 // assignments from Postgres, and returns aggregates grouped by role.
 func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.SearchUsersPayload) (*telem_gen.SearchUsersResult, error) {
-	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.Filter.From, &payload.Filter.To)
+	// Filter is required by the Goa design, but direct callers (e.g. platform
+	// tools) bypass transport validation and may pass a nil filter. Normalize to
+	// an empty filter to avoid a nil pointer dereference.
+	filter := payload.Filter
+	if filter == nil {
+		filter = &telem_gen.SearchUsersFilter{
+			From:          "",
+			To:            "",
+			DeploymentID:  nil,
+			UserIds:       nil,
+			EventSource:   nil,
+			HookSource:    nil,
+			AccountType:   nil,
+			ExternalOrgID: nil,
+		}
+	}
+
+	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
 	if err != nil {
 		return nil, err
 	}
 
-	deploymentID := conv.PtrValOr(payload.Filter.DeploymentID, "")
+	deploymentID := conv.PtrValOr(filter.DeploymentID, "")
 
 	// Fetch per-user costs from ClickHouse and role assignments from Postgres
 	// concurrently — the two queries are independent.
@@ -489,10 +588,12 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 			TimeStart:        params.timeStart,
 			TimeEnd:          params.timeEnd,
 			GramDeploymentID: deploymentID,
-			EventSource:      conv.PtrValOr(payload.Filter.EventSource, ""),
-			HookSource:       conv.PtrValOr(payload.Filter.HookSource, ""),
+			EventSource:      conv.PtrValOr(filter.EventSource, ""),
+			HookSource:       conv.PtrValOr(filter.HookSource, ""),
+			AccountType:      conv.PtrValOr(filter.AccountType, ""),
+			ExternalOrgID:    conv.PtrValOr(filter.ExternalOrgID, ""),
 			GroupBy:          "user_id",
-			UserIDs:          payload.Filter.UserIds,
+			UserIDs:          filter.UserIds,
 			SortOrder:        "desc",
 			Cursor:           "",
 			Limit:            10001, // Upper bound; orgs rarely have >10k users
@@ -736,6 +837,8 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		ExternalUserID: externalUserID,
 		EventSource:    conv.PtrValOr(payload.EventSource, ""),
 		HookSource:     conv.PtrValOr(payload.HookSource, ""),
+		AccountType:    conv.PtrValOr(payload.AccountType, ""),
+		ExternalOrgID:  conv.PtrValOr(payload.ExternalOrgID, ""),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving user metrics")
@@ -787,6 +890,8 @@ func (s *Service) GetEmployeeDataFlowGraph(ctx context.Context, payload *telem_g
 		TimeEnd:        timeEnd,
 		UserID:         userID,
 		ExternalUserID: externalUserID,
+		AccountType:    conv.PtrValOr(payload.AccountType, ""),
+		ExternalOrgID:  conv.PtrValOr(payload.ExternalOrgID, ""),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving employee data flow graph")
@@ -1253,6 +1358,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	mcpServerID := conv.PtrValOr(payload.McpServerID, "")
 	eventSource := conv.PtrValOr(payload.EventSource, "")
 	hookSource := conv.PtrValOr(payload.HookSource, "")
+	accountType := conv.PtrValOr(payload.AccountType, "")
+	externalOrgID := conv.PtrValOr(payload.ExternalOrgID, "")
 
 	if userID != "" && externalUserID != "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "only one of user_id or external_user_id can be provided")
@@ -1279,6 +1386,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
+		AccountType:       accountType,
+		ExternalOrgID:     externalOrgID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
@@ -1296,6 +1405,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
+		AccountType:       accountType,
+		ExternalOrgID:     externalOrgID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
@@ -1316,6 +1427,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			MCPServerID:       mcpServerID,
 			EventSource:       eventSource,
 			HookSource:        hookSource,
+			AccountType:       accountType,
+			ExternalOrgID:     externalOrgID,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
@@ -1334,6 +1447,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
+		AccountType:       accountType,
+		ExternalOrgID:     externalOrgID,
 		Limit:             10,
 		SortBy:            "count",
 	})
@@ -1353,6 +1468,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
+		AccountType:       accountType,
+		ExternalOrgID:     externalOrgID,
 		Limit:             10,
 		SortBy:            "failure_rate",
 	})
@@ -1468,6 +1585,8 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 			MCPServerID:       "",
 			EventSource:       "",
 			HookSource:        "",
+			AccountType:       "",
+			ExternalOrgID:     "",
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving tool call metrics")
@@ -1485,6 +1604,8 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 			MCPServerID:       "",
 			EventSource:       "",
 			HookSource:        "",
+			AccountType:       "",
+			ExternalOrgID:     "",
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving comparison tool call metrics")
@@ -2344,6 +2465,10 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
 	}
+	mcpServerMatchers, err := s.toolUsageMCPServerMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
+	}
 
 	summary, err := s.chRepo.GetToolUsageSummary(ctx, repo.GetToolUsageSummaryParams{
 		GramProjectID:      authCtx.ProjectID.String(),
@@ -2351,11 +2476,13 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 		TimeEnd:            timeEnd,
 		BucketSizeNs:       bucketSizeNs,
 		HostedMCPMatchers:  hostedMCPMatchers,
+		MCPServerMatchers:  mcpServerMatchers,
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
 		ShadowServerNames:  payload.ShadowServerNames,
 		UserFilters:        userFilters,
 		HookSources:        payload.HookSources,
+		AccountType:        conv.PtrValOr(payload.AccountType, ""),
 		TargetLimit:        25,
 		UserLimit:          25,
 		UsersByTargetLimit: 100,
@@ -2388,6 +2515,11 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		targetTypes = append(targetTypes, string(targetType))
 	}
 
+	statuses := make([]string, 0, len(payload.Statuses))
+	for _, status := range payload.Statuses {
+		statuses = append(statuses, string(status))
+	}
+
 	userFilters := make([]repo.ToolUsageUserFilter, 0, len(payload.UserFilters))
 	for _, filter := range payload.UserFilters {
 		if filter == nil {
@@ -2412,17 +2544,24 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers").LogError(ctx, logger)
 	}
+	mcpServerMatchers, err := s.toolUsageMCPServerMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers").LogError(ctx, logger)
+	}
 
 	rows, err := s.chRepo.ListToolUsageTraces(ctx, repo.ListToolUsageTracesParams{
 		GramProjectID:      params.projectID,
 		TimeStart:          params.timeStart,
 		TimeEnd:            params.timeEnd,
 		HostedMCPMatchers:  hostedMCPMatchers,
+		MCPServerMatchers:  mcpServerMatchers,
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
 		ShadowServerNames:  payload.ShadowServerNames,
 		UserFilters:        userFilters,
 		HookSources:        payload.HookSources,
+		AccountType:        conv.PtrValOr(payload.AccountType, ""),
+		Statuses:           statuses,
 		Query:              conv.PtrValOr(payload.Query, ""),
 		Filters:            toRepoAttributeFilters(payload.Filters),
 		SortOrder:          params.sortOrder,
@@ -2472,12 +2611,17 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
 	}
+	mcpServerMatchers, err := s.toolUsageMCPServerMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
+	}
 
 	options, err := s.chRepo.GetToolUsageFilterOptions(ctx, repo.GetToolUsageFilterOptionsParams{
 		GramProjectID:     authCtx.ProjectID.String(),
 		TimeStart:         timeStart,
 		TimeEnd:           timeEnd,
 		HostedMCPMatchers: hostedMCPMatchers,
+		MCPServerMatchers: mcpServerMatchers,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage filter options")
@@ -2501,6 +2645,50 @@ func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid
 			ToolsetSlug: toolset.Slug,
 			ToolsetName: toolset.Name,
 			McpSlug:     toolset.McpSlug.String,
+		})
+	}
+	return matchers, nil
+}
+
+func (s *Service) toolUsageMCPServerMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.MCPServerMatcher, error) {
+	servers, err := mcpserversRepo.New(s.db).ListMCPServersByProjectID(ctx, mcpserversRepo.ListMCPServersByProjectIDParams{
+		ProjectID:           projectID,
+		RemoteMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TunneledMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list project MCP servers: %w", err)
+	}
+
+	matchers := make([]repo.MCPServerMatcher, 0, len(servers))
+	for _, server := range servers {
+		targetType := repo.ToolUsageTargetTypeHostedMCP
+		sourceID := ""
+		switch {
+		case server.TunneledMcpServerID.Valid:
+			targetType = repo.ToolUsageTargetTypeTunneledMCP
+			sourceID = server.TunneledMcpServerID.UUID.String()
+		case server.RemoteMcpServerID.Valid:
+			sourceID = server.RemoteMcpServerID.UUID.String()
+		default:
+			continue
+		}
+
+		targetID := server.ID.String()
+		if server.Slug.Valid && server.Slug.String != "" {
+			targetID = server.Slug.String
+		}
+		targetLabel := targetID
+		if server.Name.Valid && server.Name.String != "" {
+			targetLabel = server.Name.String
+		}
+
+		matchers = append(matchers, repo.MCPServerMatcher{
+			SourceID:    sourceID,
+			TargetType:  targetType,
+			TargetID:    targetID,
+			TargetLabel: targetLabel,
 		})
 	}
 	return matchers, nil
@@ -2553,6 +2741,7 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 			HTTPStatusCode:    row.HTTPStatusCode,
 			HookStatus:        row.HookStatus,
 			BlockReason:       row.BlockReason,
+			AccountType:       row.AccountType,
 		}
 		traces = append(traces, trace)
 	}

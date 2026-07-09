@@ -6,7 +6,10 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
-import * as components from "../components/index.js";
+import {
+  ListRemoteSessionIssuersResult,
+  ListRemoteSessionIssuersResult$inboundSchema,
+} from "../components/listremotesessionissuersresult.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ListRemoteSessionIssuersSecurityOption1 = {
@@ -48,7 +51,7 @@ export type ListRemoteSessionIssuersRequest = {
 };
 
 export type ListRemoteSessionIssuersResponse = {
-  result: components.ListRemoteSessionIssuersResult;
+  result: ListRemoteSessionIssuersResult;
 };
 
 /** @internal */
@@ -204,7 +207,7 @@ export const ListRemoteSessionIssuersResponse$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    Result: components.ListRemoteSessionIssuersResult$inboundSchema,
+    Result: ListRemoteSessionIssuersResult$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  GetToolUsageFilterOptionsPayload,
+  GetToolUsageFilterOptionsPayload$Outbound,
+  GetToolUsageFilterOptionsPayload$outboundSchema,
+} from "../components/gettoolusagefilteroptionspayload.js";
 
 export type GetToolUsageFilterOptionsSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type GetToolUsageFilterOptionsRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  getToolUsageFilterOptionsPayload: components.GetToolUsageFilterOptionsPayload;
+  getToolUsageFilterOptionsPayload: GetToolUsageFilterOptionsPayload;
 };
 
 /** @internal */
@@ -149,8 +153,7 @@ export type GetToolUsageFilterOptionsRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  GetToolUsageFilterOptionsPayload:
-    components.GetToolUsageFilterOptionsPayload$Outbound;
+  GetToolUsageFilterOptionsPayload: GetToolUsageFilterOptionsPayload$Outbound;
 };
 
 /** @internal */
@@ -163,7 +166,7 @@ export const GetToolUsageFilterOptionsRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     getToolUsageFilterOptionsPayload:
-      components.GetToolUsageFilterOptionsPayload$outboundSchema,
+      GetToolUsageFilterOptionsPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -9,8 +9,33 @@ import { userSessionIssuersList } from "../funcs/userSessionIssuersList.js";
 import { userSessionIssuersMigrateLegacyGramRegistrations } from "../funcs/userSessionIssuersMigrateLegacyGramRegistrations.js";
 import { userSessionIssuersUpdate } from "../funcs/userSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { MigrateLegacyGramRegistrationsResult } from "../models/components/migratelegacygramregistrationsresult.js";
+import { UserSessionIssuer } from "../models/components/usersessionissuer.js";
+import {
+  CreateUserSessionIssuerRequest,
+  CreateUserSessionIssuerSecurity,
+} from "../models/operations/createusersessionissuer.js";
+import {
+  DeleteUserSessionIssuerRequest,
+  DeleteUserSessionIssuerSecurity,
+} from "../models/operations/deleteusersessionissuer.js";
+import {
+  GetUserSessionIssuerRequest,
+  GetUserSessionIssuerSecurity,
+} from "../models/operations/getusersessionissuer.js";
+import {
+  ListUserSessionIssuersRequest,
+  ListUserSessionIssuersResponse,
+  ListUserSessionIssuersSecurity,
+} from "../models/operations/listusersessionissuers.js";
+import {
+  MigrateLegacyGramRegistrationsRequest,
+  MigrateLegacyGramRegistrationsSecurity,
+} from "../models/operations/migratelegacygramregistrations.js";
+import {
+  UpdateUserSessionIssuerRequest,
+  UpdateUserSessionIssuerSecurity,
+} from "../models/operations/updateusersessionissuer.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -22,10 +47,10 @@ export class UserSessionIssuers extends ClientSDK {
    * Create a new user_session_issuer.
    */
   async create(
-    request: operations.CreateUserSessionIssuerRequest,
-    security?: operations.CreateUserSessionIssuerSecurity | undefined,
+    request: CreateUserSessionIssuerRequest,
+    security?: CreateUserSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.UserSessionIssuer> {
+  ): Promise<UserSessionIssuer> {
     return unwrapAsync(userSessionIssuersCreate(
       this,
       request,
@@ -41,8 +66,8 @@ export class UserSessionIssuers extends ClientSDK {
    * Soft-delete a user_session_issuer. Cascades to dependent user_sessions, user_session_consents, and remote_session_clients.
    */
   async delete(
-    request: operations.DeleteUserSessionIssuerRequest,
-    security?: operations.DeleteUserSessionIssuerSecurity | undefined,
+    request: DeleteUserSessionIssuerRequest,
+    security?: DeleteUserSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(userSessionIssuersDelete(
@@ -60,10 +85,10 @@ export class UserSessionIssuers extends ClientSDK {
    * Get a user_session_issuer by id or by slug. Provide exactly one.
    */
   async get(
-    request?: operations.GetUserSessionIssuerRequest | undefined,
-    security?: operations.GetUserSessionIssuerSecurity | undefined,
+    request?: GetUserSessionIssuerRequest | undefined,
+    security?: GetUserSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.UserSessionIssuer> {
+  ): Promise<UserSessionIssuer> {
     return unwrapAsync(userSessionIssuersGet(
       this,
       request,
@@ -79,12 +104,10 @@ export class UserSessionIssuers extends ClientSDK {
    * List user_session_issuers in the caller's project.
    */
   async list(
-    request?: operations.ListUserSessionIssuersRequest | undefined,
-    security?: operations.ListUserSessionIssuersSecurity | undefined,
+    request?: ListUserSessionIssuersRequest | undefined,
+    security?: ListUserSessionIssuersSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<
-    PageIterator<operations.ListUserSessionIssuersResponse, { cursor: string }>
-  > {
+  ): Promise<PageIterator<ListUserSessionIssuersResponse, { cursor: string }>> {
     return unwrapResultIterator(userSessionIssuersList(
       this,
       request,
@@ -100,10 +123,10 @@ export class UserSessionIssuers extends ClientSDK {
    * One-off migration: lift the legacy Redis dynamic-client registrations from a gram-type oauth_proxy_provider into user_session_clients on the given user_session_issuer, so migrated MCP clients skip re-registration and re-auth. Removed once the OAuth proxy is retired.
    */
   async migrateLegacyGramRegistrations(
-    request: operations.MigrateLegacyGramRegistrationsRequest,
-    security?: operations.MigrateLegacyGramRegistrationsSecurity | undefined,
+    request: MigrateLegacyGramRegistrationsRequest,
+    security?: MigrateLegacyGramRegistrationsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.MigrateLegacyGramRegistrationsResult> {
+  ): Promise<MigrateLegacyGramRegistrationsResult> {
     return unwrapAsync(userSessionIssuersMigrateLegacyGramRegistrations(
       this,
       request,
@@ -119,10 +142,10 @@ export class UserSessionIssuers extends ClientSDK {
    * Update fields on an existing user_session_issuer.
    */
   async update(
-    request: operations.UpdateUserSessionIssuerRequest,
-    security?: operations.UpdateUserSessionIssuerSecurity | undefined,
+    request: UpdateUserSessionIssuerRequest,
+    security?: UpdateUserSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.UserSessionIssuer> {
+  ): Promise<UserSessionIssuer> {
     return unwrapAsync(userSessionIssuersUpdate(
       this,
       request,

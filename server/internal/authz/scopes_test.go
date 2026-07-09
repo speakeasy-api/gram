@@ -128,6 +128,26 @@ func TestSystemRoleAdminExcludesChatRead(t *testing.T) {
 	}
 }
 
+// environment:read is not a member default: environment values include secrets,
+// so viewing them must be granted explicitly via a custom role. Admins retain
+// environment:read/write via adminScopes.
+func TestSystemRoleMemberExcludesEnvironmentRead(t *testing.T) {
+	t.Parallel()
+
+	memberScopes := make([]string, 0, len(SystemRoleGrants[SystemRoleMember]))
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		memberScopes = append(memberScopes, grant.Scope)
+	}
+	require.NotContains(t, memberScopes, string(ScopeEnvironmentRead))
+	require.NotContains(t, memberScopes, string(ScopeEnvironmentWrite))
+
+	adminScopes := make([]string, 0, len(SystemRoleGrants[SystemRoleAdmin]))
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		adminScopes = append(adminScopes, grant.Scope)
+	}
+	require.Contains(t, adminScopes, string(ScopeEnvironmentRead))
+}
+
 func TestCheckExpand_orgRead(t *testing.T) {
 	t.Parallel()
 

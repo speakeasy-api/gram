@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { deploymentsLogs } from "../funcs/deploymentsLogs.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetDeploymentLogsResult } from "../models/components/getdeploymentlogsresult.js";
+import {
+  GetDeploymentLogsRequest,
+  GetDeploymentLogsSecurity,
+} from "../models/operations/getdeploymentlogs.js";
 import { unwrapAsync } from "../types/fp.js";
-export type DeploymentLogsQueryData = components.GetDeploymentLogsResult;
+export type DeploymentLogsQueryData = GetDeploymentLogsResult;
 
 export function prefetchDeploymentLogs(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetDeploymentLogsRequest,
-  security?: operations.GetDeploymentLogsSecurity | undefined,
+  request: GetDeploymentLogsRequest,
+  security?: GetDeploymentLogsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchDeploymentLogs(
 
 export function buildDeploymentLogsQuery(
   client$: GramCore,
-  request: operations.GetDeploymentLogsRequest,
-  security?: operations.GetDeploymentLogsSecurity | undefined,
+  request: GetDeploymentLogsRequest,
+  security?: GetDeploymentLogsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

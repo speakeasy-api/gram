@@ -96,6 +96,7 @@ export function LogFilterBar({
   const [inputFocused, setInputFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const popoverContentRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -234,6 +235,36 @@ export function LogFilterBar({
     [selectedKey, addFilter],
   );
 
+  // True when focus is moving to something outside the filter bar (e.g. the
+  // sheet's "Done" button) rather than to one of the bar's own controls or a
+  // popover item. Popover items live in a portal, so they read as "outside"
+  // too — that's fine, since the pending-input commit below is a no-op for the
+  // partial text present while navigating the popover.
+  const isFocusLeavingBar = useCallback((e: React.FocusEvent) => {
+    const next = e.relatedTarget as Node | null;
+    return !next || !barRef.current?.contains(next);
+  }, []);
+
+  // Commit whatever the user has typed but not yet turned into a chip. Used on
+  // blur so clicking "Done" (or anywhere outside the bar) saves the filter
+  // instead of silently discarding it. Returns true when a chip was added.
+  const commitPendingInput = useCallback((): boolean => {
+    const raw = searchInput.trim();
+    if (!raw) return false;
+    if (step === "key") {
+      const parsed = tryParseFilterExpression(raw);
+      if (parsed) {
+        addFilter(parsed.key, parsed.op, parsed.value);
+        return true;
+      }
+      return false;
+    }
+    if (step === "operator") {
+      return trySubmitOperatorInput(raw);
+    }
+    return false;
+  }, [searchInput, step, addFilter, trySubmitOperatorInput]);
+
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
     switch (e.key) {
       case "Tab":
@@ -316,6 +347,7 @@ export function LogFilterBar({
       >
         <PopoverAnchor asChild>
           <div
+            ref={barRef}
             className={cn(
               "border-border flex min-h-[42px] flex-wrap items-center gap-1.5 rounded-md border px-3 py-1.5 transition-[border-color,box-shadow]",
               inputFocused && "border-ring ring-ring/50 ring-[3px]",
@@ -361,6 +393,11 @@ export function LogFilterBar({
                         break;
                     }
                   }}
+                  onBlur={(e) => {
+                    // Clicking "Done" (or away) with a value typed but not yet
+                    // submitted should save it rather than discard it.
+                    if (isFocusLeavingBar(e)) handleValueSubmit();
+                  }}
                   placeholder={valuePlaceholder}
                   className="w-[80px] bg-transparent font-mono text-xs outline-none"
                   style={{
@@ -376,7 +413,15 @@ export function LogFilterBar({
                 onValueChange={handleSearchInputChange}
                 onKeyDown={handleInputKeyDown}
                 onFocus={() => setInputFocused(true)}
-                onBlur={() => {
+                onBlur={(e) => {
+                  if (blurTimeoutRef.current)
+                    clearTimeout(blurTimeoutRef.current);
+                  // When focus leaves the bar entirely (e.g. clicking "Done"),
+                  // commit a fully-typed expression so it isn't lost. This runs
+                  // synchronously before the sheet unmounts the input, unlike
+                  // the timeout below. A no-op while navigating the popover,
+                  // where the text is still partial.
+                  if (isFocusLeavingBar(e) && commitPendingInput()) return;
                   // Delay so click events on popover items fire first
                   blurTimeoutRef.current = setTimeout(
                     () => setInputFocused(false),

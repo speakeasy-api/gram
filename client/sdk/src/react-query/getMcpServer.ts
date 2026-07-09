@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetMcpServerRequest,
+  GetMcpServerSecurity,
+} from "../models/operations/getmcpserver.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetMcpServerQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetMcpServerQueryError =
  * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
  */
 export function useGetMcpServer(
-  request?: operations.GetMcpServerRequest | undefined,
-  security?: operations.GetMcpServerSecurity | undefined,
+  request?: GetMcpServerRequest | undefined,
+  security?: GetMcpServerSecurity | undefined,
   options?: QueryHookOptions<GetMcpServerQueryData, GetMcpServerQueryError>,
 ): UseQueryResult<GetMcpServerQueryData, GetMcpServerQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useGetMcpServer(
  * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
  */
 export function useGetMcpServerSuspense(
-  request?: operations.GetMcpServerRequest | undefined,
-  security?: operations.GetMcpServerSecurity | undefined,
+  request?: GetMcpServerRequest | undefined,
+  security?: GetMcpServerSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetMcpServerQueryData,
     GetMcpServerQueryError

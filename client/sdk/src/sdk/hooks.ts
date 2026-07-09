@@ -7,9 +7,33 @@ import { hooksHooksNumberCodex } from "../funcs/hooksHooksNumberCodex.js";
 import { hooksHooksNumberCursor } from "../funcs/hooksHooksNumberCursor.js";
 import { hooksHooksNumberLogs } from "../funcs/hooksHooksNumberLogs.js";
 import { hooksHooksNumberMetrics } from "../funcs/hooksHooksNumberMetrics.js";
+import { hooksIngest } from "../funcs/hooksIngest.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ClaudeHookResult } from "../models/components/claudehookresult.js";
+import { CodexHookResult } from "../models/components/codexhookresult.js";
+import { CursorHookResult } from "../models/components/cursorhookresult.js";
+import { IngestHookResult } from "../models/components/ingesthookresult.js";
+import { HooksNumberClaudeRequest } from "../models/operations/hooksnumberclaude.js";
+import {
+  HooksNumberCodexRequest,
+  HooksNumberCodexSecurity,
+} from "../models/operations/hooksnumbercodex.js";
+import {
+  HooksNumberCursorRequest,
+  HooksNumberCursorSecurity,
+} from "../models/operations/hooksnumbercursor.js";
+import {
+  HooksNumberLogsRequest,
+  HooksNumberLogsSecurity,
+} from "../models/operations/hooksnumberlogs.js";
+import {
+  HooksNumberMetricsRequest,
+  HooksNumberMetricsSecurity,
+} from "../models/operations/hooksnumbermetrics.js";
+import {
+  IngestHookEventRequest,
+  IngestHookEventSecurity,
+} from "../models/operations/ingesthookevent.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Hooks extends ClientSDK {
@@ -20,9 +44,9 @@ export class Hooks extends ClientSDK {
    * Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.
    */
   async hooksNumberClaude(
-    request: operations.HooksNumberClaudeRequest,
+    request: HooksNumberClaudeRequest,
     options?: RequestOptions,
-  ): Promise<components.ClaudeHookResult> {
+  ): Promise<ClaudeHookResult> {
     return unwrapAsync(hooksHooksNumberClaude(
       this,
       request,
@@ -37,10 +61,10 @@ export class Hooks extends ClientSDK {
    * Endpoint for Codex hook events. Handles SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.
    */
   async hooksNumberCodex(
-    request: operations.HooksNumberCodexRequest,
-    security?: operations.HooksNumberCodexSecurity | undefined,
+    request: HooksNumberCodexRequest,
+    security?: HooksNumberCodexSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.CodexHookResult> {
+  ): Promise<CodexHookResult> {
     return unwrapAsync(hooksHooksNumberCodex(
       this,
       request,
@@ -56,11 +80,30 @@ export class Hooks extends ClientSDK {
    * Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure, beforeMCPExecution, and afterMCPExecution.
    */
   async hooksNumberCursor(
-    request: operations.HooksNumberCursorRequest,
-    security?: operations.HooksNumberCursorSecurity | undefined,
+    request: HooksNumberCursorRequest,
+    security?: HooksNumberCursorSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.CursorHookResult> {
+  ): Promise<CursorHookResult> {
     return unwrapAsync(hooksHooksNumberCursor(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * ingest hooks
+   *
+   * @remarks
+   * Feature-first unified endpoint for hook events from supported coding assistants.
+   */
+  async ingest(
+    request: IngestHookEventRequest,
+    security?: IngestHookEventSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<IngestHookResult> {
+    return unwrapAsync(hooksIngest(
       this,
       request,
       security,
@@ -75,8 +118,8 @@ export class Hooks extends ClientSDK {
    * Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.
    */
   async hooksNumberLogs(
-    request: operations.HooksNumberLogsRequest,
-    security?: operations.HooksNumberLogsSecurity | undefined,
+    request: HooksNumberLogsRequest,
+    security?: HooksNumberLogsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(hooksHooksNumberLogs(
@@ -94,8 +137,8 @@ export class Hooks extends ClientSDK {
    * Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.
    */
   async hooksNumberMetrics(
-    request: operations.HooksNumberMetricsRequest,
-    security?: operations.HooksNumberMetricsSecurity | undefined,
+    request: HooksNumberMetricsRequest,
+    security?: HooksNumberMetricsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(hooksHooksNumberMetrics(

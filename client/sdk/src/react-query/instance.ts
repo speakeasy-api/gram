@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetInstanceRequest,
+  GetInstanceSecurity,
+} from "../models/operations/getinstance.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type InstanceQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type InstanceQueryError =
  * Load all relevant data for an instance of a toolset and environment
  */
 export function useInstance(
-  request: operations.GetInstanceRequest,
-  security?: operations.GetInstanceSecurity | undefined,
+  request: GetInstanceRequest,
+  security?: GetInstanceSecurity | undefined,
   options?: QueryHookOptions<InstanceQueryData, InstanceQueryError>,
 ): UseQueryResult<InstanceQueryData, InstanceQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useInstance(
  * Load all relevant data for an instance of a toolset and environment
  */
 export function useInstanceSuspense(
-  request: operations.GetInstanceRequest,
-  security?: operations.GetInstanceSecurity | undefined,
+  request: GetInstanceRequest,
+  security?: GetInstanceSecurity | undefined,
   options?: SuspenseQueryHookOptions<InstanceQueryData, InstanceQueryError>,
 ): UseSuspenseQueryResult<InstanceQueryData, InstanceQueryError> {
   const client = useGramContext();

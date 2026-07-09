@@ -32,6 +32,21 @@ import (
 
 const initializeRequest = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`
 
+func TestServerIdentity_DistinguishesTunneledBackend(t *testing.T) {
+	t.Parallel()
+
+	identity := proxy.ServerIdentity{
+		RemoteMCPServerID:   "",
+		TunneledMCPServerID: "tun-abc",
+		McpServerID:         "mcp-abc",
+	}
+
+	require.Equal(t, "tun-abc", identity.SourceID())
+	require.Equal(t, "tunneledmcp", identity.ToolURNKind())
+	require.Contains(t, identity.AppendAttributes(nil), attr.TunneledMCPServerID("tun-abc"))
+	require.NotContains(t, identity.AppendAttributes(nil), attr.RemoteMCPServerID("tun-abc"))
+}
+
 func newProxyForTest(t *testing.T, upstreamURL string) *proxy.Proxy {
 	t.Helper()
 
@@ -39,13 +54,34 @@ func newProxyForTest(t *testing.T, upstreamURL string) *proxy.Proxy {
 	require.NoError(t, err)
 
 	return &proxy.Proxy{
-		GuardianPolicy:       policy,
-		Logger:               testenv.NewLogger(t),
-		Tracer:               testenv.NewTracerProvider(t).Tracer("test"),
-		NonStreamingTimeout:  5 * time.Second,
-		StreamingTimeout:     5 * time.Second,
-		MaxBufferedBodyBytes: proxy.DefaultMaxBufferedBodyBytes,
-		RemoteURL:            upstreamURL,
+		GuardianPolicy:        policy,
+		GuardianClientOptions: nil,
+		Logger:                testenv.NewLogger(t),
+		Tracer:                testenv.NewTracerProvider(t).Tracer("test"),
+		NonStreamingTimeout:   5 * time.Second,
+		StreamingTimeout:      5 * time.Second,
+		Metrics:               nil,
+		MaxBufferedBodyBytes:  proxy.DefaultMaxBufferedBodyBytes,
+		Identity: proxy.ServerIdentity{
+			RemoteMCPServerID:   "",
+			TunneledMCPServerID: "",
+			McpServerID:         "",
+		},
+		RemoteURL:                         upstreamURL,
+		Headers:                           nil,
+		AuthorizationOverride:             "",
+		UpstreamResponseRetryer:           nil,
+		UserRequestInterceptors:           nil,
+		InitializeRequestInterceptors:     nil,
+		RemoteMessageInterceptors:         nil,
+		ToolsCallRequestInterceptors:      nil,
+		ToolsCallResponseInterceptors:     nil,
+		ToolsListRequestInterceptors:      nil,
+		ToolsListResponseInterceptors:     nil,
+		ResourcesReadRequestInterceptors:  nil,
+		ResourcesReadResponseInterceptors: nil,
+		ResourcesListRequestInterceptors:  nil,
+		ResourcesListResponseInterceptors: nil,
 	}
 }
 
@@ -82,6 +118,52 @@ func TestProxy_Post_ForwardsRequestAndResponse(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Contains(t, rr.Body.String(), `"protocolVersion":"2025-06-18"`)
+}
+
+func TestProxy_Post_RetriesUpstreamResponseBeforeRelay(t *testing.T) {
+	t.Parallel()
+
+	var firstRequests, secondRequests atomic.Int64
+	var secondBody string
+
+	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		secondRequests.Add(1)
+		body, _ := io.ReadAll(r.Body)
+		secondBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"}}`))
+	}))
+	t.Cleanup(second.Close)
+
+	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		firstRequests.Add(1)
+		w.Header().Set("X-Gram-Tunnel-Error", "no-live-session")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("stale gateway"))
+	}))
+	t.Cleanup(first.Close)
+
+	p := newProxyForTest(t, first.URL)
+	p.UpstreamResponseRetryer = func(_ context.Context, resp *http.Response) (*proxy.UpstreamResponseRetry, error) {
+		if resp.Header.Get("X-Gram-Tunnel-Error") != "no-live-session" {
+			return nil, nil
+		}
+		return &proxy.UpstreamResponseRetry{RemoteURL: second.URL, Headers: nil}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	err := p.Post(rr, req)
+
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, int64(1), firstRequests.Load())
+	require.Equal(t, int64(1), secondRequests.Load())
+	require.JSONEq(t, initializeRequest, secondBody)
 	require.Contains(t, rr.Body.String(), `"protocolVersion":"2025-06-18"`)
 }
 
@@ -704,17 +786,20 @@ func TestProxy_Post_OversizedUpstreamBodyReturnsError(t *testing.T) {
 	require.ErrorIs(t, err, proxy.ErrBodyTooLarge)
 }
 
-func TestProxy_Post_UndecodableUpstreamBodyRelaysVerbatim(t *testing.T) {
+func TestProxy_Post_NonJSONRPC2xxBodyForRequestSynthesizesJSONRPCError(t *testing.T) {
 	t.Parallel()
 
-	// A non-spec-compliant remote returned a non-SSE body that isn't a single
-	// JSON-RPC message (observed in prod as a bare heartbeat scalar). The proxy
-	// must relay it verbatim with the upstream status rather than surfacing a
-	// 5xx — mirroring the SSE relay path's treatment of undecodable events.
+	// AIS-267: an upstream answered an authenticated request with its backing
+	// API's raw envelope ({"Output":…,"Version":…}) on HTTP 200 instead of a
+	// JSON-RPC result. Relaying that verbatim hands the client a payload it
+	// cannot parse or correlate. The proxy must synthesize a JSON-RPC error
+	// carrying the originating request id so the client surfaces a clean,
+	// correlatable failure, with the upstream body echoed in "data".
+	const upstreamBody = `{"Output":"result-payload","Version":"1"}`
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("3"))
+		_, _ = w.Write([]byte(upstreamBody))
 	}))
 	t.Cleanup(upstream.Close)
 
@@ -725,9 +810,75 @@ func TestProxy_Post_UndecodableUpstreamBodyRelaysVerbatim(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code, "a synthesized JSON-RPC error is delivered with HTTP 200")
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+
+	var envelope map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &envelope))
+	require.Equal(t, "2.0", envelope["jsonrpc"], "synthesized response must be valid JSON-RPC 2.0")
+	require.EqualValues(t, 1, envelope["id"], "synthesized error must carry the originating request id")
+	rpcErr, ok := envelope["error"].(map[string]any)
+	require.True(t, ok, "synthesized response must be a JSON-RPC error")
+	require.EqualValues(t, proxy.RejectCodeInternalError, rpcErr["code"])
+	data, ok := rpcErr["data"].(map[string]any)
+	require.True(t, ok, "error data must carry upstream diagnostics")
+	require.EqualValues(t, http.StatusOK, data["upstream_status"])
+	echoedBody, ok := data["upstream_body"].(string)
+	require.True(t, ok, "upstream body must be echoed as a string")
+	require.JSONEq(t, upstreamBody, echoedBody, "upstream body must be echoed for debugging")
+}
+
+func TestProxy_Post_UndecodableUpstreamBodyForNotificationRelaysVerbatim(t *testing.T) {
+	t.Parallel()
+
+	// A non-spec-compliant remote returned a non-JSON-RPC body (observed in
+	// prod as a bare heartbeat scalar) in response to a notification, which
+	// carries no id and no reply slot. There is nothing to correlate a
+	// synthesized error against, so the proxy relays the body verbatim with the
+	// upstream status rather than surfacing a 5xx.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("3"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	const notificationBody = `{"jsonrpc":"2.0","method":"notifications/initialized"}`
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(notificationBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
 	require.Equal(t, http.StatusOK, rr.Code, "undecodable upstream body must not surface as a 5xx")
 	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 	require.Equal(t, "3", rr.Body.String(), "undecodable upstream body must reach the client unmangled")
+}
+
+func TestProxy_Post_NonJSONRPCNon2xxBodyForRequestRelaysVerbatim(t *testing.T) {
+	t.Parallel()
+
+	// When the upstream body isn't JSON-RPC but the status is non-2xx, the
+	// status itself already signals the error. The proxy relays the body and
+	// status verbatim rather than masking the status behind a synthesized
+	// HTTP 200 JSON-RPC error.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("upstream unavailable"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusBadGateway, rr.Code, "non-2xx status must be relayed verbatim")
+	require.Equal(t, "upstream unavailable", rr.Body.String(), "non-2xx body must reach the client unmangled")
 }
 
 func TestProxy_Post_GzipEncodedUpstreamBodyIsDecodedAndIntercepted(t *testing.T) {
@@ -984,7 +1135,11 @@ func TestProxy_Post_RecordsMetrics(t *testing.T) {
 
 	p := newProxyForTest(t, upstream.URL)
 	p.Metrics = metrics
-	p.Identity = proxy.ServerIdentity{RemoteMCPServerID: "srv-abc", McpServerID: "mcp-abc"}
+	p.Identity = proxy.ServerIdentity{
+		RemoteMCPServerID:   "srv-abc",
+		TunneledMCPServerID: "",
+		McpServerID:         "mcp-abc",
+	}
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")

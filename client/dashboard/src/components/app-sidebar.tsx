@@ -22,12 +22,13 @@ import { SidebarUserMenu } from "./sidebar-user-menu";
 import { useSidebar } from "@/components/ui/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Scope, useRBAC } from "@/hooks/useRBAC";
+import { useRBAC } from "@/hooks/useRBAC";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
-import { useGetPeriodUsage } from "@gram/client/react-query";
+import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
 import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
 import { MinusIcon, Settings, TestTube2Icon } from "lucide-react";
 import * as React from "react";
@@ -197,7 +198,9 @@ export function AppSidebar({
                 <div className="border-border border-t" />
               </li>
 
-              {/* Observe group */}
+              {/* Observe group — always shown (like Secure). Non-admins still
+                  see the nav; opening a page renders the page-level "Access
+                  restricted" notice via RequireScope (org:admin). */}
               <CollapsibleNavGroup
                 label="Observe"
                 Icon={(p) => <Icon {...p} name="eye" />}

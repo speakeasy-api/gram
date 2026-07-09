@@ -18,10 +18,18 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  AccountType,
+  HasRisk,
+  ListChatsRequest,
+  ListChatsSecurity,
+  Pinned,
+  SortBy,
+  SortOrder,
+} from "../models/operations/listchats.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +50,7 @@ export {
 };
 
 export type ListChatsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +67,8 @@ export type ListChatsQueryError =
  * List all chats for a project
  */
 export function useListChats(
-  request?: operations.ListChatsRequest | undefined,
-  security?: operations.ListChatsSecurity | undefined,
+  request?: ListChatsRequest | undefined,
+  security?: ListChatsSecurity | undefined,
   options?: QueryHookOptions<ListChatsQueryData, ListChatsQueryError>,
 ): UseQueryResult<ListChatsQueryData, ListChatsQueryError> {
   const client = useGramContext();
@@ -82,8 +90,8 @@ export function useListChats(
  * List all chats for a project
  */
 export function useListChatsSuspense(
-  request?: operations.ListChatsRequest | undefined,
-  security?: operations.ListChatsSecurity | undefined,
+  request?: ListChatsRequest | undefined,
+  security?: ListChatsSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListChatsQueryData, ListChatsQueryError>,
 ): UseSuspenseQueryResult<ListChatsQueryData, ListChatsQueryError> {
   const client = useGramContext();
@@ -106,15 +114,18 @@ export function setListChatsData(
       externalUserId?: string | undefined;
       source?: string | undefined;
       assistantId?: string | undefined;
-      hasRisk?: operations.HasRisk | undefined;
-      pinned?: operations.Pinned | undefined;
+      sourceKind?: string | undefined;
+      excludeSourceKind?: string | undefined;
+      hasRisk?: HasRisk | undefined;
+      accountType?: AccountType | undefined;
+      pinned?: Pinned | undefined;
       minRiskScore?: number | undefined;
       from?: Date | undefined;
       to?: Date | undefined;
       limit?: number | undefined;
       offset?: number | undefined;
-      sortBy?: operations.SortBy | undefined;
-      sortOrder?: operations.SortOrder | undefined;
+      sortBy?: SortBy | undefined;
+      sortOrder?: SortOrder | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramChatSession?: string | undefined;
@@ -135,15 +146,18 @@ export function invalidateListChats(
       externalUserId?: string | undefined;
       source?: string | undefined;
       assistantId?: string | undefined;
-      hasRisk?: operations.HasRisk | undefined;
-      pinned?: operations.Pinned | undefined;
+      sourceKind?: string | undefined;
+      excludeSourceKind?: string | undefined;
+      hasRisk?: HasRisk | undefined;
+      accountType?: AccountType | undefined;
+      pinned?: Pinned | undefined;
       minRiskScore?: number | undefined;
       from?: Date | undefined;
       to?: Date | undefined;
       limit?: number | undefined;
       offset?: number | undefined;
-      sortBy?: operations.SortBy | undefined;
-      sortOrder?: operations.SortOrder | undefined;
+      sortBy?: SortBy | undefined;
+      sortOrder?: SortOrder | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramChatSession?: string | undefined;

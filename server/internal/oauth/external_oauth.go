@@ -14,6 +14,7 @@ import (
 	"html/template"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -457,7 +458,7 @@ func (s *ExternalOAuthService) handleIssuerConnect(w http.ResponseWriter, r *htt
 		return oops.E(oops.CodeBadRequest, nil, "toolset has no mcp slug").LogError(ctx, s.logger)
 	}
 
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, toolset.ProjectID, toolset.UserSessionIssuerID.UUID)
+	clients, err := s.remoteChallengeMgr.ListClients(ctx, toolset.ProjectID, authCtx.ActiveOrganizationID, toolset.UserSessionIssuerID.UUID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, s.logger)
 	}
@@ -484,11 +485,13 @@ func (s *ExternalOAuthService) handleIssuerConnect(w http.ResponseWriter, r *htt
 	parent := remotesessions.ParentChallenge{
 		ID:                  "",
 		ProjectID:           toolset.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Subject:             &subject,
 		RouteBase:           "mcp",
 		McpSlug:             mcpSlug,
 		FinalRedirectURI:    parsedRedirect.String(),
+		Resource:            "",
 	}
 	authURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, selected)
 	if err != nil {
@@ -709,7 +712,7 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 	// by the dashboard user's subject URN. The legacy user_oauth_tokens
 	// path is the wrong source for these.
 	if toolset.UserSessionIssuerID.Valid {
-		return s.writeIssuerGatedStatus(ctx, w, authCtx.UserID, toolset.ProjectID, toolset.UserSessionIssuerID.UUID)
+		return s.writeIssuerGatedStatus(ctx, w, authCtx.UserID, toolset.ProjectID, authCtx.ActiveOrganizationID, toolset.UserSessionIssuerID.UUID)
 	}
 
 	// Check if user has a token for this toolset
@@ -774,9 +777,9 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 // attached session expired without a workable refresh path the resolver
 // returns ErrNoValidToken and the badge reads "needs_auth" — otherwise it
 // would lie about a connection that the next /mcp/{slug} call will 401 on.
-func (s *ExternalOAuthService) writeIssuerGatedStatus(ctx context.Context, w http.ResponseWriter, userID string, projectID, issuerID uuid.UUID) error {
+func (s *ExternalOAuthService) writeIssuerGatedStatus(ctx context.Context, w http.ResponseWriter, userID string, projectID uuid.UUID, organizationID string, issuerID uuid.UUID) error {
 	subject := urn.NewUserSubject(userID)
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, projectID, issuerID, subject)
+	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, projectID, organizationID, issuerID, subject, "")
 
 	status := "needs_auth"
 	switch {
@@ -1244,27 +1247,44 @@ func (s *ExternalOAuthService) exchangeCodeForTokens(
 	redirectURI string,
 	codeVerifier string,
 ) (*ExternalTokenResponse, error) {
-	// Build token request
-	data := url.Values{}
-	data.Set("grant_type", "authorization_code")
-	data.Set("code", code)
-	data.Set("redirect_uri", redirectURI)
-	data.Set("client_id", config.ClientID)
+	// Build both credential placements up front. The client registration does
+	// not record the provider's token_endpoint_auth_method, so placement is a
+	// guess: baseForm carries no credentials and pairs with basic auth, while
+	// bodyCredsForm embeds them client_secret_post-style.
+	baseForm := url.Values{}
+	baseForm.Set("grant_type", "authorization_code")
+	baseForm.Set("code", code)
+	baseForm.Set("redirect_uri", redirectURI)
+	baseForm.Set("code_verifier", codeVerifier)
+
+	bodyCredsForm := maps.Clone(baseForm)
+	bodyCredsForm.Set("client_id", config.ClientID)
 	if config.ClientSecret != "" {
-		data.Set("client_secret", config.ClientSecret)
+		bodyCredsForm.Set("client_secret", config.ClientSecret)
 	}
-	data.Set("code_verifier", codeVerifier)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, config.TokenEndpoint, strings.NewReader(data.Encode()))
+	// Try body credentials first, matching the historical behavior.
+	resp, err := s.postTokenRequest(ctx, config.TokenEndpoint, bodyCredsForm, "", "")
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
 
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("token request: %w", err)
+	// A 4xx with a secret in hand may mean the provider only accepts
+	// client_secret_basic and rejects body credentials as ambiguous client
+	// identification (e.g. Pylon). Retry once with credentials in the
+	// Authorization header only. Client authentication is validated before
+	// the authorization code is consumed, so replaying the code is safe.
+	if config.ClientSecret != "" &&
+		(resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+		o11y.NoLogDefer(func() error { return resp.Body.Close() })
+		s.logger.InfoContext(ctx, "token exchange rejected body credentials, retrying with basic auth",
+			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
+			attr.SlogOAuthIssuer(config.Issuer))
+
+		resp, err = s.postTokenRequest(ctx, config.TokenEndpoint, baseForm, config.ClientID, config.ClientSecret)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	defer o11y.LogDefer(ctx, s.logger, func() error {
@@ -1296,6 +1316,27 @@ func (s *ExternalOAuthService) exchangeCodeForTokens(
 	}
 
 	return &tokenResp, nil
+}
+
+// postTokenRequest sends a form-encoded POST to a token endpoint. A non-empty
+// basicAuthID switches client authentication to the Authorization header; the
+// caller is responsible for keeping credentials out of the form in that case.
+func (s *ExternalOAuthService) postTokenRequest(ctx context.Context, endpoint string, form url.Values, basicAuthID, basicAuthSecret string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	if basicAuthID != "" {
+		req.SetBasicAuth(basicAuthID, basicAuthSecret)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("token request: %w", err)
+	}
+	return resp, nil
 }
 
 // redirectWithError redirects to the redirect_uri with error parameters

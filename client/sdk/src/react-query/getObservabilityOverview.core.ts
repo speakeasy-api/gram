@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetObservabilityOverviewResult } from "../models/components/getobservabilityoverviewresult.js";
+import {
+  GetObservabilityOverviewRequest,
+  GetObservabilityOverviewSecurity,
+} from "../models/operations/getobservabilityoverview.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetObservabilityOverviewQueryData =
-  components.GetObservabilityOverviewResult;
+export type GetObservabilityOverviewQueryData = GetObservabilityOverviewResult;
 
 export function prefetchGetObservabilityOverview(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetObservabilityOverviewRequest,
-  security?: operations.GetObservabilityOverviewSecurity | undefined,
+  request: GetObservabilityOverviewRequest,
+  security?: GetObservabilityOverviewSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchGetObservabilityOverview(
 
 export function buildGetObservabilityOverviewQuery(
   client$: GramCore,
-  request: operations.GetObservabilityOverviewRequest,
-  security?: operations.GetObservabilityOverviewSecurity | undefined,
+  request: GetObservabilityOverviewRequest,
+  security?: GetObservabilityOverviewSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

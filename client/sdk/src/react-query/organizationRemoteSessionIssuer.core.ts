@@ -8,20 +8,22 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersGetIssuer } from "../funcs/organizationRemoteSessionIssuersGetIssuer.js";
+import { organizationRemoteSessionIssuersGet } from "../funcs/organizationRemoteSessionIssuersGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
+import {
+  GetOrganizationRemoteSessionIssuerRequest,
+  GetOrganizationRemoteSessionIssuerSecurity,
+} from "../models/operations/getorganizationremotesessionissuer.js";
 import { unwrapAsync } from "../types/fp.js";
-export type OrganizationRemoteSessionIssuerQueryData =
-  components.RemoteSessionIssuer;
+export type OrganizationRemoteSessionIssuerQueryData = RemoteSessionIssuer;
 
 export function prefetchOrganizationRemoteSessionIssuer(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetOrganizationRemoteSessionIssuerRequest,
-  security?: operations.GetOrganizationRemoteSessionIssuerSecurity | undefined,
+  request: GetOrganizationRemoteSessionIssuerRequest,
+  security?: GetOrganizationRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchOrganizationRemoteSessionIssuer(
 
 export function buildOrganizationRemoteSessionIssuerQuery(
   client$: GramCore,
-  request: operations.GetOrganizationRemoteSessionIssuerRequest,
-  security?: operations.GetOrganizationRemoteSessionIssuerSecurity | undefined,
+  request: GetOrganizationRemoteSessionIssuerRequest,
+  security?: GetOrganizationRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -65,7 +67,7 @@ export function buildOrganizationRemoteSessionIssuerQuery(
         signal: sig,
       };
 
-      return unwrapAsync(organizationRemoteSessionIssuersGetIssuer(
+      return unwrapAsync(organizationRemoteSessionIssuersGet(
         client$,
         request,
         security,
@@ -85,7 +87,7 @@ export function queryKeyOrganizationRemoteSessionIssuer(
   return [
     "@gram/client",
     "organizationRemoteSessionIssuers",
-    "getIssuer",
+    "get",
     parameters,
   ];
 }

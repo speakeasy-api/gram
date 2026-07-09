@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { riskResultsByChat } from "../funcs/riskResultsByChat.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListRiskResultsByChatResult } from "../models/components/listriskresultsbychatresult.js";
+import {
+  ListRiskResultsByChatRequest,
+  ListRiskResultsByChatSecurity,
+} from "../models/operations/listriskresultsbychat.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskListResultsByChatQueryData =
-  components.ListRiskResultsByChatResult;
+export type RiskListResultsByChatQueryData = ListRiskResultsByChatResult;
 
 export function prefetchRiskListResultsByChat(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListRiskResultsByChatRequest | undefined,
-  security?: operations.ListRiskResultsByChatSecurity | undefined,
+  request?: ListRiskResultsByChatRequest | undefined,
+  security?: ListRiskResultsByChatSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchRiskListResultsByChat(
 
 export function buildRiskListResultsByChatQuery(
   client$: GramCore,
-  request?: operations.ListRiskResultsByChatRequest | undefined,
-  security?: operations.ListRiskResultsByChatSecurity | undefined,
+  request?: ListRiskResultsByChatRequest | undefined,
+  security?: ListRiskResultsByChatSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

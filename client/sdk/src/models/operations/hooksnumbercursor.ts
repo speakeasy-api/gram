@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CursorHookPayload,
+  CursorHookPayload$Outbound,
+  CursorHookPayload$outboundSchema,
+} from "../components/cursorhookpayload.js";
 
 export type HooksNumberCursorSecurity = {
   apikeyHeaderGramKey?: string | undefined;
@@ -28,7 +32,7 @@ export type HooksNumberCursorRequest = {
    * Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
    */
   idempotencyKey?: string | undefined;
-  cursorHookPayload: components.CursorHookPayload;
+  cursorHookPayload: CursorHookPayload;
 };
 
 /** @internal */
@@ -68,7 +72,7 @@ export type HooksNumberCursorRequest$Outbound = {
   "Gram-Project"?: string | undefined;
   "X-Gram-Hook-Hostname"?: string | undefined;
   "Idempotency-Key"?: string | undefined;
-  CursorHookPayload: components.CursorHookPayload$Outbound;
+  CursorHookPayload: CursorHookPayload$Outbound;
 };
 
 /** @internal */
@@ -81,7 +85,7 @@ export const HooksNumberCursorRequest$outboundSchema: z.ZodMiniType<
     gramProject: z.optional(z.string()),
     xGramHookHostname: z.optional(z.string()),
     idempotencyKey: z.optional(z.string()),
-    cursorHookPayload: components.CursorHookPayload$outboundSchema,
+    cursorHookPayload: CursorHookPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

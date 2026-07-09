@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { userSessionIssuersMigrateLegacyGramRegistrations } from "../funcs/userSessionIssuersMigrateLegacyGramRegistrations.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { MigrateLegacyGramRegistrationsResult } from "../models/components/migratelegacygramregistrationsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,25 +20,28 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  MigrateLegacyGramRegistrationsRequest,
+  MigrateLegacyGramRegistrationsSecurity,
+} from "../models/operations/migratelegacygramregistrations.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type MigrateLegacyGramRegistrationsMutationVariables = {
-  request: operations.MigrateLegacyGramRegistrationsRequest;
-  security?: operations.MigrateLegacyGramRegistrationsSecurity | undefined;
+  request: MigrateLegacyGramRegistrationsRequest;
+  security?: MigrateLegacyGramRegistrationsSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type MigrateLegacyGramRegistrationsMutationData =
-  components.MigrateLegacyGramRegistrationsResult;
+  MigrateLegacyGramRegistrationsResult;
 
 export type MigrateLegacyGramRegistrationsMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

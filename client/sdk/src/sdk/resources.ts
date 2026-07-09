@@ -4,8 +4,11 @@
 
 import { resourcesList } from "../funcs/resourcesList.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListResourcesResult } from "../models/components/listresourcesresult.js";
+import {
+  ListResourcesRequest,
+  ListResourcesSecurity,
+} from "../models/operations/listresources.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Resources extends ClientSDK {
@@ -16,10 +19,10 @@ export class Resources extends ClientSDK {
    * List all resources for a project
    */
   async list(
-    request?: operations.ListResourcesRequest | undefined,
-    security?: operations.ListResourcesSecurity | undefined,
+    request?: ListResourcesRequest | undefined,
+    security?: ListResourcesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListResourcesResult> {
+  ): Promise<ListResourcesResult> {
     return unwrapAsync(resourcesList(
       this,
       request,

@@ -24,10 +24,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListRemoteSessionsRequest,
+  ListRemoteSessionsSecurity,
+} from "../models/operations/listremotesessions.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -60,7 +63,7 @@ export {
 };
 
 export type RemoteSessionsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -77,8 +80,8 @@ export type RemoteSessionsQueryError =
  * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
  */
 export function useRemoteSessions(
-  request?: operations.ListRemoteSessionsRequest | undefined,
-  security?: operations.ListRemoteSessionsSecurity | undefined,
+  request?: ListRemoteSessionsRequest | undefined,
+  security?: ListRemoteSessionsSecurity | undefined,
   options?: QueryHookOptions<RemoteSessionsQueryData, RemoteSessionsQueryError>,
 ): UseQueryResult<RemoteSessionsQueryData, RemoteSessionsQueryError> {
   const client = useGramContext();
@@ -100,8 +103,8 @@ export function useRemoteSessions(
  * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
  */
 export function useRemoteSessionsSuspense(
-  request?: operations.ListRemoteSessionsRequest | undefined,
-  security?: operations.ListRemoteSessionsSecurity | undefined,
+  request?: ListRemoteSessionsRequest | undefined,
+  security?: ListRemoteSessionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RemoteSessionsQueryData,
     RemoteSessionsQueryError
@@ -126,8 +129,8 @@ export function useRemoteSessionsSuspense(
  * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
  */
 export function useRemoteSessionsInfinite(
-  request?: operations.ListRemoteSessionsRequest | undefined,
-  security?: operations.ListRemoteSessionsSecurity | undefined,
+  request?: ListRemoteSessionsRequest | undefined,
+  security?: ListRemoteSessionsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     RemoteSessionsInfiniteQueryData,
     RemoteSessionsQueryError
@@ -163,8 +166,8 @@ export function useRemoteSessionsInfinite(
  * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
  */
 export function useRemoteSessionsInfiniteSuspense(
-  request?: operations.ListRemoteSessionsRequest | undefined,
-  security?: operations.ListRemoteSessionsSecurity | undefined,
+  request?: ListRemoteSessionsRequest | undefined,
+  security?: ListRemoteSessionsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     RemoteSessionsInfiniteQueryData,
     RemoteSessionsQueryError

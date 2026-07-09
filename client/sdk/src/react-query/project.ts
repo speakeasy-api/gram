@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetProjectRequest,
+  GetProjectSecurity,
+} from "../models/operations/getproject.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ProjectQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ProjectQueryError =
  * Get project details by slug.
  */
 export function useProject(
-  request: operations.GetProjectRequest,
-  security?: operations.GetProjectSecurity | undefined,
+  request: GetProjectRequest,
+  security?: GetProjectSecurity | undefined,
   options?: QueryHookOptions<ProjectQueryData, ProjectQueryError>,
 ): UseQueryResult<ProjectQueryData, ProjectQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useProject(
  * Get project details by slug.
  */
 export function useProjectSuspense(
-  request: operations.GetProjectRequest,
-  security?: operations.GetProjectSecurity | undefined,
+  request: GetProjectRequest,
+  security?: GetProjectSecurity | undefined,
   options?: SuspenseQueryHookOptions<ProjectQueryData, ProjectQueryError>,
 ): UseSuspenseQueryResult<ProjectQueryData, ProjectQueryError> {
   const client = useGramContext();

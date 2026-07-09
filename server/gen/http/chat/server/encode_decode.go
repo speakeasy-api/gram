@@ -43,7 +43,10 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 			externalUserID    *string
 			source            *string
 			assistantID       *string
+			sourceKind        *string
+			excludeSourceKind *string
 			hasRisk           *string
+			accountType       *string
 			pinned            *string
 			minRiskScore      *int
 			from              *string
@@ -77,6 +80,14 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if assistantID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
 		}
+		sourceKindRaw := qp.Get("source_kind")
+		if sourceKindRaw != "" {
+			sourceKind = &sourceKindRaw
+		}
+		excludeSourceKindRaw := qp.Get("exclude_source_kind")
+		if excludeSourceKindRaw != "" {
+			excludeSourceKind = &excludeSourceKindRaw
+		}
 		hasRiskRaw := qp.Get("has_risk")
 		if hasRiskRaw != "" {
 			hasRisk = &hasRiskRaw
@@ -84,6 +95,15 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if hasRisk != nil {
 			if !(*hasRisk == "" || *hasRisk == "true" || *hasRisk == "false") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("has_risk", *hasRisk, []any{"", "true", "false"}))
+			}
+		}
+		accountTypeRaw := qp.Get("account_type")
+		if accountTypeRaw != "" {
+			accountType = &accountTypeRaw
+		}
+		if accountType != nil {
+			if !(*accountType == "" || *accountType == "team" || *accountType == "personal") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("account_type", *accountType, []any{"", "team", "personal"}))
 			}
 		}
 		pinnedRaw := qp.Get("pinned")
@@ -189,7 +209,7 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListChatsPayload(search, externalUserID, source, assistantID, hasRisk, pinned, minRiskScore, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewListChatsPayload(search, externalUserID, source, assistantID, sourceKind, excludeSourceKind, hasRisk, accountType, pinned, minRiskScore, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2039,6 +2059,8 @@ func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *Ch
 		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: v.LastMessageTimestamp,
 		RiskFindingsCount:    v.RiskFindingsCount,
+		AccountType:          v.AccountType,
+		AccountEmail:         v.AccountEmail,
 	}
 
 	return res
