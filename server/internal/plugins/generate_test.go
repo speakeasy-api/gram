@@ -2521,6 +2521,18 @@ esac
 	// The stash is consumed: a later decision event proceeds normally.
 	out, _ = run(`{"hook_event_name":"preToolUse","conversation_id":"sess-stash-deny","session_id":"sess-stash-deny","generation_id":"turn-2","tool_name":"shell","tool_input":{"command":"pwd"},"transcript_path":"` + transcriptPath + `"}`)
 	require.NotContains(t, out, `"permission":"deny"`, "a consumed deny must not re-fire on later turns")
+
+	// A deny stashed for a turn that ends without any decision event must not
+	// leak onto the next turn: the stash is generation-scoped, so a decision
+	// event from a different generation discards it instead of relaying it.
+	require.NoError(t, os.WriteFile(transcriptPath, []byte(`{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\ninjected prompt\n</user_query>"}]}}
+{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nanother injected prompt\n</user_query>"}]}}
+`), 0o600))
+	out, _ = run(`{"hook_event_name":"afterAgentThought","conversation_id":"sess-stash-deny","session_id":"sess-stash-deny","generation_id":"turn-3","text":"thinking again","transcript_path":"` + transcriptPath + `"}`)
+	require.NotContains(t, out, `"permission":"deny"`)
+	out, _ = run(`{"hook_event_name":"preToolUse","conversation_id":"sess-stash-deny","session_id":"sess-stash-deny","generation_id":"turn-4","tool_name":"shell","tool_input":{"command":"ls"},"transcript_path":"` + transcriptPath + `"}`)
+	require.NotContains(t, out, `"permission":"deny"`,
+		"a deny stashed for an earlier generation must not block an unrelated later turn")
 }
 
 // TestRenderHookScriptCursorBackfillDenyBlocksDecisionEvent verifies that when

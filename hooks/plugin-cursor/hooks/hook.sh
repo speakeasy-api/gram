@@ -920,14 +920,27 @@ gram_hooks_cursor_mark_prompt_submitted() {
   printf '%s\n' "$(gram_hooks_cursor_prompt_fingerprint "$(gram_hooks_json_string_value "$payload" "prompt")")" >"$state_path" 2>/dev/null || true
 }
 
+# gram_hooks_cursor_deny_scope reduces a payload's generation id to a single
+# stash-line token; "-" when the payload carries none.
+gram_hooks_cursor_deny_scope() {
+  local scope
+  scope="$(gram_hooks_json_string_value "$1" "generation_id" | tr -c 'A-Za-z0-9_.-' '_')"
+  [ -n "$scope" ] || scope="-"
+  printf '%s' "$scope"
+}
+
 # gram_hooks_cursor_take_pending_prompt_deny prints the deny body stashed by
 # a backfill that ran on a non-decision event, consuming it so the deny is
-# relayed exactly once. Returns 1 when nothing is pending.
+# relayed exactly once. The stash is scoped to the generation it was denied
+# for: when the denied turn ends without a decision event, the next turn must
+# not inherit the block — its own backfill re-checks its own prompt — so a
+# stash from another generation is discarded instead of printed. Returns 1
+# when nothing is pending for this generation.
 gram_hooks_cursor_take_pending_prompt_deny() {
   local payload="$1"
   local server_url_arg="$2"
   local project_slug_arg="$3"
-  local session_id state_path pending
+  local session_id state_path pending stashed_scope
   session_id="$(gram_hooks_session_id "$payload")"
   state_path="$(gram_hooks_cursor_prompt_state_path "$session_id" "$server_url_arg" "$project_slug_arg")" || return 1
   pending="$(sed -n '2p' "$state_path" 2>/dev/null)"
@@ -936,7 +949,12 @@ gram_hooks_cursor_take_pending_prompt_deny() {
     *) return 1 ;;
   esac
   sed -n '1p' "$state_path" >"$state_path.tmp" 2>/dev/null && mv "$state_path.tmp" "$state_path" 2>/dev/null || rm -f "$state_path.tmp"
-  printf '%s' "${pending#deny }"
+  pending="${pending#deny }"
+  stashed_scope="${pending%% *}"
+  if [ "$stashed_scope" != "$(gram_hooks_cursor_deny_scope "$payload")" ]; then
+    return 1
+  fi
+  printf '%s' "${pending#* }"
 }
 
 # gram_hooks_cursor_prompt_fingerprint reduces a prompt to a stable content
@@ -1032,7 +1050,9 @@ gram_hooks_cursor_backfill_prompt_if_missing() {
       # This invocation may be a non-decision event (stop, afterAgentResponse)
       # that cannot relay the deny; stash it with the marker so the turn's
       # next decision event relays it instead of the deny being swallowed.
-      printf '%s\ndeny %s\n' "$fingerprint" "$GRAM_HOOKS_BACKFILL_BODY" >"$state_path" 2>/dev/null || true
+      # The stash carries the generation id so it can never block a later
+      # unrelated turn.
+      printf '%s\ndeny %s %s\n' "$fingerprint" "$(gram_hooks_cursor_deny_scope "$payload")" "$GRAM_HOOKS_BACKFILL_BODY" >"$state_path" 2>/dev/null || true
     else
       printf '%s\n' "$fingerprint" >"$state_path" 2>/dev/null || true
     fi
