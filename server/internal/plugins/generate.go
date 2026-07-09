@@ -1245,23 +1245,37 @@ gram_enrich_identity_payload() {
 
   trimmed=$(printf '%s' "$payload" | sed 's/[[:space:]]*$//')
   case "$trimmed" in
-    \{*\})
-      if [[ "$trimmed" =~ \"user_email\"[[:space:]]*: ]]; then
-        printf '%s' "$trimmed" | sed -E 's|"user_email"[[:space:]]*:[[:space:]]*"[^"]*"|"user_email":"'"$email"'"|g'
-        return
-      fi
-      prefix="${trimmed%\}}"
-      if [[ "$prefix" =~ ^\{[[:space:]]*$ ]]; then
-        printf '{"user_email":"%s"}' "$email"
-      else
-        printf '%s,"user_email":"%s"}' "$prefix" "$email"
-      fi
-      ;;
+    \{*\}) ;;
     *)
       gram_hooks_identity_debug "payload is not a JSON object; cannot stamp user_email, sending unchanged"
       printf '%s' "$payload"
+      return
       ;;
   esac
+  # Only the TOP-LEVEL user_email feeds source.user_email downstream; a
+  # nested one (a tool argument, say) must be left untouched. jq sets the
+  # top-level key without disturbing nested fields. Without jq the field is
+  # appended only when absent: an existing top-level value is kept as-is
+  # rather than risk rewriting a nested tool argument with text surgery.
+  if command -v jq >/dev/null 2>&1; then
+    local stamped
+    stamped="$(printf '%s' "$trimmed" | jq -c --arg email "$email" '.user_email = $email' 2>/dev/null)" || stamped=""
+    if [ -n "$stamped" ]; then
+      printf '%s' "$stamped"
+      return
+    fi
+  fi
+  if [ -n "$(gram_hooks_json_top_level_value "$trimmed" "user_email")" ]; then
+    gram_hooks_identity_debug "payload already carries a top-level user_email; keeping it (no jq to rewrite safely)"
+    printf '%s' "$trimmed"
+    return
+  fi
+  prefix="${trimmed%\}}"
+  if [[ "$prefix" =~ ^\{[[:space:]]*$ ]]; then
+    printf '{"user_email":"%s"}' "$email"
+  else
+    printf '%s,"user_email":"%s"}' "$prefix" "$email"
+  fi
 }
 `)
 }
@@ -2383,11 +2397,11 @@ provider_payload=$(cat)
 
 %s
 
+%s
+
 if type gram_enrich_identity_payload >/dev/null 2>&1; then
   provider_payload="$(gram_enrich_identity_payload "$provider_payload")"
 fi
-
-%s
 
 hook_hostname=$(hostname 2>/dev/null || true)
 native_event="$(gram_hooks_native_event_name "$provider_payload")"
@@ -2452,6 +2466,9 @@ if [ -n "$gram_hooks_nonblocking" ]; then
 fi
 
 %s
+
+%s
+
 provider_payload=$(cat)
 if type gram_enrich_identity_payload >/dev/null 2>&1; then
   provider_payload="$(gram_enrich_identity_payload "$provider_payload")"
@@ -2462,8 +2479,6 @@ fi
 if type gram_hooks_enrich_claude_mcp_payload >/dev/null 2>&1; then
   provider_payload="$(gram_hooks_enrich_claude_mcp_payload "$provider_payload")"
 fi
-
-%s
 
 # gram_hooks_emit_login_nudge injects a once-per-session UserPromptSubmit
 # additionalContext telling Claude the hooks are unauthenticated and where the

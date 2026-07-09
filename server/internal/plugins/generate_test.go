@@ -3887,6 +3887,64 @@ printf '{}\n200'
 	require.Contains(t, postedPayload, `"adapter":"cursor"`)
 }
 
+// TestRenderHookScriptDeviceAgentIdentityLeavesNestedUserEmailUntouched
+// verifies the device-agent stamp writes only the TOP-LEVEL user_email that
+// canonicalization reads: a user_email nested inside tool input is a tool
+// argument, and rewriting it would corrupt the recorded and policy-scanned
+// call while leaving the event unattributed.
+func TestRenderHookScriptDeviceAgentIdentityLeavesNestedUserEmailUntouched(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "claude"))
+
+	dir := t.TempDir()
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payload.json")
+	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "fake-agent"), []byte(`#!/usr/bin/env bash
+if [ "$1" = "identity" ]; then
+  printf '{"identity":{"email":"agent@example.com"}}'
+  exit 0
+fi
+exit 1
+`), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
+cat > "$GRAM_CAPTURE_PAYLOAD"
+printf '{}\n200'
+`), 0o755))
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","session_id":"sess-nested-email","tool_name":"crm_update","tool_input":{"user_email":"customer@example.com","plan":"pro"}}`)
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GRAM_CAPTURE_PAYLOAD="+capturePath,
+		"GRAM_HOOKS_API_KEY=gram_test_hooks_key",
+		"GRAM_HOOKS_PROJECT_SLUG=acme-prod",
+		"GRAM_DEVICE_AGENT_COMMANDS=fake-agent",
+		"GRAM_DEVICE_AGENT_TIMEOUT_TENTHS=600",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var posted map[string]any
+	postedPayload := string(requireFileBytes(t, capturePath))
+	require.NoError(t, json.Unmarshal([]byte(postedPayload), &posted))
+	source, ok := posted["source"].(map[string]any)
+	require.True(t, ok, "canonical payload must carry a source block")
+	require.Equal(t, "agent@example.com", source["user_email"],
+		"a nested user_email is a tool argument, not attribution; the device-agent email must still land on source.user_email")
+	require.Contains(t, postedPayload, `"user_email":"customer@example.com"`,
+		"the nested tool argument must survive identity stamping unchanged")
+}
+
 func TestRenderHookScriptFallsBackWhenDeviceAgentMissing(t *testing.T) {
 	t.Parallel()
 
