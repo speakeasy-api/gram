@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -95,6 +96,14 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	// plugins- names classify the org-wide keys the plugin publish path mints
+	// (auth.PluginAPIKeyNamePrefix): hook ingestion routes their events away
+	// from owner attribution. A user-created key adopting the prefix would
+	// silently drop the owner-identity fallback that keys user-scoped policy
+	// checks, so the prefix is reserved for the publish path.
+	if strings.HasPrefix(payload.Name, auth.PluginAPIKeyNamePrefix) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "api key names starting with %q are reserved", auth.PluginAPIKeyNamePrefix).LogError(ctx, s.logger)
 	}
 	scopes := map[string]struct{}{}
 	for _, rawscope := range payload.Scopes {

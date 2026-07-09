@@ -273,6 +273,23 @@ func TestKeysService_CreateKey(t *testing.T) {
 	})
 }
 
+// The plugins- prefix classifies publish-minted org-wide keys during hook
+// ingestion; a user-created key must not adopt it, or its events would skip
+// the owner-identity fallback that keys user-scoped policy checks.
+func TestKeysService_CreateKey_RejectsReservedPluginPrefix(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestKeysService(t)
+
+	key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+		SessionToken: nil,
+		Name:         "plugins-hooks-sneaky" + randstr(6),
+		Scopes:       []string{"hooks"},
+	})
+	require.Error(t, err)
+	require.Nil(t, key)
+	require.Contains(t, err.Error(), "reserved")
+}
+
 func TestKeysService_CreateKey_AuditLogMetadata(t *testing.T) {
 	t.Parallel()
 
