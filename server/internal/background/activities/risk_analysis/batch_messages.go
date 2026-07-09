@@ -43,7 +43,7 @@ func newBatchMessages(ctx context.Context, logger *slog.Logger, rows []repo.GetM
 		if !ok {
 			continue
 		}
-		msg.UserID = row.ChatUserID.String
+		msg.UserID = row.ChatUserID
 		messages = append(messages, msg)
 	}
 	return messages
