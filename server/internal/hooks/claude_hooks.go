@@ -836,7 +836,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		// through to the shadow-MCP guard below: an ack clears the risk
 		// challenge but must never bypass unapproved-toolset validation.
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil &&
-			!(scanResult.Action == "warn" && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+			(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
 			// Unacknowledged warn → deny + out-of-band acknowledgement link
 			// (challenge). Claude is unified with Cursor/Codex on the link flow
 			// rather than the native permissionDecision "ask", which

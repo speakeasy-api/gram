@@ -128,8 +128,8 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		// Acknowledged warn is excluded from the enforcement block so it falls
 		// through to the shadow-MCP guard below: an ack clears the risk
 		// challenge but must never bypass unapproved-toolset validation.
-		if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil && !(scanResult.Action == "warn" &&
-			s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+		if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" ||
+			!s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
 			if scanResult.Action == "warn" {
 				if agentReason, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 					blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)

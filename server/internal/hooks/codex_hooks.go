@@ -104,7 +104,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			// Acknowledged warn is excluded from the enforcement block so it
 			// falls through to the shadow-MCP guard below: an ack clears the
 			// risk challenge but must never bypass unapproved-toolset validation.
-			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil && !(scanResult.Action == "warn" && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
 				// Unacknowledged warn → warning + ack link (challenge, not a
 				// durable block page). No ack link buildable → fall through to block.
 				if scanResult.Action == "warn" {
@@ -199,7 +199,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			// unacknowledged warn is challenged (deny + ack link), not
 			// hard-blocked with the raw user_message — consistent with tool calls.
 			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
-				!(scanResult.Action == "warn" && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+				(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
 				if scanResult.Action == "warn" {
 					if _, warnUserReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 						blockReason = fmt.Sprintf("Speakeasy challenged this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)

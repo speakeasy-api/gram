@@ -539,16 +539,17 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			findings := filter(gitleaksFindings)
 			if len(findings) > 0 {
 				return &ScanResult{
-					Action:       policy.Action,
-					PolicyID:     policy.ID.String(),
-					PolicyName:   policy.Name,
-					Source:       ra.SourceGitleaks,
-					MessageType:  messageType,
-					RuleID:       findings[0].RuleID,
-					Description:  findings[0].Description,
-					UserMessage:  conv.FromPGText[string](policy.UserMessage),
-					MatchedValue: findings[0].Match,
-					Entity:       findings[0].RuleID,
+					Action:          policy.Action,
+					PolicyID:        policy.ID.String(),
+					PolicyName:      policy.Name,
+					Source:          ra.SourceGitleaks,
+					MessageType:     messageType,
+					RuleID:          findings[0].RuleID,
+					Description:     findings[0].Description,
+					UserMessage:     conv.FromPGText[string](policy.UserMessage),
+					MatchedValue:    findings[0].Match,
+					Entity:          findings[0].RuleID,
+					CallFingerprint: "",
 				}, nil
 			}
 		case ra.SourcePresidio:
@@ -570,16 +571,17 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				if len(filtered) > 0 {
 					f := filtered[0]
 					return &ScanResult{
-						Action:       policy.Action,
-						PolicyID:     policy.ID.String(),
-						PolicyName:   policy.Name,
-						Source:       ra.SourcePresidio,
-						MessageType:  messageType,
-						RuleID:       f.RuleID,
-						Description:  f.Description,
-						UserMessage:  conv.FromPGText[string](policy.UserMessage),
-						MatchedValue: f.Match,
-						Entity:       f.RuleID,
+						Action:          policy.Action,
+						PolicyID:        policy.ID.String(),
+						PolicyName:      policy.Name,
+						Source:          ra.SourcePresidio,
+						MessageType:     messageType,
+						RuleID:          f.RuleID,
+						Description:     f.Description,
+						UserMessage:     conv.FromPGText[string](policy.UserMessage),
+						MatchedValue:    f.Match,
+						Entity:          f.RuleID,
+						CallFingerprint: "",
 					}, nil
 				}
 			}
@@ -591,32 +593,34 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			findings = filter(findings)
 			if len(findings) > 0 {
 				return &ScanResult{
-					Action:       policy.Action,
-					PolicyID:     policy.ID.String(),
-					PolicyName:   policy.Name,
-					Source:       ra.SourcePromptInjection,
-					MessageType:  messageType,
-					RuleID:       findings[0].RuleID,
-					Description:  findings[0].Description,
-					UserMessage:  conv.FromPGText[string](policy.UserMessage),
-					MatchedValue: findings[0].Match,
-					Entity:       findings[0].RuleID,
+					Action:          policy.Action,
+					PolicyID:        policy.ID.String(),
+					PolicyName:      policy.Name,
+					Source:          ra.SourcePromptInjection,
+					MessageType:     messageType,
+					RuleID:          findings[0].RuleID,
+					Description:     findings[0].Description,
+					UserMessage:     conv.FromPGText[string](policy.UserMessage),
+					MatchedValue:    findings[0].Match,
+					Entity:          findings[0].RuleID,
+					CallFingerprint: "",
 				}, nil
 			}
 		}
 	}
 	if denyFindings := filter(customFindings); len(denyFindings) > 0 {
 		return &ScanResult{
-			Action:       policy.Action,
-			PolicyID:     policy.ID.String(),
-			PolicyName:   policy.Name,
-			Source:       ra.SourceCustom,
-			MessageType:  messageType,
-			RuleID:       denyFindings[0].RuleID,
-			Description:  denyFindings[0].Description,
-			UserMessage:  conv.FromPGText[string](policy.UserMessage),
-			MatchedValue: denyFindings[0].Match,
-			Entity:       denyFindings[0].RuleID,
+			Action:          policy.Action,
+			PolicyID:        policy.ID.String(),
+			PolicyName:      policy.Name,
+			Source:          ra.SourceCustom,
+			MessageType:     messageType,
+			RuleID:          denyFindings[0].RuleID,
+			Description:     denyFindings[0].Description,
+			UserMessage:     conv.FromPGText[string](policy.UserMessage),
+			MatchedValue:    denyFindings[0].Match,
+			Entity:          denyFindings[0].RuleID,
+			CallFingerprint: "",
 		}, nil
 	}
 	return nil, nil
@@ -661,8 +665,9 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		Description: finding.Description,
 		UserMessage: conv.FromPGText[string](policy.UserMessage),
 		// Judge findings have no literal matched substring; Entity mirrors RuleID.
-		MatchedValue: finding.Match,
-		Entity:       finding.RuleID,
+		MatchedValue:    finding.Match,
+		Entity:          finding.RuleID,
+		CallFingerprint: "",
 	}
 }
 
@@ -684,8 +689,9 @@ func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.T
 		Description: "Policy judge was unavailable; flagged by fail-closed policy.",
 		UserMessage: conv.FromPGText[string](policy.UserMessage),
 		// No literal match for a fail-closed judge result.
-		MatchedValue: "",
-		Entity:       ra.RuleLLMJudge,
+		MatchedValue:    "",
+		Entity:          ra.RuleLLMJudge,
+		CallFingerprint: "",
 	}
 }
 
