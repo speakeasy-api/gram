@@ -2178,12 +2178,16 @@ gram_hooks_post_authenticated() {
     # attributes to its owner, and the canonical payload was built before
     # the cache was cleared. The first prepare_auth exported the cached
     # login email, so stamp it into source.user_email rather than sending
-    # the recovered event unattributed.
+    # the recovered event unattributed. Only source.user_email drives
+    # attribution, and the raw provider payload can mention user_email
+    # (e.g. empty on Cursor events) without the source member being set —
+    # so the already-stamped check reads the source object alone.
     if [ -n "${GRAM_HOOKS_AUTH_EMAIL:-}" ]; then
-      case "$payload" in
+      local stamped_email stamped_rest stamped_source
+      stamped_source="${payload%%'},"event":{'*}"
+      case "$stamped_source" in
         *'"user_email"'*) ;;
         *)
-          local stamped_email stamped_rest
           stamped_email="$(printf '%s' "$GRAM_HOOKS_AUTH_EMAIL" | gram_hooks_json_escape_string)"
           stamped_rest="${payload#'{"schema_version":"hook.ingest.v1","source":{'}"
           if [ "$stamped_rest" != "$payload" ]; then

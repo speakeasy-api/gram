@@ -1574,7 +1574,10 @@ fi
 	}
 
 	cmd := exec.Command("bash", hookPath)
-	cmd.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-stale-cache-org","prompt":"hi"}`)
+	// The empty user_email lands in the canonical raw section without setting
+	// source.user_email, so this also pins the stamp guard to the source
+	// object rather than the whole payload.
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-stale-cache-org","prompt":"hi","user_email":""}`)
 	cmd.Env = env
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -1594,10 +1597,10 @@ fi
 	// wiped cache's login email as the payload's self-reported identity.
 	payloads := strings.Split(string(requireFileBytes(t, payloadsPath)), "\n---GRAM---\n")
 	require.GreaterOrEqual(t, len(payloads), 2)
-	require.NotContains(t, payloads[0], `"user_email"`,
+	require.NotContains(t, payloads[0], `"user_email":"dev@example.com"`,
 		"the first attempt rode the personal key, which attributes via its owner")
-	require.Contains(t, payloads[1], `"user_email":"dev@example.com"`,
-		"the org-key retry must stamp the cached login email for attribution")
+	require.Contains(t, payloads[1], `"source":{"user_email":"dev@example.com",`,
+		"the org-key retry must stamp the cached login email into source.user_email")
 }
 
 // TestRenderHookScriptClaudeRejectedCachedKeyStillBlocksToolUse verifies that
