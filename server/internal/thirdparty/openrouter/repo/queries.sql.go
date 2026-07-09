@@ -21,7 +21,7 @@ INSERT INTO openrouter_api_keys (
   , $3
   , $4
 )
-RETURNING organization_id, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenRouterAPIKeyParams struct {
@@ -41,6 +41,7 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 	var i OpenrouterApiKey
 	err := row.Scan(
 		&i.OrganizationID,
+		&i.KeyType,
 		&i.Key,
 		&i.KeyHash,
 		&i.MonthlyCredits,
@@ -54,7 +55,7 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 }
 
 const getOpenRouterAPIKey = `-- name: GetOpenRouterAPIKey :one
-SELECT organization_id, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+SELECT organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -65,6 +66,7 @@ func (q *Queries) GetOpenRouterAPIKey(ctx context.Context, organizationID string
 	var i OpenrouterApiKey
 	err := row.Scan(
 		&i.OrganizationID,
+		&i.KeyType,
 		&i.Key,
 		&i.KeyHash,
 		&i.MonthlyCredits,
@@ -82,7 +84,7 @@ UPDATE openrouter_api_keys
 SET monthly_credits = $1, key_hash = $2, key = $3
 WHERE organization_id = $4
   AND deleted IS FALSE
-RETURNING organization_id, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOpenRouterKeyParams struct {
@@ -102,6 +104,7 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 	var i OpenrouterApiKey
 	err := row.Scan(
 		&i.OrganizationID,
+		&i.KeyType,
 		&i.Key,
 		&i.KeyHash,
 		&i.MonthlyCredits,

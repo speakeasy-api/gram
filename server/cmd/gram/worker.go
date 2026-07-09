@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -60,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -299,6 +301,12 @@ func newWorkerCommand() *cli.Command {
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
 			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
 		},
+		&cli.StringFlag{
+			Name:     "loops-api-key",
+			Usage:    "Loops API key for transactional emails (billing usage alerts). Empty or 'unset' disables email sending.",
+			EnvVars:  []string{"LOOPS_API_KEY"},
+			Required: false,
+		},
 	}
 
 	flags = append(flags, redisFlags...)
@@ -326,8 +334,6 @@ func newWorkerCommand() *cli.Command {
 				attr.SlogServiceVersion(shortGitSHA()),
 				attr.SlogServiceEnv(serviceEnv),
 			)
-			tracerProvider := otel.GetTracerProvider()
-			meterProvider := otel.GetMeterProvider()
 			slog.SetDefault(logger)
 
 			if serviceEnv == "local" {
@@ -337,7 +343,22 @@ func newWorkerCommand() *cli.Command {
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
 
-			temporalEnv, shutdown, err := newTemporalClient(logger, temporalClientOptions{
+			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
+				ServiceName:    serviceName,
+				ServiceVersion: shortGitSHA(),
+				GitSHA:         GitSHA,
+				EnableTracing:  c.Bool("with-otel-tracing"),
+				EnableMetrics:  c.Bool("with-otel-metrics"),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to setup opentelemetry sdk: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			tracerProvider := otel.GetTracerProvider()
+			meterProvider := otel.GetMeterProvider()
+
+			temporalEnv, shutdown, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
 				address:      c.String("temporal-address"),
 				namespace:    c.String("temporal-namespace"),
 				taskQueue:    c.String("temporal-task-queue"),
@@ -349,18 +370,6 @@ func newWorkerCommand() *cli.Command {
 			}
 			if temporalEnv == nil {
 				return errors.New("insufficient options to create temporal client")
-			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
-
-			shutdown, err = o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
-				ServiceName:    serviceName,
-				ServiceVersion: shortGitSHA(),
-				GitSHA:         GitSHA,
-				EnableTracing:  c.Bool("with-otel-tracing"),
-				EnableMetrics:  c.Bool("with-otel-metrics"),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to setup opentelemetry sdk: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
@@ -434,6 +443,9 @@ func newWorkerCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
+
+			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+			emailService := email.NewService(logger, loopsClient)
 			var featureFlags feature.Provider = posthogClient
 			if c.String("environment") == "local" {
 				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
@@ -758,6 +770,7 @@ func newWorkerCommand() *cli.Command {
 				BillingRepository:              billingRepo,
 				RedisClient:                    redisClient,
 				PosthogClient:                  posthogClient,
+				EmailService:                   emailService,
 				FunctionsDeployer:              functionsOrchestrator,
 				FunctionsVersion:               runnerVersion,
 				RagService:                     ragService,

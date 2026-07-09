@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -60,6 +61,20 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
+	}
+
+	// Discovery drops malformed documentation URLs, but a caller holding the write
+	// scope can POST them without ever calling discover, and they are persisted
+	// and later rendered as links. An empty value stays legal: the update queries
+	// read it as the explicit "clear to NULL" sentinel.
+	if v := conv.PtrValOr(payload.ServiceDocumentation, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "service_documentation must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.OpPolicyURI, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "op_policy_uri must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.OpTosURI, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
 	}
 
 	// Resolve the optional owning project. A provided project must belong to the
@@ -103,6 +118,9 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
 		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:              conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
+		OpPolicyUri:                       conv.PtrToPGTextEmpty(payload.OpPolicyURI),
+		OpTosUri:                          conv.PtrToPGTextEmpty(payload.OpTosURI),
 		ScopesSupported:                   payload.ScopesSupported,
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
@@ -112,6 +130,9 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
 	})
 	if err != nil {
+		if isRemoteSessionIssuerSlugConflict(err) || isGlobalRemoteSessionIssuerSlugConflict(err) {
+			return nil, oops.E(oops.CodeConflict, err, "an issuer with this slug already exists").LogError(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization admin remote session issuer").LogError(ctx, logger)
 	}
 
@@ -296,6 +317,20 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
 	}
 
+	// Discovery drops malformed documentation URLs, but a caller holding the write
+	// scope can POST them without ever calling discover, and they are persisted
+	// and later rendered as links. An empty value stays legal: the update queries
+	// read it as the explicit "clear to NULL" sentinel.
+	if v := conv.PtrValOr(payload.ServiceDocumentation, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "service_documentation must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.OpPolicyURI, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "op_policy_uri must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.OpTosURI, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
@@ -330,6 +365,9 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
 		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:              conv.PtrToPGText(payload.ServiceDocumentation),
+		OpPolicyUri:                       conv.PtrToPGText(payload.OpPolicyURI),
+		OpTosUri:                          conv.PtrToPGText(payload.OpTosURI),
 		ScopesSupported:                   payload.ScopesSupported,
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,

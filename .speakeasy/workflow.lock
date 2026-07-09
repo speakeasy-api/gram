@@ -1,4 +1,4 @@
-speakeasyVersion: 1.788.0
+speakeasyVersion: 1.789.1
 sources: {}
 targets:
     gram-internal:
@@ -26,4 +26,4 @@ workflow:
         gram-internal:
             target: typescript
             source: Gram-Internal
-            output: client/sdk
+            output: client/dashboard/src/sdk

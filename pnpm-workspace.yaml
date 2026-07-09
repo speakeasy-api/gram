@@ -11,13 +11,12 @@ packages:
   - docs
   - evaluation
   - elements
-  - elements/examples/*
   - dev-idp-dashboard
 
 catalog:
   "@ai-sdk/react": ^3.0.211
   "@modelcontextprotocol/sdk": ^1.29.0
-  "@tailwindcss/vite": ^4.3.1
+  "@tailwindcss/vite": ^4.3.2
   "@tanstack/react-query": 5.101.1
   "@types/react": ^19.2.17
   "@types/react-dom": ^19.2.3
@@ -25,12 +24,14 @@ catalog:
   "@vitejs/plugin-react": ^6.0.3
   ai: ^6.0.209
   "lucide-react": ^1.21.0
-  typescript: 5.9.3
+  typescript: 7.0.2
   vite: ^8.1.2
 
 minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:
+  - "typescript"
+  - "@typescript/*"
   - "@oxfmt/*"
   - "oxfmt"
   - "react-router"

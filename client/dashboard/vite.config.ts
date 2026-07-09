@@ -120,10 +120,18 @@ export default defineConfig(({ command }) => {
         },
         output: {
           codeSplitting: {
-            groups: manualChunkGroups.map(([name, packages]) => ({
-              name,
-              test: packagePathRegex(packages),
-            })),
+            groups: [
+              // Generated SDK source (aliased as @gram/client) goes into its
+              // own chunk so app-code changes don't churn its hash.
+              {
+                name: "gram-sdk",
+                test: /[\\/]src[\\/]sdk[\\/]/,
+              },
+              ...manualChunkGroups.map(([name, packages]) => ({
+                name,
+                test: packagePathRegex(packages),
+              })),
+            ],
           },
         },
       },
@@ -171,6 +179,7 @@ export default defineConfig(({ command }) => {
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
+        "@gram/client": path.resolve(__dirname, "./src/sdk/src"),
         // Ensure single instances of React and related packages across all dependencies
         react: path.resolve(__dirname, "node_modules/react"),
         "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
