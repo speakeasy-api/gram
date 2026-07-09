@@ -137,8 +137,8 @@ export function RiskPolicyChallengeAcknowledgeContent(): JSX.Element {
         message={challenge.data.message}
         approving={approving}
         declining={declining}
-        onApprove={onApprove}
-        onDecline={onDecline}
+        onApprove={() => void onApprove()}
+        onDecline={() => void onDecline()}
       />
     );
   }
