@@ -56,6 +56,7 @@ chrono = "0.4"
 clap = { version = "4", features = ["derive", "env"] }
 dashmap = "6"
 futures = "0.3"
+fs2 = "0.4"
 http = "1"
 reqwest = { version = "0.13.2", features = ["json"] }
 reqwest-middleware = { version = "0.5", features = ["json"] }

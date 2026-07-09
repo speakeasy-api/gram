@@ -870,6 +870,10 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	return nil
 }
 
+func (f *FlyRuntimeBackend) GrowWorkspace(_ context.Context, _ assistantRuntimeRecord) (RuntimeBackendGrowWorkspaceResult, error) {
+	return RuntimeBackendGrowWorkspaceResult{}, ErrWorkspaceGrowthUnsupported
+}
+
 func (f *FlyRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
 	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
 		return RuntimeBackendStatus{}, err

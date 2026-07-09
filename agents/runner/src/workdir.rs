@@ -3,8 +3,8 @@ use std::sync::OnceLock;
 
 use agentkit_tools_core::ToolError;
 
-/// Persistent working directory for the assistant inside the guest VM. Backed
-/// by a fixed-size loop-mounted ext4 image so disk usage is hard-capped.
+/// Runtime-scoped working directory for the assistant inside the guest VM.
+/// GKE backs it with a growable generic-ephemeral Persistent Disk.
 pub const ASSISTANT_WORKDIR: &str = "/var/lib/gram-assistant/work";
 
 /// Canonicalizes `path` and rejects anything that does not resolve to a

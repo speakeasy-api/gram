@@ -10,6 +10,7 @@ use crate::wire::{RunnerMessage, ThreadBootstrap};
 const BOOTSTRAP_PATH: &str = "/rpc/assistants.getThreadBootstrap";
 const CREATE_MCP_AUTH_FLOW_PATH: &str = "/rpc/assistantMcpAuth.create";
 const RECORD_COMPACTED_GENERATION_PATH: &str = "/rpc/assistants.recordCompactedGeneration";
+const GROW_WORKSPACE_PATH: &str = "/rpc/assistants.growWorkspace";
 const BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15);
 // Compaction persistence runs off the loop's critical path, so a longer
 // budget is fine; the post-compaction call body can be sizable and the
@@ -68,6 +69,13 @@ pub struct CreateMcpAuthFlowResponse {
     pub server_id: String,
     pub mcp_slug: String,
     pub auth_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GrowWorkspaceResponse {
+    pub current_bytes: u64,
+    pub requested_bytes: u64,
+    pub expanded: bool,
 }
 
 impl GramBootstrapClient {
@@ -184,5 +192,37 @@ impl GramBootstrapClient {
             });
         }
         Ok(())
+    }
+
+    pub async fn grow_workspace(
+        &self,
+        tokens: &TokenRegistry,
+    ) -> Result<GrowWorkspaceResponse, GramClientError> {
+        let endpoint = format!(
+            "{}{}",
+            self.base_url.trim_end_matches('/'),
+            GROW_WORKSPACE_PATH
+        );
+        let bearer = tokens.current().map_err(|_| GramClientError::Token)?;
+        if bearer.is_empty() {
+            return Err(GramClientError::Token);
+        }
+
+        let resp = self
+            .http
+            .post(&endpoint)
+            .timeout(BOOTSTRAP_TIMEOUT)
+            .bearer_auth(&bearer)
+            .send()
+            .await?;
+        let status = resp.status();
+        let body = resp.text().await?;
+        if !status.is_success() {
+            return Err(GramClientError::Status {
+                status: status.as_u16(),
+                body,
+            });
+        }
+        Ok(serde_json::from_str(&body)?)
     }
 }

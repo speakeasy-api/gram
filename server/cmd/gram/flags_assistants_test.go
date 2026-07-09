@@ -63,6 +63,19 @@ func TestAssistantRuntimeConfigFromCLIFallsBackToServerURL(t *testing.T) {
 	require.Equal(t, serverURL, cfg.Fly.ServerURL)
 }
 
+func TestAssistantRuntimeConfigFromCLIUsesBoundedWorkspaceGrowthDefaults(t *testing.T) {
+	t.Parallel()
+
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
+		"assistant-runtime-provider": assistants.RuntimeProviderGKE,
+	})
+	cfg, err := assistantRuntimeConfigFromCLI(ctx, &url.URL{Scheme: "https", Host: "gram.example.com"})
+	require.NoError(t, err)
+	require.Equal(t, "workspace", cfg.GKE.WorkspaceVolumeName)
+	require.Equal(t, int64(10), cfg.GKE.WorkspaceGrowthIncrementGiB)
+	require.Equal(t, int64(60), cfg.GKE.WorkspaceMaxSizeGiB)
+}
+
 func newAssistantRuntimeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	t.Helper()
 

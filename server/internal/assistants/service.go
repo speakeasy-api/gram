@@ -1626,6 +1626,33 @@ func (s *ServiceCore) RuntimeImageRef() string {
 	return s.runtime.ImageRef()
 }
 
+func (s *ServiceCore) GrowRuntimeWorkspace(ctx context.Context, projectID, assistantID uuid.UUID) (RuntimeBackendGrowWorkspaceResult, error) {
+	row, err := assistantrepo.New(s.db).GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   projectID,
+		AssistantID: assistantID,
+	})
+	if err != nil {
+		return RuntimeBackendGrowWorkspaceResult{}, fmt.Errorf("load assistant runtime for workspace growth: %w", err)
+	}
+	if row.State != runtimeStateActive {
+		return RuntimeBackendGrowWorkspaceResult{}, fmt.Errorf("assistant runtime workspace cannot grow while state is %q", row.State)
+	}
+	result, err := s.runtime.GrowWorkspace(ctx, assistantRuntimeRecord{
+		ID:                  row.ID,
+		AssistantThreadID:   row.AssistantThreadID,
+		AssistantID:         row.AssistantID,
+		ProjectID:           row.ProjectID,
+		Backend:             row.Backend,
+		BackendMetadataJSON: row.BackendMetadataJson,
+		State:               row.State,
+		WarmUntil:           row.WarmUntil,
+	})
+	if err != nil {
+		return RuntimeBackendGrowWorkspaceResult{}, fmt.Errorf("grow assistant runtime workspace: %w", err)
+	}
+	return result, nil
+}
+
 // reapRuntimeRow tears down the backend resource for one row and records the
 // outcome in DB. Returns true on success (including idempotent no-op when
 // the resource was already gone). Errors are logged here so callers can

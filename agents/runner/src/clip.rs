@@ -36,10 +36,9 @@ use serde_json::Value;
 /// content-type discriminators).
 pub const MAX_TOOL_BYTES: usize = 150_000;
 
-/// 4 MiB. The assistant workdir is a fixed 256 MiB ext4 image
-/// (`agents/runtime-image/Dockerfile`), shared with `bun_run` temp files and
-/// any artifacts the agent writes itself. Bounding each spill keeps a single
-/// runaway MCP response from filling the image and breaking subsequent
+/// 4 MiB. The assistant workdir is shared with `bun_run` temp files and any
+/// artifacts the agent writes itself. Bounding each spill keeps a single
+/// runaway MCP response from filling the workspace and breaking subsequent
 /// filesystem-tool / `bun_run` / spill calls. Truncated spills still carry
 /// the leading body — enough for the agent to inspect with `head`/`grep`.
 pub const MAX_SPILL_BYTES: usize = 4 * 1024 * 1024;

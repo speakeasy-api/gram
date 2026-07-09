@@ -95,6 +95,18 @@ func (r *runtimeRouter) RunTurn(ctx context.Context, runtime assistantRuntimeRec
 	return nil
 }
 
+func (r *runtimeRouter) GrowWorkspace(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendGrowWorkspaceResult, error) {
+	b, err := r.route(runtime.Backend)
+	if err != nil {
+		return RuntimeBackendGrowWorkspaceResult{}, err
+	}
+	result, err := b.GrowWorkspace(ctx, runtime)
+	if err != nil {
+		return result, fmt.Errorf("grow %s runtime workspace: %w", runtime.Backend, err)
+	}
+	return result, nil
+}
+
 func (r *runtimeRouter) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
 	b, err := r.route(runtime.Backend)
 	if err != nil {

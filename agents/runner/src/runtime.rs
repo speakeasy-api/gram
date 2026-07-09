@@ -79,6 +79,9 @@ pub struct RuntimeHost {
     /// Fallback bearer used only when `/threads/turn` arrives with no
     /// `auth_token` so the bootstrap fetch still has a credential.
     pub initial_token: String,
+    /// Most recently delivered runtime bearer, used only by the workspace
+    /// growth callback. It never leaves the runner or enters a subprocess.
+    pub workspace_tokens: TokenRegistry,
 }
 
 /// Live per-thread state. Concurrent first-turn requests for the same
@@ -133,6 +136,7 @@ pub async fn build_host(
     initial_token: String,
     thread_idle_ttl: Duration,
 ) -> Result<Arc<RuntimeHost>, RunnerError> {
+    let workspace_tokens = TokenRegistry::new(initial_token.clone());
     let mut default_headers = http::HeaderMap::new();
     default_headers.insert(
         http::HeaderName::from_static("x-gram-source"),
@@ -164,6 +168,7 @@ pub async fn build_host(
         http_client,
         spill_root,
         initial_token,
+        workspace_tokens,
     });
 
     // Background eviction task: walks the threads map and drops any whose
@@ -268,6 +273,9 @@ pub async fn ensure_thread(
     let bearer = auth_token
         .filter(|t| !t.is_empty())
         .unwrap_or_else(|| host.initial_token.clone());
+    if !bearer.is_empty() {
+        host.workspace_tokens.rotate(&bearer)?;
+    }
 
     let mut initialized = false;
     let thread = cell
@@ -978,6 +986,7 @@ mod tests {
             http_client,
             spill_root: PathBuf::from("/tmp/runtime-test-spill"),
             initial_token: String::new(),
+            workspace_tokens: TokenRegistry::new(""),
         })
     }
 

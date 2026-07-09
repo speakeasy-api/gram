@@ -58,6 +58,10 @@ func (s *stubRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord
 	return nil
 }
 
+func (s *stubRuntimeBackend) GrowWorkspace(_ context.Context, _ assistantRuntimeRecord) (RuntimeBackendGrowWorkspaceResult, error) {
+	return RuntimeBackendGrowWorkspaceResult{CurrentBytes: 20, RequestedBytes: 30, Expanded: true}, nil
+}
+
 func (s *stubRuntimeBackend) Status(_ context.Context, _ assistantRuntimeRecord) (RuntimeBackendStatus, error) {
 	return RuntimeBackendStatus{Configured: true, IdleSeconds: nil}, nil
 }

@@ -30,6 +30,7 @@ func newGKEFakeDynamic() *dynamicfake.FakeDynamicClient {
 		gkeSandboxClaimGVR: "SandboxClaimList",
 		gkeSandboxGVR:      "SandboxList",
 		gkePodGVR:          "PodList",
+		gkePVCGVR:          "PersistentVolumeClaimList",
 	})
 }
 
@@ -47,14 +48,17 @@ func seedUnstructured(t *testing.T, dyn dynamic.Interface, gvr schema.GroupVersi
 func newTestGKEBackend(t *testing.T, dyn dynamic.Interface, doer runtimeHTTPDoer, port int) *GKERuntimeBackend {
 	t.Helper()
 	return NewGKERuntimeBackend(testenv.NewLogger(t), testenv.NewTracerProvider(t), doer, GKERuntimeConfig{
-		Dynamic:          dyn,
-		Namespace:        "gram-test",
-		SandboxTemplate:  "gram-asst-pool",
-		GuestPort:        port,
-		OCIImage:         "registry.example.com/gram-assistant-runtime",
-		ImageTag:         "test",
-		ServerURL:        &url.URL{Scheme: "https", Host: "gram.example.com"},
-		RunnerCIDRBlocks: []string{"10.52.0.0/16"},
+		Dynamic:                     dyn,
+		Namespace:                   "gram-test",
+		SandboxTemplate:             "gram-asst-pool",
+		GuestPort:                   port,
+		OCIImage:                    "registry.example.com/gram-assistant-runtime",
+		ImageTag:                    "test",
+		ServerURL:                   &url.URL{Scheme: "https", Host: "gram.example.com"},
+		RunnerCIDRBlocks:            []string{"10.52.0.0/16"},
+		WorkspaceVolumeName:         "workspace",
+		WorkspaceGrowthIncrementGiB: 10,
+		WorkspaceMaxSizeGiB:         60,
 	})
 }
 
@@ -79,6 +83,7 @@ func gkeRecord(t *testing.T, backend *GKERuntimeBackend, assistantID uuid.UUID, 
 		Namespace:   "gram-test",
 		ClaimName:   "gram-asst-" + assistantID.String(),
 		SandboxName: "sb-1",
+		PodName:     "sb-1-pod",
 		PodIP:       podIP,
 		Image:       backend.desiredImageRef(),
 	}
@@ -158,6 +163,67 @@ func TestGKEStatusReadsRunnerState(t *testing.T) {
 	require.True(t, status.Configured)
 	require.NotNil(t, status.IdleSeconds)
 	require.Equal(t, uint64(7), *status.IdleSeconds)
+}
+
+func TestGKEGrowWorkspaceIncrementsPVC(t *testing.T) {
+	t.Parallel()
+
+	dyn := newGKEFakeDynamic()
+	pvc := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "v1",
+		"kind":       "PersistentVolumeClaim",
+		"metadata": map[string]any{
+			"name":      "sb-1-pod-workspace",
+			"namespace": "gram-test",
+		},
+		"spec": map[string]any{
+			"resources": map[string]any{
+				"requests": map[string]any{"storage": "20Gi"},
+			},
+		},
+	}}
+	seedUnstructured(t, dyn, gkePVCGVR, pvc)
+	backend := newTestGKEBackend(t, dyn, http.DefaultClient, defaultRuntimeGuestPort)
+
+	result, err := backend.GrowWorkspace(t.Context(), gkeRecord(t, backend, uuid.New(), "10.0.0.1"))
+	require.NoError(t, err)
+	require.Equal(t, int64(20)*gkeBytesPerGiB, result.CurrentBytes)
+	require.Equal(t, int64(30)*gkeBytesPerGiB, result.RequestedBytes)
+	require.True(t, result.Expanded)
+
+	updated, err := dyn.Resource(gkePVCGVR).Namespace("gram-test").Get(t.Context(), "sb-1-pod-workspace", metav1.GetOptions{})
+	require.NoError(t, err)
+	storage, found, err := unstructured.NestedString(updated.Object, "spec", "resources", "requests", "storage")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, "30Gi", storage)
+}
+
+func TestGKEGrowWorkspaceStopsAtMaximum(t *testing.T) {
+	t.Parallel()
+
+	dyn := newGKEFakeDynamic()
+	pvc := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "v1",
+		"kind":       "PersistentVolumeClaim",
+		"metadata": map[string]any{
+			"name":      "sb-1-pod-workspace",
+			"namespace": "gram-test",
+		},
+		"spec": map[string]any{
+			"resources": map[string]any{
+				"requests": map[string]any{"storage": "60Gi"},
+			},
+		},
+	}}
+	seedUnstructured(t, dyn, gkePVCGVR, pvc)
+	backend := newTestGKEBackend(t, dyn, http.DefaultClient, defaultRuntimeGuestPort)
+
+	result, err := backend.GrowWorkspace(t.Context(), gkeRecord(t, backend, uuid.New(), "10.0.0.1"))
+	require.NoError(t, err)
+	require.Equal(t, int64(60)*gkeBytesPerGiB, result.CurrentBytes)
+	require.Equal(t, int64(60)*gkeBytesPerGiB, result.RequestedBytes)
+	require.False(t, result.Expanded)
 }
 
 func TestGKEEnsureWaitsForReadySandbox(t *testing.T) {

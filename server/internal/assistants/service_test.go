@@ -2119,6 +2119,10 @@ func (t testRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord,
 	return t.runTurnErr
 }
 
+func (t testRuntimeBackend) GrowWorkspace(_ context.Context, _ assistantRuntimeRecord) (RuntimeBackendGrowWorkspaceResult, error) {
+	return RuntimeBackendGrowWorkspaceResult{}, ErrWorkspaceGrowthUnsupported
+}
+
 func (t testRuntimeBackend) Status(context.Context, assistantRuntimeRecord) (RuntimeBackendStatus, error) {
 	if t.statusErr != nil {
 		return RuntimeBackendStatus{}, t.statusErr
