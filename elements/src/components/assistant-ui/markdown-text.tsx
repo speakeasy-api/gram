@@ -7,10 +7,13 @@ import {
   useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown";
 import { CheckIcon, CopyIcon } from "lucide-react";
-import { type FC, memo, useState } from "react";
+import { type FC, memo, useCallback, useState } from "react";
+import { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { MarkdownAnchor } from "@/components/markdown-anchor";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { useMarkdownLink } from "@/contexts/MarkdownLinkContext";
 import { cn } from "@/lib/utils";
 import { useElements } from "@/hooks/useElements";
 import { useComponentsByLanguage } from "@/hooks/usePluginComponents";
@@ -19,10 +22,21 @@ import { useAssistantState } from "@assistant-ui/react";
 const MarkdownTextImpl = () => {
   const { plugins } = useElements();
   const componentsByLanguage = useComponentsByLanguage(plugins);
+  const { resolveLink } = useMarkdownLink();
+
+  // react-markdown strips hrefs with an unknown URI scheme (its XSS guard), so
+  // a host entity scheme like `gram:…` would be blanked before the anchor sees
+  // it. Preserve any href the host resolver claims; sanitize everything else.
+  const urlTransform = useCallback(
+    (url: string) =>
+      resolveLink && resolveLink(url) !== null ? url : defaultUrlTransform(url),
+    [resolveLink],
+  );
 
   return (
     <MarkdownTextPrimitive
       remarkPlugins={[remarkGfm]}
+      urlTransform={urlTransform}
       className="aui-md"
       components={defaultComponents}
       componentsByLanguage={componentsByLanguage}
@@ -139,15 +153,7 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  a: ({ className, ...props }) => (
-    <a
-      className={cn(
-        "aui-md-a font-medium text-primary underline underline-offset-4",
-        className,
-      )}
-      {...props}
-    />
-  ),
+  a: MarkdownAnchor,
   blockquote: ({ className, ...props }) => (
     <blockquote
       className={cn("aui-md-blockquote border-l-2 pl-6 italic", className)}
