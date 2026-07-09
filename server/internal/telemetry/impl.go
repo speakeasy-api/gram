@@ -2651,17 +2651,19 @@ func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid
 }
 
 func (s *Service) toolUsageMCPServerMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.MCPServerMatcher, error) {
-	servers, err := mcpserversRepo.New(s.db).ListMCPServersByProjectID(ctx, mcpserversRepo.ListMCPServersByProjectIDParams{
-		ProjectID:           projectID,
-		RemoteMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		TunneledMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
+	// Include soft-deleted servers: tool_source on telemetry rows is the
+	// backend remote/tunneled server id, which outlives the mcp_servers row.
+	// Matching against deleted servers keeps a deleted (or recreated) server's
+	// historical calls classified as their true type instead of falling through
+	// to shadow_mcp_server. The query returns live servers first so a source id
+	// shared by a live and a deleted server resolves to the live one.
+	servers, err := mcpserversRepo.New(s.db).ListMCPServersForTelemetryByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list project MCP servers: %w", err)
 	}
 
 	matchers := make([]repo.MCPServerMatcher, 0, len(servers))
+	seen := make(map[string]struct{}, len(servers))
 	for _, server := range servers {
 		targetType := repo.ToolUsageTargetTypeHostedMCP
 		sourceID := ""
@@ -2674,6 +2676,13 @@ func (s *Service) toolUsageMCPServerMatchers(ctx context.Context, projectID uuid
 		default:
 			continue
 		}
+
+		// Keep the first matcher for a source id (a live server, given the
+		// query ordering); drop later duplicates from deleted/recreated rows.
+		if _, ok := seen[sourceID]; ok {
+			continue
+		}
+		seen[sourceID] = struct{}{}
 
 		targetID := server.ID.String()
 		if server.Slug.Valid && server.Slug.String != "" {
