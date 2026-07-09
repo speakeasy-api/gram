@@ -211,11 +211,28 @@ export const TumUsageSection = (): JSX.Element => {
   const monthlyLimit = tum?.monthlyTokenLimit ?? null;
 
   // Billed tokens per UTC day across every known cycle, for the chart's
-  // headline total — the same numbers the usage card sums.
+  // headline total. The daily series is advisory — a finalized cycle serves
+  // its sealed snapshot total while the days recompute live and can drift
+  // (late telemetry) or expire (aggregate TTL) — so each cycle's days are
+  // scaled to sum to its billed total, the number on the usage card. Same
+  // normalization as the details table; cumulative rounding keeps the series
+  // integral without losing the exact sum. Cycles whose day series is empty
+  // are skipped (no shape to distribute over); the chart falls back to the
+  // details totals there.
   const billedDaysByDate = useMemo(() => {
     const byDate = new Map<string, number>();
     for (const c of cycles) {
-      for (const d of c.days) byDate.set(d.date, d.tokens);
+      const daysSum = c.days.reduce((sum, d) => sum + d.tokens, 0);
+      if (daysSum === 0) continue;
+      const scale = c.tokens / daysSum;
+      let acc = 0;
+      let prevRounded = 0;
+      for (const d of c.days) {
+        acc += d.tokens * scale;
+        const rounded = Math.round(acc);
+        byDate.set(d.date, rounded - prevRounded);
+        prevRounded = rounded;
+      }
     }
     return byDate.size > 0 ? byDate : null;
   }, [cycles]);
