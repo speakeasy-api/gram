@@ -255,15 +255,22 @@ func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	remoteServer = seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL, headers...)
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
+	// Private remote servers must carry a user_session_issuer per the
+	// mcp_servers_private_remote_requires_issuer_check constraint.
+	var issuerID uuid.NullUUID
+	if visibility == "private" {
+		issuerID = uuid.NullUUID{UUID: seedUserSessionIssuer(t, ctx, ti, projectID), Valid: true}
+	}
 	mcpServer, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                mcpServerID,
-		ProjectID:         projectID,
-		Name:              conv.ToPGText("test mcp server"),
-		Slug:              conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
-		EnvironmentID:     uuid.NullUUID{},
-		RemoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
-		ToolsetID:         uuid.NullUUID{},
-		Visibility:        visibility,
+		ID:                  mcpServerID,
+		ProjectID:           projectID,
+		Name:                conv.ToPGText("test mcp server"),
+		Slug:                conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
+		EnvironmentID:       uuid.NullUUID{},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		ToolsetID:           uuid.NullUUID{},
+		Visibility:          visibility,
+		UserSessionIssuerID: issuerID,
 	})
 	require.NoError(t, err)
 

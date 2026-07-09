@@ -465,10 +465,12 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 
 	// UpdateMCPServer is a full-record replace, so an omitted issuer would null
-	// the column. Preserve the existing issuer when the payload doesn't carry
-	// one, then auto-provision if the invariant now requires one (e.g. a
-	// disabled server being enabled to private), guaranteeing the CHECK holds.
-	if !ids.UserSessionIssuerID.Valid {
+	// the column. For servers the invariant requires an issuer on (private
+	// remote, tunneled), preserve the existing one so a partial update can't
+	// silently strip it; then auto-provision if one is still needed (e.g. a
+	// disabled server being enabled to private). Public/disabled servers keep
+	// the documented omit-to-clear behavior.
+	if !ids.UserSessionIssuerID.Valid && serverRequiresUserSessionIssuer(ids, string(payload.Visibility)) {
 		ids.UserSessionIssuerID = existing.UserSessionIssuerID
 	}
 	ids.UserSessionIssuerID, err = ensureServerUserSessionIssuer(ctx, dbtx, *authCtx.ProjectID, slug, ids, string(payload.Visibility))

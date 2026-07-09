@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -24,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	usersessionsRepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // stubWorkflowSignaler satisfies WorkflowSignaler for handler tests that
@@ -297,13 +299,22 @@ func TestServiceAttachRemoteMcpServerToAssistant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	issuer, err := usersessionsRepo.New(conn).CreateUserSessionIssuer(t.Context(), usersessionsRepo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		Slug:               "usi-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+
 	server, err := mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
-		ID:                uuid.New(),
-		ProjectID:         projectID,
-		Name:              pgtype.Text{String: "General - External SaaS", Valid: true},
-		Slug:              pgtype.Text{String: "external-remote-mcp-xyz", Valid: true},
-		RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true},
-		Visibility:        "private",
+		ID:                  uuid.New(),
+		ProjectID:           projectID,
+		Name:                pgtype.Text{String: "General - External SaaS", Valid: true},
+		Slug:                pgtype.Text{String: "external-remote-mcp-xyz", Valid: true},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		Visibility:          "private",
 	})
 	require.NoError(t, err)
 
@@ -379,14 +390,23 @@ func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	issuer, err := usersessionsRepo.New(conn).CreateUserSessionIssuer(t.Context(), usersessionsRepo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		Slug:               "usi-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+
 	// No mcp_endpoints row for this server.
 	endpointless, err := mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
-		ID:                uuid.New(),
-		ProjectID:         projectID,
-		Name:              pgtype.Text{String: "Endpointless", Valid: true},
-		Slug:              pgtype.Text{String: "endpointless-remote", Valid: true},
-		RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true},
-		Visibility:        "private",
+		ID:                  uuid.New(),
+		ProjectID:           projectID,
+		Name:                pgtype.Text{String: "Endpointless", Valid: true},
+		Slug:                pgtype.Text{String: "endpointless-remote", Valid: true},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		Visibility:          "private",
 	})
 	require.NoError(t, err)
 

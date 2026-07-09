@@ -110,6 +110,16 @@ func (s *Service) serveResolvedMCPEndpoint(
 
 	issuerGated := mcpServer.UserSessionIssuerID.Valid
 
+	// A public tunneled row is a forbidden state (the management API rejects
+	// it; only manual SQL or a future write path could produce it). Fail it
+	// closed before the issuer gate — tunneled servers always carry an issuer,
+	// and challenging the caller into an OAuth flow for a row that must never
+	// serve would be misleading. serveTunneledBackend re-checks as
+	// defense-in-depth.
+	if mcpServer.TunneledMcpServerID.Valid && mcpServer.Visibility == mcpservers.VisibilityPublic {
+		return oops.E(oops.CodeForbidden, nil, "tunneled MCP servers cannot be served publicly").LogError(ctx, logger)
+	}
+
 	// Issuer-gated mcp_servers run the JWT-validation branch here, before
 	// backend dispatch. ServeToolsetResolved then skips its in-toolset
 	// gate (skipIssuerGate=true) so the same request isn't gated twice;

@@ -168,13 +168,14 @@ func TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed(t *testing.T) 
 
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	mcpServer, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  id,
 		ProjectID:           *authCtx.ProjectID,
 		Name:                conv.ToPGText("test tunneled mcp server"),
 		Slug:                conv.ToPGText("test-tunneled-" + uuid.NewString()[:8]),
 		EnvironmentID:       uuid.NullUUID{},
-		UserSessionIssuerID: uuid.NullUUID{},
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 		RemoteMcpServerID:   uuid.NullUUID{},
 		TunneledMcpServerID: uuid.NullUUID{UUID: tunneledServer.ID, Valid: true},
 		ToolsetID:           uuid.NullUUID{},
@@ -321,7 +322,8 @@ func TestServePublic_McpEndpoint_PrivateRemoteBacked_NoAuth_Returns401(t *testin
 	t.Cleanup(upstream.Close)
 
 	endpointSlug := "endpoint-" + uuid.NewString()
-	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "private", uuid.Nil)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "private", issuerID)
 
 	// Plain context (no auth context with active org) so the identity
 	// chain in serveRemoteBackend has no credential to validate.

@@ -183,10 +183,12 @@ func TestServeMCP_PublicRemoteBackend_AnonymousForwardsUpstream(t *testing.T) {
 	require.NotEmpty(t, sessionID, "proxy must relay Mcp-Session-Id from upstream")
 }
 
-// API key callers bypass RBAC (they have their own scoping); a private
-// mcp_server in the API key's own org is reachable as long as the key's
-// principal authenticates.
-func TestServeMCP_PrivateRemoteBackend_APIKeySameOrgReachable(t *testing.T) {
+// Private remote servers always carry a user_session_issuer
+// (mcp_servers_private_remote_requires_issuer_check), which makes them
+// issuer-gated: the gate accepts only user-session JWTs, so a Gram API
+// key — even one in the server's own org — is rejected with an OAuth
+// challenge rather than falling through to the legacy identity-auth path.
+func TestServeMCP_PrivateRemoteBackend_APIKeyRejectedWithChallenge(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -202,7 +204,8 @@ func TestServeMCP_PrivateRemoteBackend_APIKeySameOrgReachable(t *testing.T) {
 	key := seedAPIKey(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID, authCtx.ProjectID, []string{auth.APIKeyScopeConsumer.String()})
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(key), []byte(initializeBody))
-	require.Equal(t, http.StatusOK, rr.Code, "body=%s", rr.Body.String())
+	require.Equal(t, http.StatusUnauthorized, rr.Code, "body=%s", rr.Body.String())
+	require.NotEmpty(t, rr.Header().Get("WWW-Authenticate"))
 }
 
 func TestServeMCP_PublicRemoteBackend_AppliesStaticSecretHeader(t *testing.T) {
@@ -267,18 +270,20 @@ func TestServeMCP_PublicRemoteBackend_DeleteForwardsSessionTermination(t *testin
 
 // Private mcp_server: the caller's Authorization is a Gram API key used
 // for identity auth and must never reach the upstream MCP server.
-func TestServeMCP_PrivateRemoteBackend_StripsAuthorizationFromUpstream(t *testing.T) {
+// A Gram API key against an (always issuer-gated) private remote server is
+// rejected at the gate, so no request — and therefore no Gram credential —
+// ever reaches the upstream. The public-server variant below covers the
+// header-stripping path where the proxy does forward.
+func TestServeMCP_PrivateRemoteBackend_APIKeyNeverReachesUpstream(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	var gotAuth string
-	done := make(chan struct{}, 1)
+	upstreamCalled := false
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
+		upstreamCalled = true
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
-		done <- struct{}{}
 	}))
 	t.Cleanup(upstream.Close)
 
@@ -290,9 +295,8 @@ func TestServeMCP_PrivateRemoteBackend_StripsAuthorizationFromUpstream(t *testin
 	key := seedAPIKey(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID, authCtx.ProjectID, []string{auth.APIKeyScopeConsumer.String()})
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(key), []byte(initializeBody))
-	<-done
-	require.Equal(t, http.StatusOK, rr.Code, "body=%s", rr.Body.String())
-	require.Empty(t, gotAuth, "Gram API key must never leak to the remote MCP server")
+	require.Equal(t, http.StatusUnauthorized, rr.Code, "body=%s", rr.Body.String())
+	require.False(t, upstreamCalled, "Gram API key must never leak to the remote MCP server")
 }
 
 // Public mcp_server with no external_oauth_server_id and no caller auth:
@@ -355,10 +359,11 @@ func TestServeMCP_PublicRemoteBackend_GramAPIKeyStripsAuthorizationFromUpstream(
 	require.Empty(t, gotAuth, "Gram API key must never leak even on a public mcp_server")
 }
 
-// Same-org cross-project access to a private mcp_server is allowed: the
-// org-membership check passes (caller and server share the active org)
-// and the API key bypasses RBAC scope checking. This mirrors /mcp.
-func TestServeMCP_PrivateRemoteBackend_SameOrgCrossProjectReachable(t *testing.T) {
+// Same-org cross-project API-key access dies at the issuer gate like any
+// other API-key call to a private remote server: the gate only accepts
+// user-session JWTs bound to the endpoint's issuer, so org membership
+// never enters the picture.
+func TestServeMCP_PrivateRemoteBackend_SameOrgCrossProjectAPIKeyRejected(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -374,11 +379,12 @@ func TestServeMCP_PrivateRemoteBackend_SameOrgCrossProjectReachable(t *testing.T
 	key := seedAPIKey(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID, authCtx.ProjectID, []string{auth.APIKeyScopeConsumer.String()})
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(key), []byte(initializeBody))
-	require.Equal(t, http.StatusOK, rr.Code, "body=%s", rr.Body.String())
+	require.Equal(t, http.StatusUnauthorized, rr.Code, "body=%s", rr.Body.String())
 }
 
-// Cross-org access to a private mcp_server is rejected at the org-membership
-// gate before RBAC even runs, matching /mcp behavior.
+// Cross-org access to a private mcp_server is rejected: the issuer gate
+// refuses any bearer that is not a user-session JWT for the endpoint's
+// issuer, so a foreign org's API key gets 401 just like a same-org one.
 func TestServeMCP_PrivateRemoteBackend_CrossOrgReturns401(t *testing.T) {
 	t.Parallel()
 
@@ -404,7 +410,7 @@ func TestServeMCP_PrivateRemoteBackend_CrossOrgReturns401(t *testing.T) {
 	slug, _, _ := seedRemoteMCPEndpoint(t, ctx, ti, otherProjectID, mockServer.URL, "private")
 
 	// API key is in the original (caller's) org; mcp_server is in a foreign
-	// org. The org-membership check rejects.
+	// org. The issuer gate rejects the non-JWT bearer outright.
 	key := seedAPIKey(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID, authCtx.ProjectID, []string{auth.APIKeyScopeConsumer.String()})
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(key), []byte(initializeBody))

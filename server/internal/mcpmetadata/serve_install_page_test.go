@@ -1395,12 +1395,14 @@ func TestServeInstallPage_McpServer_RemoteBacked_PrivateRedirectsToLogin(t *test
 		Url:           "https://upstream.example.com/mcp",
 	})
 
+	issuer := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
 	endpointSlug := "remote-mcp-private-" + uuid.NewString()[:8]
 	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
-		name:              "Remote MCP Private",
-		visibility:        mcpservers.VisibilityPrivate,
-		endpointSlug:      endpointSlug,
-		remoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		name:                "Remote MCP Private",
+		visibility:          mcpservers.VisibilityPrivate,
+		endpointSlug:        endpointSlug,
+		remoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
 	})
 
 	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
