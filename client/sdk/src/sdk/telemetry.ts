@@ -17,6 +17,8 @@ import { telemetryListHooksTraces } from "../funcs/telemetryListHooksTraces.js";
 import { telemetryListSessions } from "../funcs/telemetryListSessions.js";
 import { telemetryListToolUsageTraces } from "../funcs/telemetryListToolUsageTraces.js";
 import { telemetryQuery } from "../funcs/telemetryQuery.js";
+import { telemetryQueryRiskTokens } from "../funcs/telemetryQueryRiskTokens.js";
+import { telemetryQueryTumDetails } from "../funcs/telemetryQueryTumDetails.js";
 import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
 import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
 import { telemetrySearchToolCalls } from "../funcs/telemetrySearchToolCalls.js";
@@ -37,10 +39,12 @@ import { ListHooksTracesResult } from "../models/components/listhookstracesresul
 import { ListSessionsResult } from "../models/components/listsessionsresult.js";
 import { ListToolUsageTracesResult } from "../models/components/listtoolusagetracesresult.js";
 import { QueryResult } from "../models/components/queryresult.js";
+import { QueryRiskTokensResult } from "../models/components/queryrisktokensresult.js";
 import { SearchChatsResult } from "../models/components/searchchatsresult.js";
 import { SearchLogsResult } from "../models/components/searchlogsresult.js";
 import { SearchToolCallsResult } from "../models/components/searchtoolcallsresult.js";
 import { SearchUsersResult } from "../models/components/searchusersresult.js";
+import { TumDetailsResult } from "../models/components/tumdetailsresult.js";
 import {
   CaptureEventRequest,
   CaptureEventSecurity,
@@ -98,6 +102,14 @@ import {
   ListToolUsageTracesSecurity,
 } from "../models/operations/listtoolusagetraces.js";
 import { QueryRequest, QuerySecurity } from "../models/operations/query.js";
+import {
+  QueryRiskTokensRequest,
+  QueryRiskTokensSecurity,
+} from "../models/operations/queryrisktokens.js";
+import {
+  QueryTumDetailsRequest,
+  QueryTumDetailsSecurity,
+} from "../models/operations/querytumdetails.js";
 import {
   SearchChatsRequest,
   SearchChatsSecurity,
@@ -395,6 +407,44 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<QueryResult> {
     return unwrapAsync(telemetryQuery(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * queryRiskTokens telemetry
+   *
+   * @remarks
+   * Org-scoped daily token usage split by risk involvement: tokens from sessions with at least one active risk finding in the window versus all session tokens. Powers the token-usage panel's risk breakdown on the costs page.
+   */
+  async queryRiskTokens(
+    request: QueryRiskTokensRequest,
+    security?: QueryRiskTokensSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<QueryRiskTokensResult> {
+    return unwrapAsync(telemetryQueryRiskTokens(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * queryTumDetails telemetry
+   *
+   * @remarks
+   * Org-scoped daily usage details for the billing page's metrics table, computed in one pass: token type sums, session/tool-call/active-user counts, attribution slices (MCP tools, skills, unattributed users), and message-level stats (tokens in messages with active risk findings, tokens in tool-call messages).
+   */
+  async queryTumDetails(
+    request: QueryTumDetailsRequest,
+    security?: QueryTumDetailsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<TumDetailsResult> {
+    return unwrapAsync(telemetryQueryTumDetails(
       this,
       request,
       security,
