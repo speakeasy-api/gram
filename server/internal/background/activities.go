@@ -114,6 +114,7 @@ type Activities struct {
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
 	pluginPublisher                 *activities.PluginPublisher
+	backfillAttributeMetrics        *activities.BackfillAttributeMetricsSummaries
 }
 
 func NewActivities(
@@ -215,6 +216,7 @@ func NewActivities(
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
+		backfillAttributeMetrics:        activities.NewBackfillAttributeMetricsSummaries(logger, chConn),
 	}
 }
 
@@ -501,4 +503,50 @@ func (a *Activities) PublishPluginProject(ctx context.Context, input plugins.Pub
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}
 	return result, nil
+}
+
+func (a *Activities) PrepareAttributeMetricsBackfill(ctx context.Context, params activities.PrepareAttributeMetricsBackfillParams) (*activities.PrepareAttributeMetricsBackfillResult, error) {
+	result, err := a.backfillAttributeMetrics.Prepare(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("prepare attribute metrics backfill: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) StageAttributeMetricsBackfillChunk(ctx context.Context, params activities.StageAttributeMetricsBackfillChunkParams) error {
+	if err := a.backfillAttributeMetrics.StageChunk(ctx, params); err != nil {
+		return fmt.Errorf("stage attribute metrics backfill chunk: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) ValidateAttributeMetricsBackfill(ctx context.Context, params activities.ValidateAttributeMetricsBackfillParams) (*activities.ValidateAttributeMetricsBackfillResult, error) {
+	result, err := a.backfillAttributeMetrics.Validate(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("validate attribute metrics backfill: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) ArchiveAttributeMetricsBackfill(ctx context.Context, params activities.ArchiveAttributeMetricsBackfillParams) (*activities.ArchiveAttributeMetricsBackfillResult, error) {
+	result, err := a.backfillAttributeMetrics.Archive(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("archive attribute metrics backfill: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) CommitAttributeMetricsBackfill(ctx context.Context, params activities.CommitAttributeMetricsBackfillParams) (*activities.CommitAttributeMetricsBackfillResult, error) {
+	result, err := a.backfillAttributeMetrics.Commit(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("commit attribute metrics backfill: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) CleanupAttributeMetricsBackfill(ctx context.Context, params activities.CleanupAttributeMetricsBackfillParams) error {
+	if err := a.backfillAttributeMetrics.Cleanup(ctx, params); err != nil {
+		return fmt.Errorf("cleanup attribute metrics backfill: %w", err)
+	}
+	return nil
 }

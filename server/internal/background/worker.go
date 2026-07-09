@@ -379,6 +379,13 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
+	// Attribute metrics backfill activities
+	temporalWorker.RegisterActivity(activities.PrepareAttributeMetricsBackfill)
+	temporalWorker.RegisterActivity(activities.StageAttributeMetricsBackfillChunk)
+	temporalWorker.RegisterActivity(activities.ValidateAttributeMetricsBackfill)
+	temporalWorker.RegisterActivity(activities.ArchiveAttributeMetricsBackfill)
+	temporalWorker.RegisterActivity(activities.CommitAttributeMetricsBackfill)
+	temporalWorker.RegisterActivity(activities.CleanupAttributeMetricsBackfill)
 
 	// AI integration usage syncing runs on its own worker and task queue.
 	aiUsageWorker.RegisterActivity(activities.PollAIData)
@@ -432,6 +439,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
+	// Operator-gated tenant backfill for attribute_metrics_summaries
+	temporalWorker.RegisterWorkflow(BackfillAttributeMetricsSummariesWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
