@@ -1254,6 +1254,14 @@ ON http_security (type, scheme);
 CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   organization_id TEXT NOT NULL,
 
+  -- Which upstream OpenRouter key this row provisions: 'chat' pays for
+  -- customer-facing completion surfaces (playground, elements, assistants,
+  -- /chat/completions proxy); 'internal' pays for platform-initiated LLM
+  -- usage (risk judges, title generation, chat resolutions, memory), so a
+  -- burst of scanning inference can never exhaust the chat key's monthly cap
+  -- and 402 the customer's chat surface.
+  key_type TEXT NOT NULL DEFAULT 'chat',
+
   key TEXT NOT NULL,
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
@@ -1264,7 +1272,7 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id)
+  CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id, key_type)
 );
 
 
