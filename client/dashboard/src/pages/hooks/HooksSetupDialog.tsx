@@ -8,28 +8,96 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
+import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { ExternalLink, Plus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { HookSourceIcon } from "./HookSourceIcon";
 
-function ClaudeInstallContent() {
+function ClaudeInstallContent({
+  marketplaceUrl,
+  repoName,
+}: {
+  marketplaceUrl?: string;
+  repoName?: string;
+}) {
+  const { data: marketplaceSettings } = useMarketplaceSettings();
+  // Marketplace identifiers are a cross-surface contract: Claude Code
+  // registers the marketplace under the published marketplace.json `name`
+  // (effectiveName) and references plugins as `<plugin>@<name>`.
+  const marketplaceName = marketplaceSettings?.effectiveName ?? null;
+  // repoName = "<org-slug>-gram"; derive the observability plugin slug by
+  // replacing the suffix (same derivation as the Codex tab below).
+  const pluginName = repoName
+    ? repoName.replace(/-gram$/, "-observability")
+    : null;
+
+  const addCommand = marketplaceUrl
+    ? `claude plugin marketplace add ${marketplaceUrl}`
+    : null;
+  const installCommand =
+    pluginName && marketplaceName
+      ? `claude plugin install ${pluginName}@${marketplaceName}`
+      : null;
+
+  const requireMarketplaceJson =
+    marketplaceUrl && marketplaceName
+      ? JSON.stringify(
+          {
+            extraKnownMarketplaces: {
+              [marketplaceName]: {
+                autoUpdate: true,
+                source: { source: "git", url: marketplaceUrl },
+              },
+            },
+          },
+          null,
+          2,
+        )
+      : null;
+  const requirePluginJson =
+    pluginName && marketplaceName
+      ? JSON.stringify(
+          { plugins: { required: [`${pluginName}@${marketplaceName}`] } },
+          null,
+          2,
+        )
+      : null;
+
   return (
     <div className="space-y-6">
       <div>
         <h3 className="mb-2 text-sm font-semibold">Test Yourself</h3>
         <p className="text-muted-foreground mb-4 text-sm">
-          Try hooks in your Claude Code instance:
+          Install your org's published hooks plugin in your own Claude Code
+          instance:
         </p>
-        <div className="bg-muted/50 space-y-2 rounded-lg p-4 font-mono text-sm">
-          <div className="flex items-center justify-between">
-            <code>claude plugin marketplace add speakeasy-api/gram</code>
+        {addCommand && installCommand ? (
+          <div className="bg-muted/50 space-y-2 rounded-lg p-4 font-mono text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <code className="break-all">{addCommand}</code>
+              <CopyButton
+                size="inline"
+                text={addCommand}
+                tooltip="Copy command"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <code className="break-all">{installCommand}</code>
+              <CopyButton
+                size="inline"
+                text={installCommand}
+                tooltip="Copy command"
+              />
+            </div>
           </div>
-          <div className="flex items-center justify-between">
-            <code>claude plugin install gram-hooks@gram</code>
-          </div>
-        </div>
+        ) : (
+          <p className="text-muted-foreground text-sm italic">
+            Publish your plugins to GitHub first to get a marketplace install
+            URL.
+          </p>
+        )}
       </div>
 
       <div>
@@ -42,32 +110,52 @@ function ClaudeInstallContent() {
         <div className="space-y-4">
           <div>
             <h4 className="text-muted-foreground mb-2 text-xs font-medium">
-              1. Require the marketplace
+              1. Register the marketplace
             </h4>
-            <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
-              <code>
-                {`{
-  "pluginMarketplaces": {
-    "required": ["speakeasy-api/gram"]
-  }
-}`}
-              </code>
-            </div>
+            {requireMarketplaceJson ? (
+              <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <pre className="overflow-x-auto whitespace-pre-wrap">
+                    {requireMarketplaceJson}
+                  </pre>
+                  <CopyButton
+                    size="inline"
+                    text={requireMarketplaceJson}
+                    tooltip="Copy settings.json snippet"
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm italic">
+                Publish your plugins to GitHub first to get a marketplace
+                install URL.
+              </p>
+            )}
           </div>
 
           <div>
             <h4 className="text-muted-foreground mb-2 text-xs font-medium">
               2. Require the plugin
             </h4>
-            <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
-              <code>
-                {`{
-  "plugins": {
-    "required": ["gram-hooks@gram"]
-  }
-}`}
-              </code>
-            </div>
+            {requirePluginJson ? (
+              <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <pre className="overflow-x-auto whitespace-pre-wrap">
+                    {requirePluginJson}
+                  </pre>
+                  <CopyButton
+                    size="inline"
+                    text={requirePluginJson}
+                    tooltip="Copy settings.json snippet"
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm italic">
+                Publish your plugins to GitHub first to get the plugin
+                identifier.
+              </p>
+            )}
           </div>
 
           <Button variant="outline" size="sm" asChild>
@@ -494,7 +582,12 @@ export function HooksSetupDialog({
         </div>
 
         <div className="min-h-0 overflow-y-auto">
-          {selected === "claude" && <ClaudeInstallContent />}
+          {selected === "claude" && (
+            <ClaudeInstallContent
+              marketplaceUrl={publishStatus?.marketplaceUrl}
+              repoName={publishStatus?.repoName ?? undefined}
+            />
+          )}
           {selected === "cursor" && <CursorInstallContent />}
           {selected === "codex" && (
             <CodexInstallContent
