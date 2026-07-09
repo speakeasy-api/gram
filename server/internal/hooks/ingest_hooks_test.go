@@ -237,6 +237,42 @@ func TestIngest_ShadowMCPPolicyRecoversCachedIdentityForUnresolvableSharedKeyEma
 	require.Equal(t, "deny", result.Decision)
 }
 
+// A personal key already identifies the developer: a self-reported email that
+// matches no Gram user must fall back to the key owner rather than strip
+// user-scoped policy checks from the event.
+func TestIngest_ShadowMCPPolicyFallsBackToOwnerForUnresolvablePersonalKeyEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
+
+	toolName := "mcp__local_server__search"
+	serverIdentity := "local-server"
+	toolCallID := "call-personal-unresolvable"
+	unresolvable := "personal-address@example.net"
+	payload := canonicalIngestPayload("claude", "tool.requested", "canonical-shadow-mcp-personal-unresolvable")
+	payload.Source.UserEmail = &unresolvable
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"query": "secret"},
+		},
+		Mcp: &gen.HookMCPData{
+			ServerIdentity: &serverIdentity,
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision)
+}
+
 func TestIngest_ShadowMCPPolicyUsesAuthenticatedTokenOwner(t *testing.T) {
 	t.Parallel()
 

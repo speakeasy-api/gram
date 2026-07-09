@@ -134,14 +134,21 @@ func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.Ingest
 		UserID: s.resolveUserByEmail(ctx, selfReported, authCtx.ActiveOrganizationID),
 		Email:  selfReported,
 	}
-	if actor.UserID == "" && strings.HasPrefix(authCtx.APIKeyName, auth.PluginAPIKeyNamePrefix) {
+	if actor.UserID == "" {
 		// A self-reported email that matches no Gram user cannot key
-		// user-scoped policies. For shared plugin keys the session metadata
+		// user-scoped policies; recover a complete identity instead of
+		// running unattributed. For shared plugin keys the session metadata
 		// cache may already link this session to a user (OTEL path or device
-		// bridge); that complete identity beats an unresolvable claim, so
-		// policy enforcement and the recorded rows stay on one identity.
-		if cached := s.cachedSessionActor(ctx, payload, authCtx); cached.UserID != "" {
-			return cached
+		// bridge). A personal key already identifies the developer, so their
+		// events keep the owner identity, exactly as when no email is
+		// self-reported. Either way policy enforcement and the recorded rows
+		// stay on one identity.
+		if strings.HasPrefix(authCtx.APIKeyName, auth.PluginAPIKeyNamePrefix) {
+			if cached := s.cachedSessionActor(ctx, payload, authCtx); cached.UserID != "" {
+				return cached
+			}
+		} else if authCtx.UserID != "" {
+			return canonicalActor{UserID: authCtx.UserID, Email: tokenEmail}
 		}
 	}
 	return actor
