@@ -14,7 +14,7 @@ import type { AccessMember } from "@gram/client/models/components/accessmember.j
 import type { SyncedAgentUser } from "@gram/client/models/components/syncedagentuser.js";
 import { Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
 import { Laptop } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 
 // A device counts as "active" if it has synced within this window. The agent
@@ -22,7 +22,24 @@ import { useSearchParams } from "react-router";
 // network loss) before we flag the device as stale.
 const ACTIVE_WINDOW_MS = 5 * 60 * 1000;
 
+// Re-evaluate Active/Stale on a fixed cadence so a device crossing the window
+// flips (badge + status filter) on a long-open dashboard, without waiting on an
+// unrelated re-render. 30s keeps staleness well under the 5-minute window while
+// staying cheap for a small admin table.
+const STATUS_TICK_MS = 30 * 1000;
+
 type SyncStatus = "active" | "stale";
+
+// useNow returns a wall-clock timestamp that advances every intervalMs, so
+// time-derived values (here, Active/Stale) recompute on their own.
+function useNow(intervalMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
 
 // Derived Active/Stale filter. Pinned so its chip is always visible; the actual
 // status is computed client-side from last_seen_at, so this filters the derived
@@ -142,9 +159,9 @@ export function AgentUsers(): React.JSX.Element {
   };
 
   const users = useMemo(() => data?.users ?? [], [data]);
+  const now = useNow(STATUS_TICK_MS);
 
   const filteredUsers = useMemo(() => {
-    const now = Date.now();
     const query = search.trim().toLowerCase();
     return users.filter((user) => {
       if (
@@ -160,7 +177,7 @@ export function AgentUsers(): React.JSX.Element {
       }
       return true;
     });
-  }, [users, statusFilter, search, membersByEmail]);
+  }, [users, statusFilter, search, membersByEmail, now]);
 
   const columns: Column<SyncedAgentUser>[] = [
     {
@@ -191,15 +208,12 @@ export function AgentUsers(): React.JSX.Element {
       key: "status",
       header: "Status",
       width: "120px",
-      render: (user) => {
-        const active =
-          Date.now() - user.lastSeenAt.getTime() < ACTIVE_WINDOW_MS;
-        return active ? (
+      render: (user) =>
+        syncStatus(user, now) === "active" ? (
           <Badge variant="secondary">Active</Badge>
         ) : (
           <Badge variant="outline">Stale</Badge>
-        );
-      },
+        ),
     },
   ];
 
