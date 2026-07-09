@@ -32,6 +32,7 @@ trackedFiles:
   .devcontainer/devcontainer.json: {}
   .devcontainer/setup.sh: {}
   .npmignore: {}
+  .oxlintrc.json: {}
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
   RUNTIMES.md: {}
@@ -1980,7 +1981,6 @@ trackedFiles:
   docs/sdks/usersessions/README.md: {}
   docs/sdks/variations/README.md: {}
   docs/types/rfcdate.md: {}
-  eslint.config.mjs: {}
   examples/.env.template: {}
   examples/README.md: {}
   examples/accessApproveShadowMCPApprovalRequest.example.ts: {}
