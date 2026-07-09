@@ -3,24 +3,16 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Link as ExternalLink } from "@/components/ui/link";
-import {
-  PageTabsTrigger,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useAgentToken } from "@/hooks/useAgentToken";
-import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import React from "react";
-import { Link, Navigate, useSearchParams } from "react-router";
-import { AgentUsers } from "./AgentUsers";
+import { Link, Navigate } from "react-router";
 
 // Public, unauthenticated bucket the release pipeline publishes to. The
 // manifest (releases.json) lists the current version + per-platform URLs;
@@ -754,8 +746,9 @@ function FleetIdentity() {
   );
 }
 
-// SetupPanel is the original device-agent content: install steps + identity
-// setup. It's the default tab, visible to any org:read member.
+// SetupPanel is the device-agent page body: install steps + identity setup.
+// Per-user "who's running the agent" now lives on the Employee Enrollment page
+// (Observe) as a Device Agent column, rather than a tab here.
 function SetupPanel() {
   return (
     <>
@@ -808,64 +801,6 @@ function SetupPanel() {
   );
 }
 
-// DeviceAgentInner hosts the top-level tab set: setup instructions (everyone
-// with org:read) and the admin-only Active Users view. The active tab is
-// mirrored to ?tab= so it survives refresh and deep links.
-function DeviceAgentInner() {
-  // Gate the users tab on the org:admin scope, matching the endpoint's own
-  // admin check. When RBAC isn't enabled (local dev) hasAnyScope returns true.
-  const { hasAnyScope } = useRBAC();
-  const canViewUsers = hasAnyScope(["org:admin"]);
-
-  const [searchParams, setSearchParams] = useSearchParams();
-  const requestedTab = searchParams.get("tab");
-  const tab = requestedTab === "users" && canViewUsers ? "users" : "setup";
-
-  const handleTabChange = (value: string) => {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (value === "setup") next.delete("tab");
-        else next.set("tab", value);
-        return next;
-      },
-      { replace: true },
-    );
-  };
-
-  return (
-    <Tabs value={tab} onValueChange={handleTabChange}>
-      <div className="border-border -mx-8 border-b px-8">
-        <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
-          <PageTabsTrigger value="setup">Setup</PageTabsTrigger>
-          {canViewUsers && (
-            <PageTabsTrigger value="users">Active Users</PageTabsTrigger>
-          )}
-        </TabsList>
-      </div>
-
-      <TabsContent value="setup" className="mt-6">
-        <SetupPanel />
-      </TabsContent>
-
-      {canViewUsers && (
-        <TabsContent value="users" className="mt-6">
-          <Page.Section>
-            <Page.Section.Title>Active users</Page.Section.Title>
-            <Page.Section.Description>
-              Who's running the device agent, based on the identity each agent
-              reports when it syncs.
-            </Page.Section.Description>
-            <Page.Section.Body>
-              <AgentUsers />
-            </Page.Section.Body>
-          </Page.Section>
-        </TabsContent>
-      )}
-    </Tabs>
-  );
-}
-
 export default function DeviceAgent(): React.JSX.Element | null {
   const telemetry = useTelemetry();
   const isDeviceAgentEnabled = telemetry.isFeatureEnabled("gram-device-agent");
@@ -886,7 +821,7 @@ export default function DeviceAgent(): React.JSX.Element | null {
       </Page.Header>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <DeviceAgentInner />
+          <SetupPanel />
         </RequireScope>
       </Page.Body>
     </Page>
