@@ -2427,6 +2427,95 @@ func TestRenderAuthPreflightScriptObservabilityModeFailsOpen(t *testing.T) {
 	require.NoFileExists(t, urlFile)
 }
 
+// TestRenderAuthPreflightScriptBrowserLoginDisabled verifies the publish
+// default (browser login off): even on a machine fully capable of a browser
+// flow (display, opener, no CI markers), a fresh session start exits 0
+// without ever opening a browser.
+func TestRenderAuthPreflightScriptBrowserLoginDisabled(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	preflightPath := filepath.Join(dir, "auth_preflight.sh")
+	urlFile := filepath.Join(dir, "auth-url")
+	require.NoError(t, os.WriteFile(preflightPath, renderAuthPreflightScript(cfg), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	opener := []byte("#!/usr/bin/env bash\nprintf '%s' \"$1\" > \"$GRAM_TEST_URL_FILE\"\n")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "open"), opener, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "xdg-open"), opener, 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_TEST_URL_FILE="+urlFile,
+		"DISPLAY=:0",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + dir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	fresh := exec.Command("bash", preflightPath)
+	fresh.Env = env
+	var freshErr bytes.Buffer
+	fresh.Stderr = &freshErr
+	require.NoError(t, fresh.Run(),
+		"browser login disabled must not block session start on a fresh machine: %s", freshErr.String())
+	require.NoFileExists(t, urlFile,
+		"browser login disabled: preflight must never open a browser")
+}
+
+// TestRenderLoginScriptBrowserLoginDisabled verifies login.sh under the
+// publish default: it prints the manual credential instructions and exits
+// non-zero instead of starting the localhost token exchange, while a
+// browser-login-enabled render stays interactive.
+func TestRenderLoginScriptBrowserLoginDisabled(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	loginPath := filepath.Join(dir, "login.sh")
+	urlFile := filepath.Join(dir, "auth-url")
+	require.NoError(t, os.WriteFile(loginPath, renderLoginScript(cfg), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	opener := []byte("#!/usr/bin/env bash\nprintf '%s' \"$1\" > \"$GRAM_TEST_URL_FILE\"\n")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "open"), opener, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "xdg-open"), opener, 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_TEST_URL_FILE="+urlFile,
+		"DISPLAY=:0",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + dir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", loginPath)
+	cmd.Env = env
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "login.sh must fail rather than silently succeed without credentials")
+	require.Contains(t, output.String(), "GRAM_HOOKS_API_KEY",
+		"disabled login.sh must point at the manual credential path")
+	require.NoFileExists(t, urlFile,
+		"browser login disabled: login.sh must never open a browser")
+
+	enabled := cfg
+	enabled.BrowserLogin = true
+	require.Contains(t, string(renderLoginScript(enabled)), "export GRAM_HOOKS_INTERACTIVE=1")
+	require.Contains(t, string(renderLoginScript(cfg)), "export GRAM_HOOKS_INTERACTIVE=0")
+}
+
 // dogfoodSenderCapturedRequest renders a fresh dogfood plugin and runs its
 // per-event sender with no env credentials but a cached browser-login auth
 // file, returning the curl config lines plus request URL captured by a

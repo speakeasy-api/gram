@@ -1329,6 +1329,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				Version:           "",
 				MarketplaceName:   "",
 				ObservabilityMode: false,
+				BrowserLogin:      false,
 			}
 			result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 			result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
@@ -2357,6 +2358,7 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		MarketplaceName:   "",
 		IsDefaultProject:  s.isDefaultProject(ctx, projectID),
 		ObservabilityMode: false,
+		BrowserLogin:      false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
@@ -2394,6 +2396,21 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		)
 	}
 	cfg.ObservabilityMode = observabilityMode
+	// hooks_browser_login is the org-level opt-in for the interactive browser
+	// token exchange. Off (or unreadable), the generated plugin never opens a
+	// browser: senders authenticate through env credentials, a previously
+	// cached key, or the baked org-wide key.
+	browserLogin, err := s.repo.IsOrganizationFeatureEnabled(ctx, repo.IsOrganizationFeatureEnabledParams{
+		OrganizationID: orgID,
+		FeatureName:    string(productfeatures.FeatureHooksBrowserLogin),
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to read hooks browser login flag, defaulting to no browser login",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+	cfg.BrowserLogin = browserLogin
 	return cfg
 }
 

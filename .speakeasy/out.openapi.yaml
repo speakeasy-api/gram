@@ -44650,6 +44650,9 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
+        hooks_browser_login_enabled:
+          type: boolean
+          description: Whether generated hook plugins may mint per-user keys via the interactive browser login
         logs_enabled:
           type: boolean
           description: Whether logging is enabled
@@ -44680,6 +44683,7 @@ components:
         - sso_enabled
         - scim_enabled
         - observability_mode_enabled
+        - hooks_browser_login_enabled
     GetProjectForm:
       type: object
       properties:
@@ -52171,6 +52175,7 @@ components:
             - sso
             - scim
             - observability_mode
+            - hooks_browser_login
           maxLength: 60
       required:
         - feature_name
