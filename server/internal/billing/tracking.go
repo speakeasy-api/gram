@@ -36,10 +36,11 @@ func registerModelUsageSource(s ModelUsageSource) ModelUsageSource {
 // here.
 var (
 	ModelUsageSourcePlayground = registerModelUsageSource("playground")
-	ModelUsageSourceAssistants = registerModelUsageSource("assistants")
-	ModelUsageSourceElements   = registerModelUsageSource("elements")
-	ModelUsageSourceGram       = registerModelUsageSource("gram")
-	ModelUsageSourceSlack      = registerModelUsageSource("slack")
+	// Bring this back when customers are allowed to BYOK
+	// ModelUsageSourceAssistants = registerModelUsageSource("assistants")
+	ModelUsageSourceElements = registerModelUsageSource("elements")
+	ModelUsageSourceGram     = registerModelUsageSource("gram")
+	ModelUsageSourceSlack    = registerModelUsageSource("slack")
 )
 
 // ModelUsageSources lists every registered completion surface.
