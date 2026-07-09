@@ -163,6 +163,11 @@ func (s *Service) AcknowledgeRiskPolicyChallenge(ctx context.Context, payload *g
 		PolicyName:      toChallengeText(record.PolicyName),
 		ExpiresAt:       pgtype.Timestamptz{Time: expiresAt, InfinityModifier: pgtype.Finite, Valid: true},
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// The upsert's WHERE guard refused to overwrite a declined row: the user
+		// already declined this challenge, so the link can no longer be approved.
+		return nil, oops.E(oops.CodeInvalid, err, "this risk policy challenge was declined and can no longer be acknowledged")
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "acknowledge risk policy challenge").LogError(ctx, s.logger)
 	}

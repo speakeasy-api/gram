@@ -1391,7 +1391,7 @@ To learn about this feature and how to get started, check
 - [`useRiskEvaluatePromptGuardrail`](docs/sdks/evals/README.md#evaluate) - evaluatePromptGuardrail risk
 - [`useRiskGetBlock`](docs/sdks/blocks/README.md#get) - getRiskBlock risk
 - [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
-- [`useRiskGetPolicyChallenge`](docs/sdks/policychallenges/README.md#get) - getRiskPolicyChallenge risk
+- [`useRiskGetPolicyChallengeMutation`](docs/sdks/policychallenges/README.md#get) - getRiskPolicyChallenge risk
 - [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`useRiskListEvalReviews`](docs/sdks/evals/README.md#listreviews) - listRiskEvalReviews risk
 - [`useRiskListExclusions`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk

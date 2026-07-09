@@ -853,7 +853,10 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			// Surface the block reason on the trace summary so the dashboard
 			// shows why the call was denied. Always store the technical reason
 			// — the user_message override is for the agent-facing response only.
-			metadata, metaErr := s.getSessionMetadata(ctx, *payload.SessionID)
+			// SessionID may be nil (malformed payload); getSessionMetadata
+			// returns an error for an empty id and the ClickHouse write is
+			// skipped, so read it nil-safe instead of dereferencing.
+			metadata, metaErr := s.getSessionMetadata(ctx, conv.PtrValOr(payload.SessionID, ""))
 			if metaErr == nil {
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}

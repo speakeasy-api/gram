@@ -49,6 +49,11 @@ const (
 	policyAckCacheKeyPrefix = "risk:policy-ack:" // #nosec G101 -- cache key namespace, not a credential.
 	// defaultPolicyAckTTL is how long a challenge link stays redeemable.
 	defaultPolicyAckTTL = 10 * time.Minute
+	// maxPolicyAckTTL bounds the link lifetime. The record may carry a
+	// ChallengeMessage with secret-adjacent matched values, so its ephemeral
+	// (~10 min) window is enforced, not just documented — a caller cannot ask
+	// for a longer-lived record.
+	maxPolicyAckTTL = 10 * time.Minute
 )
 
 // PolicyAckTokenInput is the state a challenge link points at. Deliberately
@@ -130,6 +135,9 @@ func GeneratePolicyAckToken(ctx context.Context, c cache.Cache, input PolicyAckT
 	if ttl <= 0 {
 		ttl = defaultPolicyAckTTL
 	}
+	if ttl > maxPolicyAckTTL {
+		ttl = maxPolicyAckTTL
+	}
 	now := time.Now()
 	expiry := now.Add(ttl).Truncate(time.Second)
 	record := policyAckRecord{
@@ -197,7 +205,13 @@ func invalidatePolicyAckToken(ctx context.Context, c cache.Cache, tokenString st
 		return
 	}
 	id := strings.TrimPrefix(tokenString, policyAckTokenPrefix)
-	_ = c.Delete(ctx, policyAckCacheKey(id))
+	// Eviction runs after the DB commit, so it must not be skipped if the
+	// request context is already cancelled (client disconnect / timeout).
+	// Otherwise a declined-but-not-evicted token could later be redeemed. Detach
+	// from the request context with a bounded timeout so the delete still runs.
+	evictCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	_ = c.Delete(evictCtx, policyAckCacheKey(id))
 }
 
 func validatePolicyAckFields(orgID, projectID, userID, policyID string) error {

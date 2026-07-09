@@ -3,13 +3,15 @@
  */
 
 import {
-  InvalidateQueryFilters,
-  QueryClient,
-  useQuery,
-  UseQueryResult,
-  useSuspenseQuery,
-  UseSuspenseQueryResult,
+  MutationKey,
+  useMutation,
+  UseMutationResult,
 } from "@tanstack/react-query";
+import { GramCore } from "../core.js";
+import { riskPolicyChallengesGet } from "../funcs/riskPolicyChallengesGet.js";
+import { combineSignals } from "../lib/primitives.js";
+import { RequestOptions } from "../lib/sdks.js";
+import { GetRiskPolicyChallengeResponseBody } from "../models/components/getriskpolicychallengeresponsebody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -25,26 +27,20 @@ import {
   GetRiskPolicyChallengeRequest,
   GetRiskPolicyChallengeSecurity,
 } from "../models/operations/getriskpolicychallenge.js";
+import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
-import {
-  buildRiskGetPolicyChallengeQuery,
-  prefetchRiskGetPolicyChallenge,
-  queryKeyRiskGetPolicyChallenge,
-  RiskGetPolicyChallengeQueryData,
-} from "./riskGetPolicyChallenge.core.js";
-export {
-  buildRiskGetPolicyChallengeQuery,
-  prefetchRiskGetPolicyChallenge,
-  queryKeyRiskGetPolicyChallenge,
-  type RiskGetPolicyChallengeQueryData,
+import { MutationHookOptions } from "./_types.js";
+
+export type RiskGetPolicyChallengeMutationVariables = {
+  request: GetRiskPolicyChallengeRequest;
+  security?: GetRiskPolicyChallengeSecurity | undefined;
+  options?: RequestOptions;
 };
 
-export type RiskGetPolicyChallengeQueryError =
+export type RiskGetPolicyChallengeMutationData =
+  GetRiskPolicyChallengeResponseBody;
+
+export type RiskGetPolicyChallengeMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -61,87 +57,62 @@ export type RiskGetPolicyChallengeQueryError =
  * @remarks
  * Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
  */
-export function useRiskGetPolicyChallenge(
-  request: GetRiskPolicyChallengeRequest,
-  security?: GetRiskPolicyChallengeSecurity | undefined,
-  options?: QueryHookOptions<
-    RiskGetPolicyChallengeQueryData,
-    RiskGetPolicyChallengeQueryError
+export function useRiskGetPolicyChallengeMutation(
+  options?: MutationHookOptions<
+    RiskGetPolicyChallengeMutationData,
+    RiskGetPolicyChallengeMutationError,
+    RiskGetPolicyChallengeMutationVariables
   >,
-): UseQueryResult<
-  RiskGetPolicyChallengeQueryData,
-  RiskGetPolicyChallengeQueryError
+): UseMutationResult<
+  RiskGetPolicyChallengeMutationData,
+  RiskGetPolicyChallengeMutationError,
+  RiskGetPolicyChallengeMutationVariables
 > {
   const client = useGramContext();
-  return useQuery({
-    ...buildRiskGetPolicyChallengeQuery(
-      client,
-      request,
-      security,
-      options,
-    ),
+  return useMutation({
+    ...buildRiskGetPolicyChallengeMutation(client, options),
     ...options,
   });
 }
 
-/**
- * getRiskPolicyChallenge risk
- *
- * @remarks
- * Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
- */
-export function useRiskGetPolicyChallengeSuspense(
-  request: GetRiskPolicyChallengeRequest,
-  security?: GetRiskPolicyChallengeSecurity | undefined,
-  options?: SuspenseQueryHookOptions<
-    RiskGetPolicyChallengeQueryData,
-    RiskGetPolicyChallengeQueryError
-  >,
-): UseSuspenseQueryResult<
-  RiskGetPolicyChallengeQueryData,
-  RiskGetPolicyChallengeQueryError
-> {
-  const client = useGramContext();
-  return useSuspenseQuery({
-    ...buildRiskGetPolicyChallengeQuery(
-      client,
+export function mutationKeyRiskGetPolicyChallenge(): MutationKey {
+  return ["@gram/client", "policyChallenges", "get"];
+}
+
+export function buildRiskGetPolicyChallengeMutation(
+  client$: GramCore,
+  hookOptions?: RequestOptions,
+): {
+  mutationKey: MutationKey;
+  mutationFn: (
+    variables: RiskGetPolicyChallengeMutationVariables,
+  ) => Promise<RiskGetPolicyChallengeMutationData>;
+} {
+  return {
+    mutationKey: mutationKeyRiskGetPolicyChallenge(),
+    mutationFn: function riskGetPolicyChallengeMutationFn({
       request,
       security,
       options,
-    ),
-    ...options,
-  });
-}
-
-export function setRiskGetPolicyChallengeData(
-  client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
-  data: RiskGetPolicyChallengeQueryData,
-): RiskGetPolicyChallengeQueryData | undefined {
-  const key = queryKeyRiskGetPolicyChallenge(...queryKeyBase);
-
-  return client.setQueryData<RiskGetPolicyChallengeQueryData>(key, data);
-}
-
-export function invalidateRiskGetPolicyChallenge(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "policyChallenges", "get", ...queryKeyBase],
-  });
-}
-
-export function invalidateAllRiskGetPolicyChallenge(
-  client: QueryClient,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "policyChallenges", "get"],
-  });
+    }): Promise<RiskGetPolicyChallengeMutationData> {
+      const mergedOptions = {
+        ...hookOptions,
+        ...options,
+        fetchOptions: {
+          ...hookOptions?.fetchOptions,
+          ...options?.fetchOptions,
+          signal: combineSignals(
+            hookOptions?.fetchOptions?.signal,
+            options?.fetchOptions?.signal,
+          ),
+        },
+      };
+      return unwrapAsync(riskPolicyChallengesGet(
+        client$,
+        request,
+        security,
+        mergedOptions,
+      ));
+    },
+  };
 }

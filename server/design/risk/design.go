@@ -683,7 +683,11 @@ var _ = Service("risk", func() {
 		Meta("openapi:operationId", "getRiskPolicyChallenge")
 		Meta("openapi:extension:x-speakeasy-group", "risk.policyChallenges")
 		Meta("openapi:extension:x-speakeasy-name-override", "get")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskGetPolicyChallenge", "type": "query"}`)
+		// mutation, not query: the token is a POST body (it is sensitive, so it
+		// cannot live in a GET URL). The generated query cache key is built from
+		// URL/query params only and would omit the body, so two different tokens
+		// in one session would collide on the same key and return stale data.
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskGetPolicyChallenge", "type": "mutation"}`)
 	})
 
 	Method("declineRiskPolicyChallenge", func() {

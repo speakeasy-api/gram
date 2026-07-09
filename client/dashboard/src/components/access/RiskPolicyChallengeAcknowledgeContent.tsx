@@ -4,7 +4,7 @@ import { useSessionData } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
 import { useRiskAcknowledgePolicyChallengeMutation } from "@gram/client/react-query/riskAcknowledgePolicyChallenge.js";
 import { useRiskDeclinePolicyChallengeMutation } from "@gram/client/react-query/riskDeclinePolicyChallenge.js";
-import { useRiskGetPolicyChallenge } from "@gram/client/react-query/riskGetPolicyChallenge.js";
+import { useRiskGetPolicyChallengeMutation } from "@gram/client/react-query/riskGetPolicyChallenge.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { type ComponentProps, useEffect, useState } from "react";
 
@@ -58,16 +58,49 @@ export function RiskPolicyChallengeAcknowledgeContent(): JSX.Element {
     window.location.href = buildLoginRedirectURL(window.location.pathname);
   }, [storedAckToken, sessionLoading, hasSession]);
 
-  const canQuery = !!storedAckToken && hasSession && outcome === "idle";
-  const challenge = useRiskGetPolicyChallenge(
-    {
-      acknowledgeRiskPolicyChallengeRequestBody: {
-        ackToken: storedAckToken ?? "",
+  // The peek is a mutation (POST body carries the sensitive token; a query hook
+  // would omit the body from its cache key and collide across tokens), so drive
+  // it imperatively once and hold the result in state.
+  const { mutateAsync: fetchChallenge } = useRiskGetPolicyChallengeMutation();
+  const [challengeState, setChallengeState] = useState<
+    "idle" | "loading" | "loaded" | "error"
+  >("idle");
+  const [challengeData, setChallengeData] = useState<{
+    acknowledged: boolean;
+    message: string;
+    policyName?: string | undefined;
+    toolName?: string | undefined;
+  } | null>(null);
+
+  const canFetch = !!storedAckToken && hasSession && outcome === "idle";
+  useEffect(() => {
+    if (!canFetch || challengeState !== "idle") return;
+    setChallengeState("loading");
+    let active = true;
+    fetchChallenge({
+      request: {
+        acknowledgeRiskPolicyChallengeRequestBody: {
+          ackToken: storedAckToken ?? "",
+        },
       },
-    },
-    undefined,
-    { enabled: canQuery, retry: false, refetchOnWindowFocus: false },
-  );
+    })
+      .then((res) => {
+        if (!active) return;
+        setChallengeData({
+          acknowledged: res.acknowledged,
+          message: res.message,
+          policyName: res.policyName,
+          toolName: res.toolName,
+        });
+        setChallengeState("loaded");
+      })
+      .catch(() => {
+        if (active) setChallengeState("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, [canFetch, challengeState, fetchChallenge, storedAckToken]);
 
   const { mutateAsync: approve, isPending: approving } =
     useRiskAcknowledgePolicyChallengeMutation();
@@ -126,15 +159,17 @@ export function RiskPolicyChallengeAcknowledgeContent(): JSX.Element {
     if (!storedAckToken) return <ExpiredView />;
     if (sessionLoading) return <SpinnerView label="Loading..." />;
     if (!hasSession) return <SpinnerView label="Redirecting to sign in..." />;
-    if (challenge.isLoading) return <SpinnerView label="Loading request..." />;
-    if (challenge.isError || !challenge.data) return <ExpiredView />;
-    if (challenge.data.acknowledged) return <AlreadyApprovedView />;
+    if (challengeState === "idle" || challengeState === "loading") {
+      return <SpinnerView label="Loading request..." />;
+    }
+    if (challengeState === "error" || !challengeData) return <ExpiredView />;
+    if (challengeData.acknowledged) return <AlreadyApprovedView />;
 
     return (
       <ChallengeReview
-        policyName={challenge.data.policyName}
-        toolName={challenge.data.toolName}
-        message={challenge.data.message}
+        policyName={challengeData.policyName}
+        toolName={challengeData.toolName}
+        message={challengeData.message}
         approving={approving}
         declining={declining}
         onApprove={() => void onApprove()}

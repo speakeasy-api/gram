@@ -317,6 +317,13 @@ SET status = 'acknowledged'
   , expires_at = EXCLUDED.expires_at
   , policy_name = COALESCE(EXCLUDED.policy_name, risk_policy_challenges.policy_name)
   , updated_at = clock_timestamp()
+-- A decline is final for this challenge: never resurrect a declined row into an
+-- acknowledgement (e.g. a leaked/un-evicted token redeemed after decline). A
+-- genuine re-challenge (UpsertRiskPolicyChallenge) resets declined -> challenged
+-- first, after which acknowledgement can proceed. When this predicate is false
+-- the update is a no-op and RETURNING yields no rows (ErrNoRows), which the
+-- caller maps to a "declined" client error.
+WHERE risk_policy_challenges.status <> 'declined'
 RETURNING *;
 
 -- name: MarkRiskPolicyChallengeDeclined :one

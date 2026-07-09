@@ -3135,6 +3135,7 @@ SET status = 'acknowledged'
   , expires_at = EXCLUDED.expires_at
   , policy_name = COALESCE(EXCLUDED.policy_name, risk_policy_challenges.policy_name)
   , updated_at = clock_timestamp()
+WHERE risk_policy_challenges.status <> 'declined'
 RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
@@ -3152,6 +3153,12 @@ type MarkRiskPolicyChallengeAcknowledgedParams struct {
 
 // Self-service redeem: mark the challenge acknowledged with a remember-until
 // expiry. Upserts so a redeem that beats the async challenge insert still works.
+// A decline is final for this challenge: never resurrect a declined row into an
+// acknowledgement (e.g. a leaked/un-evicted token redeemed after decline). A
+// genuine re-challenge (UpsertRiskPolicyChallenge) resets declined -> challenged
+// first, after which acknowledgement can proceed. When this predicate is false
+// the update is a no-op and RETURNING yields no rows (ErrNoRows), which the
+// caller maps to a "declined" client error.
 func (q *Queries) MarkRiskPolicyChallengeAcknowledged(ctx context.Context, arg MarkRiskPolicyChallengeAcknowledgedParams) (RiskPolicyChallenge, error) {
 	row := q.db.QueryRow(ctx, markRiskPolicyChallengeAcknowledged,
 		arg.ID,

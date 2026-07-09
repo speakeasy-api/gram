@@ -160,6 +160,49 @@ func TestClaude_PreToolUse_Warn_DeniesWithChallenge(t *testing.T) {
 	assert.Contains(t, *output.PermissionDecisionReason, "danger", "the matched policy is surfaced")
 }
 
+// When no acknowledgement link can be built (missing site URL / cache / user),
+// a warn must fail SAFE to a hard block — never a native ask, never allow, and
+// with no dangling half-challenge. Guards the security-critical fallback path.
+func TestClaude_PreToolUse_Warn_FallsBackToBlockWhenNoLink(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	// Force warnDenyReason to return ok=false: no site URL means no ack link.
+	ti.service.siteURL = nil
+	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+		Action:       "warn",
+		PolicyID:     uuid.NewString(),
+		PolicyName:   "danger",
+		RuleID:       "rmrf",
+		Entity:       "destructive",
+		MatchedValue: "rm -rf /tmp/warn",
+	}}
+
+	sessionID := uuid.NewString()
+	toolName := "Bash"
+	toolUseID := "toolu_warn_fallback"
+	userEmail := "warn-fallback@example.com"
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{"command": "rm -rf /tmp/warn/*"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok)
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision, "no-link warn must hard-deny, never ask or allow")
+	require.NotNil(t, output.PermissionDecisionReason)
+	// Fell through to the plain block path, not the challenge path: no ack link.
+	assert.NotContains(t, *output.PermissionDecisionReason, "risk-policy-challenge/acknowledge", "fallback block must not carry an ack link")
+	assert.NotContains(t, *output.PermissionDecisionReason, "ack_token=")
+}
+
 // A warn at prompt submit has no confirmation primitive, so it must pass the
 // prompt through (never block) — the follow-on tool call gets challenged. This
 // guards the regression where warn hard-blocked at UserPromptSubmit.

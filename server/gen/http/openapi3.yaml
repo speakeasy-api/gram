@@ -27179,7 +27179,7 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: RiskGetPolicyChallenge
-                type: query
+                type: mutation
     /rpc/risk.getPolicyStatus:
         get:
             description: Get the analysis status of a risk policy including progress and workflow state.
