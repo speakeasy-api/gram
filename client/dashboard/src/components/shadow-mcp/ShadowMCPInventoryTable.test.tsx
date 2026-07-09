@@ -15,6 +15,7 @@ import {
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { Role } from "@gram/client/models/components/role.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { ShadowMCPInventoryTable } from "./ShadowMCPInventoryTable";
 
@@ -387,10 +388,27 @@ function blockingPolicy(
   };
 }
 
+function role(overrides: Partial<Role> = {}): Role {
+  return {
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    description: "Admin role",
+    grants: [],
+    id: "019f1e9c-09f8-7084-8011-678312db54fe",
+    isSystem: false,
+    memberCount: 1,
+    name: "Admin",
+    principalUrn: "role:organization:019f1e9c-09f8-7084-8011-678312db54fe",
+    slug: "admin",
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+    ...overrides,
+  };
+}
+
 function renderInventoryTable(
   projectID = "project-id-1",
   policyState: "blocking" | "flagging" | "none" | "unavailable" = "blocking",
   shadowMCPPolicies = [blockingPolicy()],
+  roles: Role[] = [],
 ) {
   const queryClient = new QueryClient();
 
@@ -399,6 +417,7 @@ function renderInventoryTable(
       <ShadowMCPInventoryTable
         policyState={policyState}
         projectID={projectID}
+        roles={roles}
         shadowMCPPolicies={shadowMCPPolicies}
       />
     </QueryClientProvider>,
@@ -748,6 +767,7 @@ describe("ShadowMCPInventoryTable", () => {
         <ShadowMCPInventoryTable
           policyState="blocking"
           projectID="project-id-1"
+          roles={[]}
           shadowMCPPolicies={[blockingPolicy()]}
         />
       </QueryClientProvider>,
@@ -762,6 +782,7 @@ describe("ShadowMCPInventoryTable", () => {
         <ShadowMCPInventoryTable
           policyState="blocking"
           projectID="project-id-2"
+          roles={[]}
           shadowMCPPolicies={[blockingPolicy()]}
         />
       </QueryClientProvider>,
@@ -790,6 +811,7 @@ describe("ShadowMCPInventoryTable", () => {
           enabled
           policyState="blocking"
           projectID="project-id-1"
+          roles={[]}
           shadowMCPPolicies={[blockingPolicy()]}
         />
       </QueryClientProvider>,
@@ -805,6 +827,7 @@ describe("ShadowMCPInventoryTable", () => {
           enabled={false}
           policyState="blocking"
           projectID="project-id-1"
+          roles={[]}
           shadowMCPPolicies={[blockingPolicy()]}
         />
       </QueryClientProvider>,
@@ -923,13 +946,20 @@ describe("ShadowMCPInventoryTable", () => {
       ],
     });
 
-    renderInventoryTable("project-id-1", "blocking", [
-      blockingPolicy({
-        audiencePrincipalUrns: ["role:admin"],
-        audienceType: "targeted",
-        name: "Shadow MCP Scanner",
-      }),
-    ]);
+    renderInventoryTable(
+      "project-id-1",
+      "blocking",
+      [
+        blockingPolicy({
+          audiencePrincipalUrns: [
+            "role:organization:019f1e9c-09f8-7084-8011-678312db54fe",
+          ],
+          audienceType: "targeted",
+          name: "Shadow MCP Scanner",
+        }),
+      ],
+      [role()],
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Pending MCP")).toBeTruthy();

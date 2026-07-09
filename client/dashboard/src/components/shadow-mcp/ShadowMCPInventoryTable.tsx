@@ -1,5 +1,6 @@
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import type { Role } from "@gram/client/models/components/role.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { useDeleteShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/deleteShadowMCPInventoryPolicyBypass.js";
@@ -162,13 +163,15 @@ function humanizePrincipalURN(principalURN: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function policyAudienceLabel(policy: ShadowMCPPolicy) {
+function policyAudienceLabel(policy: ShadowMCPPolicy, roles: Role[]) {
   if (policy.audienceType === "everyone") {
     return "Everyone";
   }
 
-  const principalLabels =
-    policy.audiencePrincipalUrns.map(humanizePrincipalURN);
+  const principalLabels = policy.audiencePrincipalUrns.map((principalURN) => {
+    const role = roles.find((item) => item.principalUrn === principalURN);
+    return role?.name ?? humanizePrincipalURN(principalURN);
+  });
   if (principalLabels.length <= 2) {
     return principalLabels.join(", ");
   }
@@ -311,11 +314,13 @@ function PolicySelection({
   disabled,
   onSelectionChange,
   policies,
+  roles,
   selectedPolicyIDs,
 }: {
   disabled: boolean;
   onSelectionChange: (policyIDs: string[]) => void;
   policies: ShadowMCPPolicy[];
+  roles: Role[];
   selectedPolicyIDs: string[];
 }) {
   const selectedPolicyIDSet = new Set(selectedPolicyIDs);
@@ -353,7 +358,7 @@ function PolicySelection({
                   {policy.name}
                 </Type>
                 <Type muted small>
-                  Policy applies to {policyAudienceLabel(policy)}
+                  Policy applies to {policyAudienceLabel(policy, roles)}
                 </Type>
               </span>
             </label>
@@ -371,6 +376,7 @@ function ShadowMCPInventoryActionSheet({
   onOpenChange,
   onSubmit,
   open,
+  roles,
 }: {
   action: ActiveInventoryAction | null;
   shadowMCPPolicies: ShadowMCPPolicy[];
@@ -382,6 +388,7 @@ function ShadowMCPInventoryActionSheet({
     policyIDs: string[];
   }) => Promise<void>;
   open: boolean;
+  roles: Role[];
 }) {
   const [decision, setDecision] = useState<ReviewDecision>("approve");
   const [selectedPolicyIDs, setSelectedPolicyIDs] = useState<string[]>([]);
@@ -495,6 +502,7 @@ function ShadowMCPInventoryActionSheet({
               disabled={isSubmitting}
               onSelectionChange={setSelectedPolicyIDs}
               policies={shadowMCPPolicies}
+              roles={roles}
               selectedPolicyIDs={selectedPolicyIDs}
             />
           )}
@@ -538,12 +546,14 @@ export function ShadowMCPInventoryTable({
   enabled = true,
   policyState,
   projectID,
+  roles,
 }: {
   shadowMCPPolicies: ShadowMCPPolicy[];
   className?: string;
   enabled?: boolean;
   policyState: ShadowMCPPolicyState;
   projectID: string;
+  roles: Role[];
 }): JSX.Element {
   const queryClient = useQueryClient();
   const inventoryScope = enabled && projectID.length > 0 ? projectID : "";
@@ -835,6 +845,7 @@ export function ShadowMCPInventoryTable({
         }}
         onSubmit={submitInventoryAction}
         open={activeAction !== null}
+        roles={roles}
       />
       <Table
         columns={columns}
