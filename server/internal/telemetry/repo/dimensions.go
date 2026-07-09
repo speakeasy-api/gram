@@ -78,12 +78,8 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 	},
 	"hook_source": {
-		// The aggregate column is provenance-derived by the MV; the raw path
-		// applies the same provenance classification (Claude OTEL URN, codex,
-		// cursor) so a drill-down from the aggregate resolves the same rows
-		// regardless of what gram.hook.source was stamped with.
 		aggregateColumn:        "hook_source",
-		rawExpr:                sessionHookSourceExpr,
+		rawExpr:                "hook_source",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
 	},

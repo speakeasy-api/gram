@@ -377,7 +377,7 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
 
     -- Request dimensions
     model String,
-    hook_source String, -- consuming surface, derived from row provenance: claude-code | codex | cursor
+    hook_source String, -- consuming surface (gram.hook.source): claude-code, cowork, cursor, ...
 
     -- Multi-valued user dimensions stored intact (not exploded) so totals stay
     -- exact; the query layer arrayJoin()s these to attribute spend per role/group.
@@ -448,8 +448,7 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribu
 -- Cursor come from their usage-metrics rows plus completed tool-call hook
 -- rows. Everything else — Gram-hosted chat completions, claude-code:usage
 -- metric rows (which duplicate api_request usage), Claude hook rows, MCP hook
--- rows — is excluded so cost attribution never mixes sources or surfaces
--- stray hook_source spellings.
+-- rows — is excluded so cost attribution never mixes sources.
 -- Keep the predicates in sync with the session* constants in
 -- server/internal/telemetry/repo/sessions.go, which apply the same
 -- classification to raw telemetry_logs.
@@ -513,20 +512,7 @@ SELECT
         is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
         toString(attributes.gen_ai.response.model)
     ) AS model,
-    -- Consuming surface, derived from row provenance rather than the stamped
-    -- gram.hook.source attribute (whose spellings vary by writer: 'claude'
-    -- from the legacy hook endpoint and unified-ingest adapter,
-    -- 'claude-code-desktop'/'cowork' from client service names). The WHERE
-    -- clause admits only these three surfaces, so the '' branch is
-    -- unreachable. The raw attribute path is used instead of the hook_source
-    -- materialized column because the alias shadows that column (cyclic alias
-    -- otherwise).
-    multiIf(
-        is_claude_otel_row, 'claude-code',
-        startsWith(gram_urn, 'codex:usage') OR toString(attributes.gram.hook.source) = 'codex', 'codex',
-        startsWith(gram_urn, 'cursor:usage') OR toString(attributes.gram.hook.source) = 'cursor', 'cursor',
-        ''
-    ) AS hook_source,
+    hook_source,
 
     -- Multi-valued dimensions extracted tolerantly from JSON/Dynamic values.
     -- Bad or non-array payloads resolve to [] instead of failing MV ingestion.

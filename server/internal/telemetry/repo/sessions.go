@@ -94,19 +94,6 @@ const (
 		"toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), " +
 		"toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), " + sessionUsageMeasureFilter + ")"
 
-	// sessionHookSourceExpr is the per-row consuming surface, derived from row
-	// provenance rather than the stamped gram.hook.source attribute (whose
-	// spellings vary by writer). Rows outside the three admitted surfaces
-	// resolve to '' and are excluded by sessionSourceRowPredicate anyway.
-	// Mirrors the hook_source expression in attribute_metrics_summaries_mv
-	// (server/clickhouse/schema.sql) so aggregate drill-downs resolve the same
-	// sessions. Shared with the hook_source filter in dimensions.go.
-	sessionHookSourceExpr = "multiIf(" +
-		sessionClaudeOTELRowPredicate + ", 'claude-code', " +
-		"startsWith(gram_urn, 'codex:usage') OR hook_source = 'codex', 'codex', " +
-		"startsWith(gram_urn, 'cursor:usage') OR hook_source = 'cursor', 'cursor', " +
-		"'')"
-
 	// sessionModelExpr is the per-row effective model. Claude api_request rows put
 	// it on attributes.model / attributes.gen_ai.request.model; everyone else on
 	// gen_ai.response.model. Mirrors the aggregate MV's model expression so the
@@ -306,7 +293,7 @@ func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]S
 		"chat_id as gram_chat_id",
 		"any(toString(gram_project_id)) as project_id",
 		"anyIf(user_email, user_email != '') as session_user_email",
-		"anyIf("+sessionHookSourceExpr+", "+sessionHookSourceExpr+" != '') as session_hook_source",
+		"anyIf(hook_source, hook_source != '') as session_hook_source",
 		"argMaxIf("+sessionModelExpr+", time_unix_nano, "+sessionModelExpr+" != '') as session_model",
 		"min(time_unix_nano) as start_time_unix_nano",
 		"max(time_unix_nano) as end_time_unix_nano",
