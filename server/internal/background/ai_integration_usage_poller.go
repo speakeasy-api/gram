@@ -27,15 +27,19 @@ const (
 
 	// aiUsagePollerCoordinatorRunTimeout is the total budgeted
 	// time for each scheduled coordinator run.
-	aiUsagePollerCoordinatorRunTimeout = 45 * time.Minute
+	aiUsagePollerCoordinatorRunTimeout = 8 * time.Hour
 
 	// aiUsagePollerCoordinatorActivityTimeout is the budget for
 	// short coordinator activities like candidate listing.
 	aiUsagePollerCoordinatorActivityTimeout = 30 * time.Second
 
 	// aiUsagePollerActivityTimeout is the budget for
-	// one provider/config usage poll activity.
-	aiUsagePollerActivityTimeout = 50 * time.Minute
+	// one provider/config usage poll attempt.
+	aiUsagePollerActivityTimeout = 2 * time.Hour
+
+	// aiUsagePollerActivityScheduleToCloseTimeout bounds the full
+	// provider/config usage poll across all Temporal retries.
+	aiUsagePollerActivityScheduleToCloseTimeout = 6 * time.Hour
 
 	// aiUsagePollerCoordinatorChildConcurrency limits how many
 	// provider/config child workflows a coordinator starts per batch.
@@ -44,6 +48,14 @@ const (
 	// aiUsagePollerCoordinatorRetryInitialInterval is the first
 	// backoff delay for short coordinator activity retries.
 	aiUsagePollerCoordinatorRetryInitialInterval = 5 * time.Second
+
+	// aiUsagePollerActivityRetryInitialInterval is the first backoff delay
+	// for provider/config usage poll activity retries.
+	aiUsagePollerActivityRetryInitialInterval = time.Minute
+
+	// aiUsagePollerActivityRetryMaximumInterval caps backoff between
+	// provider/config usage poll activity retries.
+	aiUsagePollerActivityRetryMaximumInterval = 15 * time.Minute
 )
 
 func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
@@ -120,11 +132,15 @@ func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
 func AIUsagePollerWorkflow(ctx workflow.Context, configID string) error {
 	taskQueue := AIUsagePollerTaskQueue(tenv.TaskQueueName(workflow.GetInfo(ctx).TaskQueueName))
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		TaskQueue:           taskQueue,
-		StartToCloseTimeout: aiUsagePollerActivityTimeout,
-		HeartbeatTimeout:    time.Minute,
+		TaskQueue:              taskQueue,
+		StartToCloseTimeout:    aiUsagePollerActivityTimeout,
+		ScheduleToCloseTimeout: aiUsagePollerActivityScheduleToCloseTimeout,
+		HeartbeatTimeout:       time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts: activities.PollUsageMaxAttempts,
+			MaximumAttempts:    activities.PollUsageMaxAttempts,
+			InitialInterval:    aiUsagePollerActivityRetryInitialInterval,
+			BackoffCoefficient: 2,
+			MaximumInterval:    aiUsagePollerActivityRetryMaximumInterval,
 		},
 	})
 
