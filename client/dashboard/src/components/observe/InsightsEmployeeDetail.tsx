@@ -1,4 +1,5 @@
-import { Alert, Badge, Icon, type IconName } from "@/components/ui/moonshine";
+import { Alert, Badge } from "@/components/ui/moonshine";
+import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
 import {
   ArrowRight,
   Boxes,
@@ -1070,8 +1071,7 @@ function DataFlowNodeVisual({
         tone,
       )}
     >
-      {/* TODO(design-system): DynamicIcon */}
-      <Icon name={icon} className="size-3.5" />
+      <DynamicIcon name={icon} className="size-3.5" />
     </span>
   );
 }

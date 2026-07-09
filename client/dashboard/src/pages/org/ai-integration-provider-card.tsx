@@ -1,5 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
-import { Input } from "@/components/ui/input";
+import { useConfirm } from "@/components/ui/use-confirm";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useAiIntegrationConfig } from "@gram/client/react-query/aiIntegrationConfig";
-import { Badge, Button, Stack } from "@/components/ui/moonshine";
+import { Badge, Button, Input, Stack } from "@/components/ui/moonshine";
 import {
   AlertCircle,
   CheckCircle2,
@@ -34,10 +34,15 @@ export function AIIntegrationProviderCard({
   const apiKeyFieldId = `${provider.provider}-ai-integration-api-key`;
   const orgIdFieldId = `${provider.provider}-ai-integration-org-id`;
   const billingModeFieldId = `${provider.provider}-ai-integration-billing-mode`;
+  const { confirm: requestConfirm, dialog } = useConfirm();
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!form.isConfigured) return;
-    if (!window.confirm(`Delete the ${provider.name} AI integration?`)) return;
+    const confirmed = await requestConfirm({
+      title: `Delete the ${provider.name} AI integration?`,
+      destructive: true,
+    });
+    if (!confirmed) return;
     form.remove();
   };
 
@@ -77,7 +82,7 @@ export function AIIntegrationProviderCard({
             form.hasSavedKey ? "•••••• (saved)" : provider.apiKeyPlaceholder
           }
           value={form.apiKey}
-          onChange={form.setApiKey}
+          onChange={(e) => form.setApiKey(e.target.value)}
           type="password"
           disabled={form.isLoading || form.isMutating}
         />
@@ -97,7 +102,7 @@ export function AIIntegrationProviderCard({
             id={orgIdFieldId}
             placeholder={provider.organizationIdPlaceholder}
             value={form.organizationId}
-            onChange={form.setOrganizationId}
+            onChange={(e) => form.setOrganizationId(e.target.value)}
             disabled={form.isLoading || form.isMutating}
           />
         </Stack>
@@ -135,7 +140,7 @@ export function AIIntegrationProviderCard({
           <Button
             variant="destructive-primary"
             size="sm"
-            onClick={handleDelete}
+            onClick={() => void handleDelete()}
             disabled={!form.isConfigured || form.isMutating}
           >
             <Button.LeftIcon>
@@ -150,6 +155,7 @@ export function AIIntegrationProviderCard({
           </Button>
         </RequireScope>
       </Stack>
+      {dialog}
     </div>
   );
 }

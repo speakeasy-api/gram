@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 
 const meta: Meta<typeof Dialog> = {
@@ -17,7 +17,7 @@ export const WithTrigger: Story = {
   render: () => (
     <Dialog>
       <Dialog.Trigger asChild>
-        <Button variant="outline">Delete API key</Button>
+        <Button variant="secondary">Delete API key</Button>
       </Dialog.Trigger>
       <Dialog.Content>
         <Dialog.Header>
@@ -29,10 +29,10 @@ export const WithTrigger: Story = {
         </Dialog.Header>
         <Dialog.Footer>
           <Dialog.Close asChild>
-            <Button variant="outline">Cancel</Button>
+            <Button variant="secondary">Cancel</Button>
           </Dialog.Close>
           <Dialog.Close asChild>
-            <Button variant="destructive">Delete</Button>
+            <Button variant="destructive-primary">Delete</Button>
           </Dialog.Close>
         </Dialog.Footer>
       </Dialog.Content>
@@ -52,7 +52,7 @@ export const DefaultOpen: Story = {
         </Dialog.Header>
         <Dialog.Footer>
           <Dialog.Close asChild>
-            <Button variant="outline">Cancel</Button>
+            <Button variant="secondary">Cancel</Button>
           </Dialog.Close>
           <Dialog.Close asChild>
             <Button>Send invite</Button>

@@ -8,8 +8,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge, Button } from "@/components/ui/moonshine";
 import {
   Select,
   SelectContent,
@@ -252,14 +251,16 @@ function ToolbarFilters({
       ))}
 
       <Button
-        variant="outline"
+        variant="secondary"
         onClick={() => setSheetOpen(true)}
         className={cn(CONTROL_HEIGHT, "gap-2")}
       >
-        <SlidersHorizontal className="size-4" />
-        More filters
+        <Button.LeftIcon>
+          <SlidersHorizontal className="size-4" />
+        </Button.LeftIcon>
+        <Button.Text>More filters</Button.Text>
         {sheetCount > 0 && (
-          <Badge variant="secondary" className="ml-1 px-1.5">
+          <Badge variant="neutral" size="sm" className="ml-1">
             {sheetCount}
           </Badge>
         )}
@@ -267,12 +268,14 @@ function ToolbarFilters({
 
       {hasClearable && (
         <Button
-          variant="ghost"
+          variant="tertiary"
           onClick={onClearAll}
           className={cn(CONTROL_HEIGHT, "text-muted-foreground gap-1")}
         >
-          <X className="size-3.5" />
-          Reset to default
+          <Button.LeftIcon>
+            <X className="size-3.5" />
+          </Button.LeftIcon>
+          <Button.Text>Reset to default</Button.Text>
         </Button>
       )}
 
@@ -419,7 +422,7 @@ function ToolbarRefresh({
 
   return (
     <Button
-      variant="outline"
+      variant="secondary"
       onClick={() => {
         setMinDurationActive(true);
         onRefresh();
@@ -428,8 +431,10 @@ function ToolbarRefresh({
       aria-label="Refresh"
       className={cn(CONTROL_HEIGHT, "gap-2", className)}
     >
-      <RefreshCw className={cn("size-4", showRefreshing && "animate-spin")} />
-      Refresh
+      <Button.LeftIcon>
+        <RefreshCw className={cn("size-4", showRefreshing && "animate-spin")} />
+      </Button.LeftIcon>
+      <Button.Text>Refresh</Button.Text>
     </Button>
   );
 }

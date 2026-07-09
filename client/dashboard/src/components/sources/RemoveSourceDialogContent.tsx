@@ -1,6 +1,5 @@
-import { Input } from "@/components/ui/input";
 import { slugify } from "@/lib/constants";
-import { Alert, Button } from "@/components/ui/moonshine";
+import { Alert, Button, Input } from "@/components/ui/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
@@ -92,7 +91,9 @@ export function RemoveSourceDialogContent({
           To confirm, type "<strong>{sourceSlug}</strong>"
         </span>
 
-        <Input onChange={(v) => setInputMatches(v === sourceSlug)} />
+        <Input
+          onChange={(e) => setInputMatches(e.target.value === sourceSlug)}
+        />
       </div>
 
       <Alert variant="warning" dismissible={false}>

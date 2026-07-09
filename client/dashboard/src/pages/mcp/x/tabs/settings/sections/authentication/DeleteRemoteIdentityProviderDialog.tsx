@@ -1,11 +1,10 @@
-import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { Dialog } from "@/components/ui/dialog";
-import { Alert, Button } from "@/components/ui/moonshine";
+import { Alert, Button, Input } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -128,7 +127,7 @@ function DeleteRemoteIdentityProviderDialogBody({
         </Type>
         <Input
           value={confirmation}
-          onChange={setConfirmation}
+          onChange={(e) => setConfirmation(e.target.value)}
           placeholder={issuer.issuer}
           disabled={submitting}
         />

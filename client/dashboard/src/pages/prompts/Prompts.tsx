@@ -2,6 +2,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Card, Cards } from "@/components/ui/card";
+import { useConfirm } from "@/components/ui/use-confirm";
 import { Action, MoreActions } from "@/components/ui/more-actions";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
@@ -82,12 +83,23 @@ export function PromptTemplateCard({
 }): JSX.Element {
   const routes = useRoutes();
   const queryClient = useQueryClient();
+  const { confirm: requestConfirm, dialog } = useConfirm();
 
   const deleteTemplate = useDeleteTemplateMutation({
     onSuccess: () => {
       void invalidateAllTemplates(queryClient);
     },
   });
+
+  const handleDelete = async () => {
+    const confirmed = await requestConfirm({
+      title: "Are you sure you want to delete this prompt template?",
+      destructive: true,
+    });
+    if (confirmed) {
+      deleteTemplate.mutate({ request: { name: template.name } });
+    }
+  };
 
   const actions: Action[] = [
     {
@@ -97,39 +109,40 @@ export function PromptTemplateCard({
       onClick: () => {
         if (onDelete) {
           onDelete();
-        } else if (
-          confirm("Are you sure you want to delete this prompt template?")
-        ) {
-          deleteTemplate.mutate({ request: { name: template.name } });
+        } else {
+          void handleDelete();
         }
       },
     },
   ];
 
   return (
-    <CardContextMenu actions={actions}>
-      <routes.prompts.prompt.Link
-        params={[template.name]}
-        className="block h-full hover:no-underline"
-      >
-        <Card>
-          <Card.Header>
-            <Card.Title className="normal-case">{template.name}</Card.Title>
-            <div onClick={(e) => e.stopPropagation()}>
-              <MoreActions actions={actions} />
-            </div>
-          </Card.Header>
-          <Card.Content>
-            <Card.Description>
-              {template.description || "No description"}
-            </Card.Description>
-          </Card.Content>
-          <Card.Footer>
-            <div />
-            <UpdatedAt date={new Date(template.updatedAt)} />
-          </Card.Footer>
-        </Card>
-      </routes.prompts.prompt.Link>
-    </CardContextMenu>
+    <>
+      <CardContextMenu actions={actions}>
+        <routes.prompts.prompt.Link
+          params={[template.name]}
+          className="block h-full hover:no-underline"
+        >
+          <Card>
+            <Card.Header>
+              <Card.Title className="normal-case">{template.name}</Card.Title>
+              <div onClick={(e) => e.stopPropagation()}>
+                <MoreActions actions={actions} />
+              </div>
+            </Card.Header>
+            <Card.Content>
+              <Card.Description>
+                {template.description || "No description"}
+              </Card.Description>
+            </Card.Content>
+            <Card.Footer>
+              <div />
+              <UpdatedAt date={new Date(template.updatedAt)} />
+            </Card.Footer>
+          </Card>
+        </routes.prompts.prompt.Link>
+      </CardContextMenu>
+      {dialog}
+    </>
   );
 }

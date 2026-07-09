@@ -1,5 +1,4 @@
 import { RequireScope } from "@/components/require-scope";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
@@ -7,7 +6,7 @@ import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
-import { Button } from "@/components/ui/moonshine";
+import { Button, Input } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -74,18 +73,21 @@ export function SettingsTab({
         />
         <div className="flex flex-col gap-1.5">
           <Label>Scopes (comma-separated)</Label>
-          <Input value={scope} onChange={setScope} />
+          <Input value={scope} onChange={(e) => setScope(e.target.value)} />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Audience</Label>
-          <Input value={audience} onChange={setAudience} />
+          <Input
+            value={audience}
+            onChange={(e) => setAudience(e.target.value)}
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Rotate client secret</Label>
           <Input
             type="password"
             value={clientSecret}
-            onChange={setClientSecret}
+            onChange={(e) => setClientSecret(e.target.value)}
             placeholder="Enter a new secret to rotate; leave blank to keep current"
           />
           <Type small muted>

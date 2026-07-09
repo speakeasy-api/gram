@@ -20,7 +20,7 @@ import {
   Server as ServerIcon,
 } from "lucide-react";
 import { Badge, Button, Input } from "@/components/ui/moonshine";
-import { Textarea } from "@/components/moon/textarea";
+import { TextArea } from "@/components/ui/textarea";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -476,9 +476,9 @@ function CollectionDetailInner() {
                     <label className="mb-1 block text-sm font-medium">
                       Description
                     </label>
-                    <Textarea
+                    <TextArea
                       value={editDescription}
-                      onChange={(e) => setEditDescription(e.target.value)}
+                      onChange={setEditDescription}
                       rows={3}
                     />
                   </div>

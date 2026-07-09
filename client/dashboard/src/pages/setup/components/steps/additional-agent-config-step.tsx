@@ -6,7 +6,6 @@ import {
   KeyRound,
   Loader2,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Sheet,
@@ -23,7 +22,7 @@ import {
 import { CodexIcon } from "@/pages/hooks/HookSourceIcon";
 import { useAIIntegrationConfigForm } from "@/pages/org/use-ai-integration-config-form";
 import { useAiIntegrationConfig } from "@gram/client/react-query/aiIntegrationConfig";
-import { Badge, Button } from "@/components/ui/moonshine";
+import { Badge, Button, Input } from "@/components/ui/moonshine";
 import { StepContainer } from "../step-container";
 
 interface AdditionalAgentConfigStepProps {
@@ -407,7 +406,7 @@ function ProviderConfigDrawer({
                           : provider.apiKeyPlaceholder
                       }
                       value={form.apiKey}
-                      onChange={form.setApiKey}
+                      onChange={(e) => form.setApiKey(e.target.value)}
                       type="password"
                       disabled={form.isLoading || form.isMutating}
                     />
@@ -427,7 +426,7 @@ function ProviderConfigDrawer({
                         id={orgIdFieldId}
                         placeholder={provider.organizationIdPlaceholder}
                         value={form.organizationId}
-                        onChange={form.setOrganizationId}
+                        onChange={(e) => form.setOrganizationId(e.target.value)}
                         disabled={form.isLoading || form.isMutating}
                       />
                     </div>

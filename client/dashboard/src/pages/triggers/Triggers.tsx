@@ -1,6 +1,5 @@
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -33,6 +32,7 @@ import {
   Badge,
   Button,
   type Column,
+  Input,
   Stack,
   Table,
 } from "@/components/ui/moonshine";
@@ -360,7 +360,7 @@ function ConfigField({
       )}
       <Input
         value={typeof config[fieldKey] === "string" ? config[fieldKey] : ""}
-        onChange={(val) => onChange({ ...config, [fieldKey]: val })}
+        onChange={(e) => onChange({ ...config, [fieldKey]: e.target.value })}
         placeholder={typeof prop.default === "string" ? prop.default : ""}
       />
     </div>
@@ -614,7 +614,11 @@ function TriggerDialog({
               <Type variant="body" className="mb-1 font-medium">
                 Name
               </Type>
-              <Input value={name} onChange={setName} placeholder="My Trigger" />
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="My Trigger"
+              />
             </div>
 
             {!isEditing && (
@@ -749,7 +753,7 @@ function TriggerDialog({
               </Type>
               <Input
                 value={targetDisplay}
-                onChange={setTargetDisplay}
+                onChange={(e) => setTargetDisplay(e.target.value)}
                 placeholder="e.g. My Assistant"
               />
             </div>
@@ -760,7 +764,7 @@ function TriggerDialog({
               </Type>
               <Input
                 value={targetRef}
-                onChange={setTargetRef}
+                onChange={(e) => setTargetRef(e.target.value)}
                 placeholder="e.g. assistant ID or slug"
               />
             </div>

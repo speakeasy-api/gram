@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
-import { ConfirmDialog, useConfirm } from "@/components/ui/confirm-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useConfirm } from "@/components/ui/use-confirm";
 import { Button } from "@/components/ui/moonshine";
 
 const meta: Meta<typeof ConfirmDialog> = {
@@ -111,7 +112,9 @@ function PendingExample(): React.JSX.Element {
         description="Simulates an async action with a 1.5s delay before the dialog closes."
         confirmLabel="Redeploy"
         onConfirm={async () => {
-          await new Promise((resolve) => setTimeout(resolve, 1500));
+          await new Promise((resolve) => {
+            setTimeout(resolve, 1500);
+          });
         }}
       />
     </>
@@ -123,11 +126,11 @@ export const PendingState: Story = {
 };
 
 function ImperativeHookExample(): React.JSX.Element {
-  const { confirm, dialog } = useConfirm();
+  const { confirm: requestConfirm, dialog } = useConfirm();
   const [result, setResult] = useState<string | null>(null);
 
   const handleClick = async (): Promise<void> => {
-    const confirmed = await confirm({
+    const confirmed = await requestConfirm({
       title: "Discard unsaved changes?",
       description: "Your edits will be lost.",
       destructive: true,

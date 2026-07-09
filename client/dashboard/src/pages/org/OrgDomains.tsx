@@ -2,7 +2,6 @@ import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetContent,
@@ -26,7 +25,7 @@ import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
 import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
-import { Badge, Button, Stack } from "@/components/ui/moonshine";
+import { Badge, Button, Input, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -151,7 +150,7 @@ function IPAllowlistEditor({
             <Input
               placeholder="1.2.3.4 or 10.0.0.0/24"
               value={row.value}
-              onChange={(val) => handleChange(row.id, val)}
+              onChange={(e) => handleChange(row.id, e.target.value)}
               onBlur={() => handleBlur(row.id)}
               className={cn("font-mono", row.error && "border-destructive")}
             />
@@ -565,7 +564,7 @@ function OrgDomainsInner() {
                 <Input
                   placeholder="Enter your domain (chat.yourdomain.com)"
                   value={domainInput}
-                  onChange={handleDomainInputChange}
+                  onChange={(e) => handleDomainInputChange(e.target.value)}
                   className={cn(
                     domainError && "border-red-500",
                     domain?.domain &&

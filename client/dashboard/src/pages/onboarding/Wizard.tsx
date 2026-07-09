@@ -1,12 +1,15 @@
 import { CodeBlock } from "@/components/code";
 import { Expandable } from "@/components/expandable";
 import { GramLogo } from "@/components/gram-logo";
-import { AnyField } from "@/components/moon/any-field";
-import { InputField } from "@/components/moon/input-field";
 import { OpenApiSourceInput } from "@/components/OpenApiSourceInput";
 import { ProjectSelector } from "@/components/project-menu";
 import { ToolBadge } from "@/components/tool-badge";
-import { Input } from "@/components/ui/input";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/field";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
@@ -25,7 +28,7 @@ import { Toolset } from "@gram/client/models/components/toolset.js";
 import { invalidateAllLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
-import { Alert, Badge, Button, Stack } from "@/components/ui/moonshine";
+import { Alert, Badge, Button, Input, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -45,7 +48,7 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion, useMotionValue } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/mcp-details-utils";
@@ -735,6 +738,7 @@ const UploadStep = ({
     undoSpecUpload,
   } = useUploadOpenAPISteps(false);
 
+  const apiNameFieldId = useId();
   const [deploymentToShowLogsFor, setDeploymentToShowLogsFor] =
     useState<string>();
 
@@ -755,19 +759,28 @@ const UploadStep = ({
         <UploadedDocument file={file} onReset={reset} />
       </Stack>
       {apiName != null ? (
-        <InputField
-          placeholder="Petstore"
-          value={apiName}
-          onChange={(e) => {
-            setApiName(e.target.value);
-          }}
-          maxLength={30}
-          label="API Name"
-          error={apiNameError}
-          hint={"Give your API a meaningful name."}
-          required
-          autoFocus
-        />
+        <Field data-invalid={apiNameError ? true : undefined}>
+          <FieldLabel htmlFor={apiNameFieldId}>API Name</FieldLabel>
+          <Input
+            id={apiNameFieldId}
+            placeholder="Petstore"
+            value={apiName}
+            onChange={(e) => {
+              setApiName(e.target.value);
+            }}
+            maxLength={30}
+            required
+            autoFocus
+            aria-invalid={!!apiNameError}
+          />
+          {apiNameError ? (
+            <FieldError>{apiNameError}</FieldError>
+          ) : (
+            <FieldDescription>
+              Give your API a meaningful name.
+            </FieldDescription>
+          )}
+        </Field>
       ) : (
         <SkeletonParagraph lines={3} />
       )}
@@ -842,6 +855,8 @@ const ToolsetStep = ({
   const client = useSdkClient();
   const { data: tools, isLoading: toolsLoading } = useListTools();
   const [createError, setCreateError] = useState<string | null>(null);
+  const toolsetNameFieldId = useId();
+  const toolsetNameError = !toolsetName ? "This field is required" : undefined;
 
   const onContinue = async () => {
     setCreateError(null);
@@ -886,16 +901,25 @@ const ToolsetStep = ({
           We'll make it available in the next step.
         </span>
       </Stack>
-      <InputField
-        placeholder="my-mcp-server"
-        value={toolsetName}
-        onChange={(e) => setToolsetName(e.target.value)}
-        maxLength={30}
-        label="Name"
-        error={!toolsetName ? "This field is required" : undefined}
-        hint={"Don't worry, you can change this later."}
-        required
-      />
+      <Field data-invalid={toolsetNameError ? true : undefined}>
+        <FieldLabel htmlFor={toolsetNameFieldId}>Name</FieldLabel>
+        <Input
+          id={toolsetNameFieldId}
+          placeholder="my-mcp-server"
+          value={toolsetName}
+          onChange={(e) => setToolsetName(e.target.value)}
+          maxLength={30}
+          required
+          aria-invalid={!!toolsetNameError}
+        />
+        {toolsetNameError ? (
+          <FieldError>{toolsetNameError}</FieldError>
+        ) : (
+          <FieldDescription>
+            Don't worry, you can change this later.
+          </FieldDescription>
+        )}
+      </Field>
       {createError && (
         <Alert
           variant="error"
@@ -967,6 +991,16 @@ const McpStep = ({
 
   const slugError = useMcpSlugValidation(mcpSlug);
 
+  // Moonshine's Input has no `requiredPrefix` prop — the org-slug prefix is
+  // rendered as a static leading segment sharing the Input's border instead,
+  // with the prefix stripped from the displayed/edited value and re-prepended
+  // on change (mirrors the old local Input's requiredPrefix behavior).
+  const mcpSlugPrefix = org?.slug ? `${org.slug}-` : "";
+  const mcpSlugValue = mcpSlug || createdToolset?.slug || "my-mcp";
+  const mcpSlugDisplayValue = mcpSlugValue.startsWith(mcpSlugPrefix)
+    ? mcpSlugValue.slice(mcpSlugPrefix.length)
+    : mcpSlugValue;
+
   const onContinue = async () => {
     setUpdateError(null);
 
@@ -1010,22 +1044,37 @@ const McpStep = ({
           configured later on.
         </span>
       </Stack>
-      <AnyField
-        id="mcp-slug"
-        label="MCP Server Slug"
-        hint={"☑︎ This slug is available!"}
-        error={slugError}
-        render={(extraProps) => (
+      <Field data-invalid={slugError ? true : undefined}>
+        <FieldLabel htmlFor="mcp-slug" optional>
+          MCP Server Slug
+        </FieldLabel>
+        <div className="border-neutral-default bg-inset flex items-center border">
+          {mcpSlugPrefix && (
+            <span className="text-muted-foreground pl-4 text-sm whitespace-nowrap select-none">
+              {mcpSlugPrefix}
+            </span>
+          )}
           <Input
-            {...extraProps}
+            id="mcp-slug"
             placeholder="my-mcp"
-            value={mcpSlug || createdToolset?.slug || "my-mcp"}
-            onChange={setMcpSlug}
+            value={mcpSlugDisplayValue}
+            onChange={(e) => {
+              const raw = e.target.value;
+              setMcpSlug(
+                raw.startsWith(mcpSlugPrefix) ? raw : `${mcpSlugPrefix}${raw}`,
+              );
+            }}
             maxLength={40}
-            requiredPrefix={org?.slug ? `${org.slug}-` : ""}
+            aria-invalid={!!slugError}
+            className="border-0 bg-transparent px-1 py-3"
           />
+        </div>
+        {slugError ? (
+          <FieldError>{slugError}</FieldError>
+        ) : (
+          <FieldDescription>☑︎ This slug is available!</FieldDescription>
         )}
-      />
+      </Field>
       {updateError && (
         <Alert
           variant="error"

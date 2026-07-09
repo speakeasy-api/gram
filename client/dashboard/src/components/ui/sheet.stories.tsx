@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/moonshine";
 import {
   Sheet,
   SheetContent,
@@ -28,7 +28,7 @@ function TriggerableSheet() {
 
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
+      <Button variant="secondary" onClick={() => setOpen(true)}>
         View chat details
       </Button>
       <Sheet open={open} onOpenChange={setOpen}>
@@ -44,7 +44,7 @@ function TriggerableSheet() {
             <p>Duration: 4m 12s</p>
           </div>
           <SheetFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
+            <Button variant="secondary" onClick={() => setOpen(false)}>
               Close
             </Button>
           </SheetFooter>

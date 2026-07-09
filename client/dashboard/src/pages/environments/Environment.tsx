@@ -1,8 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Button } from "@/components/ui/moonshine";
+import { Button, Input } from "@/components/ui/moonshine";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import {
   useRegisterEnvironmentTelemetry,
@@ -545,8 +544,8 @@ function EnvironmentPageInner() {
                         <div className="flex-1">
                           <Input
                             value={displayValue}
-                            onChange={(value) =>
-                              handleValueChange(entry.name, value)
+                            onChange={(e) =>
+                              handleValueChange(entry.name, e.target.value)
                             }
                             onFocus={() => handleFieldFocus(entry.name)}
                             onBlur={handleFieldBlur}
@@ -610,8 +609,8 @@ function EnvironmentPageInner() {
                     <div className="mb-2 grid grid-cols-2 items-center gap-4">
                       <Input
                         value={newEntryName}
-                        onChange={(value) =>
-                          setNewEntryName(value.toUpperCase())
+                        onChange={(e) =>
+                          setNewEntryName(e.target.value.toUpperCase())
                         }
                         onKeyDown={(e) => {
                           if (e.key === "Escape") {
@@ -627,7 +626,7 @@ function EnvironmentPageInner() {
                         <div className="flex-1">
                           <Input
                             value={newEntryValue}
-                            onChange={setNewEntryValue}
+                            onChange={(e) => setNewEntryValue(e.target.value)}
                             placeholder="Value"
                             type={newEntryVisible ? "text" : "password"}
                             className="w-full font-mono text-sm"

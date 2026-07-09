@@ -1,5 +1,6 @@
+import { Info } from "lucide-react";
 import { type ReactNode } from "react";
-import { Icon } from "@/components/ui/moonshine";
+
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
 type DashboardCardProps = {
@@ -27,7 +28,7 @@ export function DashboardCard({
                 aria-label={`About ${title}`}
                 className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
               >
-                <Icon name="info" className="size-3.5" />
+                <Info className="size-3.5" />
               </button>
             </SimpleTooltip>
           )}

@@ -1,12 +1,11 @@
 import { RequireScope } from "@/components/require-scope";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { useUpdateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionIssuer.js";
-import { Alert, Button } from "@/components/ui/moonshine";
+import { Alert, Button, Input } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
@@ -54,7 +53,7 @@ function Field({
   return (
     <div className="flex flex-col gap-1.5">
       <Label>{label}</Label>
-      <Input value={value} onChange={onChange} />
+      <Input value={value} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }

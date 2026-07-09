@@ -2,6 +2,7 @@ import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantSessionsList } from "@/components/assistants/sessions-list";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { EditInstructionsDialog } from "@/components/assistants/edit-instructions-dialog";
+import { useConfirm } from "@/components/ui/use-confirm";
 import {
   PageTabsTrigger,
   Tabs,
@@ -38,6 +39,7 @@ export function AssistantDraftPanel(): JSX.Element {
     parseAsStringLiteral(DETAIL_TABS).withDefault("overview"),
   );
   const [editingInstructions, setEditingInstructions] = useState(false);
+  const { confirm: requestConfirm, dialog } = useConfirm();
 
   // Only fetch triggers when the Triggers tab is active — they are no longer
   // surfaced on the Overview tab, so loading the panel shouldn't pay for them.
@@ -83,6 +85,16 @@ export function AssistantDraftPanel(): JSX.Element {
 
   const a = draft.assistant;
 
+  const handleDelete = async () => {
+    if (!draft.assistantId) return;
+    const confirmed = await requestConfirm({
+      title: "Delete this assistant? This cannot be undone.",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    del.mutate({ request: { id: draft.assistantId } });
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-border flex items-center justify-between gap-2 border-b px-4 py-3">
@@ -94,12 +106,7 @@ export function AssistantDraftPanel(): JSX.Element {
           size="sm"
           className="shrink-0"
           aria-label="Delete assistant"
-          onClick={() => {
-            if (!draft.assistantId) return;
-            if (!confirm("Delete this assistant? This cannot be undone."))
-              return;
-            del.mutate({ request: { id: draft.assistantId } });
-          }}
+          onClick={() => void handleDelete()}
           disabled={del.isPending}
         >
           <Button.LeftIcon>
@@ -315,6 +322,7 @@ export function AssistantDraftPanel(): JSX.Element {
           onUpdated={() => void draft.refetchAssistant()}
         />
       )}
+      {dialog}
     </div>
   );
 }

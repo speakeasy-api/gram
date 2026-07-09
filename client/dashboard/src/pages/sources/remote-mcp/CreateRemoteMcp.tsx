@@ -1,11 +1,10 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import { Alert, Button, Stack } from "@/components/ui/moonshine";
+import { Alert, Button, Input, Stack } from "@/components/ui/moonshine";
 import { AlertCircle, Loader2, Network } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -134,7 +133,7 @@ function CreateRemoteMcpForm() {
               autoFocus
               placeholder="My MCP server"
               value={name}
-              onChange={setName}
+              onChange={(e) => setName(e.target.value)}
             />
           </Stack>
 
@@ -149,8 +148,8 @@ function CreateRemoteMcpForm() {
               id="remote-mcp-url"
               placeholder="https://example.com/mcp"
               value={url}
-              onChange={(value) => {
-                setUrl(value);
+              onChange={(e) => {
+                setUrl(e.target.value);
                 if (!touched) setTouched(true);
               }}
               onBlur={() => setTouched(true)}

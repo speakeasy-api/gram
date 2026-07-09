@@ -55,10 +55,6 @@
   font-display: swap;
 }
 
-:root {
-  --optional-label: "optional";
-}
-
 @theme inline {
   --header-height: 3rem;
   --sidebar-width: 16rem;

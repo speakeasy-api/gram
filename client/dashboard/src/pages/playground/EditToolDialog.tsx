@@ -1,5 +1,4 @@
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
@@ -10,9 +9,9 @@ import {
   getToolTypeLabel,
   toolSupportsAnnotations,
 } from "@/lib/toolTypes";
-import { Badge, Button } from "@/components/ui/moonshine";
+import { Badge, Button, Input } from "@/components/ui/moonshine";
 import { FileCode, PencilRuler, SquareFunction } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { McpIcon } from "@/components/ui/mcp-icon";
 
 function getToolIcon(tool: Tool) {
@@ -92,7 +91,6 @@ export function EditToolDialog({
   // TODO: extend tag variations to prompt tools once they support tags.
   const [tags, setTags] = useState<string[] | undefined>(undefined);
   const [saving, setSaving] = useState(false);
-  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const hasAnnotations = tool ? toolSupportsAnnotations(tool) : false;
   const supportsTags = tool?.type === "http" || tool?.type === "function";
@@ -122,12 +120,13 @@ export function EditToolDialog({
     }
   }, [tool]);
 
-  // Focus name input when dialog opens
+  // Focus name input when dialog opens. Moonshine's Input isn't a forwardRef
+  // component, so it can't take a ref — look the field up by id instead.
   useEffect(() => {
-    if (open && nameInputRef.current) {
+    if (open) {
       // Small delay to ensure dialog animation completes
       setTimeout(() => {
-        nameInputRef.current?.focus();
+        document.getElementById("tool-name")?.focus();
       }, 50);
     }
   }, [open]);
@@ -240,9 +239,8 @@ export function EditToolDialog({
             </Label>
             <Input
               id="tool-name"
-              ref={nameInputRef}
               value={name}
-              onChange={(value) => setName(value)}
+              onChange={(e) => setName(e.target.value)}
               placeholder="Tool name"
             />
           </div>
@@ -255,7 +253,7 @@ export function EditToolDialog({
               <Input
                 id="tool-title"
                 value={title}
-                onChange={(value) => setTitle(value)}
+                onChange={(e) => setTitle(e.target.value)}
                 placeholder="Display name override"
               />
             </div>

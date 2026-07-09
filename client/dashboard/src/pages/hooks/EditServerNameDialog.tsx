@@ -1,9 +1,8 @@
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ServerNameMappings } from "@/hooks/useServerNameMappings";
 import type { ServerNameOverride } from "@gram/client/models/components/servernameoverride.js";
-import { Button } from "@/components/ui/moonshine";
+import { Button, Input } from "@/components/ui/moonshine";
 import { LoaderCircle, Trash } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
@@ -211,7 +210,8 @@ export function EditServerNameDialog({
                       individualDisplayNames.get(server.rawServerName) ||
                       server.displayName
                     }
-                    onChange={(value) => {
+                    onChange={(e) => {
+                      const value = e.target.value;
                       setIndividualDisplayNames((prev) => {
                         const next = new Map(prev);
                         next.set(server.rawServerName, value);
@@ -257,7 +257,7 @@ export function EditServerNameDialog({
                 <Input
                   id="display-name"
                   value={displayName}
-                  onChange={setDisplayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Enter a friendly name"
                   disabled={isProcessing}
                   autoFocus

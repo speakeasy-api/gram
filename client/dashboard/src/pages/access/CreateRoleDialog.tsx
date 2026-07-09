@@ -1,8 +1,7 @@
-import { AnyField } from "@/components/moon/any-field";
-import { InputField } from "@/components/moon/input-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
 import {
   Sheet,
   SheetContent,
@@ -11,6 +10,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
@@ -23,7 +23,7 @@ import {
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
-import { Alert, Button } from "@/components/ui/moonshine";
+import { Alert, Button, Input } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { useOrgRoutes } from "@/routes";
@@ -42,7 +42,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   getSelectableMembers,
   isMemberLockedToRole,
@@ -117,6 +117,8 @@ export function CreateRoleDialog({
 }: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
+  const nameFieldId = useId();
+  const descriptionFieldId = useId();
 
   // ─── Form state ───────────────────────────────────────────────
   const [name, setName] = useState("");
@@ -608,31 +610,33 @@ export function CreateRoleDialog({
                   .
                 </Alert>
               )}
-              <InputField
-                label="Name"
-                placeholder="e.g., Project Manager"
-                required
-                autoFocus
-                disabled={editingRole?.isSystem}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
+              <Field>
+                <FieldLabel htmlFor={nameFieldId}>Name</FieldLabel>
+                <Input
+                  id={nameFieldId}
+                  placeholder="e.g., Project Manager"
+                  required
+                  autoFocus
+                  disabled={editingRole?.isSystem}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </Field>
 
-              <AnyField
-                label="Description"
-                render={(props) => (
-                  <textarea
-                    {...props}
-                    rows={2}
-                    required
-                    disabled={editingRole?.isSystem}
-                    placeholder="Describe what this role can do..."
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                  />
-                )}
-              />
+              <Field>
+                <FieldLabel htmlFor={descriptionFieldId}>
+                  Description
+                </FieldLabel>
+                <TextArea
+                  id={descriptionFieldId}
+                  rows={2}
+                  required
+                  disabled={editingRole?.isSystem}
+                  placeholder="Describe what this role can do..."
+                  value={description}
+                  onChange={setDescription}
+                />
+              </Field>
 
               {/* ─── Permissions ─── */}
               <div className="border-border border-t pt-4">

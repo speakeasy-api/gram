@@ -1,4 +1,5 @@
-import { Icon, IconName, IconProps } from "@/components/ui/moonshine";
+import { type DynamicIconProps as IconProps } from "@/components/ui/dynamic-icon";
+import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { ReleaseStage } from "./components/release-stage-badge";
@@ -738,13 +739,12 @@ export const useRoutes = (overrides?: {
     const newRoute: AppRoute = {
       ...route,
       active,
-      // TODO(design-system): DynamicIcon — route.icon is data-driven (set per
       // route entry below), so this can't be statically swapped to a direct
       // lucide-react import.
       Icon: route.customIcon
         ? route.customIcon
         : (props: Omit<IconProps, "name">) =>
-            route.icon ? <Icon {...props} name={route.icon} /> : null,
+            route.icon ? <DynamicIcon {...props} name={route.icon} /> : null,
       href: resolveUrl,
       goTo,
       Link: linkComponent,
@@ -1039,13 +1039,12 @@ export const useOrgRoutes = (): OrgRoutesWithGoTo => {
     const newRoute: AppRoute = {
       ...route,
       active,
-      // TODO(design-system): DynamicIcon — route.icon is data-driven (set per
       // route entry below), so this can't be statically swapped to a direct
       // lucide-react import.
       Icon: route.customIcon
         ? route.customIcon
         : (props: Omit<IconProps, "name">) =>
-            route.icon ? <Icon {...props} name={route.icon} /> : null,
+            route.icon ? <DynamicIcon {...props} name={route.icon} /> : null,
       href: resolveUrl,
       goTo,
       Link: linkComponent,

@@ -1,4 +1,3 @@
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Sheet,
@@ -16,7 +15,7 @@ import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/clie
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
-import { Alert, Button, Stack } from "@/components/ui/moonshine";
+import { Alert, Button, Input, Stack } from "@/components/ui/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -342,7 +341,7 @@ function ModifyRemoteIdentityProviderSheetBody({
           </Label>
           <Input
             value={name}
-            onChange={setName}
+            onChange={(e) => setName(e.target.value)}
             placeholder="My Identity Provider"
           />
           <Type muted small>

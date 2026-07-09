@@ -1,7 +1,6 @@
-import { AnyField } from "@/components/moon/any-field";
-import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Heading } from "@/components/ui/heading";
 import {
   Select,
@@ -58,7 +57,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { RequireScope } from "@/components/require-scope";
@@ -103,6 +102,7 @@ export default function Team(): JSX.Element {
 }
 
 function TeamInner() {
+  const inviteEmailFieldId = useId();
   const organization = useOrganization();
   const user = useUser();
   const { isRbacEnabled } = useRBAC();
@@ -971,49 +971,54 @@ function TeamInner() {
               </span>
               .
             </Type>
-            <InputField
-              label="Email address"
-              name="email"
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => {
-                setInviteEmail(e.target.value);
-                if (!inviteEmailTouched) setInviteEmailTouched(true);
-              }}
-              onBlur={() => setInviteEmailTouched(true)}
-              error={inviteEmailError}
-              placeholder="colleague@company.com"
-              required
-              autoFocus
-              autoCapitalize="off"
-              autoComplete="off"
-              autoCorrect="off"
-              data-1p-ignore
-              data-lpignore="true"
-              data-bwignore
-            />
-            {isRbacEnabled && roles.length > 0 && (
-              <AnyField
-                label="Role"
-                optionality="hidden"
-                render={() => (
-                  <Select
-                    value={effectiveInviteRoleId}
-                    onValueChange={setInviteRoleId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {roles.map((role) => (
-                        <SelectItem key={role.id} value={role.id}>
-                          {role.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
+            <Field data-invalid={inviteEmailError ? true : undefined}>
+              <FieldLabel htmlFor={inviteEmailFieldId}>
+                Email address
+              </FieldLabel>
+              <Input
+                id={inviteEmailFieldId}
+                name="email"
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => {
+                  setInviteEmail(e.target.value);
+                  if (!inviteEmailTouched) setInviteEmailTouched(true);
+                }}
+                onBlur={() => setInviteEmailTouched(true)}
+                placeholder="colleague@company.com"
+                required
+                autoFocus
+                autoCapitalize="off"
+                autoComplete="off"
+                autoCorrect="off"
+                aria-invalid={!!inviteEmailError}
+                data-1p-ignore
+                data-lpignore="true"
+                data-bwignore
               />
+              {inviteEmailError ? (
+                <FieldError>{inviteEmailError}</FieldError>
+              ) : null}
+            </Field>
+            {isRbacEnabled && roles.length > 0 && (
+              <Field>
+                <FieldLabel>Role</FieldLabel>
+                <Select
+                  value={effectiveInviteRoleId}
+                  onValueChange={setInviteRoleId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
             )}
             <div className="flex justify-end space-x-2">
               <Button

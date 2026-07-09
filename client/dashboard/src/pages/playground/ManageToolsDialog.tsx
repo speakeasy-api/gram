@@ -1,6 +1,5 @@
 import { ToolList } from "@/components/tool-list";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -10,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { Tool, Toolset, getToolSourceLabel } from "@/lib/toolTypes";
-import { Button } from "@/components/ui/moonshine";
+import { Button, Input } from "@/components/ui/moonshine";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EditToolDialog } from "./EditToolDialog";
@@ -183,7 +182,7 @@ export function ManageToolsDialog({
             <Input
               placeholder="Search tools..."
               value={search}
-              onChange={setSearch}
+              onChange={(e) => setSearch(e.target.value)}
               className="flex-1"
               autoFocus
             />

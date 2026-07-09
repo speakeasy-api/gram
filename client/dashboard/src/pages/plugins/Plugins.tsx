@@ -1,7 +1,7 @@
 import { CreateResourceCard } from "@/components/create-resource-card";
-import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
 import { InstallInstructionsButton } from "./InstallInstructionsDialog";
@@ -30,6 +30,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  Input,
   Stack,
 } from "@/components/ui/moonshine";
 import {
@@ -41,7 +42,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { PluginCard } from "./PluginCard";
@@ -52,6 +53,9 @@ export function PluginsRoot(): JSX.Element {
 }
 
 export default function Plugins(): JSX.Element {
+  const createNameFieldId = useId();
+  const createDescriptionFieldId = useId();
+  const marketplaceNameFieldId = useId();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [pluginToDelete, setPluginToDelete] = useState<Plugin | null>(null);
@@ -431,8 +435,16 @@ export default function Plugins(): JSX.Element {
               </Dialog.Description>
             </Dialog.Header>
             <form onSubmit={handleCreate} className="flex flex-col gap-4">
-              <InputField label="Name" name="name" required autoFocus />
-              <InputField label="Description" name="description" />
+              <Field>
+                <FieldLabel htmlFor={createNameFieldId}>Name</FieldLabel>
+                <Input id={createNameFieldId} name="name" required autoFocus />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={createDescriptionFieldId} optional>
+                  Description
+                </FieldLabel>
+                <Input id={createDescriptionFieldId} name="description" />
+              </Field>
               <Dialog.Footer>
                 <Button
                   variant="secondary"
@@ -510,16 +522,21 @@ export default function Plugins(): JSX.Element {
                 handleSaveMarketplaceName();
               }}
             >
-              <InputField
-                label="Marketplace name"
-                name="marketplace_name"
-                value={marketplaceNameInput}
-                onChange={(e) => setMarketplaceNameInput(e.target.value)}
-                placeholder={marketplaceSettings.defaultName}
-                pattern="^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$"
-                title="Lowercase letters, digits, and hyphens. May not start or end with a hyphen."
-                autoFocus
-              />
+              <Field>
+                <FieldLabel htmlFor={marketplaceNameFieldId} optional>
+                  Marketplace name
+                </FieldLabel>
+                <Input
+                  id={marketplaceNameFieldId}
+                  name="marketplace_name"
+                  value={marketplaceNameInput}
+                  onChange={(e) => setMarketplaceNameInput(e.target.value)}
+                  placeholder={marketplaceSettings.defaultName}
+                  pattern="^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$"
+                  title="Lowercase letters, digits, and hyphens. May not start or end with a hyphen."
+                  autoFocus
+                />
+              </Field>
               <Type small muted>
                 Will publish as{" "}
                 <code>

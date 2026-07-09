@@ -1,9 +1,8 @@
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { Environment } from "@gram/client/models/components/environment.js";
-import { Button } from "@/components/ui/moonshine";
+import { Button, Input } from "@/components/ui/moonshine";
 import { useState } from "react";
 import { useCloneEnvironment } from "./useEnvironmentActions";
 
@@ -54,10 +53,12 @@ export function CloneEnvironmentDialog({
             <Input
               autoFocus
               value={name}
-              onChange={setName}
-              onEnter={submit}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+              }}
               placeholder="Environment name"
-              validate={(v) => v.trim().length > 0}
+              error={name !== "" && !name.trim()}
             />
           </div>
 

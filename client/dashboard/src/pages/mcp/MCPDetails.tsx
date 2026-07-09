@@ -8,7 +8,6 @@ import {
   useMcpMetadataMetadataForm,
   type UseMcpMetadataMetadataFormResult,
 } from "@/components/mcp_install_page/useMcpMetadataForm";
-import { Textarea } from "@/components/moon/textarea";
 import { Page } from "@/components/page-layout";
 import { PublicMcpWarningDialog } from "@/components/public-mcp-warning-dialog";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
@@ -20,7 +19,6 @@ import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-ho
 import { ToolList } from "@/components/tool-list";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
@@ -29,6 +27,7 @@ import {
   TabsContent,
   TabsList,
 } from "@/components/ui/tabs";
+import { TextArea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -85,6 +84,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  Input,
   Stack,
 } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -116,6 +116,53 @@ import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 import { MCPPerformanceTab } from "./MCPPerformanceTab";
 import { MCPTeamAccessTab } from "./MCPTeamAccessTab";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
+
+// Moonshine's Input has no `requiredPrefix` prop (the old local Input pinned
+// a non-editable prefix and auto-prepended/stripped it in onChange). Renders
+// the prefix as a static leading segment sharing the Input's own border, with
+// the Input's own chrome stripped via className overrides so it reads as a
+// single control.
+function PrefixedSlugInput({
+  prefix,
+  value,
+  onChange,
+  className,
+  ...inputProps
+}: {
+  prefix: string;
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+} & Omit<
+  React.ComponentProps<typeof Input>,
+  "value" | "onChange" | "className"
+>): React.JSX.Element {
+  const displayValue = value.startsWith(prefix)
+    ? value.slice(prefix.length)
+    : value;
+
+  return (
+    <div
+      className={cn(
+        "border-neutral-default bg-inset flex items-center border",
+        className,
+      )}
+    >
+      <span className="text-muted-foreground pl-4 text-sm whitespace-nowrap select-none">
+        {prefix}
+      </span>
+      <Input
+        {...inputProps}
+        value={displayValue}
+        onChange={(e) => {
+          const raw = e.target.value;
+          onChange(raw.startsWith(prefix) ? raw : `${prefix}${raw}`);
+        }}
+        className="border-0 bg-transparent px-1 py-3"
+      />
+    </div>
+  );
+}
 
 export function MCPDetailsRoot(): React.JSX.Element {
   return <Outlet />;
@@ -595,8 +642,10 @@ function RenameMCPServerButton({ toolset }: { toolset: Toolset }) {
               id="mcp-server-name"
               placeholder="My MCP Server"
               value={name}
-              onChange={setName}
-              onEnter={handleSave}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSave();
+              }}
               maxLength={MCP_SERVER_NAME_MAX_LENGTH}
               disabled={updateToolsetMutation.isPending}
               autoFocus
@@ -999,11 +1048,15 @@ function ServerInstructionsSection({
   return (
     <Stack gap={3}>
       <div className="relative">
-        <Textarea
+        <TextArea
           placeholder={`Describe how your tools work together, required workflows,\nand any constraints (rate limits, auth requirements, etc.).\n\nKeep it concise — don't repeat individual tool descriptions.`}
           className="min-h-[150px] w-full"
           value={form.instructionsHandlers.value ?? ""}
-          onChange={form.instructionsHandlers.onChange}
+          onChange={(value) =>
+            form.instructionsHandlers.onChange({
+              target: { value },
+            } as React.ChangeEvent<HTMLTextAreaElement>)
+          }
           disabled={!canWrite}
         />
         {charCount > 0 && (
@@ -1700,13 +1753,13 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
                   : `${getServerURL()}/mcp/`}
               </Type>
               {!toolset.customDomainId ? (
-                <Input
-                  className="w-full rounded border px-2 py-1"
+                <PrefixedSlugInput
+                  className="w-full"
                   placeholder="Enter MCP Slug"
+                  prefix={`${orgSlug}-`}
                   value={mcpSlug}
                   onChange={handleMcpSlugChange}
                   maxLength={40}
-                  requiredPrefix={`${orgSlug}-`}
                   disabled={!canWrite}
                 />
               ) : (
@@ -1714,7 +1767,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
                   className="w-full rounded border px-2 py-1"
                   placeholder="Enter MCP Slug"
                   value={mcpSlug}
-                  onChange={handleMcpSlugChange}
+                  onChange={(e) => handleMcpSlugChange(e.target.value)}
                   maxLength={40}
                   disabled={!toolset.customDomainId || !canWrite}
                 />

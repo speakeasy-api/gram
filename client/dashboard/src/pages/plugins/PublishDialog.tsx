@@ -1,6 +1,6 @@
-import { Input } from "@/components/moon/input";
-import { Label } from "@/components/moon/label";
 import { Dialog } from "@/components/ui/dialog";
+import { InputGroupInput } from "@/components/ui/input-group";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/moonshine";
 import { Loader2, X } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
@@ -285,7 +285,7 @@ export const PublishDialog = memo(function PublishDialog({
                     </button>
                   </span>
                 ))}
-                <Input
+                <InputGroupInput
                   id="githubUsernames"
                   value={draft}
                   onChange={(e) => {

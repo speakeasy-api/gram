@@ -3,6 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Card, Cards } from "@/components/ui/card";
+import { useConfirm } from "@/components/ui/use-confirm";
 import { Action, MoreActions } from "@/components/ui/more-actions";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
@@ -86,6 +87,7 @@ function CustomToolsInner() {
 function CustomToolCard({ template }: { template: PromptTemplate }) {
   const routes = useRoutes();
   const queryClient = useQueryClient();
+  const { confirm: requestConfirm, dialog } = useConfirm();
 
   const deleteTemplate = useDeleteTemplateMutation({
     onSuccess: () => {
@@ -93,46 +95,55 @@ function CustomToolCard({ template }: { template: PromptTemplate }) {
     },
   });
 
+  const handleDelete = async () => {
+    const confirmed = await requestConfirm({
+      title: "Are you sure you want to delete this tool?",
+      destructive: true,
+    });
+    if (confirmed) {
+      deleteTemplate.mutate({ request: { name: template.name } });
+    }
+  };
+
   const actions: Action[] = [
     {
       label: "Delete",
       destructive: true,
       icon: "trash",
-      onClick: () => {
-        if (confirm("Are you sure you want to delete this tool?")) {
-          deleteTemplate.mutate({ request: { name: template.name } });
-        }
-      },
+      onClick: () => void handleDelete(),
     },
   ];
 
   return (
-    <CardContextMenu actions={actions}>
-      <routes.customTools.toolBuilder.Link
-        params={[template.canonicalName]}
-        className="block h-full hover:no-underline"
-      >
-        <Card>
-          <Card.Header>
-            <Card.Title className="normal-case">{template.name}</Card.Title>
-            <div onClick={(e) => e.stopPropagation()}>
-              <MoreActions actions={actions} />
-            </div>
-          </Card.Header>
-          <Card.Content>
-            {template.description && (
-              <Card.Description className="line-clamp-3 whitespace-normal">
-                {template.description}
-                <MustacheHighlight>{template.description}</MustacheHighlight>
-              </Card.Description>
-            )}
-          </Card.Content>
-          <Card.Footer>
-            <ToolCollectionBadge toolNames={template.toolsHint} />
-            <UpdatedAt date={new Date(template.updatedAt)} />
-          </Card.Footer>
-        </Card>
-      </routes.customTools.toolBuilder.Link>
-    </CardContextMenu>
+    <>
+      <CardContextMenu actions={actions}>
+        <routes.customTools.toolBuilder.Link
+          params={[template.canonicalName]}
+          className="block h-full hover:no-underline"
+        >
+          <Card>
+            <Card.Header>
+              <Card.Title className="normal-case">{template.name}</Card.Title>
+              <div onClick={(e) => e.stopPropagation()}>
+                <MoreActions actions={actions} />
+              </div>
+            </Card.Header>
+            <Card.Content>
+              {template.description && (
+                <Card.Description className="line-clamp-3 whitespace-normal">
+                  {template.description}
+                  <MustacheHighlight>{template.description}</MustacheHighlight>
+                </Card.Description>
+              )}
+            </Card.Content>
+            <Card.Footer>
+              <ToolCollectionBadge toolNames={template.toolsHint} />
+              <UpdatedAt date={new Date(template.updatedAt)} />
+            </Card.Footer>
+          </Card>
+        </routes.customTools.toolBuilder.Link>
+      </CardContextMenu>
+      {dialog}
+    </>
   );
 }

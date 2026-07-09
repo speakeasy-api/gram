@@ -5,7 +5,6 @@ import {
   FieldError,
   FieldLabel,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -17,7 +16,7 @@ import type { UserSessionIssuer } from "@gram/client/models/components/usersessi
 import { useUpdateUserSessionIssuerMutation } from "@gram/client/react-query/updateUserSessionIssuer.js";
 import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
-import { Button } from "@/components/ui/moonshine";
+import { Button, Input } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -122,7 +121,7 @@ export function UserSessionDurationField({
           type="number"
           min="1"
           value={String(durationNumber)}
-          onChange={handleNumberChange}
+          onChange={(e) => handleNumberChange(e.target.value)}
           className="w-[100px]"
         />
         <Select value={durationUnit} onValueChange={handleUnitChange}>

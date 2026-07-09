@@ -1,7 +1,6 @@
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
-import { Button, Link, Stack } from "@/components/ui/moonshine";
+import { Button, Input, Link, Stack } from "@/components/ui/moonshine";
 
 import { WizardContext } from "./machine";
 import type { ProxyFormKey } from "./machine-types";
@@ -77,7 +76,7 @@ export function ProxyMetadataForm(): JSX.Element {
               <Input
                 placeholder="my-oauth-proxy"
                 value={proxy.slug}
-                onChange={(v: string) => setField("slug", v)}
+                onChange={(e) => setField("slug", e.target.value)}
                 maxLength={40}
               />
             </div>
@@ -87,7 +86,9 @@ export function ProxyMetadataForm(): JSX.Element {
               <Input
                 placeholder="https://provider.com/oauth/authorize"
                 value={proxy.authorizationEndpoint}
-                onChange={(v: string) => setField("authorizationEndpoint", v)}
+                onChange={(e) =>
+                  setField("authorizationEndpoint", e.target.value)
+                }
               />
             </div>
 
@@ -96,7 +97,7 @@ export function ProxyMetadataForm(): JSX.Element {
               <Input
                 placeholder="https://provider.com/oauth/token"
                 value={proxy.tokenEndpoint}
-                onChange={(v: string) => setField("tokenEndpoint", v)}
+                onChange={(e) => setField("tokenEndpoint", e.target.value)}
               />
             </div>
 
@@ -107,7 +108,7 @@ export function ProxyMetadataForm(): JSX.Element {
               <Input
                 placeholder="read, write, openid"
                 value={proxy.scopes}
-                onChange={(v: string) => setField("scopes", v)}
+                onChange={(e) => setField("scopes", e.target.value)}
               />
             </div>
 
@@ -116,7 +117,7 @@ export function ProxyMetadataForm(): JSX.Element {
               <Input
                 placeholder="https://api.example.com"
                 value={proxy.audience}
-                onChange={(v: string) => setField("audience", v)}
+                onChange={(e) => setField("audience", e.target.value)}
               />
               <Type muted small className="mt-1">
                 The audience parameter sent to the upstream OAuth provider.

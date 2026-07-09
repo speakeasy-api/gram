@@ -1,6 +1,7 @@
+import { LoaderCircle } from "lucide-react";
 import * as React from "react";
 
-import { Button, Icon } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { cn } from "@/lib/utils";
 
 function formatShownCount(
@@ -80,7 +81,7 @@ function LoadMoreTrigger({
     >
       {isLoading && (
         <Button.LeftIcon>
-          <Icon name="loader-circle" className="animate-spin" />
+          <LoaderCircle className="animate-spin" />
         </Button.LeftIcon>
       )}
       <Button.Text>{isLoading ? "Loading" : label}</Button.Text>

@@ -1,4 +1,3 @@
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -20,7 +19,7 @@ import { useOrgRoutes } from "@/routes";
 import { useCreateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/createOrganizationRemoteSessionIssuer.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
-import { Alert, Button, Stack } from "@/components/ui/moonshine";
+import { Alert, Button, Input, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -242,8 +241,8 @@ export function CreateRemoteIdentityProviderSheet({
               <Label className="text-muted-foreground text-xs">Slug</Label>
               <Input
                 value={slug}
-                onChange={(value) => {
-                  setSlug(value);
+                onChange={(e) => {
+                  setSlug(e.target.value);
                   setSlugDirty(true);
                 }}
                 placeholder="my-identity-provider"
@@ -260,8 +259,8 @@ export function CreateRemoteIdentityProviderSheet({
               </Label>
               <Input
                 value={name}
-                onChange={(value) => {
-                  setName(value);
+                onChange={(e) => {
+                  setName(e.target.value);
                   setNameDirty(true);
                 }}
                 placeholder="My Identity Provider"

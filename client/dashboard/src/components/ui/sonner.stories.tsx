@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/moonshine";
 import { Toaster } from "@/components/ui/sonner";
 
 const meta: Meta<typeof Toaster> = {
@@ -49,7 +49,7 @@ export const Error: Story = {
     <div>
       <Toaster />
       <Button
-        variant="destructive"
+        variant="destructive-primary"
         onClick={() => {
           toast.error("Failed to save changes");
         }}

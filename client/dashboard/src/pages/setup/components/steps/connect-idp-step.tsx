@@ -1,19 +1,12 @@
 import { useMemo, useState } from "react";
-import {
-  KeyRound,
-  ExternalLink,
-  Loader2,
-  ChevronDown,
-  Search,
-} from "lucide-react";
-import { useTheme } from "@/components/ui/moonshine";
+import { KeyRound, ExternalLink, Loader2, ChevronDown } from "lucide-react";
+import { Input, useTheme } from "@/components/ui/moonshine";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { StepContainer } from "../step-container";
 import { IDP_PROVIDERS } from "../../providers";
 import type { IdpProvider } from "../../types";
-import { Input } from "@/components/ui/input";
 import { cn, getServerURL } from "@/lib/utils";
 
 function ProviderIcon({
@@ -156,17 +149,15 @@ export function ConnectIdpStep({
           <label className="text-foreground text-sm font-medium">
             Select provider<span className="text-accent">*</span>
           </label>
-          <div className="relative mt-3">
-            <Search className="text-muted-foreground pointer-events-none absolute top-[18px] left-3 h-4 w-4 -translate-y-1/2" />
-            <Input
-              type="search"
-              value={query}
-              onChange={setQuery}
-              placeholder="Search providers"
-              className="pl-9"
-              disabled={generatePortalLink.isPending}
-            />
-          </div>
+          <Input
+            type="search"
+            icon="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search providers"
+            className="mt-3"
+            disabled={generatePortalLink.isPending}
+          />
           {isSearching && filteredProviders.length === 0 && (
             <p className="text-muted-foreground mt-3 text-sm">
               No providers match &quot;{query}&quot;.

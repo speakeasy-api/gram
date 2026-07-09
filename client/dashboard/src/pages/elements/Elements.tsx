@@ -4,7 +4,6 @@ import {
 } from "@/components/ai-elements/code-block";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -41,7 +40,7 @@ import {
   Search,
   Server,
 } from "lucide-react";
-import { Button, useTheme } from "@/components/ui/moonshine";
+import { Button, Input, useTheme } from "@/components/ui/moonshine";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -566,8 +565,8 @@ function ChatElementsInner() {
                       >
                         <Input
                           value={config.welcomeTitle}
-                          onChange={(value) =>
-                            updateConfig("welcomeTitle", value)
+                          onChange={(e) =>
+                            updateConfig("welcomeTitle", e.target.value)
                           }
                           placeholder="Welcome"
                         />
@@ -578,8 +577,8 @@ function ChatElementsInner() {
                       >
                         <Input
                           value={config.welcomeSubtitle}
-                          onChange={(value) =>
-                            updateConfig("welcomeSubtitle", value)
+                          onChange={(e) =>
+                            updateConfig("welcomeSubtitle", e.target.value)
                           }
                           placeholder="How can I help you today?"
                         />
@@ -602,8 +601,8 @@ function ChatElementsInner() {
                       >
                         <Input
                           value={config.composerPlaceholder}
-                          onChange={(value) =>
-                            updateConfig("composerPlaceholder", value)
+                          onChange={(e) =>
+                            updateConfig("composerPlaceholder", e.target.value)
                           }
                           placeholder="Send a message..."
                         />
@@ -669,8 +668,8 @@ function ChatElementsInner() {
                         <ConfigField label="Modal Title">
                           <Input
                             value={config.modalTitle}
-                            onChange={(value) =>
-                              updateConfig("modalTitle", value)
+                            onChange={(e) =>
+                              updateConfig("modalTitle", e.target.value)
                             }
                             placeholder="Chat"
                           />

@@ -1,8 +1,7 @@
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
-import { Alert, Button, Link, Stack } from "@/components/ui/moonshine";
+import { Alert, Button, Input, Link, Stack } from "@/components/ui/moonshine";
 
 import { WizardContext } from "./machine";
 
@@ -97,8 +96,12 @@ export function ExternalOAuthForm({
               <Input
                 placeholder="my-oauth-server"
                 value={external.slug}
-                onChange={(value: string) =>
-                  send({ type: "FIELD_EXTERNAL", key: "slug", value })
+                onChange={(e) =>
+                  send({
+                    type: "FIELD_EXTERNAL",
+                    key: "slug",
+                    value: e.target.value,
+                  })
                 }
                 maxLength={40}
               />

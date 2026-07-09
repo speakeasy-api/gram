@@ -1,4 +1,4 @@
-import { Icon, type IconName } from "@/components/ui/moonshine";
+import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { formatCompact } from "@/lib/format";
 import { getValueColor, ThresholdConfig } from "./chartUtils";
@@ -95,8 +95,7 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
         </div>
         {icon && (
           <div className="bg-muted/50 rounded-lg p-2">
-            {/* TODO(design-system): DynamicIcon */}
-            <Icon name={icon} className="text-muted-foreground size-4" />
+            <DynamicIcon name={icon} className="text-muted-foreground size-4" />
           </div>
         )}
       </div>

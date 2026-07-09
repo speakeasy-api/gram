@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -12,8 +11,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Stack } from "@/components/ui/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { ReactNode, useState } from "react";
 import { Type } from "./type";
@@ -31,7 +31,7 @@ export function Combobox<T extends DropdownItem>({
   selected,
   onSelectionChange,
   onOpenChange,
-  variant = "outline",
+  variant = "secondary",
   className,
   label,
   disabledMessage,
@@ -55,7 +55,7 @@ export function Combobox<T extends DropdownItem>({
     onOpenChange?.(open);
   };
 
-  let trigger = (
+  const popoverTrigger = (
     <PopoverTrigger asChild>
       <Button
         variant={variant}
@@ -63,7 +63,6 @@ export function Combobox<T extends DropdownItem>({
         aria-expanded={open}
         className={cn("px-2", className)}
         disabled={!!disabledMessage}
-        tooltip={disabledMessage || tooltip}
       >
         <div className="flex w-full items-center justify-between gap-2">
           <div className="truncate font-medium">{children}</div>
@@ -72,6 +71,20 @@ export function Combobox<T extends DropdownItem>({
       </Button>
     </PopoverTrigger>
   );
+
+  // Tooltip wraps the PopoverTrigger (rather than the Button inside it) so
+  // Popover's click/aria props still land on the Button via asChild — nesting
+  // the tooltip inside PopoverTrigger's asChild slot would swallow them. The
+  // extra div lets TooltipTrigger receive hover events even when the Button
+  // itself is disabled.
+  let trigger =
+    disabledMessage || tooltip ? (
+      <SimpleTooltip tooltip={(disabledMessage || tooltip)!}>
+        <div>{popoverTrigger}</div>
+      </SimpleTooltip>
+    ) : (
+      popoverTrigger
+    );
 
   if (label) {
     trigger = (

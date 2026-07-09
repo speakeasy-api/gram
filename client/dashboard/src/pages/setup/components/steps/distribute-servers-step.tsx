@@ -27,8 +27,7 @@ import {
   invalidateAllPlugin,
   usePlugin,
 } from "@gram/client/react-query/plugin";
-import { Badge, Button } from "@/components/ui/moonshine";
-import { Input } from "@/components/ui/input";
+import { Badge, Button, Input } from "@/components/ui/moonshine";
 import { CopyButton } from "@/components/ui/copy-button";
 import {
   Sheet,
@@ -373,8 +372,8 @@ export function DistributeServersStep({
             <Input
               type="search"
               value={query}
-              onChange={(value) => {
-                setQuery(value);
+              onChange={(e) => {
+                setQuery(e.target.value);
                 setShowAll(false);
               }}
               onKeyDown={(e) => {

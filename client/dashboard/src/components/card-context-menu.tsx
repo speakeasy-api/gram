@@ -1,4 +1,4 @@
-import { Icon } from "@/components/ui/moonshine";
+import { DynamicIcon } from "@/components/ui/dynamic-icon";
 import { cn } from "@/lib/utils";
 import {
   ContextMenu,
@@ -48,8 +48,7 @@ export function CardContextMenu({
           >
             {action.label}
             {action.icon && (
-              // TODO(design-system): DynamicIcon
-              <Icon name={action.icon} className="size-3 shrink-0" />
+              <DynamicIcon name={action.icon} className="size-3 shrink-0" />
             )}
           </ContextMenuItem>
         ))}

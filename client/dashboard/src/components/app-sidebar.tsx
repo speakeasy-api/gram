@@ -29,7 +29,7 @@ import { useProductTier } from "@/hooks/useProductTier";
 import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { cn, Stack } from "@/components/ui/moonshine";
+import { Button, cn, Stack } from "@/components/ui/moonshine";
 import {
   Eye,
   Hammer,
@@ -44,7 +44,6 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { RequireScope } from "./require-scope";
 import { FeatureRequestModal } from "./FeatureRequestModal";
-import { Button } from "./ui/button";
 import { Type } from "./ui/type";
 
 function ScopeGatedNavItem({
@@ -414,8 +413,9 @@ const PersistentNotification = ({
 
   const closeButton = (
     <Button
-      variant="ghost"
-      size="icon"
+      variant="tertiary"
+      size="sm"
+      aria-label="Minimize"
       className="absolute top-0 right-0 hover:bg-transparent"
       onClick={() => setIsMinimized(true)}
     >
@@ -439,8 +439,9 @@ const PersistentNotification = ({
       {!isMinimized && closeButton}
       {isMinimized && (
         <Button
-          variant="ghost"
-          size="icon"
+          variant="tertiary"
+          size="sm"
+          aria-label="Expand"
           className="flex h-full w-full items-center justify-center"
         >
           <Type>?</Type>

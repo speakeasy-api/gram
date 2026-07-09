@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/moonshine";
 import {
   Command,
   CommandDialog,
@@ -98,11 +98,13 @@ function TriggerableCommandDialog() {
 
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
-        Open command palette
-        <kbd className="bg-muted text-muted-foreground ml-2 rounded border px-1.5 py-0.5 text-xs">
-          ⌘K
-        </kbd>
+      <Button variant="secondary" onClick={() => setOpen(true)}>
+        <Button.Text>Open command palette</Button.Text>
+        <Button.RightIcon>
+          <kbd className="bg-muted text-muted-foreground ml-2 rounded border px-1.5 py-0.5 text-xs">
+            ⌘K
+          </kbd>
+        </Button.RightIcon>
       </Button>
       <CommandDialog open={open} onOpenChange={setOpen}>
         <PaletteBody />

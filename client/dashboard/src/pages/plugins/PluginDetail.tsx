@@ -1,9 +1,9 @@
-import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -34,6 +34,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  Input,
   Stack,
 } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -47,7 +48,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
@@ -74,6 +75,9 @@ function serverOptionKey(kind: ServerOptionKind, id: string): string {
 export default function PluginDetail(): JSX.Element | null {
   const { pluginId } = useParams<{ pluginId: string }>();
   const queryClient = useQueryClient();
+  const editNameFieldId = useId();
+  const editSlugFieldId = useId();
+  const editDescriptionFieldId = useId();
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAddServerOpen, setIsAddServerOpen] = useState(false);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
@@ -497,23 +501,34 @@ export default function PluginDetail(): JSX.Element | null {
               <Dialog.Title>Edit Plugin</Dialog.Title>
             </Dialog.Header>
             <form onSubmit={handleUpdate} className="flex flex-col gap-4">
-              <InputField
-                label="Name"
-                name="name"
-                defaultValue={plugin.name}
-                required
-              />
-              <InputField
-                label="Slug"
-                name="slug"
-                defaultValue={plugin.slug}
-                required
-              />
-              <InputField
-                label="Description"
-                name="description"
-                defaultValue={plugin.description ?? ""}
-              />
+              <Field>
+                <FieldLabel htmlFor={editNameFieldId}>Name</FieldLabel>
+                <Input
+                  id={editNameFieldId}
+                  name="name"
+                  defaultValue={plugin.name}
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={editSlugFieldId}>Slug</FieldLabel>
+                <Input
+                  id={editSlugFieldId}
+                  name="slug"
+                  defaultValue={plugin.slug}
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={editDescriptionFieldId} optional>
+                  Description
+                </FieldLabel>
+                <Input
+                  id={editDescriptionFieldId}
+                  name="description"
+                  defaultValue={plugin.description ?? ""}
+                />
+              </Field>
               <Dialog.Footer>
                 <Button
                   variant="secondary"

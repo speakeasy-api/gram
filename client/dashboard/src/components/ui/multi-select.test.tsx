@@ -2,10 +2,20 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // moonshine's bundle imports lucide-react/dynamicIconImports which can't be
-// resolved in the test environment. Mock it so the local Button renders plainly.
-vi.mock("@/components/ui/moonshine", () => ({
-  Icon: ({ name }: { name: string }) => <span>{name}</span>,
-}));
+// resolved in the test environment. Mock the pieces MultiSelect uses (Icon,
+// Button, Badge) with plain elements.
+vi.mock("@/components/ui/moonshine", async () => {
+  const { forwardRef } = await import("react");
+  const Button = forwardRef<HTMLButtonElement, React.ComponentProps<"button">>(
+    (props, ref) => <button ref={ref} {...props} />,
+  );
+  Button.displayName = "Button";
+  return {
+    Icon: ({ name }: { name: string }) => <span>{name}</span>,
+    Button,
+    Badge: (props: React.ComponentProps<"span">) => <span {...props} />,
+  };
+});
 
 import { MultiSelect } from "./multi-select";
 

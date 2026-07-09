@@ -1,8 +1,9 @@
+import { LoaderCircle } from "lucide-react";
 import * as React from "react";
 
 import { Dialog } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Button, Icon, Input } from "@/components/ui/moonshine";
+import { Button, Input } from "@/components/ui/moonshine";
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -26,8 +27,8 @@ export interface ConfirmDialogProps {
 /**
  * Generic confirmation prompt built on the local `Dialog` compound
  * (`@/components/ui/dialog`). Controlled — the caller owns `open`; prefer
- * `useConfirm` below for simple `window.confirm`-style call sites that don't
- * need a controlled dialog of their own.
+ * `useConfirm` from `./use-confirm` for simple `window.confirm`-style call
+ * sites that don't need a controlled dialog of their own.
  */
 export function ConfirmDialog({
   open,
@@ -125,7 +126,7 @@ export function ConfirmDialog({
           >
             {pending && (
               <Button.LeftIcon>
-                <Icon name="loader-circle" className="animate-spin" />
+                <LoaderCircle className="animate-spin" />
               </Button.LeftIcon>
             )}
             <Button.Text>{confirmLabel}</Button.Text>
@@ -136,88 +137,5 @@ export function ConfirmDialog({
   );
 }
 
-export interface UseConfirmOptions {
-  title: React.ReactNode;
-  description?: React.ReactNode;
-  impact?: React.ReactNode;
-  confirmLabel?: string;
-  cancelLabel?: string;
-  destructive?: boolean;
-  confirmValue?: string;
-}
-
-interface PendingConfirmation {
-  options: UseConfirmOptions;
-  resolve: (confirmed: boolean) => void;
-}
-
-/**
- * Imperative replacement for `window.confirm`. Render `dialog` once near the
- * root of the component that calls `confirm`, then await `confirm(options)`
- * wherever a `window.confirm(...)` call site used to live:
- *
- * ```tsx
- * const { confirm, dialog } = useConfirm();
- *
- * async function handleDelete() {
- *   if (!(await confirm({ title: "Delete API key?", destructive: true }))) return;
- *   await deleteKey();
- * }
- *
- * return (
- *   <>
- *     <Button onClick={handleDelete}>Delete</Button>
- *     {dialog}
- *   </>
- * );
- * ```
- */
-export function useConfirm(): {
-  confirm: (options: UseConfirmOptions) => Promise<boolean>;
-  dialog: React.ReactNode;
-} {
-  const [pendingConfirmation, setPendingConfirmation] =
-    React.useState<PendingConfirmation | null>(null);
-
-  const confirm = React.useCallback(
-    (options: UseConfirmOptions): Promise<boolean> => {
-      return new Promise<boolean>((resolve) => {
-        setPendingConfirmation({ options, resolve });
-      });
-    },
-    [],
-  );
-
-  const handleOpenChange = React.useCallback((open: boolean): void => {
-    if (open) return;
-    setPendingConfirmation((current) => {
-      current?.resolve(false);
-      return null;
-    });
-  }, []);
-
-  const handleConfirm = React.useCallback((): void => {
-    // Resolving here (rather than also clearing state) lets ConfirmDialog's
-    // own post-confirm onOpenChange(false) call drive the close — it lands
-    // on handleOpenChange above, which is a no-op resolve since the promise
-    // already settled true.
-    pendingConfirmation?.resolve(true);
-  }, [pendingConfirmation]);
-
-  const dialog = pendingConfirmation ? (
-    <ConfirmDialog
-      open
-      onOpenChange={handleOpenChange}
-      onConfirm={handleConfirm}
-      title={pendingConfirmation.options.title}
-      description={pendingConfirmation.options.description}
-      impact={pendingConfirmation.options.impact}
-      confirmLabel={pendingConfirmation.options.confirmLabel}
-      cancelLabel={pendingConfirmation.options.cancelLabel}
-      destructive={pendingConfirmation.options.destructive}
-      confirmValue={pendingConfirmation.options.confirmValue}
-    />
-  ) : null;
-
-  return { confirm, dialog };
-}
+// The imperative `useConfirm` hook lives in ./use-confirm — keeping this file
+// component-only satisfies react-refresh's only-export-components rule.

@@ -1,7 +1,6 @@
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Button, Input, Stack } from "@/components/ui/moonshine";
 
 import { WizardContext } from "./machine";
 
@@ -31,8 +30,12 @@ export function ProxyCredentialsForm(): JSX.Element {
               <Input
                 placeholder="your-client-id"
                 value={proxy.clientId}
-                onChange={(value: string) =>
-                  send({ type: "FIELD_PROXY", key: "clientId", value })
+                onChange={(e) =>
+                  send({
+                    type: "FIELD_PROXY",
+                    key: "clientId",
+                    value: e.target.value,
+                  })
                 }
               />
             </div>
@@ -42,8 +45,12 @@ export function ProxyCredentialsForm(): JSX.Element {
               <Input
                 placeholder="your-client-secret"
                 value={proxy.clientSecret}
-                onChange={(value: string) =>
-                  send({ type: "FIELD_PROXY", key: "clientSecret", value })
+                onChange={(e) =>
+                  send({
+                    type: "FIELD_PROXY",
+                    key: "clientSecret",
+                    value: e.target.value,
+                  })
                 }
                 type="password"
               />

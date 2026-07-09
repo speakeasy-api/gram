@@ -1,7 +1,6 @@
-import { AnyField } from "@/components/moon/any-field";
-import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Heading } from "@/components/ui/heading";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -16,10 +15,10 @@ import {
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
-import { Button, Column, Stack, Table } from "@/components/ui/moonshine";
+import { Button, Column, Input, Stack, Table } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy, KeyRound, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 
 export default function OrgApiKeys(): JSX.Element {
@@ -40,6 +39,7 @@ export default function OrgApiKeys(): JSX.Element {
 }
 
 function OrgApiKeysInner() {
+  const keyNameFieldId = useId();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<Key | null>(null);
@@ -279,63 +279,61 @@ function OrgApiKeysInner() {
             </div>
           ) : (
             <form className="space-y-4 py-4" onSubmit={handleCreateKey}>
-              <InputField
-                label="Key name"
-                name="name"
-                required
-                autoFocus
-                autoCapitalize="off"
-                autoComplete="off"
-                autoCorrect="off"
-              />
+              <Field>
+                <FieldLabel htmlFor={keyNameFieldId}>Key name</FieldLabel>
+                <Input
+                  id={keyNameFieldId}
+                  name="name"
+                  required
+                  autoFocus
+                  autoCapitalize="off"
+                  autoComplete="off"
+                  autoCorrect="off"
+                />
+              </Field>
 
-              <AnyField
-                label="Scope"
-                optionality="hidden"
-                render={() => {
-                  return (
-                    <RadioGroup name="scope" defaultValue="consumer">
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="consumer" id="r1" />
-                        <Label className="leading-normal" htmlFor="r1">
-                          Consumer: can query/modify toolsets, read data and
-                          access MCP servers.
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="producer" id="r2" />
-                        <Label className="leading-normal" htmlFor="r2">
-                          Producer: can upload OpenAPI documents, trigger
-                          deployments, query/modify toolsets, read data and
-                          access MCP servers.
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="chat" id="r3" />
-                        <Label className="leading-normal" htmlFor="r3">
-                          Chat: can use the chat API to interact with models.
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="hooks" id="r4" />
-                        <Label className="leading-normal" htmlFor="r4">
-                          Hooks: can send hook events and OTEL logs from agent
-                          integrations.
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="agent" id="r5" />
-                        <Label className="leading-normal" htmlFor="r5">
-                          Agent: presents to the Speakeasy device agent endpoint
-                          to fetch the user's assigned plugins. Store it in
-                          managed.json as org_token, or hand it to a dev for
-                          speakeasy enroll.
-                        </Label>
-                      </div>
-                    </RadioGroup>
-                  );
-                }}
-              />
+              <Field>
+                <FieldLabel>Scope</FieldLabel>
+                <RadioGroup name="scope" defaultValue="consumer">
+                  <div className="flex items-center gap-3">
+                    <RadioGroupItem value="consumer" id="r1" />
+                    <Label className="leading-normal" htmlFor="r1">
+                      Consumer: can query/modify toolsets, read data and access
+                      MCP servers.
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <RadioGroupItem value="producer" id="r2" />
+                    <Label className="leading-normal" htmlFor="r2">
+                      Producer: can upload OpenAPI documents, trigger
+                      deployments, query/modify toolsets, read data and access
+                      MCP servers.
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <RadioGroupItem value="chat" id="r3" />
+                    <Label className="leading-normal" htmlFor="r3">
+                      Chat: can use the chat API to interact with models.
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <RadioGroupItem value="hooks" id="r4" />
+                    <Label className="leading-normal" htmlFor="r4">
+                      Hooks: can send hook events and OTEL logs from agent
+                      integrations.
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <RadioGroupItem value="agent" id="r5" />
+                    <Label className="leading-normal" htmlFor="r5">
+                      Agent: presents to the Speakeasy device agent endpoint to
+                      fetch the user's assigned plugins. Store it in
+                      managed.json as org_token, or hand it to a dev for
+                      speakeasy enroll.
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </Field>
               <div className="flex justify-end space-x-2">
                 <Button
                   type="button"

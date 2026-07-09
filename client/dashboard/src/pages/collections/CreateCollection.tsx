@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
-import { Textarea } from "@/components/moon/textarea";
 import { RequireScope } from "@/components/require-scope";
 import { Checkbox } from "@/components/ui/checkbox";
+import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -280,11 +280,11 @@ function CreateCollectionForm() {
               >
                 Description
               </label>
-              <Textarea
+              <TextArea
                 id="description"
                 placeholder="Describe what this collection is for and what servers it includes..."
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={setDescription}
                 rows={3}
               />
             </div>

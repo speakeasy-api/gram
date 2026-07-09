@@ -1,3 +1,4 @@
+import { PanelLeft } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -13,7 +14,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn, isMacPlatform } from "@/lib/utils";
-import { Button, Icon } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import * as React from "react";
 import {
   SidebarContext,
@@ -255,7 +256,7 @@ function SidebarTrigger({
           {...props}
         >
           <Button.LeftIcon>
-            <Icon name="panel-left" />
+            <PanelLeft className="size-4" />
           </Button.LeftIcon>
           <Button.Text className="sr-only">Toggle Sidebar</Button.Text>
         </Button>

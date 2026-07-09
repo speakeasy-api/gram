@@ -2,7 +2,6 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -34,7 +33,7 @@ import {
 } from "@gram/client/react-query/riskPoliciesGet.js";
 import { riskEvalsEvaluate } from "@gram/client/funcs/riskEvalsEvaluate.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
-import { Badge, Button, Stack } from "@/components/ui/moonshine";
+import { Badge, Button, Input, Stack } from "@/components/ui/moonshine";
 import {
   keepPreviousData,
   useQueries,
@@ -497,7 +496,7 @@ function PolicyHeader({
           {editingName ? (
             <Input
               value={name}
-              onChange={onNameChange}
+              onChange={(e) => onNameChange(e.target.value)}
               placeholder={placeholder}
               autoFocus
               onBlur={() => setEditingName(false)}
@@ -2088,7 +2087,7 @@ function SessionReview({
           <div className="flex flex-wrap items-center gap-2">
             <Input
               value={query}
-              onChange={setQuery}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by title or user"
               className="min-w-48 flex-1"
             />

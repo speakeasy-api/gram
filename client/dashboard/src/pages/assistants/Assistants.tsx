@@ -7,6 +7,7 @@ import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Card } from "@/components/ui/card";
+import { useConfirm } from "@/components/ui/use-confirm";
 import { Action, MoreActions } from "@/components/ui/more-actions";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -346,6 +347,7 @@ function AssistantToolsets({ assistant }: { assistant: Assistant }) {
 function AssistantCard({ assistant }: { assistant: Assistant }) {
   const routes = useRoutes();
   const queryClient = useQueryClient();
+  const { confirm: requestConfirm, dialog } = useConfirm();
 
   const deleteAssistant = useAssistantsDeleteMutation({
     onSuccess: () => {
@@ -353,66 +355,75 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
     },
   });
 
+  const handleDelete = async () => {
+    const confirmed = await requestConfirm({
+      title: `Delete assistant "${assistant.name}"?`,
+      destructive: true,
+    });
+    if (confirmed) {
+      deleteAssistant.mutate({ request: { id: assistant.id } });
+    }
+  };
+
   const actions: Action[] = [
     {
       label: "Delete",
       destructive: true,
       icon: "trash",
-      onClick: () => {
-        if (confirm(`Delete assistant "${assistant.name}"?`)) {
-          deleteAssistant.mutate({ request: { id: assistant.id } });
-        }
-      },
+      onClick: () => void handleDelete(),
     },
   ];
 
   return (
-    <CardContextMenu actions={actions}>
-      <routes.assistants.detail.Link
-        params={[assistant.id]}
-        className="focus-visible:ring-ring block h-full rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-      >
-        <Card icon={<AssistantIcon assistant={assistant} />}>
-          {/* Header row: name + actions */}
-          <div className="mb-3 flex items-start justify-between gap-2">
-            <Type
-              variant="subheading"
-              as="div"
-              className="text-md group-hover:text-primary flex-1 truncate normal-case transition-colors"
-              title={assistant.name}
-            >
-              {assistant.name}
-            </Type>
-            <div onClick={stopLinkNavigation}>
-              <MoreActions actions={actions} />
-            </div>
-          </div>
-
-          {/* Metadata: model + MCP servers */}
-          <div className="mb-3 flex flex-col gap-2">
-            <div className="flex items-center gap-1.5">
-              <Cpu className="text-muted-foreground/70 size-3.5 shrink-0" />
-              <Type muted small className="truncate" title={assistant.model}>
-                {assistant.model}
+    <>
+      <CardContextMenu actions={actions}>
+        <routes.assistants.detail.Link
+          params={[assistant.id]}
+          className="focus-visible:ring-ring block h-full rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        >
+          <Card icon={<AssistantIcon assistant={assistant} />}>
+            {/* Header row: name + actions */}
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <Type
+                variant="subheading"
+                as="div"
+                className="text-md group-hover:text-primary flex-1 truncate normal-case transition-colors"
+                title={assistant.name}
+              >
+                {assistant.name}
               </Type>
+              <div onClick={stopLinkNavigation}>
+                <MoreActions actions={actions} />
+              </div>
             </div>
-            <AssistantToolsets assistant={assistant} />
-            <AssistantOwner
-              createdByUserId={assistant.createdByUserId}
-              variant="card"
-            />
-          </div>
 
-          {/* Footer row: status toggle + activity sparkline + last updated */}
-          <div className="border-border/60 mt-auto flex items-center justify-between gap-2 border-t pt-3">
-            <AssistantStatusToggle assistant={assistant} />
-            <div className="flex items-center gap-2">
-              <AssistantActivitySparkline assistantId={assistant.id} />
-              <UpdatedAt date={new Date(assistant.updatedAt)} />
+            {/* Metadata: model + MCP servers */}
+            <div className="mb-3 flex flex-col gap-2">
+              <div className="flex items-center gap-1.5">
+                <Cpu className="text-muted-foreground/70 size-3.5 shrink-0" />
+                <Type muted small className="truncate" title={assistant.model}>
+                  {assistant.model}
+                </Type>
+              </div>
+              <AssistantToolsets assistant={assistant} />
+              <AssistantOwner
+                createdByUserId={assistant.createdByUserId}
+                variant="card"
+              />
             </div>
-          </div>
-        </Card>
-      </routes.assistants.detail.Link>
-    </CardContextMenu>
+
+            {/* Footer row: status toggle + activity sparkline + last updated */}
+            <div className="border-border/60 mt-auto flex items-center justify-between gap-2 border-t pt-3">
+              <AssistantStatusToggle assistant={assistant} />
+              <div className="flex items-center gap-2">
+                <AssistantActivitySparkline assistantId={assistant.id} />
+                <UpdatedAt date={new Date(assistant.updatedAt)} />
+              </div>
+            </div>
+          </Card>
+        </routes.assistants.detail.Link>
+      </CardContextMenu>
+      {dialog}
+    </>
   );
 }

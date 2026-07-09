@@ -9,7 +9,6 @@ import {
 } from "@/components/sources/SourceInfoTable";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import {
   PageTabsTrigger,
   Tabs,
@@ -40,7 +39,7 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import { useUpdateTunneledMcpServerMutation } from "@gram/client/react-query/updateTunneledMcpServer.js";
 import { Dialog } from "@/components/ui/dialog";
-import { Alert, Badge, Button, Stack } from "@/components/ui/moonshine";
+import { Alert, Badge, Button, Input, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -710,7 +709,7 @@ function NameSection({
       <Stack gap={2}>
         <Input
           value={draft}
-          onChange={(value) => setDraft(value)}
+          onChange={(e) => setDraft(e.target.value)}
           placeholder="Internal MCP server"
         />
         {update.isError && (

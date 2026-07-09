@@ -1,6 +1,5 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Sheet,
@@ -13,7 +12,8 @@ import {
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import { Badge, Button, Icon, type IconName } from "@/components/ui/moonshine";
+import { Badge, Button, Input } from "@/components/ui/moonshine";
+import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
 import {
   ArrowLeft,
   Check,
@@ -352,8 +352,10 @@ function CategoryHeader({
           expanded && "rotate-90",
         )}
       />
-      {/* TODO(design-system): DynamicIcon */}
-      <Icon name={icon} className="text-muted-foreground size-4 shrink-0" />
+      <DynamicIcon
+        name={icon}
+        className="text-muted-foreground size-4 shrink-0"
+      />
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium">{label}</div>
         <div className="text-muted-foreground line-clamp-1 text-xs">
@@ -448,8 +450,7 @@ function BuiltinRuleDetail({ rule }: { rule: BuiltinRule }) {
       <div className="flex-1 space-y-6 px-6 py-4">
         <DetailField label="Category">
           <div className="flex items-center gap-2">
-            {/* TODO(design-system): DynamicIcon */}
-            <Icon
+            <DynamicIcon
               name={meta.icon as IconName}
               className="text-muted-foreground size-4"
             />
@@ -567,7 +568,7 @@ function CustomRuleDetail({
       <div className="flex-1 space-y-5 px-6 py-4">
         <div className="space-y-2">
           <Label className="text-sm font-medium">Title</Label>
-          <Input value={title} onChange={setTitle} />
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
 
         <div className="space-y-2">
@@ -1399,7 +1400,7 @@ function CreateCustomRuleSheet({
                   </span>
                   <Input
                     value={idSuffix}
-                    onChange={setIdSuffix}
+                    onChange={(e) => setIdSuffix(e.target.value)}
                     placeholder="internal_token"
                     className="rounded-l-none font-mono text-xs"
                   />
@@ -1418,7 +1419,7 @@ function CreateCustomRuleSheet({
                 <Label className="text-sm font-medium">Title</Label>
                 <Input
                   value={title}
-                  onChange={setTitle}
+                  onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Internal API Token"
                 />
               </div>

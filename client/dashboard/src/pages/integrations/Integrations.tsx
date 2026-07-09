@@ -7,7 +7,6 @@ import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Card, Cards } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -17,7 +16,7 @@ import { IntegrationEntry } from "@gram/client/models/components/integrationentr
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListIntegrations } from "@gram/client/react-query/listIntegrations.js";
 import { useListPackagesSuspense } from "@gram/client/react-query/listPackages.js";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Button, Input, Stack } from "@/components/ui/moonshine";
 import { CheckIcon, CopyPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -366,7 +365,7 @@ function RequestIntegrationDialog({
           <Input
             placeholder="Slack, GitHub, etc."
             value={integrationName}
-            onChange={setIntegrationName}
+            onChange={(e) => setIntegrationName(e.target.value)}
           />
         </Stack>
         <Dialog.Footer>

@@ -1,4 +1,4 @@
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/moonshine";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
@@ -386,7 +386,7 @@ function OnboardingSection(): ReactElement {
           name="onboarding_emails"
           placeholder="alice@example.com, bob@example.com"
           value={emailsInput}
-          onChange={setEmailsInput}
+          onChange={(e) => setEmailsInput(e.target.value)}
           disabled={sendEmail.isPending}
         />
         <div className="flex items-center justify-end">

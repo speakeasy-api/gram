@@ -2,9 +2,9 @@ import "./App.css";
 
 import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
 import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { FontTexture, WebGLCanvas } from "@/components/webgl";
-import { ThemeProvider, TooltipProvider } from "@/components/ui/moonshine";
+import { ThemeProvider } from "@/components/ui/moonshine";
 import { useEffect, useMemo, useState } from "react";
 import {
   BrowserRouter,
@@ -91,23 +91,21 @@ export default function App(): JSX.Element {
 
   return (
     <ThemeProvider theme={theme} setTheme={applyTheme}>
-      <LocalTooltipProvider>
-        <TooltipProvider>
-          <TelemetryProvider>
-            <CommandPaletteProvider>
-              <BrowserRouter>
-                <NuqsAdapter>
-                  <SdkProvider>
-                    <AppContent />
-                    <Toaster />
-                    <CommandPalette />
-                  </SdkProvider>
-                </NuqsAdapter>
-              </BrowserRouter>
-            </CommandPaletteProvider>
-          </TelemetryProvider>
-        </TooltipProvider>
-      </LocalTooltipProvider>
+      <TooltipProvider>
+        <TelemetryProvider>
+          <CommandPaletteProvider>
+            <BrowserRouter>
+              <NuqsAdapter>
+                <SdkProvider>
+                  <AppContent />
+                  <Toaster />
+                  <CommandPalette />
+                </SdkProvider>
+              </NuqsAdapter>
+            </BrowserRouter>
+          </CommandPaletteProvider>
+        </TelemetryProvider>
+      </TooltipProvider>
     </ThemeProvider>
   );
 }

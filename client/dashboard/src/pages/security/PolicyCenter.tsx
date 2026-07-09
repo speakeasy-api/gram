@@ -4,7 +4,6 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchBar } from "@/components/ui/search-bar";
@@ -34,11 +33,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
+  Input,
   Stack,
   Table,
 } from "@/components/ui/moonshine";
-import type { BadgeProps, IconName } from "@/components/ui/moonshine";
+import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
+import type { BadgeProps } from "@/components/ui/moonshine";
 import {
   Plus,
   Shield,
@@ -131,8 +131,7 @@ export function DetectorCard({
         selected ? "border-foreground bg-muted/40" : "border-border",
       )}
     >
-      {/* TODO(design-system): DynamicIcon */}
-      <Icon
+      <DynamicIcon
         name={meta.icon as IconName}
         className="text-muted-foreground mt-0.5 size-5 shrink-0"
       />
@@ -203,7 +202,7 @@ function ApprovedDomainsConfig({
       </p>
       <Input
         value={value}
-        onChange={onChange}
+        onChange={(e) => onChange(e.target.value)}
         placeholder="e.g. acme.com, corp.acme.com"
       />
     </div>
@@ -329,7 +328,7 @@ export function CustomizeRulesSheet({
         <div className="px-6 pt-3">
           <Input
             value={search}
-            onChange={setSearch}
+            onChange={(e) => setSearch(e.target.value)}
             placeholder={`Search ${rules.length} ${meta.label.toLowerCase()} rules…`}
           />
         </div>

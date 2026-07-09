@@ -42,8 +42,17 @@ function Field({
 
 function FieldLabel({
   className,
+  optional,
+  children,
   ...props
-}: React.ComponentProps<typeof Label>): React.JSX.Element {
+}: React.ComponentProps<typeof Label> & {
+  // Renders a muted "optional" suffix next to the label, mirroring the
+  // deleted `moon/any-field.tsx` `optionality="visible"` default (moon
+  // suppressed it automatically when the control was `required`/`disabled`/
+  // `readonly` — callers here should only pass `optional` for fields that
+  // are genuinely optional).
+  optional?: boolean;
+}): React.JSX.Element {
   return (
     <Label
       data-slot="field-label"
@@ -59,7 +68,14 @@ function FieldLabel({
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+      {optional ? (
+        <span className="text-muted-foreground ms-2 font-sans text-sm font-normal normal-case tracking-normal">
+          optional
+        </span>
+      ) : null}
+    </Label>
   );
 }
 

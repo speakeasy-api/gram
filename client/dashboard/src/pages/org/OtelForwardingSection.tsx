@@ -1,5 +1,4 @@
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RequireScope } from "@/components/require-scope";
 import { Switch } from "@/components/ui/switch";
@@ -11,7 +10,7 @@ import {
 import { useUpsertOtelForwardingConfigMutation } from "@gram/client/react-query/upsertOtelForwardingConfig";
 import { useDeleteOtelForwardingConfigMutation } from "@gram/client/react-query/deleteOtelForwardingConfig";
 import type { OtelForwardingHeader } from "@gram/client/models/components/otelforwardingheader.js";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Button, Input, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Send, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -176,7 +175,7 @@ export function OtelForwardingSection(): JSX.Element {
             id="otel-forwarding-url"
             placeholder="https://collector.example.com"
             value={url}
-            onChange={setUrl}
+            onChange={(e) => setUrl(e.target.value)}
             disabled={isLoading || isMutating}
           />
         </Stack>
@@ -273,14 +272,14 @@ function HeaderRow({
       <Input
         placeholder="Header name"
         value={header.name}
-        onChange={(value) => onChange({ ...header, name: value })}
+        onChange={(e) => onChange({ ...header, name: e.target.value })}
         disabled={disabled}
         className="flex-1"
       />
       <Input
         placeholder={header.hasStoredValue ? "•••••• (saved)" : "Header value"}
         value={header.value}
-        onChange={(value) => onChange({ ...header, value })}
+        onChange={(e) => onChange({ ...header, value: e.target.value })}
         type="password"
         disabled={disabled}
         className="flex-1"

@@ -1,12 +1,11 @@
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { Button } from "@/components/ui/moonshine";
+import { Button, Input } from "@/components/ui/moonshine";
 import {
   AlertTriangle,
   Bot,
@@ -220,7 +219,9 @@ export function RequestEnvironmentSecretsComponent({
             <Input
               type={k.sensitive ? "password" : "text"}
               value={values[k.name] ?? ""}
-              onChange={(v) => setValues((prev) => ({ ...prev, [k.name]: v }))}
+              onChange={(e) =>
+                setValues((prev) => ({ ...prev, [k.name]: e.target.value }))
+              }
               placeholder={k.placeholder ?? ""}
             />
           </div>
@@ -583,7 +584,7 @@ export function ProposeNameComponent({
         )}
         <Input
           value={name}
-          onChange={setName}
+          onChange={(e) => setName(e.target.value)}
           placeholder="Pick a suggestion or type your own"
         />
       </div>

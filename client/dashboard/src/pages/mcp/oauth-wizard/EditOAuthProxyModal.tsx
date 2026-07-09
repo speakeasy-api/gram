@@ -1,11 +1,10 @@
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateOAuthProxyServerMutation } from "@gram/client/react-query/updateOAuthProxyServer.js";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Button, Input, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
@@ -152,7 +151,7 @@ function EditOAuthProxyForm({
             <Input
               placeholder="https://provider.com/oauth/authorize"
               value={authorizationEndpoint}
-              onChange={(v: string) => setAuthorizationEndpoint(v)}
+              onChange={(e) => setAuthorizationEndpoint(e.target.value)}
             />
           </div>
 
@@ -161,7 +160,7 @@ function EditOAuthProxyForm({
             <Input
               placeholder="https://provider.com/oauth/token"
               value={tokenEndpoint}
-              onChange={(v: string) => setTokenEndpoint(v)}
+              onChange={(e) => setTokenEndpoint(e.target.value)}
             />
           </div>
 
@@ -170,7 +169,7 @@ function EditOAuthProxyForm({
             <Input
               placeholder="read, write, openid"
               value={scopes}
-              onChange={(v: string) => setScopes(v)}
+              onChange={(e) => setScopes(e.target.value)}
             />
           </div>
 
@@ -179,7 +178,7 @@ function EditOAuthProxyForm({
             <Input
               placeholder="https://api.example.com"
               value={audience}
-              onChange={(v: string) => setAudience(v)}
+              onChange={(e) => setAudience(e.target.value)}
             />
             <Type muted small className="mt-1">
               The audience parameter sent to the upstream OAuth provider.
@@ -205,7 +204,7 @@ function EditOAuthProxyForm({
             <Type className="mb-2 font-medium">Environment Slug</Type>
             <Input
               value={environmentSlug}
-              onChange={(v: string) => setEnvironmentSlug(v)}
+              onChange={(e) => setEnvironmentSlug(e.target.value)}
             />
           </div>
         </Stack>

@@ -1,5 +1,4 @@
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -28,7 +27,7 @@ import {
   useUserSessionIssuers,
 } from "@gram/client/react-query/userSessionIssuers.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Button, Input, Stack } from "@/components/ui/moonshine";
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -487,7 +486,9 @@ function CurrentStepBody({
           <FieldLabel label="User session issuer slug">
             <Input
               value={form.userSessionIssuerSlug}
-              onChange={(value) => setForm({ userSessionIssuerSlug: value })}
+              onChange={(e) =>
+                setForm({ userSessionIssuerSlug: e.target.value })
+              }
             />
           </FieldLabel>
           <FieldLabel label="Refresh Token Duration">
@@ -522,14 +523,16 @@ function CurrentStepBody({
           <FieldLabel label="Remote session issuer slug">
             <Input
               value={form.remoteSessionIssuerSlug}
-              onChange={(value) => setForm({ remoteSessionIssuerSlug: value })}
+              onChange={(e) =>
+                setForm({ remoteSessionIssuerSlug: e.target.value })
+              }
             />
           </FieldLabel>
           <FieldLabel label="Issuer URL">
             <Input
               value={form.issuerUrl}
               placeholder={issuerOriginGuess ?? "https://idp.example.com"}
-              onChange={(value) => setForm({ issuerUrl: value })}
+              onChange={(e) => setForm({ issuerUrl: e.target.value })}
             />
           </FieldLabel>
           <Type small className="text-muted-foreground">
@@ -779,7 +782,7 @@ function RegisterPane({
       <FieldLabel label="Client name (sent on registration)">
         <Input
           value={form.manualClientName}
-          onChange={(value) => setForm({ manualClientName: value })}
+          onChange={(e) => setForm({ manualClientName: e.target.value })}
         />
       </FieldLabel>
     </Stack>
@@ -806,7 +809,7 @@ function ManualPane({
       <FieldLabel label="Client ID">
         <Input
           value={form.manualClientId}
-          onChange={(value) => setForm({ manualClientId: value })}
+          onChange={(e) => setForm({ manualClientId: e.target.value })}
           placeholder="abc123…"
         />
       </FieldLabel>
@@ -814,14 +817,14 @@ function ManualPane({
         <Input
           type="password"
           value={form.manualClientSecret}
-          onChange={(value) => setForm({ manualClientSecret: value })}
+          onChange={(e) => setForm({ manualClientSecret: e.target.value })}
           placeholder="Leave blank for public clients"
         />
       </FieldLabel>
       <FieldLabel label="Client name">
         <Input
           value={form.manualClientName}
-          onChange={(value) => setForm({ manualClientName: value })}
+          onChange={(e) => setForm({ manualClientName: e.target.value })}
         />
       </FieldLabel>
     </Stack>

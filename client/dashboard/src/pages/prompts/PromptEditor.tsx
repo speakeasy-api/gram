@@ -1,13 +1,12 @@
-import { InputField } from "@/components/moon/input-field";
-import { Textarea } from "@/components/moon/textarea";
-import { Button } from "@/components/ui/moonshine";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Label } from "@/components/ui/label";
+import { Button, Input } from "@/components/ui/moonshine";
 import { MUSTACHE_VAR_REGEX, PROMPT_NAME_PATTERN } from "@/lib/constants";
 import { assert, cn } from "@/lib/utils";
 import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
 import { MutationStatus } from "@tanstack/react-query";
 import { Fullscreen, Loader2, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useId, useState } from "react";
 import * as z from "zod";
 
 const argsSchema = z.object({
@@ -49,6 +48,8 @@ export function PromptEditor({
     }
 )): JSX.Element {
   const isPending = status === "pending";
+  const nameFieldId = useId();
+  const descriptionFieldId = useId();
   const [fullScreenEditor, setFullScreenEditor] = useState(false);
   const parsedArgs = argsSchema.safeParse(
     JSON.parse(predecessor?.schema || "{}"),
@@ -131,22 +132,30 @@ export function PromptEditor({
         <div className="space-y-6">
           {predecessor == null ? (
             <div className="max-w-md">
-              <InputField
-                label="Name"
-                name="name"
-                pattern={PROMPT_NAME_PATTERN}
-                placeholder="my-prompt-name"
-                title="Only lowercase letters, numbers, hyphens, and underscores (max 128 characters)"
-                required
-              />
+              <Field>
+                <FieldLabel htmlFor={nameFieldId}>Name</FieldLabel>
+                <Input
+                  id={nameFieldId}
+                  name="name"
+                  pattern={PROMPT_NAME_PATTERN}
+                  placeholder="my-prompt-name"
+                  title="Only lowercase letters, numbers, hyphens, and underscores (max 128 characters)"
+                  required
+                />
+              </Field>
             </div>
           ) : null}
           <div className="max-w-md">
-            <InputField
-              label="Description"
-              name="description"
-              defaultValue={predecessor?.description ?? ""}
-            />
+            <Field>
+              <FieldLabel htmlFor={descriptionFieldId} optional>
+                Description
+              </FieldLabel>
+              <Input
+                id={descriptionFieldId}
+                name="description"
+                defaultValue={predecessor?.description ?? ""}
+              />
+            </Field>
           </div>
           <div>
             <dialog
@@ -170,11 +179,22 @@ export function PromptEditor({
                 <Label className="mb-3" htmlFor="newprompt_prompt">
                   Prompt
                 </Label>
-                <Textarea
+                {/*
+                  A plain native textarea, not the shared TextArea/Input
+                  primitives: this editor needs onKeyUp (to detect mustache
+                  variables as the user types) and a monospace/full-height
+                  style swap for the fullscreen mode, neither of which the
+                  shared components' prop surfaces support.
+                */}
+                <textarea
                   id="newprompt_prompt"
                   name="prompt"
-                  rows={fullScreenEditor ? void 0 : 4}
-                  className={cn("font-mono", fullScreenEditor ? "h-full" : "")}
+                  rows={fullScreenEditor ? undefined : 4}
+                  className={cn(
+                    "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 flex field-sizing-content min-h-16 w-full border bg-transparent px-3 py-2 text-base transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+                    "font-mono",
+                    fullScreenEditor ? "h-full" : "",
+                  )}
                   required
                   defaultValue={predecessor?.prompt}
                   onKeyUp={handleKeyUp}
@@ -301,9 +321,15 @@ const ArgumentEntry = ({
   name: string;
   defaultValue?: string;
 }) => {
+  const fieldId = useId();
   return (
     <li>
-      <InputField label={name} name={`_${name}`} defaultValue={defaultValue} />
+      <Field>
+        <FieldLabel htmlFor={fieldId} optional>
+          {name}
+        </FieldLabel>
+        <Input id={fieldId} name={`_${name}`} defaultValue={defaultValue} />
+      </Field>
     </li>
   );
 };

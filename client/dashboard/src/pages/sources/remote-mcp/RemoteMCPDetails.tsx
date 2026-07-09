@@ -11,7 +11,6 @@ import {
 import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import {
   PageTabsTrigger,
   Tabs,
@@ -41,7 +40,7 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useUpdateRemoteMcpServerMutation } from "@gram/client/react-query/updateRemoteMcpServer.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Alert, Badge, Button, Stack } from "@/components/ui/moonshine";
+import { Alert, Badge, Button, Input, Stack } from "@/components/ui/moonshine";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -583,7 +582,7 @@ function NameSection({
       <Stack gap={2}>
         <Input
           value={draft}
-          onChange={(value) => setDraft(value)}
+          onChange={(e) => setDraft(e.target.value)}
           placeholder="My MCP server"
         />
         {update.isError && (
@@ -698,8 +697,8 @@ function UrlSection({
       <Stack gap={2}>
         <Input
           value={draft}
-          onChange={(value) => {
-            setDraft(value);
+          onChange={(e) => {
+            setDraft(e.target.value);
             if (!touched) setTouched(true);
           }}
           onBlur={() => setTouched(true)}

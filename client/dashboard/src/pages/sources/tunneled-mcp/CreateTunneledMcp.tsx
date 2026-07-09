@@ -2,13 +2,12 @@ import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { mcpServerRouteParam, tunneledMcpRouteParam } from "@/lib/sources";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
-import { Alert, Button, Stack } from "@/components/ui/moonshine";
+import { Alert, Button, Input, Stack } from "@/components/ui/moonshine";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { AlertCircle, Loader2, Network } from "lucide-react";
@@ -184,8 +183,8 @@ function CreateTunneledMcpForm() {
               autoFocus
               placeholder="Internal MCP server"
               value={name}
-              onChange={(value) => {
-                setName(value);
+              onChange={(e) => {
+                setName(e.target.value);
                 if (!touched) setTouched(true);
               }}
               onBlur={() => setTouched(true)}

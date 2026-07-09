@@ -1,8 +1,7 @@
-import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { LinkedMcpServerRow } from "@/components/sources/LinkedMcpServerRow";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Alert, Button } from "@/components/ui/moonshine";
+import { Alert, Button, Input } from "@/components/ui/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
@@ -91,7 +90,7 @@ export function RemoveMcpSourceDialogContent({
         </Type>
         <Input
           value={confirmation}
-          onChange={setConfirmation}
+          onChange={(e) => setConfirmation(e.target.value)}
           placeholder={confirmValue}
           disabled={isPending}
         />

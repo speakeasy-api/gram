@@ -7,7 +7,8 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/moonshine";
 
 const meta: Meta<typeof Field> = {
   title: "UI/Field",
@@ -33,7 +34,7 @@ function BrandingFormExample() {
         <Input
           id="story-display-name"
           value={name}
-          onChange={setName}
+          onChange={(e) => setName(e.target.value)}
           placeholder="My MCP server"
           maxLength={NAME_MAX_LENGTH}
         />
@@ -44,7 +45,12 @@ function BrandingFormExample() {
 
       <Field data-invalid>
         <FieldLabel htmlFor="story-slug">Slug</FieldLabel>
-        <Input id="story-slug" defaultValue="my mcp server!" aria-invalid />
+        <Input
+          id="story-slug"
+          defaultValue="my mcp server!"
+          aria-invalid
+          error
+        />
         <FieldError>
           Slugs may only contain lowercase letters, numbers, and hyphens.
         </FieldError>
@@ -71,8 +77,22 @@ export const WithError: Story = {
   render: () => (
     <Field className="max-w-md" data-invalid>
       <FieldLabel htmlFor="story-error">Webhook URL</FieldLabel>
-      <Input id="story-error" defaultValue="not-a-url" aria-invalid />
+      <Input id="story-error" defaultValue="not-a-url" aria-invalid error />
       <FieldError>Enter a valid https:// URL.</FieldError>
+    </Field>
+  ),
+};
+
+export const OptionalLabel: Story = {
+  render: () => (
+    <Field className="max-w-md">
+      <FieldLabel htmlFor="story-optional" optional>
+        Description
+      </FieldLabel>
+      <Input
+        id="story-optional"
+        placeholder="Used to identify your MCP server"
+      />
     </Field>
   ),
 };
@@ -81,7 +101,7 @@ export const HorizontalOrientation: Story = {
   render: () => (
     <Field orientation="horizontal" className="max-w-md">
       <FieldLabel htmlFor="story-horizontal">Enabled</FieldLabel>
-      <Input id="story-horizontal" type="checkbox" className="h-4 w-4" />
+      <Checkbox id="story-horizontal" />
     </Field>
   ),
 };
@@ -110,6 +130,7 @@ export const Group: Story = {
           type="number"
           defaultValue={-1}
           aria-invalid
+          error
         />
         <FieldError errors={[{ message: "Must be a positive number." }]} />
       </Field>
