@@ -2206,6 +2206,8 @@ gram_hooks_post_authenticated() {
           stamped_rest="${payload#'{"schema_version":"hook.ingest.v1","source":{'}"
           if [ "$stamped_rest" != "$payload" ]; then
             payload='{"schema_version":"hook.ingest.v1","source":{"user_email":"'"$stamped_email"'",'"$stamped_rest"
+          else
+            echo "Speakeasy hooks: unexpected canonical envelope; org-key retry sent without stamped user_email." >&2
           fi
           ;;
       esac
