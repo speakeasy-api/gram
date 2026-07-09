@@ -5,23 +5,18 @@ import { MemoryRouter } from "react-router";
 import { withThemeByClassName } from "@storybook/addon-themes";
 import { ThemedDocsContainer } from "./themedDocsContainer";
 
-import {
-  ThemeProvider,
-  TooltipProvider as MoonshineTooltipProvider,
-} from "../src/components/ui/moonshine";
-import { TooltipProvider as LocalTooltipProvider } from "../src/components/ui/tooltip";
+import { ThemeProvider } from "../src/components/ui/moonshine";
+import { TooltipProvider } from "../src/components/ui/tooltip";
 
 // Mirrors the provider stack in App.tsx so components render like they do in
-// the app: theme context, both tooltip providers, and a router for anything
+// the app: theme context, the tooltip provider, and a router for anything
 // that renders a Link.
 const appProvidersDecorator: Decorator = (story, context) => {
   return (
     <ThemeProvider theme={context.globals["theme"]} setTheme={() => {}}>
-      <LocalTooltipProvider>
-        <MoonshineTooltipProvider>
-          <MemoryRouter>{story()}</MemoryRouter>
-        </MoonshineTooltipProvider>
-      </LocalTooltipProvider>
+      <TooltipProvider>
+        <MemoryRouter>{story()}</MemoryRouter>
+      </TooltipProvider>
     </ThemeProvider>
   );
 };
