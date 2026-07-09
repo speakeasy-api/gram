@@ -27,7 +27,7 @@ func TestAIUsagePollerCadenceAndRetryConfig(t *testing.T) {
 	require.Equal(t, 5*time.Minute, aiUsagePollerCoordinatorInterval)
 	require.Equal(t, 8*time.Hour, aiUsagePollerCoordinatorRunTimeout)
 	require.Equal(t, 2*time.Hour, aiUsagePollerActivityTimeout)
-	require.Equal(t, 6*time.Hour, aiUsagePollerActivityScheduleToCloseTimeout)
+	require.Equal(t, 12*time.Hour, aiUsagePollerActivityScheduleToCloseTimeout)
 	require.Equal(t, 5, aiUsagePollerCoordinatorChildConcurrency)
 	require.Equal(t, 5, activities.PollUsageMaxAttempts)
 }
