@@ -139,6 +139,7 @@ func TestService_ListShadowMCPInventory_ComposesInventoryUsageAndPolicyState(t *
 	require.NotNil(t, speakeasy)
 	require.NotNil(t, speakeasy.ServerName)
 	require.Equal(t, "Speakeasy", *speakeasy.ServerName)
+	require.Equal(t, "mcp-speakeasy-com-mcp-b69171c9", speakeasy.ServerSlug)
 	require.Equal(t, "mcp.speakeasy.com", speakeasy.URLHost)
 	require.NotEmpty(t, speakeasy.FirstSeen)
 	require.NotEmpty(t, speakeasy.LastSeen)
@@ -155,6 +156,7 @@ func TestService_ListShadowMCPInventory_ComposesInventoryUsageAndPolicyState(t *
 	require.NotNil(t, github)
 	require.NotNil(t, github.ServerName)
 	require.Equal(t, "GitHub", *github.ServerName)
+	require.Equal(t, "github-example-com-mcp-d8860eea", github.ServerSlug)
 	require.Nil(t, github.LastCalled)
 	require.Equal(t, 0, github.ObservedUseCount)
 	require.Equal(t, 0, github.UserCount)
@@ -291,14 +293,15 @@ func TestService_GetShadowMCPInventoryServer_ComposesOneURL(t *testing.T) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		var err error
 		server, err = ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
-			ProjectID: projectID,
-			ServerURL: "HTTPS://DETAIL.EXAMPLE.COM:443/mcp?token=ignored#fragment",
+			ProjectID:  projectID,
+			ServerSlug: "detail-example-com-mcp-30d7c46c",
 		})
 		require.NoError(c, err)
 		require.NotNil(c, server.LastCalled)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	require.Equal(t, "https://detail.example.com/mcp", server.CanonicalServerURL)
+	require.Equal(t, "detail-example-com-mcp-30d7c46c", server.ServerSlug)
 	require.NotNil(t, server.ServerName)
 	require.Equal(t, "Detail MCP", *server.ServerName)
 	require.Equal(t, "detail.example.com", server.URLHost)

@@ -109,7 +109,7 @@ async function $do(
 
   const query = encodeFormQuery({
     "project_id": payload.project_id,
-    "server_url": payload.server_url,
+    "server_slug": payload.server_slug,
   });
 
   const headers = new Headers(compactMap({

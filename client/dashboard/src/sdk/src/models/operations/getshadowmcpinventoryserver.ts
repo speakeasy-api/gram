@@ -12,9 +12,9 @@ export type GetShadowMCPInventoryServerSecurity = {
 export type GetShadowMCPInventoryServerRequest = {
   projectId: string;
   /**
-   * Shadow MCP server URL to inspect.
+   * Shadow MCP server slug to inspect.
    */
-  serverUrl: string;
+  serverSlug: string;
   /**
    * Session header
    */
@@ -54,7 +54,7 @@ export function getShadowMCPInventoryServerSecurityToJSON(
 /** @internal */
 export type GetShadowMCPInventoryServerRequest$Outbound = {
   project_id: string;
-  server_url: string;
+  server_slug: string;
   "Gram-Session"?: string | undefined;
 };
 
@@ -65,13 +65,13 @@ export const GetShadowMCPInventoryServerRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     projectId: z.string(),
-    serverUrl: z.string(),
+    serverSlug: z.string(),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       projectId: "project_id",
-      serverUrl: "server_url",
+      serverSlug: "server_slug",
       gramSession: "Gram-Session",
     });
   }),

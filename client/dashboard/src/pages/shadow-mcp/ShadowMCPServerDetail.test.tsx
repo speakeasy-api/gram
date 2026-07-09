@@ -34,7 +34,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("react-router", () => ({
   useParams: () => ({
-    serverUrl: encodeURIComponent("https://github.example.com/mcp"),
+    serverSlug: "github-example-com-mcp-d8860eea",
   }),
 }));
 
@@ -339,6 +339,7 @@ function inventoryServer(
     observedUseCount: 8,
     requestCount: 0,
     serverName: "GitHub MCP",
+    serverSlug: "github-example-com-mcp-d8860eea",
     topUsers: ["alex@example.com"],
     urlHost: "github.example.com",
     userCount: 2,
@@ -456,7 +457,7 @@ describe("ShadowMCPServerDetail", () => {
     expect(mocks.useShadowMCPInventoryServer).toHaveBeenCalledWith(
       {
         projectId: "project-id-1",
-        serverUrl: "https://github.example.com/mcp",
+        serverSlug: "github-example-com-mcp-d8860eea",
       },
       undefined,
       expect.objectContaining({ enabled: true }),

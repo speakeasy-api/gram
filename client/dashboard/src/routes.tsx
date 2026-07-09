@@ -593,7 +593,7 @@ const ROUTE_STRUCTURE = {
     subPages: {
       detail: {
         title: "Shadow MCP Server",
-        url: ":serverUrl",
+        url: ":serverSlug",
         component: ShadowMCPServerDetail,
       },
     },

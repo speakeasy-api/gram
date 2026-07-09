@@ -67,9 +67,7 @@ export default function ShadowMCP(): JSX.Element {
                   <ShadowMCPPolicyStatus policyState={policyState} />
                   <ShadowMCPInventoryTable
                     getServerHref={(server) =>
-                      routes.shadowMCP.detail.href(
-                        encodeURIComponent(server.canonicalServerUrl),
-                      )
+                      routes.shadowMCP.detail.href(server.serverSlug)
                     }
                     members={membersQuery.data?.members ?? []}
                     policyState={policyState}

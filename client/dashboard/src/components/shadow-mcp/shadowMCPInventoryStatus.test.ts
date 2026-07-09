@@ -41,6 +41,7 @@ function server(
     observedUseCount: 0,
     requestCount: 0,
     serverName: undefined,
+    serverSlug: "example-com-mcp-70563fc1",
     topUsers: [],
     urlHost: "example.com",
     userCount: 0,

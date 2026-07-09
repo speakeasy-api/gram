@@ -354,6 +354,7 @@ type ListShadowMCPInventoryResponseBody struct {
 // "getShadowMCPInventoryServer" endpoint HTTP response body.
 type GetShadowMCPInventoryServerResponseBody struct {
 	CanonicalServerURL *string                                       `form:"canonical_server_url,omitempty" json:"canonical_server_url,omitempty" xml:"canonical_server_url,omitempty"`
+	ServerSlug         *string                                       `form:"server_slug,omitempty" json:"server_slug,omitempty" xml:"server_slug,omitempty"`
 	URLHost            *string                                       `form:"url_host,omitempty" json:"url_host,omitempty" xml:"url_host,omitempty"`
 	ServerName         *string                                       `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
 	FirstSeen          *string                                       `form:"first_seen,omitempty" json:"first_seen,omitempty" xml:"first_seen,omitempty"`
@@ -6018,6 +6019,7 @@ type ShadowMCPAccessRuleResponseBody struct {
 // body types.
 type ShadowMCPInventoryServerResponseBody struct {
 	CanonicalServerURL *string                                       `form:"canonical_server_url,omitempty" json:"canonical_server_url,omitempty" xml:"canonical_server_url,omitempty"`
+	ServerSlug         *string                                       `form:"server_slug,omitempty" json:"server_slug,omitempty" xml:"server_slug,omitempty"`
 	URLHost            *string                                       `form:"url_host,omitempty" json:"url_host,omitempty" xml:"url_host,omitempty"`
 	ServerName         *string                                       `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
 	FirstSeen          *string                                       `form:"first_seen,omitempty" json:"first_seen,omitempty" xml:"first_seen,omitempty"`
@@ -8957,6 +8959,7 @@ func NewListShadowMCPInventoryGatewayError(body *ListShadowMCPInventoryGatewayEr
 func NewGetShadowMCPInventoryServerShadowMCPInventoryServerOK(body *GetShadowMCPInventoryServerResponseBody) *access.ShadowMCPInventoryServer {
 	v := &access.ShadowMCPInventoryServer{
 		CanonicalServerURL: *body.CanonicalServerURL,
+		ServerSlug:         *body.ServerSlug,
 		URLHost:            *body.URLHost,
 		ServerName:         body.ServerName,
 		FirstSeen:          *body.FirstSeen,
@@ -11683,6 +11686,9 @@ func ValidateListShadowMCPInventoryResponseBody(body *ListShadowMCPInventoryResp
 func ValidateGetShadowMCPInventoryServerResponseBody(body *GetShadowMCPInventoryServerResponseBody) (err error) {
 	if body.CanonicalServerURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("canonical_server_url", "body"))
+	}
+	if body.ServerSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_slug", "body"))
 	}
 	if body.URLHost == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("url_host", "body"))
@@ -19338,6 +19344,9 @@ func ValidateShadowMCPAccessRuleResponseBody(body *ShadowMCPAccessRuleResponseBo
 func ValidateShadowMCPInventoryServerResponseBody(body *ShadowMCPInventoryServerResponseBody) (err error) {
 	if body.CanonicalServerURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("canonical_server_url", "body"))
+	}
+	if body.ServerSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_slug", "body"))
 	}
 	if body.URLHost == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("url_host", "body"))

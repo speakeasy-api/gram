@@ -3594,7 +3594,7 @@ func EncodeGetShadowMCPInventoryServerRequest(encoder func(*http.Request) goahtt
 		}
 		values := req.URL.Query()
 		values.Add("project_id", p.ProjectID)
-		values.Add("server_url", p.ServerURL)
+		values.Add("server_slug", p.ServerSlug)
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -7125,6 +7125,7 @@ func unmarshalShadowMCPAccessRuleResponseBodyToAccessShadowMCPAccessRule(v *Shad
 func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServer(v *ShadowMCPInventoryServerResponseBody) *access.ShadowMCPInventoryServer {
 	res := &access.ShadowMCPInventoryServer{
 		CanonicalServerURL: *v.CanonicalServerURL,
+		ServerSlug:         *v.ServerSlug,
 		URLHost:            *v.URLHost,
 		ServerName:         v.ServerName,
 		FirstSeen:          *v.FirstSeen,

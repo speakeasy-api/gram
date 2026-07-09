@@ -439,8 +439,8 @@ var _ = Service("access", func() {
 			Attribute("project_id", String, func() {
 				Format(FormatUUID)
 			})
-			Attribute("server_url", String, "Shadow MCP server URL to inspect.")
-			Required("project_id", "server_url")
+			Attribute("server_slug", String, "Shadow MCP server slug to inspect.")
+			Required("project_id", "server_slug")
 			security.SessionPayload()
 		})
 
@@ -449,7 +449,7 @@ var _ = Service("access", func() {
 		HTTP(func() {
 			GET("/rpc/access.shadowMcp.inventory.get")
 			Param("project_id")
-			Param("server_url")
+			Param("server_slug")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -1118,9 +1118,10 @@ var ShadowMCPInventoryRequestSummaryModel = Type("ShadowMCPInventoryRequestSumma
 })
 
 var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
-	Required("canonical_server_url", "url_host", "first_seen", "last_seen", "observed_use_count", "user_count", "top_users", "access", "request_count", "allowed_policy_ids")
+	Required("canonical_server_url", "server_slug", "url_host", "first_seen", "last_seen", "observed_use_count", "user_count", "top_users", "access", "request_count", "allowed_policy_ids")
 
 	Attribute("canonical_server_url", String)
+	Attribute("server_slug", String)
 	Attribute("url_host", String)
 	Attribute("server_name", String)
 	Attribute("first_seen", String, func() {

@@ -2,6 +2,8 @@ package access
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -130,18 +132,10 @@ func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.
 		return nil, err
 	}
 
-	inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(payload.ServerURL)
-	if !ok {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid shadow mcp server url").LogError(ctx, s.logger)
-	}
-
 	chRepo := telemetryrepo.New(s.chConn)
-	inventoryRow, err := chRepo.GetShadowMCPInventoryURL(ctx, telemetryrepo.GetShadowMCPInventoryURLParams{
-		GramProjectID:      projectID.String(),
-		CanonicalServerURL: inventoryURL.CanonicalURL,
-	})
+	inventoryRow, err := shadowMCPInventoryURLForSlug(ctx, chRepo, projectID.String(), payload.ServerSlug)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get shadow mcp inventory url").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get shadow mcp inventory url by slug").LogError(ctx, s.logger)
 	}
 	if inventoryRow == nil {
 		return nil, oops.E(oops.CodeNotFound, nil, "shadow mcp inventory url not found").LogError(ctx, s.logger)
@@ -149,7 +143,7 @@ func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.
 
 	usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
 		GramProjectID:       projectID.String(),
-		CanonicalServerURLs: []string{inventoryURL.CanonicalURL},
+		CanonicalServerURLs: []string{inventoryRow.CanonicalServerURL},
 		Limit:               shadowMCPInventoryUsageTraceLimit,
 	})
 	if err != nil {
@@ -157,12 +151,12 @@ func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.
 	}
 	usageByURL := shadowMCPInventoryUsageByURL(usageRows)
 
-	policyState, err := s.shadowMCPInventoryPolicyState(ctx, ac.ActiveOrganizationID, projectID, []string{inventoryURL.CanonicalURL})
+	policyState, err := s.shadowMCPInventoryPolicyState(ctx, ac.ActiveOrganizationID, projectID, []string{inventoryRow.CanonicalServerURL})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
 	}
 
-	return buildShadowMCPInventoryServer(*inventoryRow, usageByURL[inventoryURL.CanonicalURL], policyState.forURL(inventoryURL.CanonicalURL)), nil
+	return buildShadowMCPInventoryServer(*inventoryRow, usageByURL[inventoryRow.CanonicalServerURL], policyState.forURL(inventoryRow.CanonicalServerURL)), nil
 }
 
 func (s *Service) ListShadowMCPInventoryUsers(ctx context.Context, payload *gen.ListShadowMCPInventoryUsersPayload) (*gen.ListShadowMCPInventoryUsersResult, error) {
@@ -326,6 +320,66 @@ func shadowMCPInventoryLimit(limit int) (int, error) {
 		return 0, oops.E(oops.CodeBadRequest, nil, "limit must be less than or equal to %d", shadowMCPInventoryMaxPageLimit)
 	}
 	return limit, nil
+}
+
+func shadowMCPInventoryServerSlug(canonicalURL string) string {
+	hash := sha256.Sum256([]byte(canonicalURL))
+	hashSuffix := hex.EncodeToString(hash[:])[:8]
+
+	label := strings.TrimPrefix(canonicalURL, "https://")
+	label = strings.TrimPrefix(label, "http://")
+	var slug strings.Builder
+	previousDash := false
+	for _, r := range strings.ToLower(label) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			slug.WriteRune(r)
+			previousDash = false
+			continue
+		}
+		if !previousDash {
+			slug.WriteByte('-')
+			previousDash = true
+		}
+	}
+
+	prefix := strings.Trim(slug.String(), "-")
+	if prefix == "" {
+		prefix = "server"
+	}
+
+	return prefix + "-" + hashSuffix
+}
+
+func shadowMCPInventoryURLForSlug(ctx context.Context, chRepo *telemetryrepo.Queries, projectID string, serverSlug string) (*telemetryrepo.ShadowMCPInventoryURLRow, error) {
+	const pageLimit = 500
+
+	cursor := ""
+	for {
+		rows, err := chRepo.ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
+			GramProjectID: projectID,
+			Limit:         pageLimit,
+			Cursor:        cursor,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("listing shadow mcp inventory urls for slug: %w", err)
+		}
+
+		for _, row := range rows {
+			if shadowMCPInventoryServerSlug(row.CanonicalServerURL) == serverSlug {
+				return &row, nil
+			}
+		}
+
+		if len(rows) < pageLimit {
+			return nil, nil
+		}
+
+		nextCursor, err := telemetryrepo.EncodeShadowMCPInventoryURLCursor(rows[len(rows)-1])
+		if err != nil {
+			return nil, fmt.Errorf("encoding shadow mcp inventory slug lookup cursor: %w", err)
+		}
+		cursor = nextCursor
+	}
 }
 
 func (s *Service) shadowMCPInventoryMutationContext(ctx context.Context, rawProjectID string, rawServerURL string) (*contextvalues.AuthContext, uuid.UUID, shadowmcp.InventoryURL, error) {
@@ -906,6 +960,7 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 
 	return &gen.ShadowMCPInventoryServer{
 		CanonicalServerURL: row.CanonicalServerURL,
+		ServerSlug:         shadowMCPInventoryServerSlug(row.CanonicalServerURL),
 		URLHost:            row.URLHost,
 		ServerName:         serverName,
 		FirstSeen:          formatTimeValue(row.FirstSeen),

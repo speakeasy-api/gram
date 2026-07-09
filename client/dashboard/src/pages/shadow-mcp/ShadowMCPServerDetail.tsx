@@ -60,16 +60,6 @@ type UsersPage = {
 
 const EMPTY_USER_PAGES: UsersPage[] = [];
 
-function decodeServerURL(value: string | undefined) {
-  if (!value) return "";
-
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
 function usageCountLabel(count: number) {
   return `${count} ${count === 1 ? "call" : "calls"}`;
 }
@@ -251,8 +241,7 @@ function DetailActionButtons({
 }
 
 export default function ShadowMCPServerDetail(): JSX.Element {
-  const { serverUrl: serverURLParam } = useParams<{ serverUrl: string }>();
-  const serverURL = decodeServerURL(serverURLParam);
+  const { serverSlug = "" } = useParams<{ serverSlug: string }>();
   const project = useProject();
   const queryClient = useQueryClient();
   const policiesQuery = useRiskListPolicies();
@@ -265,24 +254,27 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     policiesQuery.data?.policies.filter((policy) =>
       policy.sources.includes("shadow_mcp"),
     ) ?? [];
-  const queryEnabled = project.id.length > 0 && serverURL.length > 0;
-  const usersScope = queryEnabled ? `${project.id}:${serverURL}` : "";
+  const queryEnabled = project.id.length > 0 && serverSlug.length > 0;
   const [usersCursor, setUsersCursor] = useState<string | undefined>(undefined);
   const [userPages, setUserPages] = useState<UsersPage[]>([]);
+  const serverQuery = useShadowMCPInventoryServer(
+    {
+      projectId: project.id,
+      serverSlug,
+    },
+    undefined,
+    { enabled: queryEnabled },
+  );
+  const server = serverQuery.data;
+  const serverURL = server?.canonicalServerUrl ?? "";
+  const usersQueryEnabled = queryEnabled && serverURL.length > 0;
+  const usersScope = usersQueryEnabled ? `${project.id}:${serverURL}` : "";
   const [usersPaginationScope, setUsersPaginationScope] = useState(usersScope);
   const hasActiveUsersPagination = usersPaginationScope === usersScope;
   const activeUsersCursor = hasActiveUsersPagination ? usersCursor : undefined;
   const activeUserPages = hasActiveUsersPagination
     ? userPages
     : EMPTY_USER_PAGES;
-  const serverQuery = useShadowMCPInventoryServer(
-    {
-      projectId: project.id,
-      serverUrl: serverURL,
-    },
-    undefined,
-    { enabled: queryEnabled },
-  );
   const usersRequest = activeUsersCursor
     ? {
         projectId: project.id,
@@ -292,7 +284,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       }
     : { projectId: project.id, serverUrl: serverURL, limit: USERS_PAGE_LIMIT };
   const usersQuery = useShadowMCPInventoryUsers(usersRequest, undefined, {
-    enabled: queryEnabled,
+    enabled: usersQueryEnabled,
   });
   const upsertPolicyBypass = useUpsertShadowMCPInventoryPolicyBypassMutation();
   const deletePolicyBypass = useDeleteShadowMCPInventoryPolicyBypassMutation();
@@ -300,7 +292,6 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const [activeAction, setActiveAction] =
     useState<ActiveInventoryAction | null>(null);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
-  const server = serverQuery.data;
   const isSubmitting =
     isSubmittingAction ||
     upsertPolicyBypass.isPending ||
@@ -319,7 +310,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   }, [usersScope]);
 
   useEffect(() => {
-    if (!hasActiveUsersPagination || !queryEnabled || !usersQuery.data) {
+    if (!hasActiveUsersPagination || !usersQueryEnabled || !usersQuery.data) {
       return;
     }
 
@@ -345,7 +336,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   }, [
     activeUsersCursor,
     hasActiveUsersPagination,
-    queryEnabled,
+    usersQueryEnabled,
     usersQuery.data,
   ]);
 
@@ -453,7 +444,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs
           substitutions={{
-            [serverURLParam ?? ""]: server?.serverName || server?.urlHost,
+            [serverSlug]: server?.serverName || server?.urlHost,
           }}
         />
       </Page.Header>
@@ -464,7 +455,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
               {server?.serverName || server?.urlHost || "Shadow MCP Server"}
             </Page.Section.Title>
             <Page.Section.Description>
-              {server?.canonicalServerUrl || serverURL}
+              {server?.canonicalServerUrl || serverSlug}
             </Page.Section.Description>
             <Page.Section.CTA>
               {server && (

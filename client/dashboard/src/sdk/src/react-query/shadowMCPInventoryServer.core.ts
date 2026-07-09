@@ -50,7 +50,7 @@ export function buildShadowMCPInventoryServerQuery(
   return {
     queryKey: queryKeyShadowMCPInventoryServer({
       projectId: request.projectId,
-      serverUrl: request.serverUrl,
+      serverSlug: request.serverSlug,
       gramSession: request.gramSession,
     }),
     queryFn: async function shadowMCPInventoryServerQueryFn(
@@ -80,7 +80,7 @@ export function buildShadowMCPInventoryServerQuery(
 export function queryKeyShadowMCPInventoryServer(
   parameters: {
     projectId: string;
-    serverUrl: string;
+    serverSlug: string;
     gramSession?: string | undefined;
   },
 ): QueryKey {

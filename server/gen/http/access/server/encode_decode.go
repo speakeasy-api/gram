@@ -3316,7 +3316,7 @@ func DecodeGetShadowMCPInventoryServerRequest(mux goahttp.Muxer, decoder func(*h
 		var payload *access.GetShadowMCPInventoryServerPayload
 		var (
 			projectID    string
-			serverURL    string
+			serverSlug   string
 			sessionToken *string
 			err          error
 		)
@@ -3326,9 +3326,9 @@ func DecodeGetShadowMCPInventoryServerRequest(mux goahttp.Muxer, decoder func(*h
 			err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "query string"))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
-		serverURL = qp.Get("server_url")
-		if serverURL == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("server_url", "query string"))
+		serverSlug = qp.Get("server_slug")
+		if serverSlug == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("server_slug", "query string"))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -3337,7 +3337,7 @@ func DecodeGetShadowMCPInventoryServerRequest(mux goahttp.Muxer, decoder func(*h
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetShadowMCPInventoryServerPayload(projectID, serverURL, sessionToken)
+		payload = NewGetShadowMCPInventoryServerPayload(projectID, serverSlug, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -6605,6 +6605,7 @@ func marshalAccessShadowMCPAccessRuleToShadowMCPAccessRuleResponseBody(v *access
 func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody(v *access.ShadowMCPInventoryServer) *ShadowMCPInventoryServerResponseBody {
 	res := &ShadowMCPInventoryServerResponseBody{
 		CanonicalServerURL: v.CanonicalServerURL,
+		ServerSlug:         v.ServerSlug,
 		URLHost:            v.URLHost,
 		ServerName:         v.ServerName,
 		FirstSeen:          v.FirstSeen,

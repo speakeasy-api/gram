@@ -2388,12 +2388,12 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
-          description: Shadow MCP server URL to inspect.
+          description: Shadow MCP server slug to inspect.
           in: query
-          name: server_url
+          name: server_slug
           required: true
           schema:
-            description: Shadow MCP server URL to inspect.
+            description: Shadow MCP server slug to inspect.
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -53626,6 +53626,8 @@ components:
           format: int64
         server_name:
           type: string
+        server_slug:
+          type: string
         top_users:
           type: array
           items:
@@ -53637,6 +53639,7 @@ components:
           format: int64
       required:
         - canonical_server_url
+        - server_slug
         - url_host
         - first_seen
         - last_seen

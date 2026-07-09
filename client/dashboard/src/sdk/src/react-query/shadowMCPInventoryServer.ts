@@ -118,7 +118,7 @@ export function setShadowMCPInventoryServerData(
   queryKeyBase: [
     parameters: {
       projectId: string;
-      serverUrl: string;
+      serverSlug: string;
       gramSession?: string | undefined;
     },
   ],
@@ -134,7 +134,7 @@ export function invalidateShadowMCPInventoryServer(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       projectId: string;
-      serverUrl: string;
+      serverSlug: string;
       gramSession?: string | undefined;
     }]
   >,

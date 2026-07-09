@@ -354,6 +354,7 @@ type ListShadowMCPInventoryResponseBody struct {
 // "getShadowMCPInventoryServer" endpoint HTTP response body.
 type GetShadowMCPInventoryServerResponseBody struct {
 	CanonicalServerURL string                                        `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
+	ServerSlug         string                                        `form:"server_slug" json:"server_slug" xml:"server_slug"`
 	URLHost            string                                        `form:"url_host" json:"url_host" xml:"url_host"`
 	ServerName         *string                                       `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
 	FirstSeen          string                                        `form:"first_seen" json:"first_seen" xml:"first_seen"`
@@ -5992,6 +5993,7 @@ type ShadowMCPAccessRuleResponseBody struct {
 // body types.
 type ShadowMCPInventoryServerResponseBody struct {
 	CanonicalServerURL string                                        `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
+	ServerSlug         string                                        `form:"server_slug" json:"server_slug" xml:"server_slug"`
 	URLHost            string                                        `form:"url_host" json:"url_host" xml:"url_host"`
 	ServerName         *string                                       `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
 	FirstSeen          string                                        `form:"first_seen" json:"first_seen" xml:"first_seen"`
@@ -6512,6 +6514,7 @@ func NewListShadowMCPInventoryResponseBody(res *access.ListShadowMCPInventoryRes
 func NewGetShadowMCPInventoryServerResponseBody(res *access.ShadowMCPInventoryServer) *GetShadowMCPInventoryServerResponseBody {
 	body := &GetShadowMCPInventoryServerResponseBody{
 		CanonicalServerURL: res.CanonicalServerURL,
+		ServerSlug:         res.ServerSlug,
 		URLHost:            res.URLHost,
 		ServerName:         res.ServerName,
 		FirstSeen:          res.FirstSeen,
@@ -11203,10 +11206,10 @@ func NewListShadowMCPInventoryPayload(projectID string, limit int, cursor *strin
 
 // NewGetShadowMCPInventoryServerPayload builds a access service
 // getShadowMCPInventoryServer endpoint payload.
-func NewGetShadowMCPInventoryServerPayload(projectID string, serverURL string, sessionToken *string) *access.GetShadowMCPInventoryServerPayload {
+func NewGetShadowMCPInventoryServerPayload(projectID string, serverSlug string, sessionToken *string) *access.GetShadowMCPInventoryServerPayload {
 	v := &access.GetShadowMCPInventoryServerPayload{}
 	v.ProjectID = projectID
-	v.ServerURL = serverURL
+	v.ServerSlug = serverSlug
 	v.SessionToken = sessionToken
 
 	return v

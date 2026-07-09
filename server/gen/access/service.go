@@ -383,8 +383,8 @@ type GetRolePayload struct {
 // getShadowMCPInventoryServer method.
 type GetShadowMCPInventoryServerPayload struct {
 	ProjectID string
-	// Shadow MCP server URL to inspect.
-	ServerURL    string
+	// Shadow MCP server slug to inspect.
+	ServerSlug   string
 	SessionToken *string
 }
 
@@ -772,6 +772,7 @@ type ShadowMCPInventoryRequestSummary struct {
 // getShadowMCPInventoryServer method.
 type ShadowMCPInventoryServer struct {
 	CanonicalServerURL string
+	ServerSlug         string
 	URLHost            string
 	ServerName         *string
 	FirstSeen          string

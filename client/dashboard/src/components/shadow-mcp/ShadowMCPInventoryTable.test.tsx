@@ -364,6 +364,7 @@ function inventoryServer(
     observedUseCount: 0,
     requestCount: 0,
     serverName: undefined,
+    serverSlug: "github-example-com-mcp-d8860eea",
     topUsers: [],
     urlHost: new URL(canonicalServerUrl).host,
     userCount: 0,
@@ -586,9 +587,7 @@ describe("ShadowMCPInventoryTable", () => {
     render(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
-          getServerHref={(server) =>
-            `/shadow-mcp/${encodeURIComponent(server.canonicalServerUrl)}`
-          }
+          getServerHref={(server) => `/shadow-mcp/${server.serverSlug}`}
           members={[]}
           policyState="blocking"
           projectID="project-id-1"
@@ -604,7 +603,7 @@ describe("ShadowMCPInventoryTable", () => {
 
     expect(
       screen.getByRole("link", { name: "GitHub MCP" }).getAttribute("href"),
-    ).toBe("/shadow-mcp/https%3A%2F%2Fgithub.example.com%2Fmcp");
+    ).toBe("/shadow-mcp/github-example-com-mcp-d8860eea");
   });
 
   it("sorts inventory columns and uses call count for Usage", async () => {

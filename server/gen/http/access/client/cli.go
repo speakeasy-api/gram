@@ -671,7 +671,7 @@ func BuildListShadowMCPInventoryPayload(accessListShadowMCPInventoryProjectID st
 
 // BuildGetShadowMCPInventoryServerPayload builds the payload for the access
 // getShadowMCPInventoryServer endpoint from CLI flags.
-func BuildGetShadowMCPInventoryServerPayload(accessGetShadowMCPInventoryServerProjectID string, accessGetShadowMCPInventoryServerServerURL string, accessGetShadowMCPInventoryServerSessionToken string) (*access.GetShadowMCPInventoryServerPayload, error) {
+func BuildGetShadowMCPInventoryServerPayload(accessGetShadowMCPInventoryServerProjectID string, accessGetShadowMCPInventoryServerServerSlug string, accessGetShadowMCPInventoryServerSessionToken string) (*access.GetShadowMCPInventoryServerPayload, error) {
 	var err error
 	var projectID string
 	{
@@ -681,9 +681,9 @@ func BuildGetShadowMCPInventoryServerPayload(accessGetShadowMCPInventoryServerPr
 			return nil, err
 		}
 	}
-	var serverURL string
+	var serverSlug string
 	{
-		serverURL = accessGetShadowMCPInventoryServerServerURL
+		serverSlug = accessGetShadowMCPInventoryServerServerSlug
 	}
 	var sessionToken *string
 	{
@@ -693,7 +693,7 @@ func BuildGetShadowMCPInventoryServerPayload(accessGetShadowMCPInventoryServerPr
 	}
 	v := &access.GetShadowMCPInventoryServerPayload{}
 	v.ProjectID = projectID
-	v.ServerURL = serverURL
+	v.ServerSlug = serverSlug
 	v.SessionToken = sessionToken
 
 	return v, nil
