@@ -63,7 +63,7 @@ Button variant
 
 ### size?
 
-> `optional` **size?**: `"icon"` \| `"default"` \| `"sm"` \| `"lg"`
+> `optional` **size?**: `"icon"` \| `"sm"` \| `"lg"` \| `"default"`
 
 Button size
 

@@ -160,6 +160,9 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
 	})
 	if err != nil {
+		if isRemoteSessionIssuerSlugConflict(err) {
+			return nil, oops.E(oops.CodeConflict, err, "an issuer with this slug already exists").LogError(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session issuer").LogError(ctx, logger)
 	}
 
