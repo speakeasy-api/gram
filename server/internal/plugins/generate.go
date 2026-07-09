@@ -1276,23 +1276,22 @@ gram_enrich_identity_payload() {
   fi
   local existing_token
   existing_token="$(gram_hooks_json_top_level_value "$trimmed" "user_email")"
-  if [ "$existing_token" = '""' ]; then
-    # An empty provider value (Cursor sends user_email:"" when signed out)
-    # must not shadow the device identity. The top-level token is known to
-    # be empty, so when the payload holds exactly one empty pair it IS the
-    # top-level one and can be rewritten textually; more than one is
-    # ambiguous without a parser and passes through unchanged rather than
-    # risk stamping a nested tool argument.
-    if [ "$(printf '%s' "$trimmed" | grep -oE '"user_email"[[:space:]]*:[[:space:]]*""' | wc -l | tr -d '[:space:]')" = "1" ]; then
-      printf '%s' "$trimmed" | sed -E 's|"user_email"[[:space:]]*:[[:space:]]*""|"user_email":"'"$email"'"|'
+  if [ -n "$existing_token" ]; then
+    # The device identity outranks the provider's self-report (the jq path
+    # overwrites it). Without a parser, the top-level pair can only be
+    # rewritten when its exact text occurs once in the whole payload — the
+    # extractor proved the top-level value IS this token, so a unique
+    # occurrence is provably the top-level pair. Anything else (duplicate
+    # identical pairs, whitespace-formatted JSON) keeps the provider value
+    # rather than risk rewriting a nested tool argument.
+    local needle replacement
+    needle='"user_email":'"$existing_token"
+    replacement='"user_email":"'"$email"'"'
+    if [ "$(printf '%s' "$trimmed" | grep -oF -- "$needle" | wc -l | tr -d '[:space:]')" = "1" ]; then
+      printf '%s' "${trimmed/"$needle"/$replacement}"
       return
     fi
-    gram_hooks_identity_debug "multiple empty user_email fields; cannot stamp safely without jq, sending unchanged"
-    printf '%s' "$trimmed"
-    return
-  fi
-  if [ -n "$existing_token" ]; then
-    gram_hooks_identity_debug "payload already carries a top-level user_email; keeping it (no jq to rewrite safely)"
+    gram_hooks_identity_debug "existing user_email not uniquely locatable; keeping it (no jq to rewrite safely)"
     printf '%s' "$trimmed"
     return
   fi

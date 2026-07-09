@@ -3968,6 +3968,8 @@ jq() { return 127; }
 gram_enrich_identity_payload '{"hook_event_name":"beforeSubmitPrompt","user_email":""}'
 printf '\n===GRAM===\n'
 gram_enrich_identity_payload '{"hook_event_name":"PreToolUse","user_email":"","tool_input":{"user_email":""}}'
+printf '\n===GRAM===\n'
+gram_enrich_identity_payload '{"hook_event_name":"beforeSubmitPrompt","user_email":"personal@example.net"}'
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "driver.sh"), []byte(driver), 0o755))
 
@@ -3981,11 +3983,14 @@ gram_enrich_identity_payload '{"hook_event_name":"PreToolUse","user_email":"","t
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
 	parts := strings.Split(string(output), "\n===GRAM===\n")
-	require.Len(t, parts, 2)
+	require.Len(t, parts, 3)
 	require.Contains(t, parts[0], `"user_email":"agent@example.com"`,
 		"an empty provider user_email must not shadow the device identity on jq-less machines")
 	require.NotContains(t, parts[1], "agent@example.com",
 		"ambiguous multiple empty user_email pairs must pass through unchanged rather than risk stamping a tool argument")
+	require.Contains(t, parts[2], `"user_email":"agent@example.com"`,
+		"a uniquely locatable provider email must be overwritten by the device identity, matching the jq path")
+	require.NotContains(t, parts[2], "personal@example.net")
 }
 
 func TestRenderHookScriptFallsBackWhenDeviceAgentMissing(t *testing.T) {
