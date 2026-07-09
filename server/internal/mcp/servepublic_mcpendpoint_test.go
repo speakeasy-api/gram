@@ -30,8 +30,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/environments"
+	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -768,6 +771,238 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	select {
 	case <-upstreamHit:
 		t.Fatal("upstream must not be reached without mcp:connect")
+	default:
+	}
+}
+
+const envSourcedUpstreamHeader = "X-Upstream-Api-Key"
+
+func seedEnvironmentWithEntries(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	projectID uuid.UUID,
+	orgID string,
+	entries map[string]string,
+) uuid.UUID {
+	t.Helper()
+
+	envRepo := environmentsrepo.New(ti.conn)
+	env, err := envRepo.CreateEnvironment(ctx, environmentsrepo.CreateEnvironmentParams{
+		OrganizationID: orgID,
+		ProjectID:      projectID,
+		Name:           "remote-mcp-env-" + uuid.NewString()[:8],
+		Slug:           "remote-mcp-env-" + uuid.NewString()[:8],
+		Description:    pgtype.Text{String: "test environment", Valid: true},
+	})
+	require.NoError(t, err)
+
+	entriesRepo := environments.NewEnvironmentEntries(ti.logger, ti.conn, ti.enc, mcpmetadatarepo.New(ti.conn))
+	for name, value := range entries {
+		require.NoError(t, entriesRepo.UpdateEnvironmentEntry(ctx, environmentsrepo.UpsertEnvironmentEntryParams{
+			EnvironmentID: env.ID,
+			Name:          name,
+			Value:         value,
+		}))
+	}
+	return env.ID
+}
+
+func attachEnvironmentToMcpServer(
+	t *testing.T,
+	ctx context.Context,
+	conn *pgxpool.Pool,
+	projectID uuid.UUID,
+	mcpServer mcpserversrepo.McpServer,
+	environmentID uuid.UUID,
+) {
+	t.Helper()
+
+	_, err := mcpserversrepo.New(conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		Name:                  mcpServer.Name,
+		Slug:                  mcpServer.Slug,
+		EnvironmentID:         uuid.NullUUID{UUID: environmentID, Valid: true},
+		UserSessionIssuerID:   mcpServer.UserSessionIssuerID,
+		RemoteMcpServerID:     mcpServer.RemoteMcpServerID,
+		TunneledMcpServerID:   mcpServer.TunneledMcpServerID,
+		ToolsetID:             mcpServer.ToolsetID,
+		ToolVariationsGroupID: mcpServer.ToolVariationsGroupID,
+		Visibility:            mcpServer.Visibility,
+		ID:                    mcpServer.ID,
+		ProjectID:             projectID,
+	})
+	require.NoError(t, err)
+}
+
+func createEnvSourcedRemoteHeader(
+	t *testing.T,
+	ctx context.Context,
+	conn *pgxpool.Pool,
+	remoteServerID uuid.UUID,
+	required bool,
+) {
+	t.Helper()
+
+	_, err := remotemcprepo.New(conn).CreateHeader(ctx, remotemcprepo.CreateHeaderParams{
+		RemoteMcpServerID: remoteServerID,
+		Name:              envSourcedUpstreamHeader,
+		Value:             pgtype.Text{String: "", Valid: true},
+		IsRequired:        required,
+	})
+	require.NoError(t, err)
+}
+
+// TestServePublic_McpEndpoint_RemoteBacked_EnvSourcedHeader_FillsFromAttachedEnvironment
+// verifies an opt-in header (empty static value) is filled from the attached
+// environment at proxy time and unrelated env entries are not sent upstream.
+func TestServePublic_McpEndpoint_RemoteBacked_EnvSourcedHeader_FillsFromAttachedEnvironment(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	var gotAPIKey, gotUnrelated string
+	done := make(chan struct{}, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAPIKey = r.Header.Get(envSourcedUpstreamHeader)
+		gotUnrelated = r.Header.Get("X-Unrelated-Secret")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+		done <- struct{}{}
+	}))
+	t.Cleanup(upstream.Close)
+
+	endpointSlug := "endpoint-" + uuid.NewString()
+	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
+	createEnvSourcedRemoteHeader(t, ctx, ti.conn, remoteServer.ID, true)
+
+	envID := seedEnvironmentWithEntries(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, map[string]string{
+		"X_UPSTREAM_API_KEY": "from-attached-env",
+		"UNRELATED_SECRET":   "must-not-leak",
+	})
+	attachEnvironmentToMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, mcpServer, envID)
+
+	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
+	<-done
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	require.Equal(t, "from-attached-env", gotAPIKey)
+	require.Empty(t, gotUnrelated, "unrelated env entries must not be sent upstream")
+}
+
+// TestServePublic_McpEndpoint_RemoteBacked_RequiredEnvHeaderMissing_FailsClosed
+// verifies a required env-sourced header fails before proxying when the attached
+// environment lacks a matching entry.
+func TestServePublic_McpEndpoint_RemoteBacked_RequiredEnvHeaderMissing_FailsClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	upstreamHit := make(chan struct{}, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamHit <- struct{}{}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	endpointSlug := "endpoint-" + uuid.NewString()
+	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
+	createEnvSourcedRemoteHeader(t, ctx, ti.conn, remoteServer.ID, true)
+
+	envID := seedEnvironmentWithEntries(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, map[string]string{
+		"OTHER_KEY": "irrelevant",
+	})
+	attachEnvironmentToMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, mcpServer, envID)
+
+	_, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+
+	select {
+	case <-upstreamHit:
+		t.Fatal("upstream must not be reached when a required env-sourced header is unresolved")
+	default:
+	}
+}
+
+// TestServePublic_McpEndpoint_RemoteBacked_OptionalEnvHeaderMissing_Proceeds
+// verifies a non-required env-sourced header is omitted when the environment
+// lacks a match and the request still proxies.
+func TestServePublic_McpEndpoint_RemoteBacked_OptionalEnvHeaderMissing_Proceeds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	var gotAPIKey string
+	done := make(chan struct{}, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAPIKey = r.Header.Get(envSourcedUpstreamHeader)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+		done <- struct{}{}
+	}))
+	t.Cleanup(upstream.Close)
+
+	endpointSlug := "endpoint-" + uuid.NewString()
+	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
+	createEnvSourcedRemoteHeader(t, ctx, ti.conn, remoteServer.ID, false)
+
+	envID := seedEnvironmentWithEntries(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, map[string]string{
+		"OTHER_KEY": "irrelevant",
+	})
+	attachEnvironmentToMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, mcpServer, envID)
+
+	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
+	<-done
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	require.Empty(t, gotAPIKey, "optional env-sourced header must be omitted when unresolved")
+}
+
+// TestServePublic_McpEndpoint_RemoteBacked_RequiredEnvHeaderNoEnvironment_FailsClosed
+// verifies a required env-sourced header fails closed when no environment is attached.
+func TestServePublic_McpEndpoint_RemoteBacked_RequiredEnvHeaderNoEnvironment_FailsClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	upstreamHit := make(chan struct{}, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamHit <- struct{}{}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	endpointSlug := "endpoint-" + uuid.NewString()
+	_, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
+	createEnvSourcedRemoteHeader(t, ctx, ti.conn, remoteServer.ID, true)
+
+	_, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+
+	select {
+	case <-upstreamHit:
+		t.Fatal("upstream must not be reached when no environment is attached")
 	default:
 	}
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -381,11 +382,20 @@ func (s *Service) serveRemoteBackend(
 		return oops.E(oops.CodeUnexpected, err, "load remote mcp server headers").LogError(ctx, logger)
 	}
 
+	var attachedEnv *toolconfig.CaseInsensitiveEnv
+	if mcpServer.EnvironmentID.Valid {
+		envVars, loadErr := s.env.Load(ctx, endpoint.ProjectID, toolconfig.ID(mcpServer.EnvironmentID.UUID))
+		if loadErr != nil {
+			return oops.E(oops.CodeUnexpected, loadErr, "load attached environment").LogError(ctx, logger)
+		}
+		attachedEnv = toolconfig.CIEnvFrom(envVars)
+	}
+
 	if s.remoteProxyManager == nil {
 		return oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
 	}
 
-	p := s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth, wwwAuthenticate)
+	p := s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, attachedEnv, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth, wwwAuthenticate)
 
 	return serveProxyBackend(w, r.WithContext(ctx), p)
 }
