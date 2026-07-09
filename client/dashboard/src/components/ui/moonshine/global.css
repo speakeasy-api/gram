@@ -55,4 +55,33 @@
 
   /* Extended text scale */
   --text-2xs: 0.5625rem; /* 9px */
+
+  /*
+   * Squared corners (Claude Design brand rule): collapse Tailwind's whole
+   * radius scale so every rounded-* utility renders sharp. rounded-full is
+   * untouched — circles remain for dots and avatars.
+   */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
+}
+
+/* Language palette as Tailwind colors (bg-lang-*, text-lang-*, …).
+ * `inline` keeps these as references to the base.css runtime tokens
+ * instead of emitting duplicate theme variables. */
+@theme inline {
+  --color-lang-typescript: var(--color-lang-typescript);
+  --color-lang-javascript: var(--color-lang-javascript);
+  --color-lang-python: var(--color-lang-python);
+  --color-lang-go: var(--color-lang-go);
+  --color-lang-ruby: var(--color-lang-ruby);
+  --color-lang-php: var(--color-lang-php);
+  --color-lang-java: var(--color-lang-java);
+  --color-lang-csharp: var(--color-lang-csharp);
+  --color-lang-rust: var(--color-lang-rust);
 }

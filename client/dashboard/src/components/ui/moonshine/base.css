@@ -32,16 +32,21 @@
   --color-base-white: hsl(0 0% 100%);
   --color-base-black: hsl(0 0% 0%);
 
-  /* Neutrals */
+  /*
+   * Neutrals — warm, ink-tinted ramp (Claude Design brandbook).
+   * Anchors: 100 = bone #FAFAFA (canvas), 700 = stone #575251 (secondary
+   * text), 900 = ink #0F0A07 (primary text / dark surfaces). True black
+   * (--color-base-black) is reserved for logo and rule work.
+   */
   --color-neutral-100: hsl(0, 0%, 98%);
-  --color-neutral-200: hsl(0, 0%, 92%);
-  --color-neutral-300: hsl(0, 0%, 86%);
-  --color-neutral-400: hsl(0, 0%, 73%);
-  --color-neutral-500: hsl(0, 0%, 59%);
-  --color-neutral-600: hsl(0, 0%, 46%);
-  --color-neutral-700: hsl(0, 0%, 33%);
-  --color-neutral-800: hsl(0, 0%, 20%);
-  --color-neutral-900: hsl(0, 0%, 7%);
+  --color-neutral-200: hsl(20, 6%, 92%);
+  --color-neutral-300: hsl(20, 6%, 86%);
+  --color-neutral-400: hsl(18, 5%, 73%);
+  --color-neutral-500: hsl(15, 5%, 59%);
+  --color-neutral-600: hsl(12, 4%, 46%);
+  --color-neutral-700: hsl(10, 4%, 33%);
+  --color-neutral-800: hsl(16, 12%, 18%);
+  --color-neutral-900: hsl(23, 36%, 4%);
 
   --color-neutral-100-40: hsl(from var(--color-neutral-100) h s l / 40%);
   --color-neutral-100-56: hsl(from var(--color-neutral-100) h s l / 56%);
@@ -131,25 +136,29 @@
     var(--color-brand-blue-100) 100%
   );
 
-  /* Tech colors */
-  --color-brand-typescript: hsl(0, 0%, 0%);
-  --color-brand-go: hsl(220, 100%, 12%);
-  --color-brand-java: hsl(214, 69%, 50%);
-  --color-brand-python: hsl(216, 100%, 80%);
-  --color-brand-c: hsl(154, 100%, 7%);
-  --color-brand-terraform: hsl(108, 24%, 41%);
-  --color-brand-unity: hsl(68, 52%, 72%);
-  --color-brand-php: hsl(334, 54%, 13%);
-  --color-brand-swift: hsl(4, 67%, 47%);
-  --color-brand-ruby: hsl(23, 96%, 62%);
-  --color-brand-postman: hsl(0, 0%, 83%);
+  /*
+   * Language palette (Claude Design brandbook): every color names a
+   * programming language. Colors are identifiers — labels, tags, legend
+   * swatches, chart series — never surface fills.
+   */
+  --color-lang-typescript: hsl(220, 100%, 12%); /* deep ink-blue */
+  --color-lang-javascript: hsl(215, 69%, 50%); /* primary blue   */
+  --color-lang-python: hsl(216, 100%, 80%); /* sky            */
+  --color-lang-go: hsl(154, 100%, 7%); /* forest         */
+  --color-lang-ruby: hsl(108, 24%, 41%); /* moss           */
+  --color-lang-php: hsl(68, 52%, 72%); /* sap            */
+  --color-lang-java: hsl(334, 54%, 13%); /* oxblood        */
+  --color-lang-csharp: hsl(4, 67%, 47%); /* vermilion      */
+  --color-lang-rust: hsl(23, 96%, 62%); /* ember          */
 
+  /* Signature gradient: runs through the full language palette. Use at
+   * most once per screen (top borders, hero strips, dividers). */
   --gradient-brand-primary-colors:
-    var(--color-brand-php) 0%, var(--color-brand-swift) 12.56%,
-    var(--color-brand-ruby) 25.06%, var(--color-brand-unity) 37.56%,
-    var(--color-brand-terraform) 50.06%, var(--color-brand-c) 62.06%,
-    var(--color-brand-go) 74.06%, var(--color-brand-java) 86.06%,
-    var(--color-brand-python) 97.06%;
+    var(--color-lang-java) 0%, var(--color-lang-csharp) 12.56%,
+    var(--color-lang-rust) 25.06%, var(--color-lang-php) 37.56%,
+    var(--color-lang-ruby) 50.06%, var(--color-lang-go) 62.06%,
+    var(--color-lang-typescript) 74.06%, var(--color-lang-javascript) 86.06%,
+    var(--color-lang-python) 97.06%;
 
   --gradient-brand-primary: linear-gradient(
     90deg,
@@ -514,8 +523,9 @@
    * Higher-level semantic tokens for specific use cases
    * ============================================ */
 
-  /* Border Radius */
-  --radius: 0.625rem;
+  /* Border Radius — squared corners are a brand rule (Claude Design).
+   * Circles (rounded-full) remain for dots and avatars. */
+  --radius: 0px;
   /* ============================================
    * 4. DEPRECATED TOKENS - SHADCN COMPATIBILITY
    * These will be removed in future versions

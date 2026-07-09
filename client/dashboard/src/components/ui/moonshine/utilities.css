@@ -1373,11 +1373,12 @@
   /* Link colors */
   --color-link: var(--text-link-primary);
 
-  /* Shadcn theme */
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  /* Shadcn theme — squared corners are a brand rule, so the whole radius
+   * scale collapses to the (zero) --radius token. */
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: var(--radius);
 
   --color-background: var(--background);
   --color-background-pure: var(--background-pure);
