@@ -6,7 +6,7 @@ import { useRiskAcknowledgePolicyChallengeMutation } from "@gram/client/react-qu
 import { useRiskDeclinePolicyChallengeMutation } from "@gram/client/react-query/riskDeclinePolicyChallenge.js";
 import { useRiskGetPolicyChallengeMutation } from "@gram/client/react-query/riskGetPolicyChallenge.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
-import { type ComponentProps, useEffect, useState } from "react";
+import { type ComponentProps, useEffect, useRef, useState } from "react";
 
 type IconName = ComponentProps<typeof Icon>["name"];
 
@@ -72,11 +72,17 @@ export function RiskPolicyChallengeAcknowledgeContent(): JSX.Element {
     toolName?: string | undefined;
   } | null>(null);
 
+  // Fire the peek exactly once. A ref (not challengeState-in-deps + an active
+  // flag) is used deliberately: setting challengeState inside the effect while
+  // it is a dependency would re-run the effect, whose cleanup would flip the
+  // in-flight active flag and silently drop the resolved result — leaving the
+  // spinner up forever.
+  const fetchedRef = useRef(false);
   const canFetch = !!storedAckToken && hasSession && outcome === "idle";
   useEffect(() => {
-    if (!canFetch || challengeState !== "idle") return;
+    if (!canFetch || fetchedRef.current) return;
+    fetchedRef.current = true;
     setChallengeState("loading");
-    let active = true;
     fetchChallenge({
       request: {
         acknowledgeRiskPolicyChallengeRequestBody: {
@@ -85,7 +91,6 @@ export function RiskPolicyChallengeAcknowledgeContent(): JSX.Element {
       },
     })
       .then((res) => {
-        if (!active) return;
         setChallengeData({
           acknowledged: res.acknowledged,
           message: res.message,
@@ -95,12 +100,9 @@ export function RiskPolicyChallengeAcknowledgeContent(): JSX.Element {
         setChallengeState("loaded");
       })
       .catch(() => {
-        if (active) setChallengeState("error");
+        setChallengeState("error");
       });
-    return () => {
-      active = false;
-    };
-  }, [canFetch, challengeState, fetchChallenge, storedAckToken]);
+  }, [canFetch, fetchChallenge, storedAckToken]);
 
   const { mutateAsync: approve, isPending: approving } =
     useRiskAcknowledgePolicyChallengeMutation();
