@@ -297,6 +297,9 @@ type ListToolUsageTracesRequestBody struct {
 	// Optional account type filter ('team' or 'personal'). 'team' includes
 	// unclassified traces.
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
 	// Free-text attribute search string from the q URL param. Matches useful
 	// identifier attributes such as Gram URN, conversation ID, and trigger
 	// instance ID.
@@ -8886,6 +8889,12 @@ func NewListToolUsageTracesPayload(body *ListToolUsageTracesRequestBody, apikeyT
 			v.HookSources[i] = val
 		}
 	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
+		}
+	}
 	if body.Filters != nil {
 		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
 		for i, val := range body.Filters {
@@ -9428,6 +9437,11 @@ func ValidateListToolUsageTracesRequestBody(body *ListToolUsageTracesRequestBody
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	for _, e := range body.Statuses {
+		if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
 		}
 	}
 	for _, e := range body.Filters {

@@ -13,7 +13,11 @@ import {
   safeBase64Encode,
 } from "./observeFilterUtils";
 import { DEFAULT_HOOK_TYPES, VALID_HOOK_TYPES } from "./observeFilterConstants";
-import type { ObserveTypeFilterValue } from "@/components/observe/ObserveFilterBar";
+import type {
+  ObserveStatusFilterValue,
+  ObserveTypeFilterValue,
+} from "@/components/observe/ObserveFilterBar";
+import { TOOL_USAGE_VALID_STATUSES } from "./observeTargetFilters";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -368,6 +372,40 @@ function useObserveFiltersImpl<
     [defaultTypes, setSearchParams, validTypes],
   );
 
+  // status filter (error | success | blocked | pending); empty = no filter.
+  // Opt-in: only pages backed by the tool-usage traces query surface it.
+  const selectedStatuses = useMemo<ObserveStatusFilterValue[]>(() => {
+    const raw = searchParams.get("status");
+    if (!raw) return [];
+    return [
+      ...new Set(
+        raw
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s): s is ObserveStatusFilterValue =>
+            TOOL_USAGE_VALID_STATUSES.includes(s as ObserveStatusFilterValue),
+          ),
+      ),
+    ];
+  }, [searchParams]);
+  const handleStatusesChange = useCallback(
+    (statuses: ObserveStatusFilterValue[]) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (statuses.length > 0) {
+            next.set("status", statuses.join(","));
+          } else {
+            next.delete("status");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   // account_type filter (team | personal); empty string = no filter. Opt-in:
   // only pages that pass these to ObserveFilterBar surface the control.
   const urlAccountType = searchParams.get("account_type");
@@ -398,6 +436,8 @@ function useObserveFiltersImpl<
   return {
     accountType,
     handleAccountTypeChange,
+    selectedStatuses,
+    handleStatusesChange,
     activeFilters,
     selectedHookTypes,
     dateRange,

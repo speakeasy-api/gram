@@ -297,6 +297,9 @@ type ListToolUsageTracesRequestBody struct {
 	// Optional account type filter ('team' or 'personal'). 'team' includes
 	// unclassified traces.
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
 	// Free-text attribute search string from the q URL param. Matches useful
 	// identifier attributes such as Gram URN, conversation ID, and trigger
 	// instance ID.
@@ -5516,6 +5519,12 @@ func NewListToolUsageTracesRequestBody(p *telemetry.ListToolUsageTracesPayload) 
 		body.HookSources = make([]string, len(p.HookSources))
 		for i, val := range p.HookSources {
 			body.HookSources[i] = val
+		}
+	}
+	if p.Statuses != nil {
+		body.Statuses = make([]string, len(p.Statuses))
+		for i, val := range p.Statuses {
+			body.Statuses[i] = string(val)
 		}
 	}
 	if p.Filters != nil {

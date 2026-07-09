@@ -45968,6 +45968,17 @@ components:
                     enum:
                         - asc
                         - desc
+                statuses:
+                    type: array
+                    items:
+                        type: string
+                        description: Tool usage trace outcome
+                        enum:
+                            - error
+                            - success
+                            - blocked
+                            - pending
+                    description: Trace outcomes to include (error, success, blocked, pending). Empty means all.
                 target_types:
                     type: array
                     items:

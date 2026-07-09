@@ -120,6 +120,85 @@ func resolveAttributeColumn(path string) string {
 	}
 }
 
+// toolUsageHTTPStatusPath is the attribute path the Tool Logs UI uses to filter by
+// HTTP response status ("Non-2xx responses" etc.). A trace's status is a per-trace
+// aggregate (the max status code across all of the trace's rows), so this filter must
+// be applied to the aggregated normalized_traces column rather than pushed down to
+// individual telemetry_logs rows. Pushed down, a "!= 200" predicate is satisfied by any
+// status-less row of an otherwise-successful trace (e.g. a hook row that carries no
+// http.response.status_code, whose stringified attribute is empty and so is trivially
+// unequal to "200"), leaking the whole trace back into the result set after grouping
+// where it shows up as a success/200. See DNO-447.
+const toolUsageHTTPStatusPath = "http.response.status_code"
+
+// toolUsageStatusPredicate builds a trace-level predicate on the aggregated
+// http_status_code column (Nullable(Int32)) for an http.response.status_code filter.
+// Comparisons are numeric so they match the max-status-code aggregation the query uses
+// for the trace's status. Returns nil when the filter carries no usable value (numeric
+// ops whose values don't parse as integers are skipped rather than erroring the query).
+func toolUsageStatusPredicate(f AttributeFilter) squirrel.Sqlizer {
+	const col = "http_status_code"
+	switch f.Op {
+	case "exists":
+		return squirrel.Expr(col + " IS NOT NULL")
+	case "not_exists":
+		return squirrel.Expr(col + " IS NULL")
+	case "contains":
+		if len(f.Values) == 0 {
+			return nil
+		}
+		return squirrel.Expr("position(toString("+col+"), ?) > 0", f.Values[0])
+	}
+
+	// Remaining ops (eq, not_eq, in, and the default) compare numerically.
+	codes := make([]int32, 0, len(f.Values))
+	for _, v := range f.Values {
+		n, err := strconv.Atoi(strings.TrimSpace(v))
+		if err != nil {
+			continue
+		}
+		codes = append(codes, int32(n)) //nolint:gosec // HTTP status codes are small
+	}
+	if len(codes) == 0 {
+		return nil
+	}
+	switch f.Op {
+	case "not_eq":
+		return squirrel.Expr(col+" != ?", codes[0])
+	case "in":
+		return squirrel.Eq{col: codes}
+	default: // eq and fallback
+		return squirrel.Expr(col+" = ?", codes[0])
+	}
+}
+
+// toolUsageOutcomePredicate builds a trace-level predicate for the first-class Tool Logs
+// "Status" filter. It ORs together the selected outcomes, evaluated against the
+// aggregated per-trace hook_status (Nullable String) and http_status_code (Nullable
+// Int32) columns projected by both normalized_traces paths. The mapping mirrors the
+// dashboard badge logic (getStatusConfig): hook_status wins when present, otherwise the
+// HTTP status code decides. Unknown/empty selections yield nil so the query is
+// unaffected.
+func toolUsageOutcomePredicate(statuses []string) squirrel.Sqlizer {
+	or := squirrel.Or{}
+	for _, status := range statuses {
+		switch status {
+		case "blocked":
+			or = append(or, squirrel.Expr("hook_status = 'blocked'"))
+		case "failure", "error":
+			or = append(or, squirrel.Expr("(hook_status = 'failure' OR (hook_status IS NULL AND http_status_code >= 400))"))
+		case "success":
+			or = append(or, squirrel.Expr("(hook_status = 'success' OR (hook_status IS NULL AND http_status_code >= 200 AND http_status_code < 400))"))
+		case "pending":
+			or = append(or, squirrel.Expr("hook_status = 'pending'"))
+		}
+	}
+	if len(or) == 0 {
+		return nil
+	}
+	return or
+}
+
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
@@ -2071,7 +2150,8 @@ type ListToolUsageTracesParams struct {
 	ShadowServerNames  []string
 	UserFilters        []ToolUsageUserFilter
 	HookSources        []string
-	AccountType        string // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
+	AccountType        string   // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
+	Statuses           []string // Optional trace-outcome filter: error, success, blocked, pending. Empty means all.
 	Query              string
 	Filters            []AttributeFilter
 	SortOrder          string
@@ -2389,6 +2469,23 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 			})
 		}
 		sb = sb.Where(userFilters)
+	}
+
+	// http.response.status_code filters are applied here, against the aggregated
+	// per-trace http_status_code column, instead of being pushed down to raw rows in
+	// toolUsageTraceRowsCTE. See toolUsageHTTPStatusPath for why.
+	for _, filter := range arg.Filters {
+		if filter.Path != toolUsageHTTPStatusPath || !validJSONPath.MatchString(filter.Path) {
+			continue
+		}
+		if pred := toolUsageStatusPredicate(filter); pred != nil {
+			sb = sb.Where(pred)
+		}
+	}
+
+	// First-class Status filter, applied to the aggregated per-trace outcome columns.
+	if pred := toolUsageOutcomePredicate(arg.Statuses); pred != nil {
+		sb = sb.Where(pred)
 	}
 
 	if arg.CursorID != "" {
@@ -3274,6 +3371,12 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 
 	for _, filter := range arg.Filters {
 		if !validJSONPath.MatchString(filter.Path) {
+			continue
+		}
+		// http.response.status_code is a per-trace status, applied at the aggregated
+		// trace level in ListToolUsageTraces — never pushed down to raw rows here. See
+		// toolUsageHTTPStatusPath.
+		if filter.Path == toolUsageHTTPStatusPath {
 			continue
 		}
 		pred := filter.Predicate(resolveAttributeColumn(filter.Path))

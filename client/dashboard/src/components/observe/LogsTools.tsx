@@ -11,6 +11,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   FilterChip,
   ObserveFilterBar,
+  type ObserveStatusFilterValue,
   type ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
 import {
@@ -20,8 +21,10 @@ import {
   selectedTargetValues,
   selectedUserEmails,
   TOOL_USAGE_DEFAULT_TYPES,
+  TOOL_USAGE_STATUS_OPTIONS,
   TOOL_USAGE_TYPE_OPTIONS,
   TOOL_USAGE_VALID_TYPES,
+  toStatuses,
   toTargetTypes,
 } from "@/components/observe/observeTargetFilters";
 import { perPage } from "@/components/observe/observeFilterUtils";
@@ -199,6 +202,8 @@ export function LogsTools(): JSX.Element {
     from,
     to,
     selectedHookTypes,
+    selectedStatuses,
+    handleStatusesChange,
     activeFilters,
     handleServerSelectionChange,
     handleUserEmailSelectionChange,
@@ -269,6 +274,11 @@ export function LogsTools(): JSX.Element {
         | ListToolUsageTracesPayloadTargetTypes[]
         | undefined,
     [selectedHookTypes],
+  );
+
+  const statuses = useMemo(
+    () => toStatuses(selectedStatuses),
+    [selectedStatuses],
   );
 
   const { data: filterOptionsData } = useQuery({
@@ -381,6 +391,7 @@ export function LogsTools(): JSX.Element {
         hostedToolsetSlugs,
         shadowServerNames,
         targetTypes,
+        statuses,
         userFilters,
         hookSources,
         attributeSearchQuery,
@@ -398,6 +409,7 @@ export function LogsTools(): JSX.Element {
               shadowServerNames:
                 shadowServerNames.length > 0 ? shadowServerNames : undefined,
               targetTypes,
+              statuses,
               userFilters: userFilters.length > 0 ? userFilters : undefined,
               hookSources: hookSources.length > 0 ? hookSources : undefined,
               accountType: accountType || undefined,
@@ -512,6 +524,8 @@ export function LogsTools(): JSX.Element {
             onTypesChange={(types) =>
               handleHookTypesChange(types.filter(isToolUsageType))
             }
+            selectedStatuses={selectedStatuses}
+            onStatusesChange={handleStatusesChange}
             roleOptions={roleOptions}
             selectedRoleIds={selectedRoleIds}
             onRoleSelectionChange={handleRoleSelectionChange}
@@ -567,6 +581,8 @@ function LogsToolsContent({
   activeFilters,
   selectedTypes,
   onTypesChange,
+  selectedStatuses,
+  onStatusesChange,
   roleOptions,
   selectedRoleIds,
   onRoleSelectionChange,
@@ -617,6 +633,8 @@ function LogsToolsContent({
   activeFilters: FilterChip[];
   selectedTypes: ToolUsageType[];
   onTypesChange: (types: ObserveTypeFilterValue[]) => void;
+  selectedStatuses: ObserveStatusFilterValue[];
+  onStatusesChange: (statuses: ObserveStatusFilterValue[]) => void;
   roleOptions: Array<{ id: string; name: string }>;
   selectedRoleIds: string[];
   onRoleSelectionChange: (values: string[]) => void;
@@ -688,6 +706,9 @@ function LogsToolsContent({
             selectedTypes={selectedTypes}
             onTypesChange={onTypesChange}
             typeOptions={TOOL_USAGE_TYPE_OPTIONS}
+            selectedStatuses={selectedStatuses}
+            onStatusesChange={onStatusesChange}
+            statusOptions={TOOL_USAGE_STATUS_OPTIONS}
             roleOptions={roleOptions}
             selectedRoleIds={selectedRoleIds}
             onRoleSelectionChange={onRoleSelectionChange}
@@ -754,6 +775,7 @@ function LogsToolsContent({
                     hasActiveFilters={
                       activeFilters.length > 0 ||
                       selectedTypes.length > 0 ||
+                      selectedStatuses.length > 0 ||
                       selectedRoleIds.length > 0 ||
                       attributeFilters.length > 0 ||
                       accountType !== "" ||
