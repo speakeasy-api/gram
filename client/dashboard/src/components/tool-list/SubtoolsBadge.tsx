@@ -6,7 +6,7 @@ import {
   TooltipContent,
   TooltipPortal,
   TooltipTrigger,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 
 export function SubtoolsBadge({
   tool,

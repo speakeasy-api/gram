@@ -14,11 +14,6 @@ const config: KnipConfig = {
     // re-export). No import sites by design.
     "src/lib.d.ts",
   ],
-  ignoreDependencies: [
-    // Consumed via CSS @import inside @speakeasy-api/moonshine; knip's
-    // CSS plugin only scans first-party files so it misses this.
-    "@tailwindcss/typography",
-  ],
 };
 
 export default config;

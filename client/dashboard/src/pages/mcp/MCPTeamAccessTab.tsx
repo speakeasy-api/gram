@@ -14,11 +14,11 @@ import { resourceKindForScope, selectorMatches } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Column, Table } from "@speakeasy-api/moonshine";
+import { Column, Table } from "@/components/ui/moonshine";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { useMemo, useState, ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 
 function getInitials(name: string) {
   return name

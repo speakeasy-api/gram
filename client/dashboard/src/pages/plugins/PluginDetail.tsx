@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
   Icon,
   Stack,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { Network, Trash2 } from "lucide-react";

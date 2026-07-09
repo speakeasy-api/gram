@@ -34,7 +34,7 @@ import {
 } from "@gram/client/react-query/riskPoliciesGet.js";
 import { riskEvalsEvaluate } from "@gram/client/funcs/riskEvalsEvaluate.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Button, Stack } from "@/components/ui/moonshine";
 import {
   keepPreviousData,
   useQueries,

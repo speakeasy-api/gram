@@ -10,7 +10,7 @@ import { Type } from "@/components/ui/type";
 import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool } from "@/lib/toolTypes";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Icon, Stack } from "@/components/ui/moonshine";
 import { useMemo, useState } from "react";
 
 type EditMode = "name" | "description" | "annotations" | "tags";

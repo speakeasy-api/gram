@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   ThemeSwitcher,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import {
   ActivityIcon,
   BookOpenIcon,

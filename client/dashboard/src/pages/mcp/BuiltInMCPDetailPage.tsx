@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn, getServerURL } from "@/lib/utils";
-import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Button, Icon, Stack } from "@/components/ui/moonshine";
 import { useState } from "react";
 import { toast } from "sonner";
 

@@ -11,8 +11,8 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import {
   Button as MoonshineButton,
   Stack,
-  useMoonshineConfig,
-} from "@speakeasy-api/moonshine";
+  useTheme,
+} from "@/components/ui/moonshine";
 import { Webhook } from "lucide-react";
 import { AppPortal } from "svix-react";
 import React, { JSX } from "react";
@@ -148,7 +148,7 @@ function WebhooksDisabled() {
 }
 
 function WebhookConfigPortal() {
-  const { theme: rawTheme } = useMoonshineConfig();
+  const { theme: rawTheme } = useTheme();
   const { mutate: createSession } = useCreatePortalSessionMutation();
   const [portalURL, setPortalURL] = React.useState<string | null>(null);
   React.useEffect(() => {

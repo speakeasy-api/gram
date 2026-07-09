@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
 import type { DeploymentSummary } from "@gram/client/models/components/deploymentsummary.js";
 import { useRoutes } from "@/routes";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@/components/ui/moonshine";
 import { ExternalLink } from "lucide-react";
 import { Suspense, useState } from "react";
 import { DeploymentsEmptyState } from "../deployments/DeploymentsEmptyState";

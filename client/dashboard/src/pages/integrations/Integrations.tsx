@@ -17,7 +17,7 @@ import { IntegrationEntry } from "@gram/client/models/components/integrationentr
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListIntegrations } from "@gram/client/react-query/listIntegrations.js";
 import { useListPackagesSuspense } from "@gram/client/react-query/listPackages.js";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button, Icon, Stack } from "@/components/ui/moonshine";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";

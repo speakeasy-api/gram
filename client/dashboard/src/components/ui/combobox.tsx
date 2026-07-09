@@ -13,7 +13,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/moonshine";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { ReactNode, useState } from "react";
 import { Type } from "./type";

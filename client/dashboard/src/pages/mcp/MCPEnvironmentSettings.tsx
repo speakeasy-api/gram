@@ -26,7 +26,7 @@ import {
 import { useMcpMetadataSetMutation } from "@gram/client/react-query/mcpMetadataSet.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateEnvironmentMutation } from "@gram/client/react-query/updateEnvironment.js";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Button, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle, Link, Plus, Shield } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";

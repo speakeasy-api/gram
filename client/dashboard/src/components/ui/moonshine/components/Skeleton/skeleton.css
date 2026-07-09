@@ -1,0 +1,55 @@
+/* The vendored global.css no longer imports tailwindcss itself (App.css owns
+ * that), so reference tailwind here too for @apply/@variant resolution. */
+@reference "tailwindcss";
+@reference "../../global.css";
+
+/* light */
+:root {
+  --skeleton-animation-duration: 2s;
+  --skeleton-animation-delay: 0s;
+  --skeleton-animation-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --skeleton-animation-direction: to right;
+  --skeleton-animation-background-color-1: rgba(0, 0, 0, 0.01);
+  --skeleton-animation-background-color-2: rgba(0, 0, 0, 0.03);
+  --skeleton-animation-background-color-start: rgba(0, 0, 0, 0);
+  --skeleton-animation-background-color-end: rgba(0, 0, 0, 0);
+}
+
+.dark {
+  /* dark */
+  --skeleton-animation-background-color-1: rgba(255, 255, 255, 0.03);
+  --skeleton-animation-background-color-2: rgba(255, 255, 255, 0.07);
+  --skeleton-animation-background-color-start: rgba(255, 255, 255, 0);
+  --skeleton-animation-background-color-end: rgba(255, 255, 255, 0);
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+
+  @apply bg-muted;
+
+  &::after {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      var(--skeleton-animation-background-color-start) 0,
+      var(--skeleton-animation-background-color-1) 20%,
+      var(--skeleton-animation-background-color-2) 60%,
+      var(--skeleton-animation-background-color-end)
+    );
+    animation: skeleton-shimmer var(--skeleton-animation-duration) infinite;
+    content: "";
+  }
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}

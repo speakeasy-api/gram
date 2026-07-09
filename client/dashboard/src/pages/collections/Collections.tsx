@@ -2,7 +2,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CreateResourceCard } from "@/components/create-resource-card";
 import { Type } from "@/components/ui/type";
-import { Input, Stack } from "@speakeasy-api/moonshine";
+import { Input, Stack } from "@/components/ui/moonshine";
 import { Search, X } from "lucide-react";
 import { useState } from "react";
 import { Outlet, useNavigate } from "react-router";

@@ -11,7 +11,7 @@ import { useRiskListCustomDetectionRulesSuspense } from "@gram/client/react-quer
 import { useRiskListPoliciesSuspense } from "@gram/client/react-query/riskListPolicies.js";
 import { usePluginsSuspense } from "@gram/client/react-query/plugins";
 import { useShadowMCPApprovalRequestsSuspense } from "@gram/client/react-query/shadowMCPApprovalRequests.js";
-import { Icon, type IconName } from "@speakeasy-api/moonshine";
+import { Icon, type IconName } from "@/components/ui/moonshine";
 import { Suspense, useMemo, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { CommandErrorBoundary } from "./CommandErrorBoundary";

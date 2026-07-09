@@ -23,7 +23,7 @@ import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSess
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { useMintUserSessionMutation } from "@gram/client/react-query/mintUserSession.js";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useTheme } from "@/components/ui/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, HistoryIcon, ShieldAlert } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -56,7 +56,7 @@ export function PlaygroundElements({
   const session = useSession();
   const project = useProject();
   const createSessionMutation = useChatSessionsCreateMutation();
-  const { theme: resolvedTheme } = useMoonshineConfig();
+  const { theme: resolvedTheme } = useTheme();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [searchParams] = useSearchParams();
 

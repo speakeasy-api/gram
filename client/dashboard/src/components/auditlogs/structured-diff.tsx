@@ -2,7 +2,7 @@ import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { computeChangedFields } from "@/lib/compute-changed-fields";
 import { useMemo, useState, Suspense } from "react";
 import React from "react";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/moonshine";
 import { HighlightProvider } from "@/components/diffs/provider";
 
 const StaticDiff = React.lazy(() =>

@@ -5,7 +5,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateOAuthProxyServerMutation } from "@gram/client/react-query/updateOAuthProxyServer.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 

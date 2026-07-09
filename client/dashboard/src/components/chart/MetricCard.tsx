@@ -1,4 +1,4 @@
-import { Icon, type IconName } from "@speakeasy-api/moonshine";
+import { Icon, type IconName } from "@/components/ui/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { formatCompact } from "@/lib/format";
 import { getValueColor, ThresholdConfig } from "./chartUtils";

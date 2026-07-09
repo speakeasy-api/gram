@@ -3,7 +3,7 @@ import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
 import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import type { Tool } from "@/lib/toolTypes";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/moonshine";
 import { useState } from "react";
 import { SourceToolActions } from "./SourceToolActions";
 

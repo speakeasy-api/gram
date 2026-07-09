@@ -1,4 +1,4 @@
-import { cn, Stack } from "@speakeasy-api/moonshine";
+import { cn, Stack } from "@/components/ui/moonshine";
 import { Type } from "./ui/type";
 
 export const Block = ({

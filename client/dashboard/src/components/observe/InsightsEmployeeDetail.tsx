@@ -1,4 +1,4 @@
-import { Badge, Icon, type IconName } from "@speakeasy-api/moonshine";
+import { Badge, Icon, type IconName } from "@/components/ui/moonshine";
 import {
   ArrowRight,
   Boxes,

@@ -15,7 +15,7 @@ import {
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import { Icon, type IconName } from "@speakeasy-api/moonshine";
+import { Icon, type IconName } from "@/components/ui/moonshine";
 import {
   ArrowLeft,
   Check,

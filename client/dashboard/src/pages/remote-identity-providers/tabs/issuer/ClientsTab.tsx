@@ -13,7 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
 import { remoteSessionClientDisplayName } from "../../clientDisplay";

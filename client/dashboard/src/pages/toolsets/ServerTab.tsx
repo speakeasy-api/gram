@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { Toolset } from "@/lib/toolTypes";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/moonshine";
 import { Server } from "lucide-react";
 
 interface ServerTabContentProps {

@@ -19,7 +19,7 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
-import { Button, Card, Icon } from "@speakeasy-api/moonshine";
+import { Button, Card, Icon } from "@/components/ui/moonshine";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Wand2 } from "lucide-react";
 import {

@@ -18,7 +18,7 @@ import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServ
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@/components/ui/moonshine";
 import { ArrowUpRight, Copy, ExternalLink } from "lucide-react";
 import { type ReactNode } from "react";
 import { useNavigate } from "react-router";

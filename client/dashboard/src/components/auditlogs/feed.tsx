@@ -18,7 +18,7 @@ import {
 } from "@/lib/audit-log-feed";
 import { formatAuditAction } from "@/lib/audit-log-format";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/moonshine";
 import React from "react";
 
 export function DateGroupHeader({

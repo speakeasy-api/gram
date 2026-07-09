@@ -53,7 +53,7 @@ import {
   type SortDescriptor,
   Table,
   sortTableData,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import { HooksSetupDialog } from "@/pages/hooks/HooksSetupDialog";
 
 type EmployeeView = "employees" | "unattributed";

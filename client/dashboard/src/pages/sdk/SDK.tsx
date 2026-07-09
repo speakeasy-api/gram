@@ -1,12 +1,12 @@
 import { Page } from "@/components/page-layout";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Button, Icon } from "@/components/ui/moonshine";
 import { Combobox } from "@/components/ui/combobox";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { capitalize } from "@/lib/utils";
-import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
+import { CodeSnippet, Stack } from "@/components/ui/moonshine";
 import { AgentifyProvider } from "../playground/Agentify";
 import { useAgentify } from "../playground/useAgentify";
 import {

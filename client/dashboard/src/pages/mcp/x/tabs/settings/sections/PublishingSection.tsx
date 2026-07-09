@@ -4,7 +4,7 @@ import { Type } from "@/components/ui/type";
 import { usePublishing } from "@/pages/mcp/usePublishing";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
 import { FooterSaveButtonContent, SettingsSection } from "../SettingsSection";
 
 export function PublishingSection({

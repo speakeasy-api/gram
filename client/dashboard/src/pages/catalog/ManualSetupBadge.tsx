@@ -4,7 +4,7 @@ import {
   TooltipContent,
   TooltipPortal,
   TooltipTrigger,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import type { PulseMCPServer } from "./hooks";
 import { requiresManualSetup } from "./hooks/serverMetadata";
 

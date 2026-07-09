@@ -1,7 +1,7 @@
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { Card } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Icon, Stack } from "@/components/ui/moonshine";
 import { ReactNode, Suspense } from "react";
 import { ErrorBoundary as ReactErrorBoundary } from "react-error-boundary";
 import { handleError, toError } from "@/lib/errors";

@@ -7,7 +7,7 @@ import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";

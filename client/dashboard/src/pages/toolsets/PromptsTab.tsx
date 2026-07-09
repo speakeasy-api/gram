@@ -7,7 +7,7 @@ import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
 import { useState } from "react";
 import { PromptTemplateCard } from "../prompts/Prompts";
 import { ToolsetsGraphic } from "./ToolsetsEmptyState";

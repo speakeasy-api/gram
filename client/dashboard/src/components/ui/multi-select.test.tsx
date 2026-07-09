@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // moonshine's bundle imports lucide-react/dynamicIconImports which can't be
 // resolved in the test environment. Mock it so the local Button renders plainly.
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/moonshine", () => ({
   Icon: ({ name }: { name: string }) => <span>{name}</span>,
 }));
 

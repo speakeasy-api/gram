@@ -25,7 +25,7 @@ import { StepContainer } from "../step-container";
 import { AGENT_PLATFORMS } from "../../setup-data";
 import type { AgentPlatform, PlatformSetupStatus } from "../../types";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
-import { Badge, Button, Link } from "@speakeasy-api/moonshine";
+import { Badge, Button, Link } from "@/components/ui/moonshine";
 import { cn } from "@/lib/utils";
 
 const API_KEY_PLACEHOLDER = "{{GRAM_API_KEY}}";

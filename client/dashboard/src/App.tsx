@@ -1,14 +1,10 @@
-import "@speakeasy-api/moonshine/moonshine.css";
-import "./App.css"; // Import this second to override certain values in moonshine.css
+import "./App.css";
 
 import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
 import { FontTexture, WebGLCanvas } from "@/components/webgl";
-import {
-  MoonshineConfigProvider,
-  TooltipProvider,
-} from "@speakeasy-api/moonshine";
+import { ThemeProvider, TooltipProvider } from "@/components/ui/moonshine";
 import { useEffect, useMemo, useState } from "react";
 import {
   BrowserRouter,
@@ -94,7 +90,7 @@ export default function App(): JSX.Element {
   }, []);
 
   return (
-    <MoonshineConfigProvider theme={theme} setTheme={applyTheme}>
+    <ThemeProvider theme={theme} setTheme={applyTheme}>
       <LocalTooltipProvider>
         <TooltipProvider>
           <TelemetryProvider>
@@ -112,7 +108,7 @@ export default function App(): JSX.Element {
           </TelemetryProvider>
         </TooltipProvider>
       </LocalTooltipProvider>
-    </MoonshineConfigProvider>
+    </ThemeProvider>
   );
 }
 

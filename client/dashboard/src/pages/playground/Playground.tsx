@@ -28,7 +28,7 @@ import {
 import { invalidateTemplate } from "@gram/client/react-query/template.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
-import { ResizablePanel } from "@speakeasy-api/moonshine";
+import { ResizablePanel } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, Plus, ScrollTextIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";

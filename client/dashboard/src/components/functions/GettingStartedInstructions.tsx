@@ -1,6 +1,6 @@
 import { CodeBlock } from "@/components/code";
 import { Type } from "@/components/ui/type";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/moonshine";
 
 export function GettingStartedInstructions(): JSX.Element {
   const commands = [

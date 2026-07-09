@@ -1,4 +1,4 @@
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/moonshine";
 
 import { cn } from "@/lib/utils";
 

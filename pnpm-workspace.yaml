@@ -36,7 +36,6 @@ minimumReleaseAgeExclude:
   - "@oxfmt/*"
   - "oxfmt"
   - "react-router"
-  - "@speakeasy-api/moonshine"
   - "@chromatic-com/storybook"
 
 overrides:

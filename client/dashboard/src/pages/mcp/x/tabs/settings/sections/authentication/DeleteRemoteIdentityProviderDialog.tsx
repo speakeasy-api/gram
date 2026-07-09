@@ -4,7 +4,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
-import { Alert, Button, Dialog } from "@speakeasy-api/moonshine";
+import { Alert, Button, Dialog } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";

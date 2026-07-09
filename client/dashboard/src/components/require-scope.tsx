@@ -1,7 +1,7 @@
 import { useRBAC } from "@/hooks/useRBAC";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/moonshine";
 import React from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 

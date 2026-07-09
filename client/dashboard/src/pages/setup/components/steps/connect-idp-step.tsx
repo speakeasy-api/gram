@@ -6,7 +6,7 @@ import {
   ChevronDown,
   Search,
 } from "lucide-react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useTheme } from "@/components/ui/moonshine";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
@@ -23,7 +23,7 @@ function ProviderIcon({
   provider: IdpProvider;
   className?: string;
 }) {
-  const { theme } = useMoonshineConfig();
+  const { theme } = useTheme();
   const variant = theme === "dark" ? "dark" : "light";
   return (
     <img

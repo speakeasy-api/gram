@@ -27,7 +27,7 @@ import {
   invalidateAllPlugin,
   usePlugin,
 } from "@gram/client/react-query/plugin";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@/components/ui/moonshine";
 import { Input } from "@/components/ui/input";
 import { CopyButton } from "@/components/ui/copy-button";
 import {

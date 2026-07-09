@@ -62,7 +62,7 @@ import {
   type SortDescriptor,
   Table,
   sortTableData,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, Chart } from "react-chartjs-2";
 import { Link } from "react-router";

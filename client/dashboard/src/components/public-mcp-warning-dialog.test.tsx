@@ -5,7 +5,7 @@ import { PublicMcpWarningDialog } from "./public-mcp-warning-dialog";
 // moonshine's bundle imports lucide-react/dynamicIconImports which can't be
 // resolved in the test environment (no package exports map). Mock the whole
 // package so Button renders as a plain <button>.
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/moonshine", () => ({
   Button: ({
     children,
     onClick,

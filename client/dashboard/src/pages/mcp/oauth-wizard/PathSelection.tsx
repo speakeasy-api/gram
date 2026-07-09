@@ -7,7 +7,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/moonshine";
 import { ReactNode } from "react";
 import { canAutoConfigureFromDiscovered, WizardContext } from "./machine";
 import type { DiscoveredOAuth } from "./machine-types";

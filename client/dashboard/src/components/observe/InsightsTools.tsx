@@ -42,7 +42,7 @@ import type { ToolUsageUserSummary } from "@gram/client/models/components/toolus
 import type { ToolUsageUserTimeSeriesPoint } from "@gram/client/models/components/toolusageusertimeseriespoint.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge, Icon } from "@/components/ui/moonshine";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";

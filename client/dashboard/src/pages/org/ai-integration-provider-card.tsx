@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useAiIntegrationConfig } from "@gram/client/react-query/aiIntegrationConfig";
-import { Badge, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Stack } from "@/components/ui/moonshine";
 import {
   AlertCircle,
   CheckCircle2,

@@ -1,4 +1,4 @@
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/moonshine";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "./ui/button";

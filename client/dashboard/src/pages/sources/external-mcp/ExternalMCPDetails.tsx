@@ -12,7 +12,7 @@ import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.j
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { RequireScope } from "@/components/require-scope";
-import { Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Button, Dialog, Stack } from "@/components/ui/moonshine";
 import { ChevronRight, Globe, Lock, Power, Server, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";

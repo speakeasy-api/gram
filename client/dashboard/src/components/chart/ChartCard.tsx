@@ -1,4 +1,4 @@
-import { cn, Icon } from "@speakeasy-api/moonshine";
+import { cn, Icon } from "@/components/ui/moonshine";
 import type { ReactNode } from "react";
 import { ChartButton } from "./ChartButton";
 

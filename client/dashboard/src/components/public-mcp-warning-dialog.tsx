@@ -1,5 +1,5 @@
 import { Dialog } from "@/components/ui/dialog";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { ExternalLink, ShieldAlert } from "lucide-react";
 
 interface PublicMcpWarningDialogProps {

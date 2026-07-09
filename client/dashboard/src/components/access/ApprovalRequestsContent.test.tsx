@@ -80,7 +80,7 @@ vi.mock("nuqs", () => ({
   useQueryState: mocks.useQueryState,
 }));
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/moonshine", () => ({
   Badge: Object.assign(
     ({ children }: { children: ReactNode }) => <span>{children}</span>,
     {

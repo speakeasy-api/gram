@@ -10,7 +10,7 @@ import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpRegistriesGetServerDetails } from "@gram/client/react-query/mcpRegistriesGetServerDetails.js";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Button, Stack } from "@/components/ui/moonshine";
 import { useMutation } from "@tanstack/react-query";
 import {
   ChevronDown,

@@ -33,7 +33,7 @@ vi.mock("@gram/client/react-query/riskCreatePolicyBypassRequest.js", () => ({
   }),
 }));
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/moonshine", () => ({
   Button: Object.assign(
     ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
       <button onClick={onClick}>{children}</button>

@@ -36,7 +36,7 @@ vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ capture: mocks.capture }),
 }));
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/moonshine", () => ({
   Button: ({
     children,
     onClick,

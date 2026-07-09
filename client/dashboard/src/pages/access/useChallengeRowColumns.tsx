@@ -12,7 +12,7 @@ import { useSlugs } from "@/contexts/Sdk";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
-import { Column } from "@speakeasy-api/moonshine";
+import { Column } from "@/components/ui/moonshine";
 import { KeyRound } from "lucide-react";
 import { useMemo } from "react";
 import { OutcomeBadge } from "./ChallengesTab";

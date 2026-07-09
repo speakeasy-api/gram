@@ -1,4 +1,4 @@
-import { cn } from "@speakeasy-api/moonshine";
+import { cn } from "@/components/ui/moonshine";
 import { ReactNode } from "react";
 
 export type ChartButtonProps = {

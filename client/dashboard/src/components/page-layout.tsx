@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils.ts";
 import { useIsProjectEmpty } from "@/pages/onboarding/upload-openapi-utils";
 import { InitialChoiceStep } from "@/pages/onboarding/Wizard.tsx";
 import { useRoutes } from "@/routes.tsx";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
 import React, { ReactElement } from "react";
 import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 import { PageHeader } from "./page-header.tsx";

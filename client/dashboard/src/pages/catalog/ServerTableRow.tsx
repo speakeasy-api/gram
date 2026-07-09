@@ -3,7 +3,7 @@ import { DotRow } from "@/components/ui/dot-row";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components/deploymentexternalmcp.js";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@/components/ui/moonshine";
 import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";

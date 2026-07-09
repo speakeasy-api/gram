@@ -1,4 +1,4 @@
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { PlusIcon } from "lucide-react";
 
 export const AddButton = ({

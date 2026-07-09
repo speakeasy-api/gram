@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Column, Stack, Table } from "@speakeasy-api/moonshine";
+import { Column, Stack, Table } from "@/components/ui/moonshine";
 
 function Skeleton({
   className,

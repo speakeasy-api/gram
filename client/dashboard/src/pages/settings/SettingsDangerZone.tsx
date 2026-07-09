@@ -6,7 +6,7 @@ import { Type } from "@/components/ui/type";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useDeleteProjectMutation } from "@gram/client/react-query/deleteProject";
 import { invalidateListProjects } from "@gram/client/react-query/listProjects";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";

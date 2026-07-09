@@ -36,7 +36,7 @@ import {
   Icon,
   Stack,
   Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Outlet } from "react-router";

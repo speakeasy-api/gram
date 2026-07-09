@@ -8,7 +8,7 @@ import {
   useProject,
 } from "@/contexts/Auth";
 import { ShieldAlert } from "lucide-react";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/moonshine";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
 

@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import { useRiskDeleteExclusionMutation } from "@gram/client/react-query/riskDeleteExclusion.js";
 import {
   invalidateAllRiskListExclusions,

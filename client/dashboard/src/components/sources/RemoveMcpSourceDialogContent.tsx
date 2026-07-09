@@ -2,7 +2,7 @@ import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { LinkedMcpServerRow } from "@/components/sources/LinkedMcpServerRow";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Alert, Button, Dialog } from "@speakeasy-api/moonshine";
+import { Alert, Button, Dialog } from "@/components/ui/moonshine";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";

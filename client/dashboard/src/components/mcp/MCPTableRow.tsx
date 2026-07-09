@@ -15,7 +15,7 @@ import {
   useExternalMcpOAuthConfigStatus,
 } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/moonshine";
 
 export function MCPTableRow({
   toolset,

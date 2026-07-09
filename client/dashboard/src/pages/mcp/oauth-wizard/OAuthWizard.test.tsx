@@ -107,7 +107,7 @@ vi.mock("@/components/FeatureRequestModal", () => ({
 
 // moonshine bundles dynamic icon imports that don't resolve in vitest. Stub
 // it down to plain HTML matching the existing test pattern.
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/moonshine", () => ({
   Button: ({
     children,
     onClick,

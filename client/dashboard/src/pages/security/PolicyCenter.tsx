@@ -37,8 +37,8 @@ import {
   Icon,
   Stack,
   Table,
-} from "@speakeasy-api/moonshine";
-import type { BadgeProps, IconName } from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
+import type { BadgeProps, IconName } from "@/components/ui/moonshine";
 import {
   Plus,
   Shield,

@@ -1,6 +1,6 @@
 import { InputField } from "@/components/moon/input-field";
 import { Textarea } from "@/components/moon/textarea";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { Label } from "@/components/ui/label";
 import { MUSTACHE_VAR_REGEX, PROMPT_NAME_PATTERN } from "@/lib/constants";
 import { assert, cn } from "@/lib/utils";

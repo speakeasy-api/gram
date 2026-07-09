@@ -23,7 +23,7 @@ import {
 import { CodexIcon } from "@/pages/hooks/HookSourceIcon";
 import { useAIIntegrationConfigForm } from "@/pages/org/use-ai-integration-config-form";
 import { useAiIntegrationConfig } from "@gram/client/react-query/aiIntegrationConfig";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@/components/ui/moonshine";
 import { StepContainer } from "../step-container";
 
 interface AdditionalAgentConfigStepProps {

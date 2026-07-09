@@ -48,7 +48,7 @@ vi.mock("lucide-react", () => ({
 
 // moonshine pulls lucide dynamicIconImports which can't resolve in the test env;
 // stub the few primitives the page uses so Button renders as a plain <button>.
-vi.mock("@speakeasy-api/moonshine", () => {
+vi.mock("@/components/ui/moonshine", () => {
   const Button = ({
     children,
     onClick,

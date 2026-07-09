@@ -1,6 +1,6 @@
 import { GramLogo } from "@/components/gram-logo/index";
 import { toError } from "@/lib/errors";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button, Icon, Stack } from "@/components/ui/moonshine";
 
 interface FullPageErrorProps {
   error: unknown;

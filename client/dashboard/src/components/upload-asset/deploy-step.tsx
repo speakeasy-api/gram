@@ -11,7 +11,7 @@ import { useRoutes } from "@/routes";
 import { Deployment } from "@gram/client/models/components/deployment.js";
 import { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
 import { useDeploymentLogs } from "@gram/client/react-query/deploymentLogs.js";
-import { Alert, Stack } from "@speakeasy-api/moonshine";
+import { Alert, Stack } from "@/components/ui/moonshine";
 import { ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
 import React from "react";
 import { Spinner } from "../ui/spinner";

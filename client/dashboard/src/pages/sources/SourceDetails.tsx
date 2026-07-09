@@ -29,7 +29,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useToolUpdate } from "@/hooks/useToolUpdate";
 import { invalidateAllListTools } from "@gram/client/react-query/listTools.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@/components/ui/moonshine";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { SourceDeploymentsPanel } from "./SourceDeploymentsPanel";

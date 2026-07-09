@@ -20,7 +20,7 @@ import {
 import { useRemoteMcpUserSessionToken } from "@/hooks/useRemoteMcpUserSessionToken";
 import { handleError, toError } from "@/lib/errors";
 import { cn, firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@/components/ui/moonshine";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";

@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn, isMacPlatform } from "@/lib/utils";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Button, Icon } from "@/components/ui/moonshine";
 import * as React from "react";
 import {
   SidebarContext,

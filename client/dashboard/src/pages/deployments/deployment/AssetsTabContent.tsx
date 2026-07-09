@@ -14,7 +14,7 @@ import { DeploymentFunctions } from "@gram/client/models/components/deploymentfu
 import { OpenAPIv3DeploymentAsset } from "@gram/client/models/components/openapiv3deploymentasset.js";
 import { buildDeploymentQuery } from "@gram/client/react-query/deployment.js";
 import { buildListToolsQuery } from "@gram/client/react-query/listTools.js";
-import { Badge, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Stack } from "@/components/ui/moonshine";
 import { useSuspenseQueries } from "@tanstack/react-query";
 import { FileCodeIcon, SquareFunctionIcon } from "lucide-react";
 import React from "react";

@@ -4,7 +4,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Label as Heading } from "@/components/ui/label";
 import { Link } from "@/components/ui/link";
 import { Type } from "@/components/ui/type";
-import { Button, cn, Icon, Input, Stack } from "@speakeasy-api/moonshine";
+import { Button, cn, Icon, Input, Stack } from "@/components/ui/moonshine";
 import { useState } from "react";
 import { CompactUpload } from "../upload";
 import type { UseMcpMetadataMetadataFormResult } from "./useMcpMetadataForm";

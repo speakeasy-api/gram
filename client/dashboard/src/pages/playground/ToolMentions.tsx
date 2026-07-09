@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/moonshine";
 import { Type } from "@/components/ui/type";
 import { type Tool, parseMentionedTools } from "./tool-mention-utils";
 

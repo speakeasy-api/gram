@@ -11,7 +11,7 @@ import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
-import { Alert } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/moonshine";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";

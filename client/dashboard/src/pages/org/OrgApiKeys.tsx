@@ -16,7 +16,7 @@ import {
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
-import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
+import { Button, Column, Icon, Stack, Table } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy } from "lucide-react";
 import { useMemo, useState } from "react";

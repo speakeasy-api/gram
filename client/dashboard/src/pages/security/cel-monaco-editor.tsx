@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import Editor, { loader, type OnMount } from "@monaco-editor/react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useTheme } from "@/components/ui/moonshine";
 import type * as Monaco from "monaco-editor";
 import * as monaco from "monaco-editor";
 import { useEffect, useRef, type JSX } from "react";
@@ -307,7 +307,7 @@ export function CelMonacoEditor({
   disabled?: boolean;
   className?: string;
 }): JSX.Element {
-  const { theme } = useMoonshineConfig();
+  const { theme } = useTheme();
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
 

@@ -45,7 +45,7 @@ import {
   Input,
   Stack,
   Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,

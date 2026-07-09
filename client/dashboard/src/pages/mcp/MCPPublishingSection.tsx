@@ -6,7 +6,7 @@ import {
   usePublishing,
   type PublishingTarget,
 } from "@/pages/mcp/usePublishing";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
 import { PageSection } from "./MCPDetails";
 
 export function MCPPublishingSection({

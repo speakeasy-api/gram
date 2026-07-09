@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/moonshine";
 import React, { useMemo, useState } from "react";
 import { useQueryState } from "nuqs";
 

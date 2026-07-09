@@ -1,5 +1,5 @@
 import { toolSupportsAnnotations, type Tool } from "@/lib/toolTypes";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/moonshine";
 
 export interface ResolvedToolAnnotations {
   readOnly: boolean;

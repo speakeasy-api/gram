@@ -2,7 +2,7 @@ import { CodeBlock } from "@/components/code";
 import { Dialog } from "@/components/ui/dialog";
 import { Link } from "@/components/ui/link";
 import { Type } from "@/components/ui/type";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { AlertTriangle } from "lucide-react";
 
 export function AutoRegisterFailedStep({

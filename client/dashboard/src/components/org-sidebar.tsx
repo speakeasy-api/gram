@@ -17,7 +17,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { AppRoute, useOrgRoutes } from "@/routes";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/moonshine";
 import * as React from "react";
 import { Link } from "react-router";
 import { GramLogo } from "./gram-logo";

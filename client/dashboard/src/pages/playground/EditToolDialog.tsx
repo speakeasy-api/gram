@@ -11,7 +11,7 @@ import {
   getToolTypeLabel,
   toolSupportsAnnotations,
 } from "@/lib/toolTypes";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { FileCode, PencilRuler, SquareFunction } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { McpIcon } from "@/components/ui/mcp-icon";

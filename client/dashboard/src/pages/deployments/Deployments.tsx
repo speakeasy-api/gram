@@ -13,7 +13,7 @@ import {
   Icon,
   Table,
   TableProps,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import { Suspense, useState } from "react";
 import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";

@@ -40,7 +40,7 @@ import {
 } from "@gram/client/react-query/template.js";
 import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
 import { useUpdateTemplateMutation } from "@gram/client/react-query/updateTemplate.js";
-import { Button, Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
+import { Button, Icon, ResizablePanel, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";

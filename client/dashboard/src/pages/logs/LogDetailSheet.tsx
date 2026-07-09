@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import { ChevronDown, Copy } from "lucide-react";
 import { useState } from "react";
 import { formatNanoTimestamp, getSeverityColorClass } from "./utils";

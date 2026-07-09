@@ -29,7 +29,7 @@ import {
   useAssistantsList,
 } from "@gram/client/react-query/assistantsList.js";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button, Icon, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, Boxes, Cpu, Info, Plus } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";

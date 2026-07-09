@@ -21,8 +21,8 @@ vi.mock("@/routes", () => ({
 vi.mock("react-router", () => ({
   useNavigate: () => vi.fn(),
 }));
-vi.mock("@speakeasy-api/moonshine", async (orig) => ({
-  ...(await orig<typeof import("@speakeasy-api/moonshine")>()),
+vi.mock("@/components/ui/moonshine", async (orig) => ({
+  ...(await orig<typeof import("@/components/ui/moonshine")>()),
   ThemeSwitcher: () => <div data-testid="theme-switcher" />,
   // Radix DropdownMenu requires pointerDown+click to open in happy-dom.
   // Stub the full primitive family so content is always rendered and

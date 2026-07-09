@@ -12,7 +12,7 @@ import {
 } from "@gram-ai/elements";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { ResizablePanel, useTheme } from "@/components/ui/moonshine";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useSearchParams } from "react-router";
@@ -120,7 +120,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   const project = useProject();
   const draft = useAssistantDraft();
   const createSessionMutation = useChatSessionsCreateMutation();
-  const { theme: resolvedTheme } = useMoonshineConfig();
+  const { theme: resolvedTheme } = useTheme();
   const [searchParams] = useSearchParams();
 
   const initialThreadId = searchParams.get("threadId") ?? undefined;

@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useDeploymentLogs } from "@gram/client/react-query/deploymentLogs.js";
 import { Heading } from "@/components/ui/heading";
-import { Button, CodeSnippet, Stack } from "@speakeasy-api/moonshine";
+import { Button, CodeSnippet, Stack } from "@/components/ui/moonshine";
 import { ArrowRightIcon, FileTextIcon, RefreshCcwIcon } from "lucide-react";
 
 export default function UploadOpenAPI(): JSX.Element {

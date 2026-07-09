@@ -12,7 +12,7 @@ import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { useRiskRuleBreakdown } from "@gram/client/react-query/riskRuleBreakdown.js";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   useCallback,

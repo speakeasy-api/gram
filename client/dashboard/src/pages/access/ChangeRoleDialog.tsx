@@ -17,7 +17,7 @@ import {
   useRoles,
 } from "@gram/client/react-query/roles.js";
 import { useUpdateMemberRolesMutation } from "@gram/client/react-query/updateMemberRoles.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";

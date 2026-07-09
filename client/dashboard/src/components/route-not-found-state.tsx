@@ -1,5 +1,5 @@
 import { Type } from "@/components/ui/type";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button, Icon, Stack } from "@/components/ui/moonshine";
 import type { ReactNode } from "react";
 
 type RouteNotFoundStateProps = {

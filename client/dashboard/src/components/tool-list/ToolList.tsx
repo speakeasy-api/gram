@@ -13,7 +13,7 @@ import { Tool, Toolset, isHttpTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Icon, Stack } from "@/components/ui/moonshine";
 import {
   ChevronDown,
   FileCode,

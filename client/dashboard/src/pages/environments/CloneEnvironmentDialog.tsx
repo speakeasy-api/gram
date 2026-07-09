@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { Environment } from "@gram/client/models/components/environment.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { useState } from "react";
 import { useCloneEnvironment } from "./useEnvironmentActions";
 

@@ -32,7 +32,7 @@ import {
   DropdownMenuTrigger,
   Icon,
   Stack,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import { Activity } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";

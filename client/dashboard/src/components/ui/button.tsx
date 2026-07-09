@@ -5,7 +5,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Slot } from "@radix-ui/react-slot";
-import { Icon, IconName } from "@speakeasy-api/moonshine";
+import { Icon, IconName } from "@/components/ui/moonshine";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 

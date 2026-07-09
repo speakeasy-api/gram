@@ -1,0 +1,58 @@
+/*
+ * Vendored from @speakeasy-api/moonshine v1.43.1 (src/global.css).
+ * Adapted for the dashboard's Tailwind pipeline: `tailwindcss` /
+ * `tw-animate-css` imports and the `dark` custom variant already live in
+ * App.css, so they are omitted here.
+ */
+
+@plugin "@tailwindcss/typography";
+
+/* Order matters: base tokens must come before utilities. */
+@import "./base.css";
+@import "./utilities.css";
+
+@custom-variant interact {
+  &:hover,
+  &:focus-visible {
+    @slot;
+  }
+}
+
+/*
+ * Responsive utility sources: Stack/Grid build class names dynamically
+ * (via responsiveMappers), so Tailwind's static scan can't see them.
+ * Force-generate the combinations they may produce.
+ */
+
+/* Spacing Utilities */
+@source inline(
+  "{,sm:,md:,lg:,xl:,2xl:}{p-,px-,py-,pr-,pb-,pl-,pt-}{0,0.5,1,2,3,4,5,6,8,10,12,16}"
+);
+@source inline("{,sm:,md:,lg:,xl:,2xl:}gap-{0,0.5,1,2,3,4,5,6,8,10,12,16}");
+
+/* Grid & Flexbox */
+@source inline("{,sm:,md:,lg:,xl:,2xl:}grid-cols-{1,2,3,4,5,6,7,8,9,10,11,12}");
+@source inline("{,sm:,md:,lg:,xl:,2xl:}col-span-{1,2,3,4,5,6,7,8,9,10,11,12}");
+@source inline(
+  "{,sm:,md:,lg:,xl:,2xl:}flex-{row,col,nowrap,wrap,wrap-reverse,none,1,auto,initial,grow,shrink}"
+);
+@source inline(
+  "{,sm:,md:,lg:,xl:,2xl:}justify-{start,center,end,between,evenly}"
+);
+@source inline(
+  "{,sm:,md:,lg:,xl:,2xl:}items-{start,center,end,stretch,baseline}"
+);
+
+/* Sizing */
+@source inline("{,sm:,md:,lg:,xl:,2xl:}size-{8,12,16,24,32}");
+
+/* Map the design-system fonts to Tailwind's theme. */
+@theme {
+  --font-sans: var(--font-diatype);
+  --font-mono: var(--font-diatype-mono);
+  --font-display: var(--font-tobias);
+  --font-ascii: var(--font-speakeasy), var(--font-diatype-mono), monospace;
+
+  /* Extended text scale */
+  --text-2xs: 0.5625rem; /* 9px */
+}

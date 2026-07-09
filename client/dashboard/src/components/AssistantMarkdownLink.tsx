@@ -1,4 +1,4 @@
-import { Link } from "@speakeasy-api/moonshine";
+import { Link } from "@/components/ui/moonshine";
 import { type ComponentPropsWithoutRef, type ReactElement } from "react";
 
 /**

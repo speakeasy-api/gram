@@ -16,7 +16,7 @@ import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage.js";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
 import { useGetUsageTiers } from "@gram/client/react-query/getUsageTiers.js";
 import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
-import { Button, cn, Stack } from "@speakeasy-api/moonshine";
+import { Button, cn, Stack } from "@/components/ui/moonshine";
 import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";

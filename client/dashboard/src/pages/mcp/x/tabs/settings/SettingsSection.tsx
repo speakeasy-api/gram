@@ -2,7 +2,7 @@
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { Loader2, SaveIcon } from "lucide-react";
 import { createContext, use } from "react";
 

@@ -60,8 +60,8 @@ import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusa
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useListAttributeKeys } from "@gram/client/react-query/listAttributeKeys.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
-import type { BadgeProps } from "@speakeasy-api/moonshine";
+import { Badge, Icon } from "@/components/ui/moonshine";
+import type { BadgeProps } from "@/components/ui/moonshine";
 import {
   useInfiniteQuery,
   useQuery,

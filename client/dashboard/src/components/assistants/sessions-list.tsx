@@ -8,7 +8,7 @@ import {
   invalidateAllListChats,
   useListChats,
 } from "@gram/client/react-query/listChats.js";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Icon, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Loader2 } from "lucide-react";

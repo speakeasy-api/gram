@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert, Button, Stack } from "@/components/ui/moonshine";
 import { AlertCircle, Loader2, Network } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";

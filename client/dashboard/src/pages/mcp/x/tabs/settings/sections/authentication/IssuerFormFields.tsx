@@ -11,7 +11,7 @@ import {
 import { Type } from "@/components/ui/type";
 import { getServerURL } from "@/lib/utils";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert, Button, Stack } from "@/components/ui/moonshine";
 import {
   CLIENT_TYPE_LABELS,
   clientTypeHelp,

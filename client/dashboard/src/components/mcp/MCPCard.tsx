@@ -21,7 +21,7 @@ import {
   useExternalMcpOAuthConfigStatus,
 } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/moonshine";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
   const routes = useRoutes();

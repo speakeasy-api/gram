@@ -22,7 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import {
   ChevronDown,
   CircleAlert,

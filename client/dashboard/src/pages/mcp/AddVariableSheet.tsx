@@ -11,7 +11,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { ChevronDown, Plus, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { EnvVarState } from "./environmentVariableUtils";

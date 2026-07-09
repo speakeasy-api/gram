@@ -4,7 +4,7 @@ import {
   providerLabel,
 } from "@/components/observe/account-display-utils";
 import { cn } from "@/lib/utils";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/moonshine";
 
 // The per-account type marker. Personal reuses the shared amber badge; team is
 // shown explicitly (this is the detailed view, so every account is labeled).

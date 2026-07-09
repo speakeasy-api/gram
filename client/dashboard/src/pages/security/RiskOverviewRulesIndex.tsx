@@ -8,7 +8,7 @@ import { useRoutes } from "@/routes";
 import { type DateRangePreset } from "@gram-ai/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/moonshine";
 import { useMemo } from "react";
 import { Link, useLocation } from "react-router";
 import { getRuleTitleFallback } from "./risk-utils";

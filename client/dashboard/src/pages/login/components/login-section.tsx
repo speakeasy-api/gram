@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
 import { useSearchParams } from "react-router";
 import { useState } from "react";

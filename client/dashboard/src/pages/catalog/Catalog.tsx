@@ -11,7 +11,7 @@ import { CommandBar } from "@/pages/catalog/CommandBar";
 import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
 import { SearchXIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router";

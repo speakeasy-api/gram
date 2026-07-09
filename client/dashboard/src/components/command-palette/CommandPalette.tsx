@@ -9,7 +9,7 @@ import {
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useSlugs } from "@/contexts/Sdk";
-import { Icon, IconName, Badge } from "@speakeasy-api/moonshine";
+import { Icon, IconName, Badge } from "@/components/ui/moonshine";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { requestAskAi } from "./askAiBridge";

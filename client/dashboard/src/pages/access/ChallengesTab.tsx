@@ -17,7 +17,7 @@ import {
   Badge as MoonshineBadge,
   type Column,
   Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import { Button } from "@/components/ui/button";
 import { Check, Loader2 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";

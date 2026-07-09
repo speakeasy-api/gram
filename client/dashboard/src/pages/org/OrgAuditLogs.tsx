@@ -21,7 +21,7 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogFacets } from "@gram/client/react-query/auditLogFacets.js";
 import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
-import { Icon, Input } from "@speakeasy-api/moonshine";
+import { Icon, Input } from "@/components/ui/moonshine";
 import React, {
   useCallback,
   useDeferredValue,

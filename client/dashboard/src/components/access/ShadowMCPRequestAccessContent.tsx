@@ -3,7 +3,7 @@ import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
 import { useRiskCreatePolicyBypassRequestMutation } from "@gram/client/react-query/riskCreatePolicyBypassRequest.js";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button, Icon, Stack } from "@/components/ui/moonshine";
 import { useEffect, useState } from "react";
 
 const REQUEST_TOKEN_STORAGE_KEY = "riskPolicyBypassRequestToken";

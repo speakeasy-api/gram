@@ -14,7 +14,7 @@ import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
-import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
+import { Badge, Button, Icon } from "@/components/ui/moonshine";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet, useNavigate } from "react-router";

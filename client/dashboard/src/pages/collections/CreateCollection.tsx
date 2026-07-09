@@ -8,7 +8,7 @@ import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import { Button, Input, Stack } from "@speakeasy-api/moonshine";
+import { Button, Input, Stack } from "@/components/ui/moonshine";
 import { useQueries } from "@tanstack/react-query";
 import {
   Globe,

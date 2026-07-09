@@ -4,7 +4,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { ArrowRight } from "lucide-react";
 import { PropsWithChildren } from "react";
 

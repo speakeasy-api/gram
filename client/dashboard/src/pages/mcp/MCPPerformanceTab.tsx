@@ -6,7 +6,7 @@ import { Toolset } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, ListOrdered, Search } from "lucide-react";
 import { toast } from "sonner";

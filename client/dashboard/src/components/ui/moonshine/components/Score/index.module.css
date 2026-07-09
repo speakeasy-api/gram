@@ -1,0 +1,32 @@
+.svg {
+  user-select: none;
+}
+
+.text {
+  fill: var(--progress-colour);
+  transition: fill var(--transition-length) ease var(--delay);
+  font-weight: bold;
+  font-size: 36px;
+}
+
+.circleBase {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dashoffset: 0;
+  transform-origin: 50% 50%;
+  shape-rendering: geometricprecision;
+  stroke-width: var(--stroke-width);
+  transition: stroke var(--transition-length) ease var(--delay);
+}
+
+.progress {
+  composes: circleBase;
+  stroke: var(--progress-colour);
+  stroke-dasharray: var(--progress-stroke-dasharray);
+}
+
+.track {
+  composes: circleBase;
+  stroke: var(--track-colour);
+  stroke-dasharray: var(--track-stroke-dasharray);
+}

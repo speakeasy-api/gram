@@ -12,7 +12,7 @@ import { getPresetRange } from "@gram-ai/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Button, Icon } from "@/components/ui/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { History, Share2 } from "lucide-react";

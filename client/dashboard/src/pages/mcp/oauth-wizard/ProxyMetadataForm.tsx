@@ -2,7 +2,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
 import { Type } from "@/components/ui/type";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
 
 import { WizardContext } from "./machine";
 import type { ProxyFormKey } from "./machine-types";

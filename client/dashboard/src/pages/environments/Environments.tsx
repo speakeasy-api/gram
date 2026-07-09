@@ -13,7 +13,7 @@ import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnv
 import { ArrowRight, Blocks, Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@/components/ui/moonshine";
 import { Type } from "@/components/ui/type";
 import { handleAPIError } from "@/lib/errors";
 import { CloneEnvironmentDialog } from "./CloneEnvironmentDialog";

@@ -8,7 +8,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { mcpServerRouteParam, tunneledMcpRouteParam } from "@/lib/sources";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert, Button, Stack } from "@/components/ui/moonshine";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { AlertCircle, Loader2, Network } from "lucide-react";

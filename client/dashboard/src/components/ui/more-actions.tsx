@@ -6,7 +6,7 @@ import {
   DropdownMenuTrigger,
   Icon,
   IconName,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import { useState } from "react";
 import { Button } from "./button";
 

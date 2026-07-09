@@ -6,7 +6,7 @@ import { TextArea } from "@/components/ui/textarea";
 import { useToolset } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button, Icon, Stack } from "@/components/ui/moonshine";
 import { generateObject } from "ai";
 import { useState } from "react";
 import { z } from "zod";

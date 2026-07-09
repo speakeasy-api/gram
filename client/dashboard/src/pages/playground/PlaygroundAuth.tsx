@@ -11,7 +11,7 @@ import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
-import { Badge, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Stack } from "@/components/ui/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, ExternalLink, Loader2, LogOut } from "lucide-react";
 import { useEffect, useRef, useState } from "react";

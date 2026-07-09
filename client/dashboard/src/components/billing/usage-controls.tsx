@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Button, cn } from "@speakeasy-api/moonshine";
+import { Button, cn } from "@/components/ui/moonshine";
 import { useCallback, useState } from "react";
 
 export const TopUpCTA = (): JSX.Element => {

@@ -1,4 +1,4 @@
-import { ThemeSwitcher } from "@speakeasy-api/moonshine";
+import { ThemeSwitcher } from "@/components/ui/moonshine";
 
 export function OnboardingFooter(): JSX.Element {
   return (

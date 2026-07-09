@@ -34,7 +34,7 @@ import {
   INSIGHTS_SUGGESTION_ICONS,
   type InsightsSuggestion,
 } from "@/lib/insights-suggestions";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useTheme } from "@/components/ui/moonshine";
 import type { UIMessage } from "ai";
 import {
   ArrowLeft,
@@ -686,7 +686,7 @@ export function InsightsProvider({
       setHistoryReturnable(false);
     }
   }, [isExpanded]);
-  const { theme } = useMoonshineConfig();
+  const { theme } = useTheme();
   const { pathname } = useLocation();
   const routes = useRoutes();
   // The full-page chat lives at `/…/chat[/…]`. The shared assistant runtime is

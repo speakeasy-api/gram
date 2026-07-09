@@ -20,7 +20,7 @@ import {
 } from "@gram/client/react-query/listChats.js";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { Badge } from "@/components/ui/badge";
-import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
+import { Alert, Button, Icon } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Link, useSearchParams } from "react-router";

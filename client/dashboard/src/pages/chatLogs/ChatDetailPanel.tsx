@@ -29,7 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/moonshine";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";

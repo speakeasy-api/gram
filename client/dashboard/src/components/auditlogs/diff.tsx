@@ -1,7 +1,7 @@
 import { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { FileDiffOptions, ThemeTypes } from "@pierre/diffs";
 import { MultiFileDiff } from "@pierre/diffs/react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useTheme } from "@/components/ui/moonshine";
 import React from "react";
 
 const staticDiffOptions: FileDiffOptions<undefined> = {
@@ -43,7 +43,7 @@ export function StaticDiff(props: {
   log: AuditLog;
   lang?: string;
 }): React.JSX.Element {
-  const { theme } = useMoonshineConfig();
+  const { theme } = useTheme();
 
   const { log, lang } = props;
   const { oldFile, newFile } = React.useMemo(

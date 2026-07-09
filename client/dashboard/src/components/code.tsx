@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Button, Theme, useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { Button, Theme, useTheme } from "@/components/ui/moonshine";
 import { Check, Copy } from "lucide-react";
 import React, { useEffect } from "react";
 import {
@@ -60,7 +60,7 @@ export function CodeBlock({
   preClassName?: string;
   slots?: Record<string, CodeBlockSlot>;
 }): React.JSX.Element {
-  const { theme } = useMoonshineConfig();
+  const { theme } = useTheme();
   const hasSlots = !!slots && Object.keys(slots).length > 0;
   const [highlightedCode, setHighlightedCode] = React.useState<string | null>(
     null,

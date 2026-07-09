@@ -10,7 +10,7 @@ import type { OpenAPIv3DeploymentAsset } from "@gram/client/models/components/op
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { RequireScope } from "@/components/require-scope";
-import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Button, Dialog, Stack } from "@/components/ui/moonshine";
 import { Download, Eye, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";

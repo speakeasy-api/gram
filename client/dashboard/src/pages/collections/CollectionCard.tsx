@@ -6,7 +6,7 @@ import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { toolStats } from "@/pages/catalog/hooks/serverMetadata";
 import { buildCollectionMcpJson } from "@/lib/mcp-json";
 import { useOrgRoutes } from "@/routes";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
 import {
   ArrowRight,
   Download,

@@ -1,4 +1,4 @@
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/moonshine";
 import { Skeleton } from "./skeleton";
 
 import { cn } from "@/lib/utils";

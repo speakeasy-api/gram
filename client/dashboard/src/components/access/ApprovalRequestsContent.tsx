@@ -32,7 +32,13 @@ import { useRiskApprovePolicyBypassRequestMutation } from "@gram/client/react-qu
 import { useRiskDenyPolicyBypassRequestMutation } from "@gram/client/react-query/riskDenyPolicyBypassRequest.js";
 import { useRiskRevokePolicyBypassRequestMutation } from "@gram/client/react-query/riskRevokePolicyBypassRequest.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Badge, Button, Column, Dialog, Table } from "@speakeasy-api/moonshine";
+import {
+  Badge,
+  Button,
+  Column,
+  Dialog,
+  Table,
+} from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Inbox, Loader2, ShieldCheck } from "lucide-react";
 import type React from "react";

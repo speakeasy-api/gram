@@ -9,7 +9,7 @@ import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js
 import { useDeleteTemplateMutation } from "@gram/client/react-query/deleteTemplate.js";
 import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
 import { usePrompts } from "./usePrompts";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { Outlet } from "react-router";

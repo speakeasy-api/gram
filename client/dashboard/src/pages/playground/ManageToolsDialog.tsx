@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { Tool, Toolset, getToolSourceLabel } from "@/lib/toolTypes";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EditToolDialog } from "./EditToolDialog";

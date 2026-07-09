@@ -10,7 +10,7 @@ import {
 import { useRiskUnmaskResultMutation } from "@gram/client/react-query/riskUnmaskResult.js";
 import { RULE_CATEGORY_META } from "./policy-data";
 import { getCategoryForFinding, getRuleTitleFallback } from "./risk-utils";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   RevealAllContext,

@@ -6,7 +6,7 @@ import {
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import { Icon, Modal, ModalProvider } from "@speakeasy-api/moonshine";
+import { Icon, Modal, ModalProvider } from "@/components/ui/moonshine";
 import { ShieldAlert } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";

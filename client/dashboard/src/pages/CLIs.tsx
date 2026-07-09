@@ -2,7 +2,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/moonshine";
 
 export default function CLIs(): JSX.Element {
   return (

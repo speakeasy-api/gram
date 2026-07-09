@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { Deployment } from "@gram/client/models/components/deployment.js";
 import type { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
-import { Alert, Badge, Button, Dialog } from "@speakeasy-api/moonshine";
+import { Alert, Badge, Button, Dialog } from "@/components/ui/moonshine";
 import {
   ChevronDown,
   ChevronRight,

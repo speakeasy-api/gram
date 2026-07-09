@@ -9,7 +9,7 @@ import { useOrganization } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useAgentToken } from "@/hooks/useAgentToken";
 import { useOrgRoutes } from "@/routes";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Button, Icon } from "@/components/ui/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import React from "react";
 import { Link, Navigate } from "react-router";

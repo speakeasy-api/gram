@@ -1,4 +1,4 @@
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/moonshine";
 import { SimpleTooltip } from "./ui/tooltip";
 
 export type ReleaseStage = "preview" | "beta";

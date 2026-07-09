@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/popover";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { Check, ChevronsUpDown, Link, Plus, Unlink } from "lucide-react";
 import { useState } from "react";
 import {

@@ -27,7 +27,7 @@ vi.mock("./ui/context-menu", () => ({
     </button>
   ),
 }));
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/moonshine", () => ({
   Icon: () => <span data-testid="icon" />,
 }));
 

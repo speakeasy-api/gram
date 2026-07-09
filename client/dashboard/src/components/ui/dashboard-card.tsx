@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
 type DashboardCardProps = {

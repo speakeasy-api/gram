@@ -20,7 +20,7 @@ import {
   Server,
   Server as ServerIcon,
 } from "lucide-react";
-import { Button, Input } from "@speakeasy-api/moonshine";
+import { Button, Input } from "@/components/ui/moonshine";
 import { Textarea } from "@/components/moon/textarea";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router";

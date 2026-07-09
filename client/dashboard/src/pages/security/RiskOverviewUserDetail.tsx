@@ -13,7 +13,7 @@ import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { useRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 import { getRuleTitleFallback } from "./risk-utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/moonshine";
 import { useCallback, useMemo } from "react";
 import { useParams, useSearchParams } from "react-router";
 
