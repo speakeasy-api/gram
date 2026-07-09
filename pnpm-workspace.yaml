@@ -11,7 +11,6 @@ packages:
   - docs
   - evaluation
   - elements
-  - elements/examples/*
   - dev-idp-dashboard
 
 catalog:
