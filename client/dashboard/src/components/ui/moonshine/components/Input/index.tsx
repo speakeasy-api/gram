@@ -61,7 +61,7 @@ export function Input({
       onFocus={handleFocus}
       onBlur={handleBlur}
       className={cn(
-        "h-full w-full bg-surface-primary-default text-sm text-default shadow-none outline-none placeholder:text-placeholder disabled:cursor-not-allowed disabled:opacity-50",
+        "h-full w-full bg-inset font-sans text-sm font-light text-default shadow-none outline-none placeholder:text-placeholder disabled:cursor-not-allowed disabled:opacity-50",
         isFocused && "placeholder:text-default",
       )}
     />
@@ -77,7 +77,7 @@ export function Input({
         cols={30}
         rows={10}
         className={cn(
-          "my-2 h-full max-h-60 min-h-16 w-full bg-surface-primary-default px-3 py-3 text-sm text-default shadow-none outline-none placeholder:text-placeholder disabled:cursor-not-allowed disabled:opacity-50",
+          "my-2 h-full max-h-60 min-h-16 w-full bg-inset px-3 py-3 font-sans text-sm font-light text-default shadow-none outline-none placeholder:text-placeholder disabled:cursor-not-allowed disabled:opacity-50",
           isFocused && "placeholder:text-default",
         )}
       />
@@ -87,9 +87,9 @@ export function Input({
   return (
     <div
       className={cn(
-        "flex items-center gap-3 rounded-md border border-input bg-surface-primary-default px-4 py-3 text-muted-foreground",
+        "flex items-center gap-3 border border-neutral-default bg-inset px-4 py-3 text-muted-foreground shadow-none transition-colors",
         icon && "px-3",
-        isFocused && "border-focus text-default",
+        isFocused && "border-neutral-active text-default",
         error && "border-destructive-default",
         className,
       )}

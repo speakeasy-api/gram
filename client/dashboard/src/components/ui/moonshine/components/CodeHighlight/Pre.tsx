@@ -33,7 +33,7 @@ export const Pre = forwardRef<HTMLPreElement, PreProps>(
               className={cn("flex flex-row", wordWrap && "flex-wrap")}
             >
               {showLineNumbers && (
-                <span className="pr-3 text-body-muted select-none">
+                <span className="pr-3 text-muted-fixed-light select-none">
                   {lineIndex + 1}
                 </span>
               )}

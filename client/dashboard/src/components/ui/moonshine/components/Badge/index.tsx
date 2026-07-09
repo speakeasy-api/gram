@@ -50,7 +50,7 @@ const BadgeText = React.forwardRef<
 BadgeText.displayName = "BadgeText";
 
 const badgeVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap select-none font-mono uppercase tracking-[0.03em] rounded-xs border transition-colors",
+  "inline-flex items-center justify-center whitespace-nowrap select-none font-mono uppercase tracking-[0.08em] rounded-xs border transition-colors",
   {
     variants: {
       variant: {
@@ -112,6 +112,13 @@ export interface BadgeProps extends Attributes {
   variant?: BadgeVariant;
   size?: BadgeSize;
   background?: boolean;
+  /**
+   * Square identifier dot before the label (Claude Design tag treatment).
+   * The dot inherits the badge's text color unless --badge-dot-color is
+   * set (e.g. `className="[--badge-dot-color:var(--color-lang-go)]"`), so
+   * language/identity tags keep ink text with only the dot colored.
+   */
+  dot?: boolean;
   className?: string;
   "aria-label"?: string;
 }
@@ -122,6 +129,7 @@ const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
       variant = "neutral",
       size = "md",
       background = true,
+      dot = false,
       asChild = false,
       className,
       ...props
@@ -216,6 +224,15 @@ const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
         ref={ref}
         {...props}
       >
+        {dot && !asChild && (
+          <span
+            aria-hidden
+            className={cn(
+              "shrink-0 bg-[var(--badge-dot-color,currentColor)]",
+              size === "sm" ? "size-1.5" : "size-2",
+            )}
+          />
+        )}
         {processedChildren}
       </Comp>
     );

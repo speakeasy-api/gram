@@ -144,7 +144,7 @@ const BrandSlot = React.forwardRef<
 BrandSlot.displayName = "BrandSlot";
 
 const buttonVariants = cva(
-  "relative inline-flex items-center justify-center whitespace-nowrap text-sm font-mono uppercase tracking-[0.01em] transition-all select-none cursor-pointer focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-[var(--bg-surface-primary-default)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "relative inline-flex items-center justify-center whitespace-nowrap text-sm font-sans font-light tracking-[0.01em] transition-all select-none cursor-pointer focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-[var(--bg-surface-primary-default)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       context: {
@@ -155,13 +155,13 @@ const buttonVariants = cva(
         brand:
           'relative text-btn-brand hover:text-btn-brand-hover disabled:text-btn-brand-disabled [transform:translateZ(0)] before:absolute before:content-[""] before:-z-10 before:pointer-events-none [--gradient-rotation:220deg] before:bg-[conic-gradient(from_var(--gradient-rotation),hsl(334,54%,13%),hsl(4,67%,47%),hsl(23,96%,62%),hsl(68,52%,72%),hsl(108,24%,41%),hsl(154,100%,7%),hsl(220,100%,12%),hsl(214,69%,50%),hsl(216,100%,80%),hsl(334,54%,13%))] after:absolute after:content-[""] after:-z-20 after:pointer-events-none after:opacity-0 after:transition-opacity after:duration-300 hover:after:opacity-100 after:bg-[conic-gradient(from_var(--gradient-rotation),hsl(334,54%,13%),hsl(4,67%,47%),hsl(23,96%,62%),hsl(68,52%,72%),hsl(108,24%,41%),hsl(154,100%,7%),hsl(220,100%,12%),hsl(214,69%,50%),hsl(216,100%,80%),hsl(334,54%,13%))] after:blur-[2px] focus-visible:ring-2 focus-visible:ring-offset-3 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-[var(--bg-surface-primary-default)]',
         primary:
-          "bg-btn-primary text-btn-primary shadow-[0px_2px_1px_0px_rgba(255,255,255,0.1)_inset,0px_-2px_1px_0px_rgba(0,0,0,0.2)_inset] hover:bg-btn-primary-hover hover:text-btn-primary-hover hover:shadow-[0px_2px_1px_0px_rgba(255,255,255,0.08)_inset,0px_-2px_1px_0px_rgba(0,0,0,0.25)_inset] active:bg-btn-primary-active active:text-btn-primary-active active:shadow-none disabled:bg-btn-primary-disabled disabled:text-btn-primary-disabled",
+          "bg-btn-primary text-btn-primary hover:bg-btn-primary-hover hover:text-btn-primary-hover active:bg-btn-primary-active active:text-btn-primary-active disabled:bg-btn-primary-disabled disabled:text-btn-primary-disabled",
         secondary:
-          "bg-btn-secondary text-btn-secondary shadow-[0px_2px_1px_0px_rgba(255,255,255,0.25)_inset,0px_-2px_1px_0px_rgba(0,0,0,0.1)_inset] hover:bg-btn-secondary-hover hover:text-btn-secondary-hover hover:shadow-[0px_2px_1px_0px_rgba(255,255,255,0.2)_inset,0px_-2px_1px_0px_rgba(0,0,0,0.15)_inset] active:bg-btn-secondary-active active:text-btn-secondary-active active:shadow-none disabled:bg-btn-secondary-disabled disabled:text-btn-secondary-disabled",
+          "border border-neutral-active bg-transparent text-btn-secondary hover:border-neutral-hover hover:bg-btn-secondary-hover hover:text-btn-secondary-hover active:bg-btn-secondary-active active:text-btn-secondary-active disabled:border-neutral-disabled disabled:bg-transparent disabled:text-btn-secondary-disabled",
         tertiary:
           "bg-transparent text-btn-tertiary hover:bg-btn-secondary-hover hover:text-btn-tertiary-hover active:bg-btn-secondary-active active:text-btn-tertiary-active disabled:text-btn-tertiary-disabled",
         "destructive-primary":
-          "bg-btn-destructive text-btn-destructive-primary shadow-[0px_2px_1px_0px_rgba(255,255,255,0.1)_inset,0px_-2px_1px_0px_rgba(0,0,0,0.2)_inset] hover:bg-btn-destructive-hover hover:text-btn-destructive-primary-hover hover:shadow-[0px_2px_1px_0px_rgba(255,255,255,0.08)_inset,0px_-2px_1px_0px_rgba(0,0,0,0.25)_inset] active:bg-btn-destructive-active active:text-btn-destructive-primary-active active:shadow-none disabled:bg-btn-destructive-disabled disabled:text-btn-destructive-primary-disabled",
+          "bg-btn-destructive text-btn-destructive-primary hover:bg-btn-destructive-hover hover:text-btn-destructive-primary-hover active:bg-btn-destructive-active active:text-btn-destructive-primary-active disabled:bg-btn-destructive-disabled disabled:text-btn-destructive-primary-disabled",
         "destructive-secondary":
           "bg-transparent text-btn-destructive-secondary hover:text-btn-destructive-secondary-hover active:text-btn-destructive-secondary-active disabled:text-btn-destructive-secondary-disabled",
       },

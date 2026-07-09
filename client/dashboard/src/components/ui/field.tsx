@@ -48,6 +48,13 @@ function FieldLabel({
     <Label
       data-slot="field-label"
       className={cn(
+        // Claude Design brandbook: field labels are mono, uppercase, and
+        // tracked — distinct from the base Label default (see label.tsx for
+        // why that default was left sans/normal-case). `text-[var(--text-muted)]`
+        // (not the `text-muted` utility) is intentional: `text-muted` carries
+        // `!important` and would permanently win over the destructive variant
+        // below, breaking the invalid-field color swap.
+        "font-mono text-xs uppercase tracking-[0.08em] text-[var(--text-muted)]",
         "group-data-[invalid=true]/field:text-destructive",
         className,
       )}

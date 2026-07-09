@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
-import { Button, Theme, useTheme } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/moonshine";
+import { getLanguageAccentColor } from "@/components/ui/moonshine/lib/codeUtils";
 import { Check, Copy } from "lucide-react";
 import React, { useEffect } from "react";
 import {
@@ -10,10 +11,9 @@ import {
   type ThemedToken,
 } from "shiki";
 
-const DEFAULT_THEME_PER_MODE: Record<Theme, BuiltinTheme> = {
-  light: "github-light-default",
-  dark: "github-dark-default",
-};
+// Code blocks always render on the ink brand surface (Claude Design), so
+// they always highlight with the dark Shiki theme regardless of app theme.
+const SHIKI_THEME: BuiltinTheme = "github-dark-default";
 
 /**
  * A slot lets the caller host an interactive React node inline inside the
@@ -60,8 +60,9 @@ export function CodeBlock({
   preClassName?: string;
   slots?: Record<string, CodeBlockSlot>;
 }): React.JSX.Element {
-  const { theme } = useTheme();
   const hasSlots = !!slots && Object.keys(slots).length > 0;
+  const accentColor = getLanguageAccentColor(language);
+  const innerStyle: React.CSSProperties = { borderLeftColor: accentColor };
   const [highlightedCode, setHighlightedCode] = React.useState<string | null>(
     null,
   );
@@ -97,14 +98,14 @@ export function CodeBlock({
       // prop is a free-form string, so narrow it the same way callers expect.
       void codeToTokens(code, {
         lang: language as BundledLanguage,
-        theme: DEFAULT_THEME_PER_MODE[theme],
+        theme: SHIKI_THEME,
       }).then((res) => {
         if (!cancelled) setTokenResult(res);
       });
     } else {
       void codeToHtml(code, {
         lang: language,
-        theme: DEFAULT_THEME_PER_MODE[theme],
+        theme: SHIKI_THEME,
         transformers: [
           {
             pre(node) {
@@ -112,7 +113,7 @@ export function CodeBlock({
               node.properties.class = cn(
                 "!bg-transparent",
                 preClassName,
-                theme === "dark" ? "dark" : "light",
+                "dark",
               );
             },
           },
@@ -125,13 +126,20 @@ export function CodeBlock({
     return () => {
       cancelled = true;
     };
-  }, [code, language, preClassName, theme, hasSlots]);
+  }, [code, language, preClassName, hasSlots]);
 
+  // Claude Design brandbook code-block specimen: ink surface, bone text,
+  // mono weight 300 at ~15px/1.6, a 4px language-accent rail on the left
+  // instead of an all-around border, ~20px/24px padding.
   const baseClasses =
-    "rounded-md font-mono text-sm text-wrap overflow-x-auto border break-all whitespace-pre-wrap truncate";
-  const innerClasses = cn(baseClasses, "p-4 pr-12", innerClassName);
+    "rounded-md font-mono font-light text-[15px] leading-[1.6] text-wrap overflow-x-auto border-l-4 break-all whitespace-pre-wrap truncate bg-surface-secondary-fixed-dark text-default-fixed-light";
+  const innerClasses = cn(baseClasses, "py-5 px-6 pr-12", innerClassName);
   // Shown until the async highlight resolves (and as the slot-path placeholder).
-  const fallback = <div className={innerClasses}>{code}</div>;
+  const fallback = (
+    <div className={innerClasses} style={innerStyle}>
+      {code}
+    </div>
+  );
 
   // Token-rendered path: shiki tokens as real React nodes so a slot can host an
   // interactive element inline. Mirrors shiki's <pre><code> structure so the
@@ -188,13 +196,16 @@ export function CodeBlock({
     <div className={cn("group relative", className)}>
       {hasSlots ? (
         tokenResult ? (
-          <div className={innerClasses}>{renderTokens(tokenResult)}</div>
+          <div className={innerClasses} style={innerStyle}>
+            {renderTokens(tokenResult)}
+          </div>
         ) : (
           fallback
         )
       ) : highlightedCode ? (
         <div
           className={innerClasses}
+          style={innerStyle}
           dangerouslySetInnerHTML={{ __html: highlightedCode ?? "" }}
         />
       ) : (

@@ -1080,7 +1080,8 @@
 }
 
 @utility bg-btn-primary {
-  background-color: var(--color-neutral-800);
+  /* Primary action = ink fill (Claude Design). */
+  background-color: var(--color-neutral-900);
 
   @variant dark {
     background-color: var(--color-neutral-200);

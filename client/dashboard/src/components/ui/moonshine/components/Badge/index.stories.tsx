@@ -262,3 +262,92 @@ export const AllSizesWithIcon: Story = {
     </div>
   ),
 };
+
+export const LanguageTags: Story = {
+  render: () => (
+    <div className="flex flex-wrap items-center gap-2">
+      <Badge
+        dot
+        background={false}
+        className="[--badge-dot-color:var(--color-lang-typescript)]"
+      >
+        TypeScript
+      </Badge>
+      <Badge
+        dot
+        background={false}
+        className="[--badge-dot-color:var(--color-lang-javascript)]"
+      >
+        JavaScript
+      </Badge>
+      <Badge
+        dot
+        background={false}
+        className="[--badge-dot-color:var(--color-lang-python)]"
+      >
+        Python
+      </Badge>
+      <Badge
+        dot
+        background={false}
+        className="[--badge-dot-color:var(--color-lang-go)]"
+      >
+        Go
+      </Badge>
+      <Badge
+        dot
+        background={false}
+        className="[--badge-dot-color:var(--color-lang-ruby)]"
+      >
+        Ruby
+      </Badge>
+      <Badge
+        dot
+        background={false}
+        className="[--badge-dot-color:var(--color-lang-php)]"
+      >
+        PHP
+      </Badge>
+      <Badge
+        dot
+        background={false}
+        className="[--badge-dot-color:var(--color-lang-java)]"
+      >
+        Java
+      </Badge>
+      <Badge
+        dot
+        background={false}
+        className="[--badge-dot-color:var(--color-lang-csharp)]"
+      >
+        C#
+      </Badge>
+      <Badge
+        dot
+        background={false}
+        className="[--badge-dot-color:var(--color-lang-rust)]"
+      >
+        Rust
+      </Badge>
+    </div>
+  ),
+};
+
+export const StatusDots: Story = {
+  render: () => (
+    <div className="flex items-center gap-2">
+      <Badge dot variant="success">
+        Online
+      </Badge>
+      <Badge dot variant="warning">
+        Degraded
+      </Badge>
+      <Badge dot variant="destructive">
+        Blocked
+      </Badge>
+      <Badge dot variant="information">
+        Syncing
+      </Badge>
+    </div>
+  ),
+};

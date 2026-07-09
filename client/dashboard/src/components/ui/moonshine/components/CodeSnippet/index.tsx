@@ -8,8 +8,8 @@ import { Icon } from "../Icon";
 import {
   highlightCode,
   HighlightedCode,
-  LIGHT_THEME,
   DARK_THEME,
+  getLanguageAccentColor,
 } from "@/components/ui/moonshine/lib/codeUtils";
 import { useConfig } from "@/components/ui/moonshine/hooks/useConfig";
 import { Pre } from "../CodeHighlight/Pre";
@@ -66,7 +66,8 @@ export interface CodeSnippetProps {
 
 const fontSizeMap: Record<Size, string> = {
   small: "text-sm",
-  medium: "text-sm",
+  // Claude Design brandbook code-block specimen: ~15px.
+  medium: "text-[15px]",
   large: "text-base",
   xl: "text-lg",
   "2xl": "text-xl",
@@ -122,17 +123,18 @@ export function CodeSnippet({
   >(undefined);
   const isMultiline = code.split("\n").length > 1;
   const { theme } = useConfig();
+  const accentColor = getLanguageAccentColor(language);
 
-  // Directly highlight the code when code or language changes
+  // Directly highlight the code when code or language changes. The code
+  // block surface is always the ink brand background (Claude Design), so it
+  // always highlights with the dark Shiki theme regardless of app theme.
   useEffect(() => {
     if (!language) return;
 
-    const shikiTheme = theme === "dark" ? DARK_THEME : LIGHT_THEME;
-    // Use the highlightCode utility directly
-    void highlightCode(code, language, shikiTheme).then((highlighted) => {
+    void highlightCode(code, language, DARK_THEME).then((highlighted) => {
       setHighlightedCodeState(highlighted);
     });
-  }, [code, language, theme]);
+  }, [code, language]);
 
   const handleCopy = useCallback(() => {
     setCopying(true);
@@ -147,17 +149,22 @@ export function CodeSnippet({
     <div
       data-theme={theme}
       className={cn(
-        "snippet relative box-border flex w-full overflow-hidden rounded-lg border border-muted bg-card",
+        "snippet relative box-border flex w-full overflow-hidden rounded-lg border-l-4 bg-surface-secondary-fixed-dark",
         inline && "inline-flex",
         shimmer && "shimmer",
         className,
       )}
-      style={{ "--width": `${containerWidth}px` } as React.CSSProperties}
+      style={
+        {
+          "--width": `${containerWidth}px`,
+          borderLeftColor: accentColor,
+        } as React.CSSProperties
+      }
       ref={containerRef}
     >
-      <div className="snippet-inner flex w-full flex-row gap-2 rounded-lg bg-card p-4">
+      <div className="snippet-inner flex w-full flex-row gap-2 rounded-lg bg-surface-secondary-fixed-dark px-6 py-5 text-default-fixed-light">
         {language === "bash" && (
-          <div className="self-center font-mono font-light text-body select-none">
+          <div className="self-center font-mono font-light text-default-fixed-light select-none">
             {promptSymbol ?? "$"}
           </div>
         )}
@@ -166,7 +173,7 @@ export function CodeSnippet({
             code={highlightedCodeState}
             onClick={onSelectOrCopy}
             className={cn(
-              "highlighted-code inline-flex w-fit self-center font-mono outline-none",
+              "highlighted-code inline-flex w-fit self-center font-mono font-light leading-[1.6] outline-none",
               fontSizeMap[fontSize],
               isMultiline && "min-w-32",
               snippetClassName,
@@ -206,7 +213,7 @@ export function CodeSnippet({
                     variants={copyIconVariants}
                     initial="hidden"
                     animate="visible"
-                    className="text-body-muted hover:text-body"
+                    className="text-muted-fixed-light hover:text-highlight-fixed-light"
                     exit="hidden"
                   >
                     <Icon name="copy" stroke="currentColor" />

@@ -134,6 +134,36 @@ export function isProgrammingLanguage(
   ].includes(language);
 }
 
+/**
+ * Maps a language identifier to its brand accent color (Claude Design
+ * brandbook language palette — see the `--color-lang-*` tokens in
+ * `src/components/ui/moonshine/base.css`). Used for the left accent rail on
+ * code blocks. Falls back to the primary blue (javascript) for languages
+ * without a dedicated brand color.
+ */
+const LANGUAGE_ACCENT_COLORS: Record<string, string> = {
+  typescript: "var(--color-lang-typescript)",
+  javascript: "var(--color-lang-javascript)",
+  python: "var(--color-lang-python)",
+  go: "var(--color-lang-go)",
+  ruby: "var(--color-lang-ruby)",
+  php: "var(--color-lang-php)",
+  java: "var(--color-lang-java)",
+  csharp: "var(--color-lang-csharp)",
+  dotnet: "var(--color-lang-csharp)",
+  rust: "var(--color-lang-rust)",
+};
+
+const DEFAULT_LANGUAGE_ACCENT_COLOR = LANGUAGE_ACCENT_COLORS.javascript!;
+
+export function getLanguageAccentColor(language?: string | null): string {
+  if (!language) return DEFAULT_LANGUAGE_ACCENT_COLOR;
+  return (
+    LANGUAGE_ACCENT_COLORS[language.toLowerCase()] ??
+    DEFAULT_LANGUAGE_ACCENT_COLOR
+  );
+}
+
 const ANNOTATION_TYPES = [
   "callout",
   "className",
