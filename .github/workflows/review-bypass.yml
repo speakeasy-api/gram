@@ -138,8 +138,22 @@ jobs:
             | tail -1)
           labeled_by="${labeled_by:-unknown}"
 
+          # Escape Slack mrkdwn control characters so PR metadata (title,
+          # branch name) can't inject formatting or special mentions like
+          # <!channel> into the audit post. The title also stays outside the
+          # <url|label> link so a literal "|" can't corrupt the link syntax.
+          escape_mrkdwn() {
+            local s=$1
+            s=${s//&/&amp;}
+            s=${s//</&lt;}
+            s=${s//>/&gt;}
+            printf '%s' "$s"
+          }
+          title_esc=$(escape_mrkdwn "$PR_TITLE")
+          branch_esc=$(escape_mrkdwn "$BASE_BRANCH")
+
           payload=$(jq -n \
-            --arg text ":warning: *Review bypass merge* — <${PR_URL}|#${PR_NUMBER}: ${PR_TITLE}> by \`${PR_AUTHOR}\` merged to \`${BASE_BRANCH}\` without independent review. Bypass authorized by \`${labeled_by}\` via the \`review:bypass\` label. All required status checks passed." \
+            --arg text ":warning: *Review bypass merge* — <${PR_URL}|#${PR_NUMBER}> ${title_esc} by \`${PR_AUTHOR}\` merged to \`${branch_esc}\` without independent review. Bypass authorized by \`${labeled_by}\` via the \`review:bypass\` label. All required status checks passed." \
             '{text: $text}')
 
           curl -sf -X POST -H 'Content-Type: application/json' -d "$payload" "$SLACK_WEBHOOK_URL"
