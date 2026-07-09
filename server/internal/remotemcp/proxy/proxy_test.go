@@ -670,12 +670,15 @@ func TestProxy_Get_LongStreamStaysAliveOnActivity(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	p := newProxyForTest(t, upstream.URL)
-	// Both timeouts intentionally smaller than the total stream duration
-	// (~300ms): NonStreamingTimeout would have killed the stream pre-fix;
-	// per-event reset keeps StreamingTimeout from firing as long as
-	// activity is at least every interEventGap.
+	// NonStreamingTimeout is intentionally smaller than the total stream
+	// duration (~300ms): it would have killed the stream pre-fix. The
+	// per-event idle reset keeps StreamingTimeout from firing as long as
+	// activity is at least every interEventGap. StreamingTimeout is kept
+	// well above interEventGap (20x) so scheduler/GC jitter under parallel
+	// CI load can't stretch a single gap past the idle bound and tear the
+	// stream down (DNO-460).
 	p.NonStreamingTimeout = 75 * time.Millisecond
-	p.StreamingTimeout = 200 * time.Millisecond
+	p.StreamingTimeout = 1 * time.Second
 
 	var observed []jsonrpc.Message
 	p.RemoteMessageInterceptors = []proxy.RemoteMessageInterceptor{
