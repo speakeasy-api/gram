@@ -116,6 +116,55 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 	}, nil
 }
 
+func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.GetShadowMCPInventoryServerPayload) (*gen.ShadowMCPInventoryServer, error) {
+	ac, err := s.requireOrgAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	projectID, err := uuid.Parse(payload.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
+	}
+	if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, projectID); err != nil {
+		return nil, err
+	}
+
+	inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(payload.ServerURL)
+	if !ok {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid shadow mcp server url").LogError(ctx, s.logger)
+	}
+
+	chRepo := telemetryrepo.New(s.chConn)
+	inventoryRow, err := chRepo.GetShadowMCPInventoryURL(ctx, telemetryrepo.GetShadowMCPInventoryURLParams{
+		GramProjectID:      projectID.String(),
+		CanonicalServerURL: inventoryURL.CanonicalURL,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get shadow mcp inventory url").LogError(ctx, s.logger)
+	}
+	if inventoryRow == nil {
+		return nil, oops.E(oops.CodeNotFound, nil, "shadow mcp inventory url not found").LogError(ctx, s.logger)
+	}
+
+	usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
+		GramProjectID:       projectID.String(),
+		CanonicalServerURLs: []string{inventoryURL.CanonicalURL},
+		Limit:               shadowMCPInventoryUsageTraceLimit,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage").LogError(ctx, s.logger)
+	}
+	usageByURL := shadowMCPInventoryUsageByURL(usageRows)
+
+	policyState, err := s.shadowMCPInventoryPolicyState(ctx, ac.ActiveOrganizationID, projectID, []string{inventoryURL.CanonicalURL})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
+	}
+
+	return buildShadowMCPInventoryServer(*inventoryRow, usageByURL[inventoryURL.CanonicalURL], policyState.forURL(inventoryURL.CanonicalURL)), nil
+}
+
 func (s *Service) ListShadowMCPInventoryUsers(ctx context.Context, payload *gen.ListShadowMCPInventoryUsersPayload) (*gen.ListShadowMCPInventoryUsersResult, error) {
 	ac, err := s.requireOrgAdmin(ctx)
 	if err != nil {

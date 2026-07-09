@@ -251,6 +251,64 @@ func TestService_ListShadowMCPInventory_ServerNameIsOptional(t *testing.T) {
 	require.Nil(t, result.Servers[0].ServerName)
 }
 
+func TestService_GetShadowMCPInventoryServer_ComposesOneURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	now := time.Now().UTC()
+
+	require.NoError(t, telemetryRepo.New(ti.chConn).UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://detail.example.com/mcp",
+			URLHost:            "detail.example.com",
+			ServerName:         "Detail MCP",
+			SeenAt:             now.Add(-2 * time.Hour),
+			FirstSeen:          now.Add(-2 * time.Hour),
+			LastSeen:           now.Add(-30 * time.Minute),
+			UpdatedAt:          now.Add(-30 * time.Minute),
+		},
+	}))
+	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{
+		ProjectID:  projectID,
+		ServerURL:  "https://detail.example.com/mcp?token=ignored",
+		ServerName: "Detail MCP",
+		UserEmail:  "alex@example.com",
+		ObservedAt: now.Add(-10 * time.Minute),
+	})
+	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Block Shadow MCP",
+		Action:         "block",
+	})
+	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://detail.example.com/mcp")
+
+	var server *gen.ShadowMCPInventoryServer
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		var err error
+		server, err = ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
+			ProjectID: projectID,
+			ServerURL: "HTTPS://DETAIL.EXAMPLE.COM:443/mcp?token=ignored#fragment",
+		})
+		require.NoError(c, err)
+		require.NotNil(c, server.LastCalled)
+	}, 5*time.Second, 100*time.Millisecond)
+
+	require.Equal(t, "https://detail.example.com/mcp", server.CanonicalServerURL)
+	require.NotNil(t, server.ServerName)
+	require.Equal(t, "Detail MCP", *server.ServerName)
+	require.Equal(t, "detail.example.com", server.URLHost)
+	require.Equal(t, shadowMCPInventoryAccessAllowed, server.Access)
+	require.Equal(t, []string{policy.ID.String()}, server.AllowedPolicyIds)
+	require.Equal(t, 1, server.ObservedUseCount)
+	require.Equal(t, 1, server.UserCount)
+	require.Equal(t, []string{"alex@example.com"}, server.TopUsers)
+}
+
 func TestService_ListShadowMCPInventory_RequiresOrgAdmin(t *testing.T) {
 	t.Parallel()
 

@@ -572,6 +572,41 @@ describe("ShadowMCPInventoryTable", () => {
     expect(screen.queryByText("0 Access Requests")).toBeFalsy();
   });
 
+  it("links inventory rows to a server detail page", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://github.example.com/mcp",
+          serverName: "GitHub MCP",
+        }),
+      ],
+    });
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ShadowMCPInventoryTable
+          getServerHref={(server) =>
+            `/shadow-mcp/${encodeURIComponent(server.canonicalServerUrl)}`
+          }
+          members={[]}
+          policyState="blocking"
+          projectID="project-id-1"
+          roles={[]}
+          shadowMCPPolicies={[blockingPolicy()]}
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("GitHub MCP")).toBeTruthy();
+    });
+
+    expect(
+      screen.getByRole("link", { name: "GitHub MCP" }).getAttribute("href"),
+    ).toBe("/shadow-mcp/https%3A%2F%2Fgithub.example.com%2Fmcp");
+  });
+
   it("sorts inventory columns and uses call count for Usage", async () => {
     mockShadowMCPInventory({
       servers: [

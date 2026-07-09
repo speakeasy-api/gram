@@ -14,6 +14,7 @@ import { accessDisableRBAC } from "../funcs/accessDisableRBAC.js";
 import { accessEnableRBAC } from "../funcs/accessEnableRBAC.js";
 import { accessGetRBACStatus } from "../funcs/accessGetRBACStatus.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
+import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
 import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
@@ -49,6 +50,7 @@ import { Role } from "../models/components/role.js";
 import { ShadowMCPAccessRule } from "../models/components/shadowmcpaccessrule.js";
 import { ShadowMCPApprovalDecisionResult } from "../models/components/shadowmcpapprovaldecisionresult.js";
 import { ShadowMCPApprovalRequest } from "../models/components/shadowmcpapprovalrequest.js";
+import { ShadowMCPInventoryServer } from "../models/components/shadowmcpinventoryserver.js";
 import { ShadowMCPInventoryURLState } from "../models/components/shadowmcpinventoryurlstate.js";
 import {
   ApproveShadowMCPApprovalRequestRequest,
@@ -98,6 +100,10 @@ import {
   GetRoleRequest,
   GetRoleSecurity,
 } from "../models/operations/getrole.js";
+import {
+  GetShadowMCPInventoryServerRequest,
+  GetShadowMCPInventoryServerSecurity,
+} from "../models/operations/getshadowmcpinventoryserver.js";
 import {
   ListChallengeBucketsRequest,
   ListChallengeBucketsSecurity,
@@ -614,6 +620,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ShadowMCPInventoryURLState> {
     return unwrapAsync(accessResolveShadowMCPInventoryRequest(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getShadowMCPInventoryServer access
+   *
+   * @remarks
+   * Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.
+   */
+  async getShadowMCPInventoryServer(
+    request: GetShadowMCPInventoryServerRequest,
+    security?: GetShadowMCPInventoryServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ShadowMCPInventoryServer> {
+    return unwrapAsync(accessGetShadowMCPInventoryServer(
       this,
       request,
       security,

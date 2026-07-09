@@ -5,9 +5,15 @@ import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicySt
 import { shadowMCPPolicyState } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { useProject } from "@/contexts/Auth";
+import { useRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
+import { Outlet } from "react-router";
+
+export function ShadowMCPRoot(): JSX.Element {
+  return <Outlet />;
+}
 
 function ShadowMCPLoadingState(): JSX.Element {
   return (
@@ -24,6 +30,7 @@ function ShadowMCPLoadingState(): JSX.Element {
 export default function ShadowMCP(): JSX.Element {
   const pageTitle = "Shadow MCP";
   const project = useProject();
+  const routes = useRoutes();
   const policiesQuery = useRiskListPolicies();
   const membersQuery = useMembers();
   const rolesQuery = useRoles();
@@ -59,6 +66,11 @@ export default function ShadowMCP(): JSX.Element {
                 <div className="flex flex-col gap-4 pb-8">
                   <ShadowMCPPolicyStatus policyState={policyState} />
                   <ShadowMCPInventoryTable
+                    getServerHref={(server) =>
+                      routes.shadowMCP.detail.href(
+                        encodeURIComponent(server.canonicalServerUrl),
+                      )
+                    }
                     members={membersQuery.data?.members ?? []}
                     policyState={policyState}
                     projectID={project.id}

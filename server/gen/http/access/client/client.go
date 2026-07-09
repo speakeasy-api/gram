@@ -77,6 +77,10 @@ type Client struct {
 	// listShadowMCPInventory endpoint.
 	ListShadowMCPInventoryDoer goahttp.Doer
 
+	// GetShadowMCPInventoryServer Doer is the HTTP client used to make requests to
+	// the getShadowMCPInventoryServer endpoint.
+	GetShadowMCPInventoryServerDoer goahttp.Doer
+
 	// ListShadowMCPInventoryUsers Doer is the HTTP client used to make requests to
 	// the listShadowMCPInventoryUsers endpoint.
 	ListShadowMCPInventoryUsersDoer goahttp.Doer
@@ -164,6 +168,7 @@ func NewClient(
 		DenyShadowMCPApprovalRequestDoer:         doer,
 		ListShadowMCPAccessRulesDoer:             doer,
 		ListShadowMCPInventoryDoer:               doer,
+		GetShadowMCPInventoryServerDoer:          doer,
 		ListShadowMCPInventoryUsersDoer:          doer,
 		UpsertShadowMCPInventoryPolicyBypassDoer: doer,
 		DeleteShadowMCPInventoryPolicyBypassDoer: doer,
@@ -540,6 +545,30 @@ func (c *Client) ListShadowMCPInventory() goa.Endpoint {
 		resp, err := c.ListShadowMCPInventoryDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "listShadowMCPInventory", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetShadowMCPInventoryServer returns an endpoint that makes HTTP requests to
+// the access service getShadowMCPInventoryServer server.
+func (c *Client) GetShadowMCPInventoryServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetShadowMCPInventoryServerRequest(c.encoder)
+		decodeResponse = DecodeGetShadowMCPInventoryServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetShadowMCPInventoryServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetShadowMCPInventoryServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "getShadowMCPInventoryServer", err)
 		}
 		return decodeResponse(resp)
 	}

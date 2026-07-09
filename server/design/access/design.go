@@ -431,6 +431,34 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventory"}`)
 	})
 
+	Method("getShadowMCPInventoryServer", func() {
+		Description("Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("server_url", String, "Shadow MCP server URL to inspect.")
+			Required("project_id", "server_url")
+			security.SessionPayload()
+		})
+
+		Result(ShadowMCPInventoryServerModel)
+
+		HTTP(func() {
+			GET("/rpc/access.shadowMcp.inventory.get")
+			Param("project_id")
+			Param("server_url")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getShadowMCPInventoryServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "getShadowMCPInventoryServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryServer"}`)
+	})
+
 	Method("listShadowMCPInventoryUsers", func() {
 		Description("List users with observed telemetry usage for one project-scoped Shadow MCP server URL.")
 		Security(security.Session)

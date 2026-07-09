@@ -316,6 +316,11 @@ type ListShadowMCPInventoryURLsParams struct {
 	Cursor        string
 }
 
+type GetShadowMCPInventoryURLParams struct {
+	GramProjectID      string
+	CanonicalServerURL string
+}
+
 type ShadowMCPInventoryURLRow struct {
 	CanonicalServerURL string    `ch:"canonical_server_url"`
 	URLHost            string    `ch:"url_host"`
@@ -598,6 +603,10 @@ func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []Upser
 	}
 
 	return nil
+}
+
+func (q *Queries) GetShadowMCPInventoryURL(ctx context.Context, arg GetShadowMCPInventoryURLParams) (*ShadowMCPInventoryURLRow, error) {
+	return q.getShadowMCPInventoryURL(ctx, arg.GramProjectID, arg.CanonicalServerURL)
 }
 
 func (q *Queries) getShadowMCPInventoryURL(ctx context.Context, projectID string, canonicalURL string) (*ShadowMCPInventoryURLRow, error) {

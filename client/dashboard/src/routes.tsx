@@ -78,7 +78,8 @@ import SecurityOverview, {
 } from "./pages/security/SecurityOverview";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
 import ApprovalRequests from "./pages/security/ApprovalRequests";
-import ShadowMCP from "./pages/shadow-mcp/ShadowMCP";
+import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
+import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
 import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
 import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
@@ -587,7 +588,15 @@ const ROUTE_STRUCTURE = {
     title: "Shadow MCP",
     url: "shadow-mcp",
     icon: "shield",
-    component: ShadowMCP,
+    component: ShadowMCPRoot,
+    indexComponent: ShadowMCP,
+    subPages: {
+      detail: {
+        title: "Shadow MCP Server",
+        url: ":serverUrl",
+        component: ShadowMCPServerDetail,
+      },
+    },
   },
   sdks: {
     title: "SDKs",
