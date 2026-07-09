@@ -245,6 +245,26 @@ func TestCreateIssuer_ProjectNotInOrg(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+// TestCreateIssuer_DuplicateSlug maps a duplicate-slug insert on a
+// project-specific issuer to a 409 conflict rather than an unexpected fault.
+func TestCreateIssuer_DuplicateSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	pid := authCtx.ProjectID.String()
+
+	_, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("admin-dup-slug", &pid))
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateIssuer(ctx, newCreateIssuerPayload("admin-dup-slug", &pid))
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
 // newUpdateIssuerNamePayload sets only the display name, leaving every other
 // field nil so the update preserves the existing values (COALESCE narg).
 func newUpdateIssuerNamePayload(id string, name *string) *orgissuersgen.UpdateIssuerPayload {
