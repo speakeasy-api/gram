@@ -1,4 +1,4 @@
-h1:Vls2e48N0t4EUIvo2j5r5ambLMjOMElPmvYsCinqS9M=
+h1:K2K88fOWZ0ZO9e7Fdo+jT2TDKJtllLlrSFI2g/AfKjg=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -255,3 +255,4 @@ h1:Vls2e48N0t4EUIvo2j5r5ambLMjOMElPmvYsCinqS9M=
 20260709083351_risk-policy-challenge-call-fingerprint.sql h1:jIIXDWLontE+WT4GeA17OSO3rojBf76ZLETT9i2bubA=
 20260709124627_add-remote-session-issuer-documentation-urls.sql h1:xnKvDYXMQkyBCJIRGe+XZHJfq8sI1y+EgQfHsea3zO4=
 20260709172736_device-agent-syncs.sql h1:GZQ/O5LcdX5dtVYE4ADV6y4pOFGoaTYv4maGmzw1mUw=
+20260709213047_plugin-connections-split-fingerprint.sql h1:zwCQg6wRiUD27gtUHufcNFPPHRwzsL0XDM1gDGl60o0=

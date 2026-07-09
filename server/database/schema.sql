@@ -3266,13 +3266,27 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   -- existing connections (and any future connection without the marketplace
   -- surface enabled) are unconstrained.
   marketplace_token TEXT,
-  -- Stable content hash of the plugin packages last published to this repo,
-  -- independent of per-publish values (manifest version, injected API keys).
-  -- The automated generator rollout compares the current fingerprint against
-  -- this value and skips republishing when nothing has changed. Nullable so
-  -- connections published before fingerprinting existed re-publish once to
-  -- backfill it.
+  -- DEPRECATED: superseded by published_mcp_fingerprint + published_hooks_version
+  -- when hooks and MCP plugin generation were decoupled. No longer written or
+  -- read; retained per expand-contract and dropped in a later contract migration.
   published_fingerprint TEXT,
+  -- Per-plugin content fingerprints of the MCP (feature) plugins last published
+  -- to this repo: a JSON object mapping plugin slug -> stable hash (plus a
+  -- reserved "__shared__" key for the marketplace/README files), independent of
+  -- per-publish values (manifest version, injected API key). The automated
+  -- rollout compares the current fingerprints against this value to skip no-op
+  -- MCP republishes. JSON (rather than a single hash) so a future per-plugin
+  -- publish flow can decide independently which plugins have unpublished changes
+  -- without another migration. Excludes the hooks subtree, which rolls out on
+  -- published_hooks_version instead. Nullable so connections predating the split
+  -- republish once to backfill it.
+  published_mcp_fingerprints JSONB,
+  -- The hooksGeneratorVersion stamped into the observability (hooks) plugin last
+  -- published to this repo. The rollout regenerates the hooks subtree only when
+  -- the current hooksGeneratorVersion differs from this value, so an MCP-only
+  -- publish leaves the hooks plugin untouched. Nullable so connections predating
+  -- the split republish the hooks plugin once to backfill it.
+  published_hooks_version TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
