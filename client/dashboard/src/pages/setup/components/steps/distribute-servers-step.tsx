@@ -611,6 +611,9 @@ export function DistributeServersStep({
                       repoOwner={publishStatus.repoOwner}
                       repoName={publishStatus.repoName}
                       marketplaceUrl={publishStatus.marketplaceUrl}
+                      codexObservabilityPlugin={
+                        publishStatus.codexObservabilityPlugin
+                      }
                     />
                   </div>
                 )}

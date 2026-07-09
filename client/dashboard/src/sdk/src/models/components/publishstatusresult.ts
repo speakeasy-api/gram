@@ -10,6 +10,14 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type PublishStatusResult = {
   /**
+   * Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+   */
+  claudeObservabilityPlugin?: string | undefined;
+  /**
+   * Slug of the generated Codex observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+   */
+  codexObservabilityPlugin?: string | undefined;
+  /**
    * Whether GitHub publishing is configured on the server.
    */
   configured: boolean;
@@ -49,6 +57,8 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    claude_observability_plugin: z.optional(z.string()),
+    codex_observability_plugin: z.optional(z.string()),
     configured: z.boolean(),
     connected: z.boolean(),
     last_published_at: z.optional(
@@ -62,6 +72,8 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "claude_observability_plugin": "claudeObservabilityPlugin",
+      "codex_observability_plugin": "codexObservabilityPlugin",
       "last_published_at": "lastPublishedAt",
       "marketplace_url": "marketplaceUrl",
       "repo_name": "repoName",

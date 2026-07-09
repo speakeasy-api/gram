@@ -17,21 +17,16 @@ import { HookSourceIcon } from "./HookSourceIcon";
 
 function ClaudeInstallContent({
   marketplaceUrl,
-  repoName,
+  pluginName,
 }: {
   marketplaceUrl?: string;
-  repoName?: string;
+  pluginName?: string;
 }) {
   const { data: marketplaceSettings } = useMarketplaceSettings();
   // Marketplace identifiers are a cross-surface contract: Claude Code
   // registers the marketplace under the published marketplace.json `name`
   // (effectiveName) and references plugins as `<plugin>@<name>`.
   const marketplaceName = marketplaceSettings?.effectiveName ?? null;
-  // repoName = "<org-slug>-gram"; derive the observability plugin slug by
-  // replacing the suffix (same derivation as the Codex tab below).
-  const pluginName = repoName
-    ? repoName.replace(/-gram$/, "-observability")
-    : null;
 
   const addCommand = marketplaceUrl
     ? `claude plugin marketplace add ${marketplaceUrl}`
@@ -296,19 +291,19 @@ function CursorInstallContent() {
 
 function CodexInstallContent({
   marketplaceUrl,
-  repoName,
+  pluginName,
 }: {
   marketplaceUrl?: string;
-  repoName?: string;
+  pluginName?: string;
 }) {
+  const { data: marketplaceSettings } = useMarketplaceSettings();
   const addCommand = marketplaceUrl
     ? `codex plugin marketplace add ${marketplaceUrl}`
     : null;
 
-  const marketplaceKey = repoName ?? null;
-  const pluginName = repoName
-    ? repoName.replace(/-gram$/, "-observability-codex")
-    : null;
+  // Codex registers the marketplace under the published marketplace.json
+  // `name` (effectiveName) and references plugins as `<plugin>@<name>`.
+  const marketplaceKey = marketplaceSettings?.effectiveName ?? null;
   const pluginEntry =
     pluginName && marketplaceKey
       ? `[plugins."${pluginName}@${marketplaceKey}"]\nenabled = true`
@@ -585,14 +580,14 @@ export function HooksSetupDialog({
           {selected === "claude" && (
             <ClaudeInstallContent
               marketplaceUrl={publishStatus?.marketplaceUrl}
-              repoName={publishStatus?.repoName ?? undefined}
+              pluginName={publishStatus?.claudeObservabilityPlugin}
             />
           )}
           {selected === "cursor" && <CursorInstallContent />}
           {selected === "codex" && (
             <CodexInstallContent
               marketplaceUrl={publishStatus?.marketplaceUrl}
-              repoName={publishStatus?.repoName ?? undefined}
+              pluginName={publishStatus?.codexObservabilityPlugin}
             />
           )}
         </div>

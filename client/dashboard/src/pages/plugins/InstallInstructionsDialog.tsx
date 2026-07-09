@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useFetcher } from "@/contexts/Fetcher";
 import { cn } from "@/lib/utils";
+import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { BookOpen, Download, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { HookSourceIcon } from "../hooks/HookSourceIcon";
@@ -24,6 +25,7 @@ type ContentProps = {
   repoOwner: string;
   repoName: string;
   marketplaceUrl: string | undefined;
+  codexObservabilityPlugin: string | undefined;
 };
 
 type Provider =
@@ -82,6 +84,11 @@ function ClaudeCodeInstallContent({
   repoName,
   marketplaceUrl,
 }: Pick<ContentProps, "repoName" | "marketplaceUrl">) {
+  const { data: marketplaceSettings } = useMarketplaceSettings();
+  // Claude Code registers the marketplace under the published
+  // marketplace.json `name` and references plugins as `<plugin>@<name>`, so
+  // the managed-settings alias must match that name — not the repo name.
+  const marketplaceName = marketplaceSettings?.effectiveName ?? repoName;
   const installCommand = marketplaceUrl
     ? `/plugin marketplace add ${marketplaceUrl}`
     : null;
@@ -93,7 +100,7 @@ function ClaudeCodeInstallContent({
     ? JSON.stringify(
         {
           extraKnownMarketplaces: {
-            [repoName]: {
+            [marketplaceName]: {
               autoUpdate: true,
               source: {
                 source: "git",
@@ -451,17 +458,22 @@ function CursorInstallContent({
 function CodexInstallContent({
   repoOwner,
   repoName,
-}: Pick<ContentProps, "repoOwner" | "repoName">) {
+  codexObservabilityPlugin,
+}: Pick<ContentProps, "repoOwner" | "repoName" | "codexObservabilityPlugin">) {
   const { fetch: authFetch } = useFetcher();
+  const { data: marketplaceSettings } = useMarketplaceSettings();
   const [isDownloading, setIsDownloading] = useState(false);
 
   const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
   const addCommand = `codex plugin marketplace add ${repoUrl}`;
 
-  // repoName = "<org-slug>-gram"; derive plugin name by replacing the suffix.
-  const pluginName = repoName.replace(/-gram$/, "-observability-codex");
+  // Codex registers the marketplace under the published marketplace.json
+  // `name` and references plugins as `<plugin>@<name>`; the plugin slug comes
+  // from publish status so the org-derived formula lives server-side only.
+  const marketplaceName = marketplaceSettings?.effectiveName ?? repoName;
+  const pluginName = codexObservabilityPlugin ?? "<plugin-name>";
   const featureFlags = `features.hooks = true\nfeatures.plugin_hooks = true`;
-  const pluginEntry = `[plugins."${pluginName}@${repoName}"]\nenabled = true`;
+  const pluginEntry = `[plugins."${pluginName}@${marketplaceName}"]\nenabled = true`;
   const configBlock = `${featureFlags}\n\n${pluginEntry}`;
 
   const handleDownloadInstallScript = async () => {
@@ -700,6 +712,7 @@ function InstallInstructionsDialog({
             <CodexInstallContent
               repoOwner={content.repoOwner}
               repoName={content.repoName}
+              codexObservabilityPlugin={content.codexObservabilityPlugin}
             />
           )}
         </div>

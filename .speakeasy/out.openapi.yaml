@@ -48640,6 +48640,12 @@ components:
     PublishStatusResult:
       type: object
       properties:
+        claude_observability_plugin:
+          type: string
+          description: Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+        codex_observability_plugin:
+          type: string
+          description: Slug of the generated Codex observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.
         configured:
           type: boolean
           description: Whether GitHub publishing is configured on the server.

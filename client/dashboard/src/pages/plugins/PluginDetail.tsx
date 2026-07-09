@@ -374,6 +374,9 @@ export default function PluginDetail(): JSX.Element | null {
                 repoOwner={publishStatus.repoOwner}
                 repoName={publishStatus.repoName}
                 marketplaceUrl={publishStatus.marketplaceUrl}
+                codexObservabilityPlugin={
+                  publishStatus.codexObservabilityPlugin
+                }
               />
             )}
           </div>

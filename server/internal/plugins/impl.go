@@ -1201,14 +1201,16 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 	}
 
 	result := &gen.PublishStatusResult{
-		Configured:      s.github != nil,
-		Connected:       false,
-		RepoOwner:       nil,
-		RepoName:        nil,
-		RepoURL:         nil,
-		MarketplaceURL:  nil,
-		UpToDate:        nil,
-		LastPublishedAt: nil,
+		Configured:                s.github != nil,
+		Connected:                 false,
+		RepoOwner:                 nil,
+		RepoName:                  nil,
+		RepoURL:                   nil,
+		MarketplaceURL:            nil,
+		ClaudeObservabilityPlugin: nil,
+		CodexObservabilityPlugin:  nil,
+		UpToDate:                  nil,
+		LastPublishedAt:           nil,
 	}
 
 	if s.github != nil {
@@ -1222,6 +1224,23 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			result.RepoName = &conn.RepoName
 			repoURL := fmt.Sprintf("https://github.com/%s/%s", conn.RepoOwner, conn.RepoName)
 			result.RepoURL = &repoURL
+			// The observability plugin slugs are org-name-derived (see naming
+			// package); surface them so install UIs never re-derive the formula.
+			slugCfg := GenerateConfig{
+				OrgName:           s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
+				OrgEmail:          "",
+				OrgID:             "",
+				ServerURL:         "",
+				APIKey:            "",
+				HooksAPIKey:       "",
+				ProjectSlug:       "",
+				IsDefaultProject:  false,
+				Version:           "",
+				MarketplaceName:   "",
+				ObservabilityMode: false,
+			}
+			result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
+			result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
 			if conn.MarketplaceToken.Valid && s.serverURL != "" {
 				marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
 				result.MarketplaceURL = &marketplaceURL
@@ -1645,18 +1664,7 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 // flows like project-scoped API keys leave unset) so non-default projects get
 // their correct project-scoped name.
 func (s *Service) resolveDefaultMarketplaceName(ctx context.Context, orgID, orgSlug string, projectID uuid.UUID) string {
-	orgName := orgSlug
-	switch fetched, err := s.repo.GetOrganizationName(ctx, orgID); {
-	case err == nil:
-		orgName = fetched
-	case errors.Is(err, pgx.ErrNoRows):
-		// Use the slug from auth context.
-	default:
-		s.logger.WarnContext(ctx, "failed to fetch organization name, falling back to slug",
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-	}
+	orgName := s.resolveOrganizationName(ctx, orgID, orgSlug)
 
 	pctx, err := s.repo.GetProjectMarketplaceNameContext(ctx, projectID)
 	if err != nil {
@@ -1669,6 +1677,25 @@ func (s *Service) resolveDefaultMarketplaceName(ctx context.Context, orgID, orgS
 		return DefaultMarketplaceName(orgName, "", true)
 	}
 	return DefaultMarketplaceName(orgName, pctx.ProjectSlug, pctx.IsDefaultProject)
+}
+
+// resolveOrganizationName returns the org's display name, falling back to the
+// auth-context slug when the org row is missing or unreadable. The name feeds
+// the org-derived marketplace and observability-plugin slug formulas.
+func (s *Service) resolveOrganizationName(ctx context.Context, orgID, orgSlug string) string {
+	orgName := orgSlug
+	switch fetched, err := s.repo.GetOrganizationName(ctx, orgID); {
+	case err == nil:
+		orgName = fetched
+	case errors.Is(err, pgx.ErrNoRows):
+		// Use the slug from auth context.
+	default:
+		s.logger.WarnContext(ctx, "failed to fetch organization name, falling back to slug",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+	return orgName
 }
 
 // pluginAPIKeyCandidate is the in-memory shape of a generated plugin API key
