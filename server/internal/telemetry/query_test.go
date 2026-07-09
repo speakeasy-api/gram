@@ -13,6 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -894,4 +896,59 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 	// The fixture carries no division attribute; the tokens land on the ''
 	// row (labeled by the frontend).
 	require.Equal(t, map[string]int64{"": 1000}, rowsByKey["division_name"])
+}
+
+func TestQueryTumDetails_IncludesDeletedProjects(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	// A second project that gets soft-deleted after recording usage: the
+	// tokens were consumed while it was live, so billing — the card AND the
+	// breakdowns — must keep counting them.
+	doomed, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Doomed Project",
+		Slug:           "doomed-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	ts := now.Add(-10 * time.Minute)
+
+	liveChat := uuid.NewString()
+	doomedChat := uuid.NewString()
+	insertAttributeGramCompletionLog(t, ctx, projectID, ts, liveChat, 0.42, 1000, "anthropic/claude-4.6", "playground", "user@example.com", "Engineering", nil)
+	insertChatEvidenceRow(t, ctx, projectID, ts, liveChat)
+	insertAttributeGramCompletionLog(t, ctx, doomed.ID.String(), ts, doomedChat, 0.2, 250, "anthropic/claude-4.6", "playground", "user@example.com", "Engineering", nil)
+	insertChatEvidenceRow(t, ctx, doomed.ID.String(), ts, doomedChat)
+
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, doomed.ID)
+	require.NoError(t, err)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, resErr := ti.service.QueryTumDetails(ctx, &gen.QueryTumDetailsPayload{
+			SessionToken: nil,
+			From:         from,
+			To:           to,
+			ProjectID:    nil,
+		})
+		if !assert.NoError(c, resErr) || !assert.NotNil(c, res.Totals) {
+			return
+		}
+		assert.Equal(c, int64(1250), res.Totals.TotalTokens,
+			"the deleted project's usage must still count toward the billing breakdowns")
+	}, 10*time.Second, 200*time.Millisecond)
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
+	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
 // minIntervalSeconds is the finest timeseries bucket telemetry.query supports.
@@ -272,8 +273,29 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	}
 	timeStart, timeEnd := scope.timeStart, scope.timeEnd
 
+	// Billing counts usage recorded while a project was live even if the
+	// project has since been soft-deleted — the card's totals do (see
+	// ListBillingProjectIDsByOrganization) — while resolveOrgQueryScope lists
+	// active projects only. Org-wide reads swap in the billing-aware list so
+	// a deleted project's usage cannot show on the card yet vanish from the
+	// breakdowns; an explicit project filter keeps the caller's choice.
+	billedProjectUUIDs := scope.projectUUIDs
+	billedProjectIDs := scope.projectIDs
+	if payload.ProjectID == nil || *payload.ProjectID == "" {
+		authCtx, _ := contextvalues.GetAuthContext(ctx)
+		billingIDs, err := usagerepo.New(s.db).ListBillingProjectIDsByOrganization(ctx, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list billing projects").LogError(ctx, s.logger)
+		}
+		billedProjectUUIDs = billingIDs
+		billedProjectIDs = make([]string, 0, len(billingIDs))
+		for _, id := range billingIDs {
+			billedProjectIDs = append(billedProjectIDs, id.String())
+		}
+	}
+
 	billedParams := repo.GetTokensUnderManagementParams{
-		ProjectIDs:        scope.projectIDs,
+		ProjectIDs:        billedProjectIDs,
 		StartUnixNano:     timeStart,
 		EndUnixNano:       timeEnd,
 		BilledHookSources: billing.ModelUsageSourceStrings(),
@@ -297,7 +319,7 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	eg.Go(func() error {
 		var egErr error
 		msgRows, egErr = s.chatRepo.SumMessageTokenStatsByDay(egCtx, chatRepo.SumMessageTokenStatsByDayParams{
-			ProjectIds: scope.projectUUIDs,
+			ProjectIds: billedProjectUUIDs,
 			FromTime:   pgtype.Timestamptz{Time: time.Unix(0, timeStart).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
 			ToTime:     pgtype.Timestamptz{Time: time.Unix(0, timeEnd).UTC(), InfinityModifier: pgtype.Finite, Valid: true},
 		})
