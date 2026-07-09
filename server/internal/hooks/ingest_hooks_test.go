@@ -44,11 +44,11 @@ func (s ingestUserScopedShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Co
 	return true, nil
 }
 
-func (s ingestUserScopedShadowMCPScanner) HasAcknowledgedChallenge(_ context.Context, _ uuid.UUID, _, _, _ string) bool {
+func (s ingestUserScopedShadowMCPScanner) HasAcknowledgedChallenge(_ context.Context, _ uuid.UUID, _, _, _, _ string) bool {
 	return false
 }
 
-func (s ingestUserScopedShadowMCPScanner) RecordPolicyChallenge(_ context.Context, _ string, _ uuid.UUID, _, _, _, _, _, _ string) {
+func (s ingestUserScopedShadowMCPScanner) RecordPolicyChallenge(_ context.Context, _ string, _ uuid.UUID, _, _, _, _, _, _, _ string) {
 }
 
 func requireBlockIDFromMessage(t *testing.T, message string) uuid.UUID {

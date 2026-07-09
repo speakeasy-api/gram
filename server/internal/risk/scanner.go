@@ -2,6 +2,8 @@ package risk
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -52,14 +54,15 @@ type RiskScanner interface {
 	// schemas.
 	HasEnabledShadowMCPPolicy(ctx context.Context, projectID uuid.UUID) (bool, error)
 	// HasAcknowledgedChallenge reports whether a live acknowledgement exists for
-	// a warn (challenge) policy match by this (user, policy, tool). The hooks
-	// layer calls this before denying a warn match: true means the user already
-	// acknowledged and the retried call should be allowed. Fail-closed.
-	HasAcknowledgedChallenge(ctx context.Context, projectID uuid.UUID, userID, policyID, toolName string) bool
+	// a warn (challenge) policy match by this (user, policy, tool, callFingerprint).
+	// The hooks layer calls this before denying a warn match: true means the user
+	// already acknowledged THIS concrete call and the identical retry should be
+	// allowed. Fail-closed.
+	HasAcknowledgedChallenge(ctx context.Context, projectID uuid.UUID, userID, policyID, toolName, callFingerprint string) bool
 	// RecordPolicyChallenge upserts the challenged-state row for a warn match so
-	// the challenge is auditable and linkable. Log-safe: never receives the raw
-	// matched value. Best-effort.
-	RecordPolicyChallenge(ctx context.Context, organizationID string, projectID uuid.UUID, userID, policyID, toolName, policyName, entity, ruleID string)
+	// the challenge is auditable and linkable. Keyed per concrete call via
+	// callFingerprint. Log-safe: never receives the raw matched value. Best-effort.
+	RecordPolicyChallenge(ctx context.Context, organizationID string, projectID uuid.UUID, userID, policyID, toolName, policyName, entity, ruleID, callFingerprint string)
 }
 
 // ShadowMCPPolicy is the minimal policy view the hooks layer needs to render
@@ -106,6 +109,21 @@ type ScanResult struct {
 	// Sensitive — see the type doc. Only for the ephemeral warn render.
 	MatchedValue string
 	Entity       string
+
+	// CallFingerprint is a SHA-256 (hex) of the exact scanned input (the tool-
+	// call arguments / prompt text). It scopes a warn acknowledgement to THIS
+	// concrete call: the challenge row and the ack are keyed on it, so
+	// acknowledging one command clears only an identical retry, not every call
+	// of the same tool under the same policy. Not sensitive (a one-way digest).
+	CallFingerprint string
+}
+
+// callFingerprint is the stable per-call key for a warn acknowledgement: a hex
+// SHA-256 of the exact scanned text. An identical retry hashes the same; any
+// different command/prompt hashes differently and is challenged again.
+func callFingerprint(text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(sum[:])
 }
 
 type scannerMetrics struct {
@@ -352,6 +370,8 @@ func (s *Scanner) ScanForEnforcement(
 		return hit, nil
 	}
 	if hit := warnWinner.Load(); hit != nil {
+		// Scope the challenge/ack to this concrete call.
+		hit.CallFingerprint = callFingerprint(text)
 		// Distinct outcome from "blocked" so challenge hits are tracked
 		// separately in dashboards/metrics and don't inflate the block count.
 		s.recordScan(ctx, projectID.String(), "warned", time.Since(start))

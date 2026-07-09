@@ -882,6 +882,7 @@ WHERE project_id = $1
   AND user_id = $2
   AND risk_policy_id = $3
   AND tool_name IS NOT DISTINCT FROM $4::text
+  AND call_fingerprint IS NOT DISTINCT FROM $5::text
   AND status = 'acknowledged'
   AND expires_at IS NOT NULL
   AND expires_at > clock_timestamp()
@@ -889,21 +890,25 @@ WHERE project_id = $1
 `
 
 type GetActiveRiskPolicyAckParams struct {
-	ProjectID    uuid.UUID
-	UserID       string
-	RiskPolicyID uuid.UUID
-	ToolName     pgtype.Text
+	ProjectID       uuid.UUID
+	UserID          string
+	RiskPolicyID    uuid.UUID
+	ToolName        pgtype.Text
+	CallFingerprint pgtype.Text
 }
 
-// Hook-time gate: is there a live acknowledgement for this (user, policy, tool)?
-// The agent retries with NO token, so this table lookup — not the cache token —
-// is what allows the retry through.
+// Hook-time gate: is there a live acknowledgement for this concrete call
+// (user, policy, tool, call_fingerprint)? The agent retries with NO token, so
+// this table lookup — not the cache token — is what allows the retry through.
+// Scoped by call_fingerprint so only an identical retry clears, not any
+// same-tool call under the policy.
 func (q *Queries) GetActiveRiskPolicyAck(ctx context.Context, arg GetActiveRiskPolicyAckParams) (RiskPolicyChallenge, error) {
 	row := q.db.QueryRow(ctx, getActiveRiskPolicyAck,
 		arg.ProjectID,
 		arg.UserID,
 		arg.RiskPolicyID,
 		arg.ToolName,
+		arg.CallFingerprint,
 	)
 	var i RiskPolicyChallenge
 	err := row.Scan(
@@ -3101,6 +3106,7 @@ INSERT INTO risk_policy_challenges (
   , risk_policy_id
   , user_id
   , tool_name
+  , call_fingerprint
   , status
   , policy_name
   , challenged_at
@@ -3114,13 +3120,14 @@ VALUES (
   , $4
   , $5
   , $6::text
-  , 'acknowledged'
   , $7::text
+  , 'acknowledged'
+  , $8::text
   , clock_timestamp()
   , clock_timestamp()
-  , $8
+  , $9
 )
-ON CONFLICT (project_id, user_id, risk_policy_id, tool_name)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
 WHERE deleted IS FALSE
 DO UPDATE
 SET status = 'acknowledged'
@@ -3132,14 +3139,15 @@ RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, s
 `
 
 type MarkRiskPolicyChallengeAcknowledgedParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	RiskPolicyID   uuid.UUID
-	UserID         string
-	ToolName       pgtype.Text
-	PolicyName     pgtype.Text
-	ExpiresAt      pgtype.Timestamptz
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.UUID
+	UserID          string
+	ToolName        pgtype.Text
+	CallFingerprint pgtype.Text
+	PolicyName      pgtype.Text
+	ExpiresAt       pgtype.Timestamptz
 }
 
 // Self-service redeem: mark the challenge acknowledged with a remember-until
@@ -3152,6 +3160,7 @@ func (q *Queries) MarkRiskPolicyChallengeAcknowledged(ctx context.Context, arg M
 		arg.RiskPolicyID,
 		arg.UserID,
 		arg.ToolName,
+		arg.CallFingerprint,
 		arg.PolicyName,
 		arg.ExpiresAt,
 	)
@@ -3187,6 +3196,7 @@ INSERT INTO risk_policy_challenges (
   , risk_policy_id
   , user_id
   , tool_name
+  , call_fingerprint
   , status
   , policy_name
   , challenged_at
@@ -3198,11 +3208,12 @@ VALUES (
   , $4
   , $5
   , $6::text
-  , 'declined'
   , $7::text
+  , 'declined'
+  , $8::text
   , clock_timestamp()
 )
-ON CONFLICT (project_id, user_id, risk_policy_id, tool_name)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
 WHERE deleted IS FALSE
 DO UPDATE
 SET status = 'declined'
@@ -3214,13 +3225,14 @@ RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, s
 `
 
 type MarkRiskPolicyChallengeDeclinedParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	RiskPolicyID   uuid.UUID
-	UserID         string
-	ToolName       pgtype.Text
-	PolicyName     pgtype.Text
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.UUID
+	UserID          string
+	ToolName        pgtype.Text
+	CallFingerprint pgtype.Text
+	PolicyName      pgtype.Text
 }
 
 // Self-service decline: mark the challenge declined and never grant an ack
@@ -3233,6 +3245,7 @@ func (q *Queries) MarkRiskPolicyChallengeDeclined(ctx context.Context, arg MarkR
 		arg.RiskPolicyID,
 		arg.UserID,
 		arg.ToolName,
+		arg.CallFingerprint,
 		arg.PolicyName,
 	)
 	var i RiskPolicyChallenge
@@ -3907,6 +3920,7 @@ INSERT INTO risk_policy_challenges (
   , risk_policy_id
   , user_id
   , tool_name
+  , call_fingerprint
   , status
   , policy_name
   , entity
@@ -3920,13 +3934,14 @@ VALUES (
   , $4
   , $5
   , $6::text
-  , 'challenged'
   , $7::text
+  , 'challenged'
   , $8::text
   , $9::text
+  , $10::text
   , clock_timestamp()
 )
-ON CONFLICT (project_id, user_id, risk_policy_id, tool_name)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
 WHERE deleted IS FALSE
 DO UPDATE
 SET status = CASE
@@ -3951,15 +3966,16 @@ RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, s
 `
 
 type UpsertRiskPolicyChallengeParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	RiskPolicyID   uuid.UUID
-	UserID         string
-	ToolName       pgtype.Text
-	PolicyName     pgtype.Text
-	Entity         pgtype.Text
-	RuleID         pgtype.Text
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.UUID
+	UserID          string
+	ToolName        pgtype.Text
+	CallFingerprint pgtype.Text
+	PolicyName      pgtype.Text
+	Entity          pgtype.Text
+	RuleID          pgtype.Text
 }
 
 // Records (or refreshes) a warn/challenge for a (user, policy, tool). Never
@@ -3973,6 +3989,7 @@ func (q *Queries) UpsertRiskPolicyChallenge(ctx context.Context, arg UpsertRiskP
 		arg.RiskPolicyID,
 		arg.UserID,
 		arg.ToolName,
+		arg.CallFingerprint,
 		arg.PolicyName,
 		arg.Entity,
 		arg.RuleID,

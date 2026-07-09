@@ -33,11 +33,11 @@ func (s *stubResultScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.
 	return false, nil
 }
 
-func (s *stubResultScanner) HasAcknowledgedChallenge(_ context.Context, _ uuid.UUID, _, _, _ string) bool {
+func (s *stubResultScanner) HasAcknowledgedChallenge(_ context.Context, _ uuid.UUID, _, _, _, _ string) bool {
 	return s.acknowledged
 }
 
-func (s *stubResultScanner) RecordPolicyChallenge(_ context.Context, _ string, _ uuid.UUID, _, _, _, _, _, _ string) {
+func (s *stubResultScanner) RecordPolicyChallenge(_ context.Context, _ string, _ uuid.UUID, _, _, _, _, _, _, _ string) {
 	s.recordedChallenge = true
 }
 

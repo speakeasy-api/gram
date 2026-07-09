@@ -99,7 +99,7 @@ func (s *Service) warnAcknowledged(ctx context.Context, ev hookevents.Event, sca
 	if s.riskScanner == nil || scanResult == nil {
 		return false
 	}
-	return s.riskScanner.HasAcknowledgedChallenge(ctx, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, toolName)
+	return s.riskScanner.HasAcknowledgedChallenge(ctx, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, toolName, scanResult.CallFingerprint)
 }
 
 // warnDenyReason records the challenge and returns two framings of the deny:
@@ -124,7 +124,7 @@ func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanR
 		return "", "", false
 	}
 	// Record the challenge (log-safe fields only — never the matched value).
-	s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, toolName, scanResult.PolicyName, scanResult.Entity, scanResult.RuleID)
+	s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, toolName, scanResult.PolicyName, scanResult.Entity, scanResult.RuleID, scanResult.CallFingerprint)
 
 	var toolPtr *string
 	if toolName != "" {
@@ -137,6 +137,8 @@ func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanR
 		RiskPolicyID:   scanResult.PolicyID,
 		PolicyName:     scanResult.PolicyName,
 		ToolName:       toolPtr,
+		// Scope the ack to this concrete call.
+		CallFingerprint: scanResult.CallFingerprint,
 		// Human-facing challenge shown on the approval page (may include the
 		// match — ephemeral, token-gated, same as the terminal display).
 		ChallengeMessage: renderWarnBody(scanResult),

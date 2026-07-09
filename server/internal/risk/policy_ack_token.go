@@ -22,9 +22,15 @@ import (
 // When a `warn` policy matches, enforcement denies the current call and returns
 // a link carrying an rpak1 token. The warned user opens it in the dashboard,
 // which redeems the token (AcknowledgeRiskPolicyChallenge) — recording the
-// acknowledgement in risk_policy_challenges — and then the agent retries the
-// same call, which now passes because GetActiveRiskPolicyAck finds a live
-// acknowledged row.
+// acknowledgement in risk_policy_challenges — and then the agent retries, which
+// now passes because GetActiveRiskPolicyAck finds a live acknowledged row.
+//
+// SCOPE: the acknowledgement is keyed on (project, user, policy, tool_name)
+// with an expiry window, NOT on the specific call/input. So within the window
+// it clears ANY call of the same tool under the same policy for that user —
+// e.g. acknowledging one Bash command lets a different Bash command that trips
+// the same policy through until it expires. It is a short "don't re-prompt me
+// for this tool+policy" grant, not a per-call approval.
 //
 // The token itself only carries a short opaque id (128-bit random bearer
 // secret) whose state lives in the cache. The redeem handler re-binds the
@@ -54,15 +60,19 @@ const (
 // the same scoped exposure as the terminal display, NOT durable persistence. It
 // must never be copied into ClickHouse, tool_call_blocks, or audit.
 type PolicyAckTokenInput struct {
-	OrganizationID   string
-	ProjectID        string
-	UserID           string
-	RiskPolicyID     string
-	PolicyName       string
-	ToolName         *string
+	OrganizationID string
+	ProjectID      string
+	UserID         string
+	RiskPolicyID   string
+	PolicyName     string
+	ToolName       *string
+	// CallFingerprint scopes the acknowledgement to the concrete call that was
+	// challenged (SHA-256 of the scanned input). Redeeming writes it onto the
+	// challenge row so only an identical retry — not any same-tool call — clears.
+	CallFingerprint  string
 	ChallengeMessage string
 	// RememberFor is how long the acknowledgement, once granted, suppresses
-	// re-challenging the same (user, policy, tool). Zero uses the ack window default.
+	// re-challenging that same call. Zero uses the ack window default.
 	RememberFor time.Duration
 }
 
@@ -74,6 +84,8 @@ type policyAckRecord struct {
 	RiskPolicyID   string  `json:"risk_policy_id"`
 	PolicyName     string  `json:"policy_name,omitempty"`
 	ToolName       *string `json:"tool_name,omitempty"`
+	// CallFingerprint — see PolicyAckTokenInput.
+	CallFingerprint string `json:"call_fingerprint,omitempty"`
 	// ChallengeMessage — see PolicyAckTokenInput. Ephemeral, token-gated only.
 	ChallengeMessage string        `json:"challenge_message,omitempty"`
 	RememberFor      time.Duration `json:"remember_for,omitempty"`
@@ -127,6 +139,7 @@ func GeneratePolicyAckToken(ctx context.Context, c cache.Cache, input PolicyAckT
 		RiskPolicyID:     strings.TrimSpace(input.RiskPolicyID),
 		PolicyName:       strings.TrimSpace(input.PolicyName),
 		ToolName:         normalizeOptionalString(input.ToolName),
+		CallFingerprint:  strings.TrimSpace(input.CallFingerprint),
 		ChallengeMessage: strings.TrimSpace(input.ChallengeMessage),
 		RememberFor:      input.RememberFor,
 		ExpiresAt:        expiry,

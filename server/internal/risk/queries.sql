@@ -234,6 +234,7 @@ INSERT INTO risk_policy_challenges (
   , risk_policy_id
   , user_id
   , tool_name
+  , call_fingerprint
   , status
   , policy_name
   , entity
@@ -247,13 +248,14 @@ VALUES (
   , @risk_policy_id
   , @user_id
   , sqlc.narg(tool_name)::text
+  , sqlc.narg(call_fingerprint)::text
   , 'challenged'
   , sqlc.narg(policy_name)::text
   , sqlc.narg(entity)::text
   , sqlc.narg(rule_id)::text
   , clock_timestamp()
 )
-ON CONFLICT (project_id, user_id, risk_policy_id, tool_name)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
 WHERE deleted IS FALSE
 DO UPDATE
 SET status = CASE
@@ -286,6 +288,7 @@ INSERT INTO risk_policy_challenges (
   , risk_policy_id
   , user_id
   , tool_name
+  , call_fingerprint
   , status
   , policy_name
   , challenged_at
@@ -299,13 +302,14 @@ VALUES (
   , @risk_policy_id
   , @user_id
   , sqlc.narg(tool_name)::text
+  , sqlc.narg(call_fingerprint)::text
   , 'acknowledged'
   , sqlc.narg(policy_name)::text
   , clock_timestamp()
   , clock_timestamp()
   , @expires_at
 )
-ON CONFLICT (project_id, user_id, risk_policy_id, tool_name)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
 WHERE deleted IS FALSE
 DO UPDATE
 SET status = 'acknowledged'
@@ -325,6 +329,7 @@ INSERT INTO risk_policy_challenges (
   , risk_policy_id
   , user_id
   , tool_name
+  , call_fingerprint
   , status
   , policy_name
   , challenged_at
@@ -336,11 +341,12 @@ VALUES (
   , @risk_policy_id
   , @user_id
   , sqlc.narg(tool_name)::text
+  , sqlc.narg(call_fingerprint)::text
   , 'declined'
   , sqlc.narg(policy_name)::text
   , clock_timestamp()
 )
-ON CONFLICT (project_id, user_id, risk_policy_id, tool_name)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
 WHERE deleted IS FALSE
 DO UPDATE
 SET status = 'declined'
@@ -351,15 +357,18 @@ SET status = 'declined'
 RETURNING *;
 
 -- name: GetActiveRiskPolicyAck :one
--- Hook-time gate: is there a live acknowledgement for this (user, policy, tool)?
--- The agent retries with NO token, so this table lookup — not the cache token —
--- is what allows the retry through.
+-- Hook-time gate: is there a live acknowledgement for this concrete call
+-- (user, policy, tool, call_fingerprint)? The agent retries with NO token, so
+-- this table lookup — not the cache token — is what allows the retry through.
+-- Scoped by call_fingerprint so only an identical retry clears, not any
+-- same-tool call under the policy.
 SELECT *
 FROM risk_policy_challenges
 WHERE project_id = @project_id
   AND user_id = @user_id
   AND risk_policy_id = @risk_policy_id
   AND tool_name IS NOT DISTINCT FROM sqlc.narg(tool_name)::text
+  AND call_fingerprint IS NOT DISTINCT FROM sqlc.narg(call_fingerprint)::text
   AND status = 'acknowledged'
   AND expires_at IS NOT NULL
   AND expires_at > clock_timestamp()

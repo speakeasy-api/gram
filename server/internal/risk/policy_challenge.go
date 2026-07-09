@@ -46,7 +46,7 @@ func toChallengeText(v string) pgtype.Text {
 // token, so this DB lookup — not the ack link's cache token — is what lets the
 // retry through. Fail-closed: any error (including an unreachable DB) returns
 // false so a warn never silently allows on infra failure.
-func (s *Scanner) HasAcknowledgedChallenge(ctx context.Context, projectID uuid.UUID, userID, policyID, toolName string) bool {
+func (s *Scanner) HasAcknowledgedChallenge(ctx context.Context, projectID uuid.UUID, userID, policyID, toolName, callFingerprint string) bool {
 	pid, err := uuid.Parse(policyID)
 	if err != nil {
 		return false
@@ -55,10 +55,11 @@ func (s *Scanner) HasAcknowledgedChallenge(ctx context.Context, projectID uuid.U
 		return false
 	}
 	_, err = s.repo.GetActiveRiskPolicyAck(ctx, repo.GetActiveRiskPolicyAckParams{
-		ProjectID:    projectID,
-		UserID:       userID,
-		RiskPolicyID: pid,
-		ToolName:     toChallengeToolName(toolName),
+		ProjectID:       projectID,
+		UserID:          userID,
+		RiskPolicyID:    pid,
+		ToolName:        toChallengeToolName(toolName),
+		CallFingerprint: toChallengeText(callFingerprint),
 	})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -73,21 +74,22 @@ func (s *Scanner) HasAcknowledgedChallenge(ctx context.Context, projectID uuid.U
 // RecordPolicyChallenge upserts the challenged-state row for a warn match.
 // Log-safe only: it never receives or stores the raw matched value. Best-effort
 // — a failure to record must not change the enforcement decision.
-func (s *Scanner) RecordPolicyChallenge(ctx context.Context, organizationID string, projectID uuid.UUID, userID, policyID, toolName, policyName, entity, ruleID string) {
+func (s *Scanner) RecordPolicyChallenge(ctx context.Context, organizationID string, projectID uuid.UUID, userID, policyID, toolName, policyName, entity, ruleID, callFingerprint string) {
 	pid, err := uuid.Parse(policyID)
 	if err != nil || userID == "" || organizationID == "" {
 		return
 	}
 	if _, err := s.repo.UpsertRiskPolicyChallenge(ctx, repo.UpsertRiskPolicyChallengeParams{
-		ID:             uuid.New(),
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		RiskPolicyID:   pid,
-		UserID:         userID,
-		ToolName:       toChallengeToolName(toolName),
-		PolicyName:     toChallengeText(policyName),
-		Entity:         toChallengeText(entity),
-		RuleID:         toChallengeText(ruleID),
+		ID:              uuid.New(),
+		OrganizationID:  organizationID,
+		ProjectID:       projectID,
+		RiskPolicyID:    pid,
+		UserID:          userID,
+		ToolName:        toChallengeToolName(toolName),
+		CallFingerprint: toChallengeText(callFingerprint),
+		PolicyName:      toChallengeText(policyName),
+		Entity:          toChallengeText(entity),
+		RuleID:          toChallengeText(ruleID),
 	}); err != nil {
 		s.logger.WarnContext(ctx, "failed to record risk policy challenge",
 			attr.SlogError(err), attr.SlogRiskPolicyID(policyID))
@@ -151,14 +153,15 @@ func (s *Service) AcknowledgeRiskPolicyChallenge(ctx context.Context, payload *g
 
 	q := repo.New(dbtx)
 	row, err := q.MarkRiskPolicyChallengeAcknowledged(ctx, repo.MarkRiskPolicyChallengeAcknowledgedParams{
-		ID:             uuid.New(),
-		OrganizationID: record.OrganizationID,
-		ProjectID:      projectID,
-		RiskPolicyID:   policyID,
-		UserID:         record.UserID,
-		ToolName:       toChallengeToolName(ptrValOr(record.ToolName)),
-		PolicyName:     toChallengeText(record.PolicyName),
-		ExpiresAt:      pgtype.Timestamptz{Time: expiresAt, InfinityModifier: pgtype.Finite, Valid: true},
+		ID:              uuid.New(),
+		OrganizationID:  record.OrganizationID,
+		ProjectID:       projectID,
+		RiskPolicyID:    policyID,
+		UserID:          record.UserID,
+		ToolName:        toChallengeToolName(ptrValOr(record.ToolName)),
+		CallFingerprint: toChallengeText(record.CallFingerprint),
+		PolicyName:      toChallengeText(record.PolicyName),
+		ExpiresAt:       pgtype.Timestamptz{Time: expiresAt, InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "acknowledge risk policy challenge").LogError(ctx, s.logger)
@@ -226,10 +229,11 @@ func (s *Service) GetRiskPolicyChallenge(ctx context.Context, payload *gen.GetRi
 	if projectID, perr := uuid.Parse(record.ProjectID); perr == nil {
 		if policyID, perr2 := uuid.Parse(record.RiskPolicyID); perr2 == nil {
 			if _, gerr := repo.New(s.db).GetActiveRiskPolicyAck(ctx, repo.GetActiveRiskPolicyAckParams{
-				ProjectID:    projectID,
-				UserID:       record.UserID,
-				RiskPolicyID: policyID,
-				ToolName:     toChallengeToolName(ptrValOr(record.ToolName)),
+				ProjectID:       projectID,
+				UserID:          record.UserID,
+				RiskPolicyID:    policyID,
+				ToolName:        toChallengeToolName(ptrValOr(record.ToolName)),
+				CallFingerprint: toChallengeText(record.CallFingerprint),
 			}); gerr == nil {
 				acknowledged = true
 			}
@@ -281,13 +285,14 @@ func (s *Service) DeclineRiskPolicyChallenge(ctx context.Context, payload *gen.D
 	}
 
 	if _, err := repo.New(s.db).MarkRiskPolicyChallengeDeclined(ctx, repo.MarkRiskPolicyChallengeDeclinedParams{
-		ID:             uuid.New(),
-		OrganizationID: record.OrganizationID,
-		ProjectID:      projectID,
-		RiskPolicyID:   policyID,
-		UserID:         record.UserID,
-		ToolName:       toChallengeToolName(ptrValOr(record.ToolName)),
-		PolicyName:     toChallengeText(record.PolicyName),
+		ID:              uuid.New(),
+		OrganizationID:  record.OrganizationID,
+		ProjectID:       projectID,
+		RiskPolicyID:    policyID,
+		UserID:          record.UserID,
+		ToolName:        toChallengeToolName(ptrValOr(record.ToolName)),
+		CallFingerprint: toChallengeText(record.CallFingerprint),
+		PolicyName:      toChallengeText(record.PolicyName),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "decline risk policy challenge").LogError(ctx, s.logger)
 	}

@@ -186,11 +186,11 @@ func (s *recordingCursorRiskScanner) HasEnabledShadowMCPPolicy(_ context.Context
 	return false, nil
 }
 
-func (s *recordingCursorRiskScanner) HasAcknowledgedChallenge(_ context.Context, _ uuid.UUID, _, _, _ string) bool {
+func (s *recordingCursorRiskScanner) HasAcknowledgedChallenge(_ context.Context, _ uuid.UUID, _, _, _, _ string) bool {
 	return false
 }
 
-func (s *recordingCursorRiskScanner) RecordPolicyChallenge(_ context.Context, _ string, _ uuid.UUID, _, _, _, _, _, _ string) {
+func (s *recordingCursorRiskScanner) RecordPolicyChallenge(_ context.Context, _ string, _ uuid.UUID, _, _, _, _, _, _, _ string) {
 }
 
 func TestBuildCursorTelemetryAttributes_BasicFields(t *testing.T) {
