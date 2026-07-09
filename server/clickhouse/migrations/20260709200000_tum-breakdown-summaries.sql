@@ -1,4 +1,4 @@
--- completion_token_summaries: the DIMENSIONED billing aggregate. One row per
+-- tum_breakdown_summaries: the DIMENSIONED billing aggregate. One row per
 -- (project, day, chat, surface, model, user, division, roles) carrying the
 -- billed token split, sourced from the same gen_ai completion rows that
 -- chat_token_summaries (the billing record) sums. The billing page's
@@ -10,7 +10,7 @@
 -- surfaces only), so this is the only dimensioned home for the billed
 -- population. Identity dimensions (email, division, roles) are stamped on
 -- completion rows at emit time by the telemetry logger's directory snapshot.
-CREATE TABLE `completion_token_summaries` (
+CREATE TABLE `tum_breakdown_summaries` (
     `gram_project_id` UUID,
     `chat_id` String,
     `time_bucket` DateTime('UTC'),
@@ -35,7 +35,7 @@ COMMENT 'Per-chat daily billed token usage broken down by consuming surface and 
 -- window and covers the June cycle onward; older cycles keep exact totals
 -- (snapshots + chat_token_summaries) but have no dimensional breakdowns —
 -- their raw logs are past the 90-day TTL and cannot be re-derived.
-INSERT INTO `completion_token_summaries` (gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles, input_tokens, output_tokens, total_tokens)
+INSERT INTO `tum_breakdown_summaries` (gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles, input_tokens, output_tokens, total_tokens)
 SELECT
     gram_project_id,
     chat_id,
@@ -59,7 +59,7 @@ GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, 
 -- undercount, the safe failure direction for billing data). The two passes
 -- partition rows by event time exactly; a slipped deploy just makes this
 -- pass scan a little more.
-INSERT INTO `completion_token_summaries` (gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles, input_tokens, output_tokens, total_tokens)
+INSERT INTO `tum_breakdown_summaries` (gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles, input_tokens, output_tokens, total_tokens)
 SELECT
     gram_project_id,
     chat_id,
@@ -77,8 +77,8 @@ WHERE chat_id != ''
   AND toString(attributes.gen_ai.usage.total_tokens) != ''
   AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= toDateTime('2026-07-10 00:00:00', 'UTC')
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles;
--- Create "completion_token_summaries_mv" view — LAST, closing the backfill.
-CREATE MATERIALIZED VIEW `completion_token_summaries_mv` TO `completion_token_summaries` AS
+-- Create "tum_breakdown_summaries_mv" view — LAST, closing the backfill.
+CREATE MATERIALIZED VIEW `tum_breakdown_summaries_mv` TO `tum_breakdown_summaries` AS
 SELECT
     gram_project_id,
     chat_id,
