@@ -54,6 +54,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
+import { HeadersSection } from "./HeadersSection";
 import { useLinkMcpServerToRemote } from "./hooks";
 import { RemoveRemoteMcpDialogContent } from "./RemoveRemoteMcpDialog";
 import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
@@ -516,6 +517,7 @@ function SettingsTab({
         initialName={initialName}
       />
       <UrlSection remoteMcpServerId={remoteMcpServerId} initialUrl={url} />
+      <HeadersSection remoteMcpServerId={remoteMcpServerId} />
       <DangerZoneSection
         remoteMcpServerId={remoteMcpServerId}
         url={url}

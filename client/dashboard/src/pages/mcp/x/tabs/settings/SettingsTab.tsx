@@ -9,7 +9,6 @@ import {
 import { BrandingSection } from "./sections/BrandingSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
 import { EnvironmentSection } from "./sections/EnvironmentSection";
-import { HeadersSection } from "./sections/HeadersSection";
 import { PublishingSection } from "./sections/PublishingSection";
 import {
   MCP_SERVER_URL_SECTION_ID,
@@ -60,7 +59,6 @@ export function SettingsTab({
       />
       <AuthenticationSection mcpServer={mcpServer} />
       <EnvironmentSection mcpServer={mcpServer} />
-      <HeadersSection mcpServer={mcpServer} />
       <ToolFilteringSection mcpServer={mcpServer} />
       <PublishingSection mcpServer={mcpServer} endpoints={endpoints} />
       <DangerZoneSection mcpServer={mcpServer} endpoints={endpoints} />

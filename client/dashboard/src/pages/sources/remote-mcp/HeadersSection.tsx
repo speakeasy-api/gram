@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
 import type { HeaderInput } from "@gram/client/models/components/headerinput.js";
-import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
 import {
   invalidateAllGetRemoteMcpServer,
@@ -23,7 +22,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { FooterSaveButtonContent, SettingsSection } from "../SettingsSection";
 
 const REDACTED_SECRET = "***";
 
@@ -167,20 +165,6 @@ function newHeaderDraft(): HeaderDraft {
 }
 
 export function HeadersSection({
-  mcpServer,
-}: {
-  mcpServer: McpServer;
-}): JSX.Element | null {
-  if (!mcpServer.remoteMcpServerId) {
-    return null;
-  }
-
-  return (
-    <HeadersSectionContent remoteMcpServerId={mcpServer.remoteMcpServerId} />
-  );
-}
-
-function HeadersSectionContent({
   remoteMcpServerId,
 }: {
   remoteMcpServerId: string;
@@ -207,9 +191,11 @@ function HeadersSectionContent({
 
   const validationError = validateDrafts(drafts);
   const dirty = !draftsEqual(drafts, initialDrafts);
-  const isSaving = update.isPending;
   const saveDisabled =
-    !dirty || isSaving || validationError !== null || remoteMcpQuery.isLoading;
+    !dirty ||
+    update.isPending ||
+    validationError !== null ||
+    remoteMcpQuery.isLoading;
 
   const handleSave = async () => {
     if (validationError) return;
@@ -235,96 +221,103 @@ function HeadersSectionContent({
   };
 
   return (
-    <SettingsSection>
-      <SettingsSection.Header>
-        <SettingsSection.Title>Upstream Headers</SettingsSection.Title>
-        <SettingsSection.Description>
-          Headers sent to the remote MCP URL. Choose &ldquo;From
-          environment&rdquo; to fill the value from the environment attached
-          above (header name must match the environment variable).
-        </SettingsSection.Description>
-      </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body>
-          {remoteMcpQuery.isLoading ? (
-            <Type muted small>
-              Loading headers…
-            </Type>
-          ) : drafts.length === 0 ? (
-            <Type muted small>
-              No upstream headers configured yet.
-            </Type>
-          ) : (
-            <Stack gap={4}>
-              {drafts.map((draft, index) => (
-                <HeaderDraftRow
-                  key={draft.key}
-                  draft={draft}
-                  onChange={(next) =>
-                    setDrafts((current) =>
-                      current.map((row, rowIndex) =>
-                        rowIndex === index ? next : row,
-                      ),
-                    )
-                  }
-                  onRemove={() =>
-                    setDrafts((current) =>
-                      current.filter((_, rowIndex) => rowIndex !== index),
-                    )
-                  }
-                />
-              ))}
-            </Stack>
-          )}
+    <div className="rounded-lg border p-6">
+      <Type variant="subheading" className="mb-1">
+        Upstream Headers
+      </Type>
+      <Type muted small className="mb-4">
+        Headers sent to the remote MCP URL. Choose &ldquo;From environment&rdquo;
+        to fill the value from the environment attached to an MCP server that
+        fronts this source (header name must match the environment variable).
+      </Type>
+      <Stack gap={4}>
+        {remoteMcpQuery.isLoading ? (
+          <Type muted small>
+            Loading headers…
+          </Type>
+        ) : drafts.length === 0 ? (
+          <Type muted small>
+            No upstream headers configured yet.
+          </Type>
+        ) : (
+          <Stack gap={4}>
+            {drafts.map((draft, index) => (
+              <HeaderDraftRow
+                key={draft.key}
+                draft={draft}
+                onChange={(next) =>
+                  setDrafts((current) =>
+                    current.map((row, rowIndex) =>
+                      rowIndex === index ? next : row,
+                    ),
+                  )
+                }
+                onRemove={() =>
+                  setDrafts((current) =>
+                    current.filter((_, rowIndex) => rowIndex !== index),
+                  )
+                }
+              />
+            ))}
+          </Stack>
+        )}
 
-          {validationError && dirty ? (
-            <Type small className="text-destructive">
-              {validationError}
-            </Type>
-          ) : null}
+        {validationError && dirty ? (
+          <Type small className="text-destructive">
+            {validationError}
+          </Type>
+        ) : null}
 
-          {update.isError ? (
-            <Alert variant="error" dismissible={false}>
-              {update.error.message}
-            </Alert>
-          ) : null}
+        {update.isError ? (
+          <Alert variant="error" dismissible={false}>
+            {update.error.message}
+          </Alert>
+        ) : null}
 
+        <RequireScope scope="mcp:write" level="component">
+          <Button
+            variant="secondary"
+            size="md"
+            disabled={remoteMcpQuery.isLoading}
+            onClick={() =>
+              setDrafts((current) => [...current, newHeaderDraft()])
+            }
+          >
+            <Button.LeftIcon>
+              <Plus className="size-4" />
+            </Button.LeftIcon>
+            <Button.Text>Add header</Button.Text>
+          </Button>
+        </RequireScope>
+
+        <Type muted small>
+          Static secrets are redacted after save. Leave the value blank to keep
+          the current secret.
+        </Type>
+
+        <Stack direction="horizontal" gap={2}>
           <RequireScope scope="mcp:write" level="component">
             <Button
-              variant="secondary"
+              variant="primary"
               size="md"
-              disabled={remoteMcpQuery.isLoading}
-              onClick={() =>
-                setDrafts((current) => [...current, newHeaderDraft()])
-              }
+              disabled={saveDisabled}
+              onClick={() => void handleSave()}
             >
-              <Button.LeftIcon>
-                <Plus className="size-4" />
-              </Button.LeftIcon>
-              <Button.Text>Add header</Button.Text>
+              {update.isPending ? (
+                <>
+                  <Button.LeftIcon>
+                    <Loader2 className="size-4 animate-spin" />
+                  </Button.LeftIcon>
+                  <Button.Text>Saving</Button.Text>
+                </>
+              ) : (
+                <Button.Text>Save</Button.Text>
+              )}
             </Button>
           </RequireScope>
-        </SettingsSection.Body>
-        <SettingsSection.Footer>
-          <SettingsSection.FooterHint>
-            Static secrets are redacted after save. Leave the value blank to
-            keep the current secret.
-          </SettingsSection.FooterHint>
-          <SettingsSection.FooterActions>
-            <RequireScope scope="mcp:write" level="component">
-              <Button
-                variant="primary"
-                size="md"
-                disabled={saveDisabled}
-                onClick={() => void handleSave()}
-              >
-                <FooterSaveButtonContent pending={isSaving} />
-              </Button>
-            </RequireScope>
-          </SettingsSection.FooterActions>
-        </SettingsSection.Footer>
-      </SettingsSection.Panel>
-    </SettingsSection>
+        </Stack>
+      </Stack>
+    </div>
   );
 }
 
