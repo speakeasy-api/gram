@@ -2053,9 +2053,23 @@ gram_hooks_prepare_auth() {
       # degrading to the unauthenticated pass-through. Never cached: a later
       # browser login upgrades this machine to per-user attribution, and a
       # republished plugin swaps the key without stale local state.
-      GRAM_HOOKS_AUTH_SOURCE="org"
-      api_key="$gram_hooks_org_key"
-      project="$project_hint"
+      #
+      # Interactive entry points (auth_preflight.sh/login.sh of a
+      # browser-sign-in-enabled render) offer the browser login FIRST, or
+      # fresh installs would silently stay on shared-key attribution
+      # forever. The org key doubles as the safety net: a declined,
+      # cooled-down, or failed login falls through to it instead of nudging
+      # or blocking, and gram_hooks_login's attempt marker keeps session
+      # starts from re-opening browser tabs.
+      if [ "${GRAM_HOOKS_INTERACTIVE:-}" = "1" ] &&
+        gram_hooks_login "$server_url" "$project_hint" &&
+        gram_hooks_read_auth "$server_url" 2>/dev/null; then
+        GRAM_HOOKS_AUTH_SOURCE="login"
+      else
+        GRAM_HOOKS_AUTH_SOURCE="org"
+        api_key="$gram_hooks_org_key"
+        project="$project_hint"
+      fi
     else
       if ! gram_hooks_login "$server_url" "$project_hint"; then
         if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ] && gram_hooks_reauth_needed; then

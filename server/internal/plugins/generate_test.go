@@ -2467,6 +2467,51 @@ func TestRenderAuthPreflightScriptBrowserLoginDisabled(t *testing.T) {
 		"browser login disabled: preflight must never open a browser")
 }
 
+// TestRenderAuthPreflightScriptBrowserLoginOptInOffersLoginBeforeOrgKey
+// verifies that an opted-in render still offers the browser sign-in to a
+// fresh machine even though an org-wide key is baked — otherwise fresh
+// installs would silently stay on shared-key attribution forever — and that
+// a failed attempt falls back to the org key instead of blocking session
+// start.
+func TestRenderAuthPreflightScriptBrowserLoginOptInOffersLoginBeforeOrgKey(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:    "https://app.getgram.ai",
+		HooksAPIKey:  "gram_local_org_key_xyz",
+		ProjectSlug:  "acme-prod",
+		BrowserLogin: true,
+	}
+	dir := t.TempDir()
+	preflightPath := filepath.Join(dir, "auth_preflight.sh")
+	urlFile := filepath.Join(dir, "auth-url")
+	require.NoError(t, os.WriteFile(preflightPath, renderAuthPreflightScript(cfg), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	opener := []byte("#!/usr/bin/env bash\nprintf '%s' \"$1\" > \"$GRAM_TEST_URL_FILE\"\n")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "open"), opener, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "xdg-open"), opener, 0o755))
+
+	env := hookAuthTestEnv(dir,
+		"GRAM_HOOKS_AUTH_FILE="+filepath.Join(dir, "auth.env"),
+		"GRAM_TEST_URL_FILE="+urlFile,
+		"GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS=1",
+		"DISPLAY=:0",
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + dir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	fresh := exec.Command("bash", preflightPath)
+	fresh.Env = env
+	var freshErr bytes.Buffer
+	fresh.Stderr = &freshErr
+	require.NoError(t, fresh.Run(),
+		"a failed opt-in login must fall back to the org key, not block session start: %s", freshErr.String())
+	require.FileExists(t, urlFile,
+		"an opted-in fresh install must be offered the browser sign-in despite the baked org key")
+}
+
 // TestRenderLoginScriptBrowserLoginDisabled verifies login.sh under the
 // publish default: it prints the manual credential instructions and exits
 // non-zero instead of starting the localhost token exchange, while a
