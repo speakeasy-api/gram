@@ -604,11 +604,19 @@ func (panicProvider) IsFlagEnabled(context.Context, feature.Flag, string, map[st
 	panic("IsFlagEnabled should not be called")
 }
 
+func (panicProvider) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
+	panic("FlagPayload should not be called")
+}
+
 // errProvider always returns an error from IsFlagEnabled.
 type errProvider struct{ err error }
 
 func (p errProvider) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
 	return false, p.err
+}
+
+func (p errProvider) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
+	return nil, p.err
 }
 
 // countingProvider records how many times the flag was resolved so tests can

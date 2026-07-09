@@ -134,10 +134,11 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 			futures := make([]workflow.Future, 0, end-start)
 			for _, candidate := range candidates.Candidates[start:end] {
 				futures = append(futures, workflow.ExecuteActivity(ctx, a.PublishPluginProject, plugins.PublishProjectInput{
-					ProjectID:       candidate.ProjectID,
-					CreatedByUserID: candidate.CreatedByUserID,
-					CommitMessage:   commitMessage,
-					SkipIfUnchanged: true,
+					ProjectID:          candidate.ProjectID,
+					CreatedByUserID:    candidate.CreatedByUserID,
+					CommitMessage:      commitMessage,
+					SkipIfUnchanged:    true,
+					PhasedHooksRollout: true,
 				}))
 			}
 
