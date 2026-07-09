@@ -12,7 +12,6 @@
     "/client/dashboard/src/lib/constants.ts",
     "/client/sdk/**",
     "/elements/docs/**",
-    "/elements/examples/tanstack-start/src/routeTree.gen.ts",
     "/infra/gen/**",
     "/infra/gen/**/*",
     "/pnpm-lock.yaml",

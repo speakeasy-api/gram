@@ -91,6 +91,45 @@ func TestListClaudeUserPromptCandidatesForCorrelationBindsLargePrompt(t *testing
 	require.Empty(t, candidates)
 }
 
+func TestListClaudeUserPromptCandidatesForCorrelationSkipsOversizedStoredPrompt(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+	sessionID := uuid.New().String()
+	now := time.Now().UTC()
+
+	insertClaudeUserPromptEvent(t, ctx, ti.chClient, claudeUserPromptEventFixture{
+		projectID:     projectID,
+		chatID:        chatID,
+		sessionID:     sessionID,
+		promptID:      "prompt-oversized",
+		prompt:        strings.Repeat("a", telemetryRepo.MaxClaudePromptCorrelationEditDistanceBytes+1),
+		eventSequence: 1,
+		timestamp:     now,
+	})
+
+	var candidates []telemetryRepo.ClaudeUserPromptCandidate
+	require.Eventually(t, func() bool {
+		var err error
+		candidates, err = ti.chClient.ListClaudeUserPromptCandidatesForCorrelation(ctx, telemetryRepo.ListClaudeUserPromptCandidatesForCorrelationParams{
+			GramProjectID:          projectID,
+			GramChatID:             chatID,
+			SessionID:              sessionID,
+			MessagePrompt:          strings.Repeat("a", telemetryRepo.MaxClaudePromptCorrelationEditDistanceBytes),
+			MessageTimeUnixNano:    now.UnixNano(),
+			AfterEventSequence:     0,
+			AfterEventTimeUnixNano: 0,
+			MinFuzzyLength:         40,
+			MaxTimeDeltaNanos:      (10 * time.Minute).Nanoseconds(),
+		})
+		return err == nil
+	}, 2*time.Second, 50*time.Millisecond)
+	require.Empty(t, candidates)
+}
+
 func TestListClaudeUserPromptCandidatesForCorrelationMatchesEscapedPrompt(t *testing.T) {
 	t.Parallel()
 

@@ -172,6 +172,7 @@ run();
 ### [Agent](docs/sdks/agent/README.md)
 
 * [getPlugins](docs/sdks/agent/README.md#getplugins) - getPlugins agent
+* [listSyncedUsers](docs/sdks/agent/README.md#listsyncedusers) - listSyncedUsers agent
 
 ### [AiIntegrations](docs/sdks/aiintegrations/README.md)
 
@@ -565,6 +566,12 @@ run();
 * [list](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
 * [revoke](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
 
+### [Risk.PolicyChallenges](docs/sdks/policychallenges/README.md)
+
+* [acknowledge](docs/sdks/policychallenges/README.md#acknowledge) - acknowledgeRiskPolicyChallenge risk
+* [decline](docs/sdks/policychallenges/README.md#decline) - declineRiskPolicyChallenge risk
+* [get](docs/sdks/policychallenges/README.md#get) - getRiskPolicyChallenge risk
+
 ### [Risk.Results](docs/sdks/results/README.md)
 
 * [list](docs/sdks/results/README.md#list) - listRiskResults risk
@@ -593,6 +600,8 @@ run();
 * [listSessions](docs/sdks/telemetry/README.md#listsessions) - listSessions telemetry
 * [listToolUsageTraces](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
 * [query](docs/sdks/telemetry/README.md#query) - query telemetry
+* [queryRiskTokens](docs/sdks/telemetry/README.md#queryrisktokens) - queryRiskTokens telemetry
+* [queryTumDetails](docs/sdks/telemetry/README.md#querytumdetails) - queryTumDetails telemetry
 * [searchChats](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 * [searchLogs](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 * [searchToolCalls](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
@@ -748,6 +757,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`adminRemoteSessionsUpdateGlobalClient`](docs/sdks/adminremotesessions/README.md#updateglobalclient) - updateGlobalClient adminRemoteSessions
 - [`adminRemoteSessionsUpdateGlobalIssuer`](docs/sdks/adminremotesessions/README.md#updateglobalissuer) - updateGlobalIssuer adminRemoteSessions
 - [`agentGetPlugins`](docs/sdks/agent/README.md#getplugins) - getPlugins agent
+- [`agentListSyncedUsers`](docs/sdks/agent/README.md#listsyncedusers) - listSyncedUsers agent
 - [`aiIntegrationsDeleteConfig`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
 - [`aiIntegrationsGetConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getConfig aiIntegrations
 - [`aiIntegrationsUpsertConfig`](docs/sdks/aiintegrations/README.md#upsertconfig) - upsertConfig aiIntegrations
@@ -999,6 +1009,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskPolicyBypassRequestsDeny`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
 - [`riskPolicyBypassRequestsList`](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
 - [`riskPolicyBypassRequestsRevoke`](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
+- [`riskPolicyChallengesAcknowledge`](docs/sdks/policychallenges/README.md#acknowledge) - acknowledgeRiskPolicyChallenge risk
+- [`riskPolicyChallengesDecline`](docs/sdks/policychallenges/README.md#decline) - declineRiskPolicyChallenge risk
+- [`riskPolicyChallengesGet`](docs/sdks/policychallenges/README.md#get) - getRiskPolicyChallenge risk
 - [`riskResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`riskResultsListForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
@@ -1019,6 +1032,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`telemetryListSessions`](docs/sdks/telemetry/README.md#listsessions) - listSessions telemetry
 - [`telemetryListToolUsageTraces`](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
 - [`telemetryQuery`](docs/sdks/telemetry/README.md#query) - query telemetry
+- [`telemetryQueryRiskTokens`](docs/sdks/telemetry/README.md#queryrisktokens) - queryRiskTokens telemetry
+- [`telemetryQueryTumDetails`](docs/sdks/telemetry/README.md#querytumdetails) - queryTumDetails telemetry
 - [`telemetrySearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 - [`telemetrySearchLogs`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`telemetrySearchToolCalls`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
@@ -1366,6 +1381,7 @@ To learn about this feature and how to get started, check
 - [`useRevokeUserSessionClientMutation`](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
 - [`useRevokeUserSessionConsentMutation`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
 - [`useRevokeUserSessionMutation`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
+- [`useRiskAcknowledgePolicyChallengeMutation`](docs/sdks/policychallenges/README.md#acknowledge) - acknowledgeRiskPolicyChallenge risk
 - [`useRiskApprovePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
 - [`useRiskCategories`](docs/sdks/categories/README.md#list) - listRiskCategories risk
 - [`useRiskCompileExpr`](docs/sdks/expr/README.md#compile) - compileExpr risk
@@ -1373,6 +1389,7 @@ To learn about this feature and how to get started, check
 - [`useRiskCreateExclusionMutation`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 - [`useRiskCreatePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
 - [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
+- [`useRiskDeclinePolicyChallengeMutation`](docs/sdks/policychallenges/README.md#decline) - declineRiskPolicyChallenge risk
 - [`useRiskDeleteCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
 - [`useRiskDeleteEvalReviewMutation`](docs/sdks/evals/README.md#deletereview) - deleteRiskEvalReview risk
 - [`useRiskDeleteExclusionMutation`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
@@ -1380,6 +1397,7 @@ To learn about this feature and how to get started, check
 - [`useRiskEvaluatePromptGuardrail`](docs/sdks/evals/README.md#evaluate) - evaluatePromptGuardrail risk
 - [`useRiskGetBlock`](docs/sdks/blocks/README.md#get) - getRiskBlock risk
 - [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
+- [`useRiskGetPolicyChallengeMutation`](docs/sdks/policychallenges/README.md#get) - getRiskPolicyChallenge risk
 - [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`useRiskListEvalReviews`](docs/sdks/evals/README.md#listreviews) - listRiskEvalReviews risk
 - [`useRiskListExclusions`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
@@ -1430,8 +1448,11 @@ To learn about this feature and how to get started, check
 - [`useShadowMCPAccessRules`](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
 - [`useShadowMCPApprovalRequests`](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
+- [`useSyncedAgentUsers`](docs/sdks/agent/README.md#listsyncedusers) - listSyncedUsers agent
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`useTelemetryQuery`](docs/sdks/telemetry/README.md#query) - query telemetry
+- [`useTelemetryQueryRiskTokens`](docs/sdks/telemetry/README.md#queryrisktokens) - queryRiskTokens telemetry
+- [`useTelemetryQueryTumDetails`](docs/sdks/telemetry/README.md#querytumdetails) - queryTumDetails telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets

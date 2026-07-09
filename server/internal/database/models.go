@@ -480,6 +480,16 @@ type DeploymentsPackage struct {
 	VersionID    uuid.UUID
 }
 
+type DeviceAgentSync struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Email          string
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type DeviceOwner struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -1413,6 +1423,9 @@ type RemoteSessionIssuer struct {
 	TokenEndpoint                     pgtype.Text
 	RegistrationEndpoint              pgtype.Text
 	JwksUri                           pgtype.Text
+	ServiceDocumentation              pgtype.Text
+	OpPolicyUri                       pgtype.Text
+	OpTosUri                          pgtype.Text
 	ScopesSupported                   []string
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
@@ -1422,6 +1435,7 @@ type RemoteSessionIssuer struct {
 	Passthrough                       bool
 	Name                              pgtype.Text
 	LogoAssetID                       uuid.NullUUID
+	ClientSetupDocumentationUrl       pgtype.Text
 	CreatedAt                         pgtype.Timestamptz
 	UpdatedAt                         pgtype.Timestamptz
 	DeletedAt                         pgtype.Timestamptz
@@ -1518,23 +1532,24 @@ type RiskPolicyBypassRequest struct {
 
 // Interactive warn/challenge lifecycle for warn-action policies: a warn match records a challenged row; the user self-service acknowledges to proceed on retry. Never stores the raw matched value.
 type RiskPolicyChallenge struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	RiskPolicyID   uuid.UUID
-	UserID         string
-	ToolName       pgtype.Text
-	Status         string
-	PolicyName     pgtype.Text
-	Entity         pgtype.Text
-	RuleID         pgtype.Text
-	ChallengedAt   pgtype.Timestamptz
-	AcknowledgedAt pgtype.Timestamptz
-	ExpiresAt      pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.UUID
+	UserID          string
+	ToolName        pgtype.Text
+	Status          string
+	PolicyName      pgtype.Text
+	Entity          pgtype.Text
+	RuleID          pgtype.Text
+	CallFingerprint pgtype.Text
+	ChallengedAt    pgtype.Timestamptz
+	AcknowledgedAt  pgtype.Timestamptz
+	ExpiresAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type RiskPolicyEvalReview struct {
@@ -1917,6 +1932,7 @@ type UserSessionIssuer struct {
 	Slug               string
 	AuthnChallengeMode string
 	SessionDuration    pgtype.Interval
+	Classification     string
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz

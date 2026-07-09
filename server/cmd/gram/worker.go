@@ -334,8 +334,6 @@ func newWorkerCommand() *cli.Command {
 				attr.SlogServiceVersion(shortGitSHA()),
 				attr.SlogServiceEnv(serviceEnv),
 			)
-			tracerProvider := otel.GetTracerProvider()
-			meterProvider := otel.GetMeterProvider()
 			slog.SetDefault(logger)
 
 			if serviceEnv == "local" {
@@ -345,7 +343,22 @@ func newWorkerCommand() *cli.Command {
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
 
-			temporalEnv, shutdown, err := newTemporalClient(logger, temporalClientOptions{
+			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
+				ServiceName:    serviceName,
+				ServiceVersion: shortGitSHA(),
+				GitSHA:         GitSHA,
+				EnableTracing:  c.Bool("with-otel-tracing"),
+				EnableMetrics:  c.Bool("with-otel-metrics"),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to setup opentelemetry sdk: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			tracerProvider := otel.GetTracerProvider()
+			meterProvider := otel.GetMeterProvider()
+
+			temporalEnv, shutdown, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
 				address:      c.String("temporal-address"),
 				namespace:    c.String("temporal-namespace"),
 				taskQueue:    c.String("temporal-task-queue"),
@@ -357,18 +370,6 @@ func newWorkerCommand() *cli.Command {
 			}
 			if temporalEnv == nil {
 				return errors.New("insufficient options to create temporal client")
-			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
-
-			shutdown, err = o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
-				ServiceName:    serviceName,
-				ServiceVersion: shortGitSHA(),
-				GitSHA:         GitSHA,
-				EnableTracing:  c.Bool("with-otel-tracing"),
-				EnableMetrics:  c.Bool("with-otel-metrics"),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to setup opentelemetry sdk: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 

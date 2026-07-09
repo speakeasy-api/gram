@@ -139,6 +139,9 @@ function ModifyRemoteIdentityProviderSheetBody({
     tokenEndpointAuthMethodsSupported:
       issuer.tokenEndpointAuthMethodsSupported ?? [],
     clientIdMetadataDocumentSupported: issuer.clientIdMetadataDocumentSupported,
+    serviceDocumentation: issuer.serviceDocumentation ?? "",
+    opPolicyUri: issuer.opPolicyUri ?? "",
+    opTosUri: issuer.opTosUri ?? "",
   });
   const {
     issuerUrl,
@@ -213,6 +216,12 @@ function ModifyRemoteIdentityProviderSheetBody({
           // stored CIMD-support value; a fresh discovery overwrites it.
           clientIdMetadataDocumentSupported:
             discoveredSnapshot?.clientIdMetadataDocumentSupported,
+          // Discovery-only, no form inputs. The snapshot is seeded from the saved
+          // record, so absent a fresh discovery these round-trip unchanged; a
+          // fresh one overwrites them, and "" clears a URL the issuer dropped.
+          serviceDocumentation: discoveredSnapshot?.serviceDocumentation,
+          opPolicyUri: discoveredSnapshot?.opPolicyUri,
+          opTosUri: discoveredSnapshot?.opTosUri,
         },
       });
 

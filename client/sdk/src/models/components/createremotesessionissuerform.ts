@@ -42,6 +42,14 @@ export type CreateRemoteSessionIssuerForm = {
    */
   oidc?: boolean | undefined;
   /**
+   * RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
+   */
+  opPolicyUri?: string | undefined;
+  /**
+   * RFC 8414 op_tos_uri; the issuer's terms of service. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
+   */
+  opTosUri?: string | undefined;
+  /**
    * When true, the MCP client registers and transacts directly with this issuer. Default false.
    */
   passthrough?: boolean | undefined;
@@ -57,6 +65,10 @@ export type CreateRemoteSessionIssuerForm = {
    * Scopes advertised by the issuer.
    */
   scopesSupported?: Array<string> | undefined;
+  /**
+   * RFC 8414 service_documentation; developer documentation for the issuer. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
+   */
+  serviceDocumentation?: string | undefined;
   /**
    * Project-unique slug.
    */
@@ -81,10 +93,13 @@ export type CreateRemoteSessionIssuerForm$Outbound = {
   logo_asset_id?: string | undefined;
   name?: string | undefined;
   oidc?: boolean | undefined;
+  op_policy_uri?: string | undefined;
+  op_tos_uri?: string | undefined;
   passthrough?: boolean | undefined;
   registration_endpoint?: string | undefined;
   response_types_supported?: Array<string> | undefined;
   scopes_supported?: Array<string> | undefined;
+  service_documentation?: string | undefined;
   slug: string;
   token_endpoint?: string | undefined;
   token_endpoint_auth_methods_supported?: Array<string> | undefined;
@@ -104,10 +119,13 @@ export const CreateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
     logoAssetId: z.optional(z.string()),
     name: z.optional(z.string()),
     oidc: z.optional(z.boolean()),
+    opPolicyUri: z.optional(z.string()),
+    opTosUri: z.optional(z.string()),
     passthrough: z.optional(z.boolean()),
     registrationEndpoint: z.optional(z.string()),
     responseTypesSupported: z.optional(z.array(z.string())),
     scopesSupported: z.optional(z.array(z.string())),
+    serviceDocumentation: z.optional(z.string()),
     slug: z.string(),
     tokenEndpoint: z.optional(z.string()),
     tokenEndpointAuthMethodsSupported: z.optional(z.array(z.string())),
@@ -120,9 +138,12 @@ export const CreateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
       grantTypesSupported: "grant_types_supported",
       jwksUri: "jwks_uri",
       logoAssetId: "logo_asset_id",
+      opPolicyUri: "op_policy_uri",
+      opTosUri: "op_tos_uri",
       registrationEndpoint: "registration_endpoint",
       responseTypesSupported: "response_types_supported",
       scopesSupported: "scopes_supported",
+      serviceDocumentation: "service_documentation",
       tokenEndpoint: "token_endpoint",
       tokenEndpointAuthMethodsSupported:
         "token_endpoint_auth_methods_supported",

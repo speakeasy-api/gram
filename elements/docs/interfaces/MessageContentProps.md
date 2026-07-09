@@ -32,3 +32,19 @@ Optional className applied to the root container.
 Render plain-text segments as markdown (matching `<MarkdownText />`)
 instead of preformatted text. Fenced `chart`/`ui` blocks still render as
 widgets either way.
+
+***
+
+### resolveLink?
+
+> `optional` **resolveLink?**: [`LinkResolver`](../type-aliases/LinkResolver.md)
+
+Resolver that rewrites link hrefs (only applies when `markdown` is true).
+
+***
+
+### linkComponent?
+
+> `optional` **linkComponent?**: [`MarkdownLinkComponent`](../type-aliases/MarkdownLinkComponent.md)
+
+Host link component used to render links (only applies when `markdown`).

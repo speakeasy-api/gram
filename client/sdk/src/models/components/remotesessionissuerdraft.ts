@@ -38,6 +38,14 @@ export type RemoteSessionIssuerDraft = {
    */
   oidc: boolean;
   /**
+   * RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised or when the advertised value is not an absolute http(s) URL.
+   */
+  opPolicyUri?: string | undefined;
+  /**
+   * RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised or when the advertised value is not an absolute http(s) URL.
+   */
+  opTosUri?: string | undefined;
+  /**
    * When true, the MCP client registers and transacts directly with this issuer.
    */
   passthrough: boolean;
@@ -47,6 +55,10 @@ export type RemoteSessionIssuerDraft = {
   registrationEndpoint?: string | undefined;
   responseTypesSupported?: Array<string> | undefined;
   scopesSupported?: Array<string> | undefined;
+  /**
+   * RFC 8414 service_documentation; developer documentation for the issuer. Null when not advertised or when the advertised value is not an absolute http(s) URL.
+   */
+  serviceDocumentation?: string | undefined;
   /**
    * Upstream token endpoint.
    */
@@ -67,10 +79,13 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
     issuer: z.string(),
     jwks_uri: z.optional(z.string()),
     oidc: z.boolean(),
+    op_policy_uri: z.optional(z.string()),
+    op_tos_uri: z.optional(z.string()),
     passthrough: z.boolean(),
     registration_endpoint: z.optional(z.string()),
     response_types_supported: z.optional(z.array(z.string())),
     scopes_supported: z.optional(z.array(z.string())),
+    service_documentation: z.optional(z.string()),
     token_endpoint: z.optional(z.string()),
     token_endpoint_auth_methods_supported: z.optional(z.array(z.string())),
   }),
@@ -82,9 +97,12 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
       "discovery_warnings": "discoveryWarnings",
       "grant_types_supported": "grantTypesSupported",
       "jwks_uri": "jwksUri",
+      "op_policy_uri": "opPolicyUri",
+      "op_tos_uri": "opTosUri",
       "registration_endpoint": "registrationEndpoint",
       "response_types_supported": "responseTypesSupported",
       "scopes_supported": "scopesSupported",
+      "service_documentation": "serviceDocumentation",
       "token_endpoint": "tokenEndpoint",
       "token_endpoint_auth_methods_supported":
         "tokenEndpointAuthMethodsSupported",

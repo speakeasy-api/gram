@@ -3,6 +3,7 @@ import { type ReactNode, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import {
   defineFilters,
+  type FilterDimension,
   type FilterValue,
   type OptionsById,
 } from "@/components/filters";
@@ -40,6 +41,21 @@ const SERVER_TYPES: Array<{ label: string; value: ObserveTypeFilterValue }> = [
   { label: "Local Tools", value: "local" },
   { label: "Skills", value: "skill" },
 ];
+
+// Trace outcome, mapped to the ListToolUsageTraces `statuses` payload field.
+export type ObserveStatusFilterValue =
+  | "error"
+  | "success"
+  | "blocked"
+  | "pending";
+
+const STATUS_TYPES: Array<{ label: string; value: ObserveStatusFilterValue }> =
+  [
+    { label: "Error", value: "error" },
+    { label: "Success", value: "success" },
+    { label: "Blocked", value: "blocked" },
+    { label: "Pending", value: "pending" },
+  ];
 
 // Server, User and the date range are the most-used dimensions, so they pin as
 // always-visible pills. Role and Agent appear as pills once active; Type is
@@ -81,20 +97,21 @@ const OBSERVE_FILTER_BASE = [
   { id: "type", label: "Type", kind: "multiselect", hideChip: true },
 ] as const;
 
-const OBSERVE_FILTERS = defineFilters(OBSERVE_FILTER_BASE);
-
-// Account-type is opt-in: only consumers whose data source can filter on the
-// account_type dimension (e.g. the raw-logs path) pass account-type props, so
-// the control isn't shown where it can't be served.
-const OBSERVE_FILTERS_WITH_ACCOUNT_TYPE = defineFilters([
-  ...OBSERVE_FILTER_BASE,
-  {
-    id: "account_type",
-    label: "Account type",
-    kind: "select",
-    allLabel: "All",
-  },
-] as const);
+// Account-type and status are opt-in: only consumers whose data source can
+// serve them (the tool-usage traces/summary paths) pass the matching handlers,
+// so the controls aren't shown where they can't be filtered. Appended to the
+// base schema at render time based on which handlers were provided.
+const ACCOUNT_TYPE_DIMENSION: FilterDimension = {
+  id: "account_type",
+  label: "Account type",
+  kind: "select",
+  allLabel: "All",
+};
+const STATUS_DIMENSION: FilterDimension = {
+  id: "status",
+  label: "Status",
+  kind: "multiselect",
+};
 
 export function ObserveFilterBar({
   serverOptions,
@@ -111,6 +128,9 @@ export function ObserveFilterBar({
   selectedTypes,
   onTypesChange,
   typeOptions = SERVER_TYPES,
+  selectedStatuses,
+  onStatusesChange,
+  statusOptions = STATUS_TYPES,
   dateRange,
   customRange,
   customRangeLabel,
@@ -140,6 +160,11 @@ export function ObserveFilterBar({
   selectedTypes: ObserveTypeFilterValue[];
   onTypesChange: (types: ObserveTypeFilterValue[]) => void;
   typeOptions?: MultiSelectOption[];
+  // Opt-in trace-outcome ("error" | "success" | "blocked" | "pending") filter.
+  // Only wire these on pages backed by the tool-usage traces query.
+  selectedStatuses?: ObserveStatusFilterValue[];
+  onStatusesChange?: (statuses: ObserveStatusFilterValue[]) => void;
+  statusOptions?: MultiSelectOption[];
   dateRange: DateRangePreset;
   customRange: { from: Date; to: Date } | null;
   customRangeLabel: string | null;
@@ -214,6 +239,7 @@ export function ObserveFilterBar({
       role: selectedRoleIds,
       source: selectedSources,
       type: selectedTypes,
+      status: selectedStatuses ?? [],
       account_type: accountType || null,
     }),
     [
@@ -225,6 +251,7 @@ export function ObserveFilterBar({
       selectedRoleIds,
       selectedSources,
       selectedTypes,
+      selectedStatuses,
       accountType,
     ],
   );
@@ -236,6 +263,7 @@ export function ObserveFilterBar({
       role: roleOptions.map((r) => ({ label: r.name, value: r.id })),
       source: sourceOptionsWithIcons,
       type: typeOptions,
+      status: statusOptions,
       account_type: ACCOUNT_TYPE_OPTIONS,
     }),
     [
@@ -244,6 +272,7 @@ export function ObserveFilterBar({
       roleOptions,
       sourceOptionsWithIcons,
       typeOptions,
+      statusOptions,
     ],
   );
 
@@ -264,6 +293,9 @@ export function ObserveFilterBar({
           return;
         case "type":
           onTypesChange(value as ObserveTypeFilterValue[]);
+          return;
+        case "status":
+          onStatusesChange?.(value as ObserveStatusFilterValue[]);
           return;
         case "account_type":
           onAccountTypeChange?.((value as string | null) ?? "");
@@ -295,6 +327,7 @@ export function ObserveFilterBar({
       onRoleSelectionChange,
       onSourceSelectionChange,
       onTypesChange,
+      onStatusesChange,
       onCustomRangeChange,
       onDateRangeChange,
       onClearCustomRange,
@@ -320,6 +353,9 @@ export function ObserveFilterBar({
         case "type":
           onTypesChange([]);
           return;
+        case "status":
+          onStatusesChange?.([]);
+          return;
         case "account_type":
           onAccountTypeChange?.("");
           return;
@@ -334,6 +370,7 @@ export function ObserveFilterBar({
       onRoleSelectionChange,
       onSourceSelectionChange,
       onTypesChange,
+      onStatusesChange,
       onDateRangeChange,
       onAccountTypeChange,
     ],
@@ -362,6 +399,7 @@ export function ObserveFilterBar({
           "source",
           "role",
           "hookTypes",
+          "status",
           "account_type",
           "range",
           "from",
@@ -376,6 +414,16 @@ export function ObserveFilterBar({
     );
   }, [setSearchParams]);
 
+  // Compose the schema from the base filters plus whichever opt-in dimensions
+  // the caller wired handlers for. defineFilters is an identity helper, so the
+  // runtime array is all the toolbar needs (values/options are keyed by id).
+  const schema = useMemo(() => {
+    const dimensions: FilterDimension[] = [...OBSERVE_FILTER_BASE];
+    if (onStatusesChange) dimensions.push(STATUS_DIMENSION);
+    if (onAccountTypeChange) dimensions.push(ACCOUNT_TYPE_DIMENSION);
+    return defineFilters(dimensions);
+  }, [onStatusesChange, onAccountTypeChange]);
+
   // The arbitrary-attribute search/builder lives inside the sheet's "Custom
   // attributes" section (via FilterBar's customBuilder) rather than as a second
   // row under the bar — keeps the bar to one clean line and avoids the cramped
@@ -383,11 +431,7 @@ export function ObserveFilterBar({
   return (
     <Page.Toolbar className={className}>
       <Page.Toolbar.Filters
-        schema={
-          onAccountTypeChange
-            ? OBSERVE_FILTERS_WITH_ACCOUNT_TYPE
-            : OBSERVE_FILTERS
-        }
+        schema={schema}
         values={values}
         optionsById={optionsById}
         onChange={handleChange}

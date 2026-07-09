@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -118,9 +119,10 @@ func (s *SnapshotBillingCycleUsage) snapshotOrganization(ctx context.Context, qu
 		}
 
 		days, err := s.telemetryRepo.GetTokensUnderManagementByDay(ctx, telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:    ids,
-			StartUnixNano: cycle.Start.UnixNano(),
-			EndUnixNano:   cycle.End.UnixNano(),
+			ProjectIDs:        ids,
+			StartUnixNano:     cycle.Start.UnixNano(),
+			EndUnixNano:       cycle.End.UnixNano(),
+			BilledHookSources: billing.ModelUsageSourceStrings(),
 		})
 		if err != nil {
 			return fmt.Errorf("compute tokens under management: %w", err)

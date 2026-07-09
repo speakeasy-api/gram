@@ -3270,6 +3270,88 @@ paths:
       x-speakeasy-name-override: getPlugins
       x-speakeasy-react-hook:
         name: AgentPlugins
+  /rpc/agent.listSyncedUsers:
+    get:
+      description: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.
+      operationId: listSyncedAgentUsers
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSyncedUsersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listSyncedUsers agent
+      tags:
+        - agent
+      x-speakeasy-name-override: listSyncedUsers
+      x-speakeasy-react-hook:
+        name: SyncedAgentUsers
   /rpc/aiIntegrations.deleteConfig:
     post:
       description: Delete the org-wide AI integration config for a provider.
@@ -24943,6 +25025,96 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: ListResources
+  /rpc/risk.acknowledgePolicyChallenge:
+    post:
+      description: Acknowledge a risk policy warn/challenge from a warning-link token. Records the acknowledgement so the user's retried action proceeds; self-service (no admin approval).
+      operationId: acknowledgeRiskPolicyChallenge
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcknowledgeRiskPolicyChallengeRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcknowledgeRiskPolicyChallengeResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: acknowledgeRiskPolicyChallenge risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.policyChallenges
+      x-speakeasy-name-override: acknowledge
+      x-speakeasy-react-hook:
+        name: RiskAcknowledgePolicyChallenge
+        type: mutation
   /rpc/risk.approvePolicyBypassRequest:
     post:
       description: Approve a risk policy bypass request for the requested policy target.
@@ -25568,6 +25740,96 @@ paths:
       x-speakeasy-name-override: create
       x-speakeasy-react-hook:
         name: RiskCreatePolicyBypassRequest
+        type: mutation
+  /rpc/risk.declinePolicyChallenge:
+    post:
+      description: 'Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.'
+      operationId: declineRiskPolicyChallenge
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcknowledgeRiskPolicyChallengeRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeclineRiskPolicyChallengeResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: declineRiskPolicyChallenge risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.policyChallenges
+      x-speakeasy-name-override: decline
+      x-speakeasy-react-hook:
+        name: RiskDeclinePolicyChallenge
         type: mutation
   /rpc/risk.deleteCustomRule:
     post:
@@ -26414,6 +26676,96 @@ paths:
         - risk
       x-speakeasy-group: risk.policies
       x-speakeasy-name-override: get
+  /rpc/risk.getPolicyChallenge:
+    post:
+      description: Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
+      operationId: getRiskPolicyChallenge
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcknowledgeRiskPolicyChallengeRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetRiskPolicyChallengeResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getRiskPolicyChallenge risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.policyChallenges
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: RiskGetPolicyChallenge
+        type: mutation
   /rpc/risk.getPolicyStatus:
     get:
       description: Get the analysis status of a risk policy including progress and workflow state.
@@ -30805,6 +31157,184 @@ paths:
       x-speakeasy-name-override: query
       x-speakeasy-react-hook:
         name: TelemetryQuery
+        type: query
+  /rpc/telemetry.queryRiskTokens:
+    post:
+      description: 'Org-scoped daily token usage split by risk involvement: tokens from sessions with at least one active risk finding in the window versus all session tokens. Powers the token-usage panel''s risk breakdown on the costs page.'
+      operationId: queryRiskTokens
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryWindowPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryRiskTokensResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: queryRiskTokens telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: queryRiskTokens
+      x-speakeasy-react-hook:
+        name: TelemetryQueryRiskTokens
+        type: query
+  /rpc/telemetry.queryTumDetails:
+    post:
+      description: 'Org-scoped daily usage details for the billing page''s metrics table, computed in one pass: token type sums, session/tool-call/active-user counts, attribution slices (MCP tools, skills, unattributed users), and message-level stats (tokens in messages with active risk findings, tokens in tool-call messages).'
+      operationId: queryTumDetails
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryWindowPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TumDetailsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: queryTumDetails telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: queryTumDetails
+      x-speakeasy-react-hook:
+        name: TelemetryQueryTumDetails
         type: query
   /rpc/telemetry.searchChats:
     post:
@@ -38131,6 +38661,29 @@ components:
         - email
         - role_ids
         - joined_at
+    AcknowledgeRiskPolicyChallengeRequestBody:
+      type: object
+      properties:
+        ack_token:
+          type: string
+          description: Acknowledgement token generated when a warn policy challenged the action.
+      required:
+        - ack_token
+    AcknowledgeRiskPolicyChallengeResponseBody:
+      type: object
+      properties:
+        acknowledged:
+          type: boolean
+          description: Whether the challenge is now acknowledged.
+        expires_at:
+          type: string
+          description: RFC3339 time until which the acknowledgement suppresses re-challenge.
+          format: date-time
+        policy_name:
+          type: string
+          description: The policy that issued the warning.
+      required:
+        - acknowledged
     AddDeploymentPackageForm:
       type: object
       properties:
@@ -40522,6 +41075,12 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour. Default false.
+        op_policy_uri:
+          type: string
+          description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
+        op_tos_uri:
+          type: string
+          description: RFC 8414 op_tos_uri; the issuer's terms of service. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
         passthrough:
           type: boolean
           description: When true, the MCP client registers and transacts directly with this issuer. Default false.
@@ -40542,6 +41101,9 @@ components:
           items:
             type: string
           description: Scopes advertised by the issuer.
+        service_documentation:
+          type: string
+          description: RFC 8414 service_documentation; developer documentation for the issuer. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
         slug:
           type: string
           description: Project-unique slug.
@@ -40905,6 +41467,12 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour. Default false.
+        op_policy_uri:
+          type: string
+          description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
+        op_tos_uri:
+          type: string
+          description: RFC 8414 op_tos_uri; the issuer's terms of service. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
         passthrough:
           type: boolean
           description: When true, the MCP client registers and transacts directly with this issuer. Default false.
@@ -40921,6 +41489,9 @@ components:
           items:
             type: string
           description: Scopes advertised by the issuer.
+        service_documentation:
+          type: string
+          description: RFC 8414 service_documentation; developer documentation for the issuer. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
         slug:
           type: string
           description: Project-unique slug.
@@ -41060,10 +41631,11 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag or block.'
+          description: 'Policy action: flag, warn (challenge), or block.'
           default: flag
           enum:
             - flag
+            - warn
             - block
         approved_email_domains:
           type: array
@@ -41661,6 +42233,14 @@ components:
         - project_name
         - project_slug
         - mcp_server_id
+    DeclineRiskPolicyChallengeResponseBody:
+      type: object
+      properties:
+        declined:
+          type: boolean
+          description: Whether the challenge is now declined.
+      required:
+        - declined
     DeleteConfigRequestBody:
       type: object
       properties:
@@ -43619,6 +44199,28 @@ components:
           $ref: '#/components/schemas/PromptTemplate'
       required:
         - template
+    GetRiskPolicyChallengeResponseBody:
+      type: object
+      properties:
+        acknowledged:
+          type: boolean
+          description: Whether this challenge has already been acknowledged.
+        expires_at:
+          type: string
+          description: RFC3339 time the acknowledgement link expires.
+          format: date-time
+        message:
+          type: string
+          description: Human-facing challenge message describing what was flagged.
+        policy_name:
+          type: string
+          description: The policy that issued the warning.
+        tool_name:
+          type: string
+          description: The tool the challenge applies to, if any.
+      required:
+        - message
+        - acknowledged
     GetSignedAssetURLForm:
       type: object
       properties:
@@ -45499,6 +46101,16 @@ components:
           description: The distinct agent sources present in this project's chats (raw source strings such as 'claude-code', 'Codex', 'playground').
       required:
         - sources
+    ListSyncedUsersResult:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncedAgentUser'
+          description: Emails seen syncing the device agent, most recently active first.
+      required:
+        - users
     ListToolFiltersResult:
       type: object
       properties:
@@ -45578,6 +46190,17 @@ components:
           enum:
             - asc
             - desc
+        statuses:
+          type: array
+          items:
+            type: string
+            description: Tool usage trace outcome
+            enum:
+              - error
+              - success
+              - blocked
+              - pending
+          description: Trace outcomes to include (error, success, blocked, pending). Empty means all.
         target_types:
           type: array
           items:
@@ -48233,6 +48856,22 @@ components:
         - interval_seconds
         - table
         - timeseries
+    QueryRiskTokensResult:
+      type: object
+      properties:
+        interval_seconds:
+          type: integer
+          description: Timeseries bucket width in seconds. Always 86400 — the source aggregate is bucketed daily.
+          format: int64
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskTokensPoint'
+          description: Gap-filled daily buckets in ascending time order
+      description: Result of the token-by-risk breakdown query
+      required:
+        - interval_seconds
+        - points
     QueryRow:
       type: object
       properties:
@@ -48575,6 +49214,12 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour.
+        op_policy_uri:
+          type: string
+          description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised.
+        op_tos_uri:
+          type: string
+          description: RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
         organization_id:
           type: string
           description: The owning organization id. Empty for legacy rows not yet backfilled.
@@ -48595,6 +49240,9 @@ components:
           type: array
           items:
             type: string
+        service_documentation:
+          type: string
+          description: RFC 8414 service_documentation; developer documentation for the issuer. Null when not advertised.
         slug:
           type: string
           description: Project-unique slug.
@@ -48647,6 +49295,12 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour.
+        op_policy_uri:
+          type: string
+          description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised or when the advertised value is not an absolute http(s) URL.
+        op_tos_uri:
+          type: string
+          description: RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised or when the advertised value is not an absolute http(s) URL.
         passthrough:
           type: boolean
           description: When true, the MCP client registers and transacts directly with this issuer.
@@ -48661,6 +49315,9 @@ components:
           type: array
           items:
             type: string
+        service_documentation:
+          type: string
+          description: RFC 8414 service_documentation; developer documentation for the issuer. Null when not advertised or when the advertised value is not an absolute http(s) URL.
         token_endpoint:
           type: string
           description: Upstream token endpoint.
@@ -49167,10 +49824,11 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag (log only) or block (deny in real-time).'
+          description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), or block (deny in real-time).'
           default: flag
           enum:
             - flag
+            - warn
             - block
         approved_email_domains:
           type: array
@@ -49747,6 +50405,25 @@ components:
       required:
         - match_redacted
         - position_known
+    RiskTokensPoint:
+      type: object
+      properties:
+        bucket_time_unix_nano:
+          type: string
+          description: Bucket start time in Unix nanoseconds (string for JS precision)
+        risky_tokens:
+          type: integer
+          description: Tokens from sessions with at least one active risk finding created in the query window
+          format: int64
+        total_tokens:
+          type: integer
+          description: All session tokens in the bucket
+          format: int64
+      description: One UTC day of token usage split by risk involvement
+      required:
+        - bucket_time_unix_nano
+        - risky_tokens
+        - total_tokens
     RiskUnmaskResultResult:
       type: object
       properties:
@@ -51389,6 +52066,25 @@ components:
         - description
         - regex
         - severity
+    SyncedAgentUser:
+      type: object
+      properties:
+        email:
+          type: string
+          description: Email the device agent reported on sync. Resolve against org members for display.
+          example: dev@acme.corp
+        first_seen_at:
+          type: string
+          description: First time this email was seen syncing the device agent.
+          format: date-time
+        last_seen_at:
+          type: string
+          description: Most recent time this email was seen syncing the device agent.
+          format: date-time
+      required:
+        - email
+        - first_seen_at
+        - last_seen_at
     TUMPeriod:
       type: object
       properties:
@@ -51493,6 +52189,27 @@ components:
         - attributes
         - resource_attributes
         - service
+    TelemetryWindowPayload:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Start time in ISO 8601 format
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        project_id:
+          type: string
+          description: Optional project to scope to; defaults to every project in the organization.
+          format: uuid
+        to:
+          type: string
+          description: End time in ISO 8601 format
+          example: "2025-12-26T10:00:00Z"
+          format: date-time
+      description: An org-scoped time window, optionally narrowed to one project
+      required:
+        - from
+        - to
     TestDetectionRuleMatch:
       type: object
       properties:
@@ -53070,6 +53787,131 @@ components:
           minimum: 0
       required:
         - id
+    TumDetailsBreakdown:
+      type: object
+      properties:
+        key:
+          type: string
+          description: The breakdown dimension key (hook_source, model, email, division_name, role)
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/TumDetailsBreakdownRow'
+          description: Top values by tokens in descending order, with the remainder rolled into 'Other'
+      description: Per-dimension billed token breakdown for the usage details table
+      required:
+        - key
+        - rows
+    TumDetailsBreakdownRow:
+      type: object
+      properties:
+        series:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: Daily tokens aligned to the result's points buckets
+        total_tokens:
+          type: integer
+          description: Billed tokens for this value over the range
+          format: int64
+        value:
+          type: string
+          description: The dimension value; empty for rows recorded before the dimension existed
+      description: One value of a breakdown dimension with its billed token usage over the range
+      required:
+        - value
+        - total_tokens
+        - series
+    TumDetailsPoint:
+      type: object
+      properties:
+        bucket_time_unix_nano:
+          type: string
+          description: Bucket start time in Unix nanoseconds (string for JS precision)
+        input_tokens:
+          type: integer
+          description: Billed input tokens
+          format: int64
+        output_tokens:
+          type: integer
+          description: Billed output tokens
+          format: int64
+        risky_message_tokens:
+          type: integer
+          description: Tokens in messages carrying at least one active risk finding
+          format: int64
+        tool_message_tokens:
+          type: integer
+          description: Tokens in tool-call messages
+          format: int64
+        total_tokens:
+          type: integer
+          description: Billed tokens under management
+          format: int64
+      description: One UTC day of billing usage details
+      required:
+        - input_tokens
+        - output_tokens
+        - total_tokens
+        - risky_message_tokens
+        - tool_message_tokens
+        - bucket_time_unix_nano
+    TumDetailsResult:
+      type: object
+      properties:
+        breakdowns:
+          type: array
+          items:
+            $ref: '#/components/schemas/TumDetailsBreakdown'
+          description: Billed token usage per breakdown dimension
+        interval_seconds:
+          type: integer
+          description: Timeseries bucket width in seconds. Always 86400 — the details are bucketed daily.
+          format: int64
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/TumDetailsPoint'
+          description: Gap-filled daily buckets in ascending time order
+        totals:
+          $ref: '#/components/schemas/TumDetailsTotals'
+      description: Result of the billing usage details query. Everything derives from the billed population (registered completion surfaces), matching the invoiced totals exactly.
+      required:
+        - interval_seconds
+        - points
+        - totals
+        - breakdowns
+    TumDetailsTotals:
+      type: object
+      properties:
+        input_tokens:
+          type: integer
+          description: Billed input tokens
+          format: int64
+        output_tokens:
+          type: integer
+          description: Billed output tokens
+          format: int64
+        risky_message_tokens:
+          type: integer
+          description: Tokens in messages carrying at least one active risk finding
+          format: int64
+        tool_message_tokens:
+          type: integer
+          description: Tokens in tool-call messages
+          format: int64
+        total_tokens:
+          type: integer
+          description: Billed tokens under management
+          format: int64
+      description: Whole-range totals for the billing usage details
+      required:
+        - input_tokens
+        - output_tokens
+        - total_tokens
+        - risky_message_tokens
+        - tool_message_tokens
     TunneledMcpConnection:
       type: object
       properties:
@@ -53736,6 +54578,12 @@ components:
           description: Set or clear the display name. An empty string clears it to NULL.
         oidc:
           type: boolean
+        op_policy_uri:
+          type: string
+          description: Set or clear RFC 8414 op_policy_uri. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
+        op_tos_uri:
+          type: string
+          description: Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
         passthrough:
           type: boolean
         registration_endpoint:
@@ -53749,6 +54597,9 @@ components:
           type: array
           items:
             type: string
+        service_documentation:
+          type: string
+          description: Set or clear RFC 8414 service_documentation. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
         slug:
           type: string
           description: Rename the slug.
@@ -53829,9 +54680,10 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag or block.'
+          description: 'Policy action: flag, warn (challenge), or block.'
           enum:
             - flag
+            - warn
             - block
         approved_email_domains:
           type: array
