@@ -5,7 +5,7 @@ const lucideIconNames = Object.keys(
   dynamicIconImports,
 ) as (keyof typeof dynamicIconImports)[];
 
-const customIconNames = Object.keys(
+export const customIconNames = Object.keys(
   customDynamicIconImports,
 ) as (keyof typeof customDynamicIconImports)[];
 

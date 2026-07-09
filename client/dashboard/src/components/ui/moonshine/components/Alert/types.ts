@@ -1,4 +1,4 @@
-const variants = [
+export const variants = [
   "default",
   "success",
   "error",

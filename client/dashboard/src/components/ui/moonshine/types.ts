@@ -79,7 +79,7 @@ export type PaddingPerSide =
 
 export type Padding = PaddingValue | PaddingPerSide;
 
-const supportedLanguages = [
+export const supportedLanguages = [
   "typescript",
   "go",
   "java",
