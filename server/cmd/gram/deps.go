@@ -124,6 +124,10 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 	password := c.String("clickhouse-password")
 	nativePort := c.String("clickhouse-native-port")
 	insecure := c.Bool("clickhouse-insecure")
+	maxOpenConns := c.Int("clickhouse-max-open-conns")
+	maxIdleConns := c.Int("clickhouse-max-idle-conns")
+	connMaxLifetime := c.Duration("clickhouse-conn-max-lifetime")
+	dialTimeout := c.Duration("clickhouse-dial-timeout")
 
 	// validate cli args
 	err := inv.Check("clickhouse config options",
@@ -152,6 +156,14 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 			// #nosec G402 -- we're reading the value from an environment variable.
 			InsecureSkipVerify: insecure,
 		},
+		DialTimeout:  dialTimeout,
+		MaxOpenConns: maxOpenConns,
+		MaxIdleConns: maxIdleConns,
+		// Recycle connections before a network middlebox silently drops idle
+		// ones. Without this the driver keeps connections for up to 1 hour, so a
+		// reset-by-peer connection is reused and the next query fails until
+		// Temporal retries. See CLICKHOUSE_CONN_MAX_LIFETIME.
+		ConnMaxLifetime: connMaxLifetime,
 	}
 
 	conn, err := clickhouse.Open(opts)
