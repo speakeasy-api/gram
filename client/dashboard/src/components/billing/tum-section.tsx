@@ -28,6 +28,7 @@ import { useEffect, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { BillingCyclePicker } from "./billing-cycle-picker";
 import {
+  type BilledDays,
   type BillingPeriod,
   bucketDateKey,
   cycleKey,
@@ -54,14 +55,14 @@ import { TumUsageCard } from "./tum-usage-card";
 function TumTokenBreakdown({
   period,
   projectId,
-  billedDaysByDate,
+  billedDays,
   onSelectRange,
 }: {
   period: BillingPeriod;
   projectId: string | null;
-  // Billed tokens per UTC day ("YYYY-MM-DD" keys) across every known cycle;
-  // null when unavailable. Org-wide — unusable under a project filter.
-  billedDaysByDate: Map<string, number> | null;
+  // The billed per-day series and the cycle windows it fully describes.
+  // Org-wide — unusable under a project filter.
+  billedDays: BilledDays;
   // Bar-click drill-down: narrows the page's period to the clicked bucket.
   onSelectRange: (start: Date, end: Date) => void;
 }): JSX.Element {
@@ -94,17 +95,28 @@ function TumTokenBreakdown({
     }));
   }, [data, dimension]);
 
-  // The billed series aligned to the points grid. All-zero means the billed
-  // days don't cover this window (e.g. a synthesized active cycle without
-  // history) — fall back to the details totals rather than charting zeros
-  // under a non-zero usage card.
+  // The billed series aligned to the points grid, used only when the billed
+  // data COVERS every charted day — coverage, not positivity: a sealed
+  // zero-token cycle is fully known (all zeros beat late-recomputed
+  // telemetry), while a day outside every covered cycle window (e.g. a
+  // synthesized active cycle without history) makes the whole view fall
+  // back to the details totals rather than charting misleading zeros.
   const billedSeries = useMemo(() => {
-    if (projectId != null || billedDaysByDate == null) return null;
-    const series = points.map(
-      (p) => billedDaysByDate.get(bucketDateKey(p.bucketTimeUnixNano)) ?? 0,
-    );
-    return series.some((v) => v > 0) ? series : null;
-  }, [points, billedDaysByDate, projectId]);
+    if (projectId != null || points.length === 0) return null;
+    const series: number[] = [];
+    for (const p of points) {
+      const key = bucketDateKey(p.bucketTimeUnixNano);
+      // Bucket dates are UTC midnights, so the key parses back to the
+      // bucket's exact start instant.
+      const ms = Date.parse(key);
+      const coveredDay = billedDays.covered.some(
+        (r) => ms >= r.start && ms < r.end,
+      );
+      if (!coveredDay) return null;
+      series.push(billedDays.byDate.get(key) ?? 0);
+    }
+    return series;
+  }, [points, billedDays, projectId]);
 
   const riskPoints = riskData?.points ?? null;
 
@@ -216,14 +228,25 @@ export const TumUsageSection = (): JSX.Element => {
   // (late telemetry) or expire (aggregate TTL) — so each cycle's days are
   // scaled to sum to its billed total, the number on the usage card. Same
   // normalization as the details table; cumulative rounding keeps the series
-  // integral without losing the exact sum. Cycles whose day series is empty
-  // are skipped (no shape to distribute over); the chart falls back to the
-  // details totals there.
-  const billedDaysByDate = useMemo(() => {
+  // integral without losing the exact sum.
+  //
+  // `covered` records the cycle windows the billed data fully describes —
+  // including zero-token cycles, where every day is a known zero (a sealed
+  // zero total beats whatever late telemetry recomputed). A cycle with a
+  // nonzero total but no daily shape (the synthesized active-cycle fallback)
+  // stays uncovered, and the chart falls back to the details totals there.
+  const billedDays = useMemo<BilledDays>(() => {
     const byDate = new Map<string, number>();
+    const covered: { start: number; end: number }[] = [];
     for (const c of cycles) {
       const daysSum = c.days.reduce((sum, d) => sum + d.tokens, 0);
-      if (daysSum === 0) continue;
+      if (daysSum === 0) {
+        if (c.tokens === 0) {
+          covered.push({ start: c.start.getTime(), end: c.end.getTime() });
+        }
+        continue;
+      }
+      covered.push({ start: c.start.getTime(), end: c.end.getTime() });
       const scale = c.tokens / daysSum;
       let acc = 0;
       let prevRounded = 0;
@@ -234,7 +257,7 @@ export const TumUsageSection = (): JSX.Element => {
         prevRounded = rounded;
       }
     }
-    return byDate.size > 0 ? byDate : null;
+    return { byDate, covered };
   }, [cycles]);
 
   // The effective period. A custom range that happens to match a cycle's
@@ -375,7 +398,7 @@ export const TumUsageSection = (): JSX.Element => {
                 key={viewNonce}
                 period={period}
                 projectId={projectId}
-                billedDaysByDate={billedDaysByDate}
+                billedDays={billedDays}
                 onSelectRange={handleBarSelect}
               />
             </div>
