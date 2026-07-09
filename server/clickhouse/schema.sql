@@ -557,6 +557,12 @@ CREATE TABLE IF NOT EXISTS chat_token_summaries (
     gram_project_id UUID,
     chat_id String,
     time_bucket DateTime('UTC'),
+    -- The consuming surface (gram.hook.source) the chat's rows carry. Billing
+    -- reads scope token sums to the registered billed completion surfaces
+    -- (billing.ModelUsageSources in Go); unregistered surfaces (e.g.
+    -- "assistants" until BYOK) are tagged but not billed. Rows aggregated
+    -- before this dimension existed carry '' and are grandfathered as billed.
+    hook_source String,
 
     -- Token usage reported for the chat during the bucket (rows carrying
     -- gen_ai.usage.total_tokens, including OTEL-forwarded metrics)
@@ -568,7 +574,11 @@ CREATE TABLE IF NOT EXISTS chat_token_summaries (
     -- tokens-under-management billing.
     stored_event_count SimpleAggregateFunction(sum, UInt64)
 ) ENGINE = AggregatingMergeTree
-ORDER BY (gram_project_id, chat_id, time_bucket)
+-- PRIMARY KEY stays the pre-hook_source prefix: MODIFY ORDER BY can only
+-- extend the sort key, never the primary key, so the split must be explicit
+-- here to match the live table.
+PRIMARY KEY (gram_project_id, chat_id, time_bucket)
+ORDER BY (gram_project_id, chat_id, time_bucket, hook_source)
 TTL time_bucket + INTERVAL 730 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Per-chat daily token usage and stored-session evidence, retained beyond the raw telemetry TTL to support tokens-under-management billing across historical billing cycles';
@@ -580,6 +590,7 @@ SELECT
     -- Force UTC so the daily billing bucket boundary never shifts with the
     -- server timezone (fromUnixTimestamp64Nano defaults to the server tz).
     toStartOfDay(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS time_bucket,
+    hook_source,
     sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens,
     toUInt64(countIf(
         startsWith(gram_urn, 'tools:')
@@ -589,7 +600,7 @@ SELECT
     )) AS stored_event_count
 FROM telemetry_logs
 WHERE chat_id != ''
-GROUP BY gram_project_id, chat_id, time_bucket;
+GROUP BY gram_project_id, chat_id, time_bucket, hook_source;
 
 CREATE TABLE IF NOT EXISTS attribute_keys (
     gram_project_id UUID,
