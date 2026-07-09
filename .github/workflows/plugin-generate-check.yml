@@ -4,7 +4,8 @@ on:
   pull_request:
     paths:
       - "hooks/**"
-      - "server/internal/plugins/generate.go"
+      - "server/internal/plugins/**"
+      - "server/cmd/export-hook-plugin/**"
 
 jobs:
   check-generate-updated:
@@ -15,27 +16,32 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check that plugins/generate.go was updated
-        env:
-          BASE_REF: ${{ github.base_ref }}
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: "go.mod"
+          # Reference: https://github.com/actions/setup-go/issues/495
+          cache: false
+
+      - name: Check checked-in plugins match the generators
+        working-directory: server
         run: |
-          git fetch origin "$BASE_REF"
-          CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF"...HEAD)
+          go run ./cmd/export-hook-plugin
 
-          HOOKS_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^hooks/' | grep -v -E '^hooks/plugin-claude-test/' || true)
-          GENERATE_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^server/internal/plugins/generate\.go$' || true)
-
-          if [ -n "$HOOKS_CHANGED" ] && [ -z "$GENERATE_CHANGED" ]; then
-            echo "❌ Error: hooks/ was modified but server/internal/plugins/generate.go was not updated"
+          if ! git diff --exit-code -- ../hooks; then
             echo ""
-            echo "Changed production hook files:"
-            echo "$HOOKS_CHANGED"
+            echo "❌ Error: hooks/plugin-claude and hooks/plugin-cursor are out of date."
             echo ""
-            echo "Please update server/internal/plugins/generate.go to reflect the hook changes."
+            echo "The checked-in dogfood plugins are rendered from the same generators"
+            echo "that publish customer plugins. Regenerate them with:"
+            echo ""
+            echo "    cd server && go run ./cmd/export-hook-plugin"
+            echo ""
+            echo "and commit the result. If you edited files under hooks/ directly,"
+            echo "make the change in server/internal/plugins instead."
             exit 1
           fi
 
-          echo "✅ server/internal/plugins/generate.go was updated alongside hooks/ changes"
+          echo "✅ Checked-in plugins match the generators."
 
       - name: Remind to consider a generator version bump
         env:
@@ -48,6 +54,7 @@ jobs:
           # a full republish (fresh keys + commits) for no reason. This is a
           # non-blocking nudge for the rare case where generation BEHAVIOUR
           # changes in a way the placeholder fingerprint pass can't observe.
+          git fetch origin "$BASE_REF"
           GENERATE_DIFF=$(git diff "origin/$BASE_REF"...HEAD -- server/internal/plugins/generate.go)
           if [ -z "$GENERATE_DIFF" ]; then
             echo "generate.go unchanged; nothing to check."
