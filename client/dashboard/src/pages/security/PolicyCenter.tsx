@@ -103,14 +103,6 @@ import {
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
 
-/** Built-in detector categories that only produce findings when Speakeasy hooks
- *  are installed on the agent (no rule list to customize). */
-const HOOK_REQUIRED_CATEGORIES: Set<RuleCategory> = new Set([
-  "shadow_mcp",
-  "destructive_tool",
-  "account_identity",
-]);
-
 /** One built-in detector as a toggleable card (Detect step). "Customize" opens
  *  a side-sheet to pick which rules in the category are active. */
 export function DetectorCard({
@@ -132,7 +124,6 @@ export function DetectorCard({
   const customizable = available && rules.length > 1;
   const enabledCount = rules.filter((r) => !disabledRules.has(r.id)).length;
   const customized = selected && enabledCount < rules.length;
-  const needsHook = HOOK_REQUIRED_CATEGORIES.has(category);
   return (
     <div
       className={cn(
@@ -157,21 +148,17 @@ export function DetectorCard({
           {meta.description}
         </p>
         <div className="mt-2 flex items-center gap-3 text-xs">
-          {needsHook ? (
-            <span className="text-warning">Requires Speakeasy hooks</span>
-          ) : (
-            rules.length > 0 && (
-              <span
-                className={cn(
-                  "bg-muted rounded-full px-2 py-0.5",
-                  customized ? "text-foreground" : "text-muted-foreground",
-                )}
-              >
-                {customized
-                  ? `${enabledCount} of ${rules.length} rules`
-                  : `${rules.length} rules`}
-              </span>
-            )
+          {rules.length > 0 && (
+            <span
+              className={cn(
+                "bg-muted rounded-full px-2 py-0.5",
+                customized ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {customized
+                ? `${enabledCount} of ${rules.length} rules`
+                : `${rules.length} rules`}
+            </span>
           )}
           {selected && customizable && (
             <button
