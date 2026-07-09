@@ -294,7 +294,6 @@ func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServ
 }
 
 const listMCPServersForTelemetryByProjectID = `-- name: ListMCPServersForTelemetryByProjectID :many
-
 SELECT id, name, slug, remote_mcp_server_id, tunneled_mcp_server_id
 FROM mcp_servers
 WHERE project_id = $1
