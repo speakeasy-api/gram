@@ -39,7 +39,7 @@ const (
 
 	// aiUsagePollerActivityScheduleToCloseTimeout bounds the full
 	// provider/config usage poll across all Temporal retries.
-	aiUsagePollerActivityScheduleToCloseTimeout = 6 * time.Hour
+	aiUsagePollerActivityScheduleToCloseTimeout = 12 * time.Hour
 
 	// aiUsagePollerCoordinatorChildConcurrency limits how many
 	// provider/config child workflows a coordinator starts per batch.
