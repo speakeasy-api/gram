@@ -124,6 +124,10 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 	password := c.String("clickhouse-password")
 	nativePort := c.String("clickhouse-native-port")
 	insecure := c.Bool("clickhouse-insecure")
+	maxOpenConns := c.Int("clickhouse-max-open-conns")
+	maxIdleConns := c.Int("clickhouse-max-idle-conns")
+	connMaxLifetime := c.Duration("clickhouse-conn-max-lifetime")
+	dialTimeout := c.Duration("clickhouse-dial-timeout")
 
 	// validate cli args
 	err := inv.Check("clickhouse config options",
@@ -152,6 +156,15 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 			// #nosec G402 -- we're reading the value from an environment variable.
 			InsecureSkipVerify: insecure,
 		},
+		DialTimeout: dialTimeout,
+		// Bound the connection pool and recycle connections well before any
+		// fronting load balancer's idle timeout. Left at library defaults,
+		// ConnMaxLifetime is 1h, so idle pooled connections outlive the LB and
+		// get dropped server-side, then resurface as intermittent connection
+		// resets/timeouts on the next query (see DNO-462).
+		MaxOpenConns:    maxOpenConns,
+		MaxIdleConns:    maxIdleConns,
+		ConnMaxLifetime: connMaxLifetime,
 	}
 
 	conn, err := clickhouse.Open(opts)
