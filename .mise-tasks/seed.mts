@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env -S node --import tsx
 
 //MISE description="Seed the local database with data"
 
@@ -9,26 +9,25 @@ import os from "node:os";
 import path from "node:path";
 
 import { intro, log as clackLog, outro } from "@clack/prompts";
-import { GramCore } from "@gram/client/core.js";
-import { accessEnableRBAC } from "@gram/client/funcs/accessEnableRBAC.js";
-import { assetsUploadFunctions } from "@gram/client/funcs/assetsUploadFunctions.js";
-import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
-import { authInfo } from "@gram/client/funcs/authInfo.js";
-import { deploymentsEvolveDeployment } from "@gram/client/funcs/deploymentsEvolveDeployment.js";
-import { deploymentsGetById } from "@gram/client/funcs/deploymentsGetById.js";
-import { keysCreate } from "@gram/client/funcs/keysCreate.js";
-import { keysList } from "@gram/client/funcs/keysList.js";
-import { keysRevokeById } from "@gram/client/funcs/keysRevokeById.js";
-import { keysValidate } from "@gram/client/funcs/keysValidate.js";
-import { projectsCreate } from "@gram/client/funcs/projectsCreate.js";
-import { projectsRead } from "@gram/client/funcs/projectsRead.js";
-import { resourcesList } from "@gram/client/funcs/resourcesList.js";
-import { toolsList } from "@gram/client/funcs/toolsList.js";
-import { toolsetsCreate } from "@gram/client/funcs/toolsetsCreate.js";
-import { toolsetsUpdateBySlug } from "@gram/client/funcs/toolsetsUpdateBySlug.js";
-import { environmentsCreate } from "@gram/client/funcs/environmentsCreate.js";
-import { environmentsList } from "@gram/client/funcs/environmentsList.js";
-import { ServiceError } from "@gram/client/models/errors/index.js";
+import { GramCore } from "#gram/client/core.js";
+import { accessEnableRBAC } from "#gram/client/funcs/accessEnableRBAC.js";
+import { assetsUploadFunctions } from "#gram/client/funcs/assetsUploadFunctions.js";
+import { assetsUploadOpenAPIv3 } from "#gram/client/funcs/assetsUploadOpenAPIv3.js";
+import { authInfo } from "#gram/client/funcs/authInfo.js";
+import { deploymentsEvolveDeployment } from "#gram/client/funcs/deploymentsEvolveDeployment.js";
+import { deploymentsGetById } from "#gram/client/funcs/deploymentsGetById.js";
+import { keysCreate } from "#gram/client/funcs/keysCreate.js";
+import { keysList } from "#gram/client/funcs/keysList.js";
+import { keysRevokeById } from "#gram/client/funcs/keysRevokeById.js";
+import { keysValidate } from "#gram/client/funcs/keysValidate.js";
+import { projectsCreate } from "#gram/client/funcs/projectsCreate.js";
+import { projectsRead } from "#gram/client/funcs/projectsRead.js";
+import { resourcesList } from "#gram/client/funcs/resourcesList.js";
+import { toolsList } from "#gram/client/funcs/toolsList.js";
+import { toolsetsCreate } from "#gram/client/funcs/toolsetsCreate.js";
+import { toolsetsUpdateBySlug } from "#gram/client/funcs/toolsetsUpdateBySlug.js";
+import { environmentsCreate } from "#gram/client/funcs/environmentsCreate.js";
+import { environmentsList } from "#gram/client/funcs/environmentsList.js";
 import { $, chalk } from "zx";
 import { seedTunnel } from "./seed/tunnel.mts";
 

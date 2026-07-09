@@ -4,3 +4,16 @@
 # Speakeasy emits a .gitattributes that marks generated TS as linguist-generated=false.
 # We intentionally don't keep it, so stop the generator from re-adding it.
 /.gitattributes
+
+/.devcontainer
+/docs
+/examples
+/.npmignore
+/.oxfmtrc.json
+/.oxlintrc.json
+/package.json
+/jsr.json
+/tsconfig.json
+/*.md
+!/FUNCTIONS.md
+!/REACT_QUERY.md

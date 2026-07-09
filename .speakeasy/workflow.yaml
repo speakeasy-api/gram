@@ -20,4 +20,4 @@ targets:
     gram-internal:
         target: typescript
         source: Gram-Internal
-        output: client/sdk
+        output: client/dashboard/src/sdk

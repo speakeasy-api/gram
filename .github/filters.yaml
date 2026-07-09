@@ -31,13 +31,13 @@ tsframework:
   - "ts-framework/**"
 
 sdk:
-  - "client/sdk/**"
+  - "client/dashboard/src/sdk/**"
   - "package.json"
   - "pnpm-lock.yaml"
 
 sdk-gen:
   - ".speakeasy/workflow.yaml"
-  - "client/sdk/.speakeasy/gen.yaml"
+  - "client/dashboard/src/sdk/.speakeasy/gen.yaml"
   - "mise.toml"
   - "overlays/**"
   - "server/gen/http/openapi3.yaml"
