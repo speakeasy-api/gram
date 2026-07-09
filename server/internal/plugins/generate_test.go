@@ -2300,6 +2300,7 @@ func TestCheckedInSenderEnvProjectOverridesCachedProject(t *testing.T) {
 	require.Contains(t, headers, "Gram-Project: acme-staging",
 		"env-selected project must outrank the cached login project")
 	require.NotContains(t, headers, "Gram-Project: acme-prod")
+	require.Contains(t, headers, "/rpc/hooks.ingest")
 }
 
 // TestCheckedInCursorSenderUsesCachedBrowserAuth verifies the checked-in
