@@ -279,10 +279,12 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 
 	// Every dimension the chart's breakdown picker offers, so the details
 	// table can mirror it. Each needs a grouped totals + timeseries pair; all
-	// of them run concurrently below alongside the headline queries.
+	// of them run concurrently below alongside the headline queries. No
+	// account_type: it's a device-enrollment (agent-fleet) attribute that
+	// billed completions never carry.
 	breakdownDims := []string{
 		"division_name", "email", "role", "hook_source", "skill_name",
-		"mcp_server_name", "mcp_tool_name", "model", "provider", "account_type",
+		"mcp_server_name", "mcp_tool_name", "model", "provider",
 	}
 	type breakdownData struct {
 		table []repo.AttributeMetricsRow

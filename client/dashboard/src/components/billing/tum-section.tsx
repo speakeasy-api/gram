@@ -36,7 +36,7 @@ import {
   periodDisplayRange,
   periodFromCycle,
 } from "./billing-cycles";
-import { stackModeFor } from "./breakdown-options";
+import { BREAKDOWN_TOTAL, stackModeFor } from "./breakdown-options";
 import { BreakdownPicker } from "./breakdown-picker";
 import { type GroupSeries, TokenUsagePanel } from "./token-usage-panel";
 import { TumDetailsTable } from "./tum-details-table";
@@ -68,8 +68,9 @@ function TumTokenBreakdown({
   const client = useGramContext();
   const organization = useOrganization();
   // The picker's selection, plus the last-picked dimension so switching to
-  // token type or risk and back doesn't lose the grouping.
-  const [breakdown, setBreakdown] = useState<string>(Dimension.DivisionName);
+  // token type or risk and back doesn't lose the grouping. Opens on the
+  // total view — the billed series that matches the usage card exactly.
+  const [breakdown, setBreakdown] = useState<string>(BREAKDOWN_TOTAL);
   const [dimension, setDimension] = useState<Dimension>(Dimension.DivisionName);
   const stackBy = stackModeFor(breakdown);
 

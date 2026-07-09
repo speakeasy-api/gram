@@ -52,7 +52,6 @@ const LEAD_DIMENSION_SECTIONS: string[] = [
   Dimension.McpServerName,
 ];
 const TAIL_DIMENSION_SECTIONS: string[] = [
-  Dimension.AccountType,
   Dimension.DivisionName,
   Dimension.Email,
   Dimension.Role,

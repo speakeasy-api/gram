@@ -1,7 +1,6 @@
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import {
   Bot,
-  CircleUser,
   Cloud,
   Cpu,
   Layers,
@@ -28,7 +27,9 @@ export type StackMode = "group" | "tokenType" | "risk" | "total";
 
 // Sentinel values for the non-dimension modes. Dimension values are
 // snake_case attribute keys, so these can't collide.
-const BREAKDOWN_TOTAL = "total";
+// Exported as the picker's default: the total view plots the billed per-day
+// series, so the billing page opens on the number that matches the usage card.
+export const BREAKDOWN_TOTAL = "total";
 const BREAKDOWN_TOKEN_TYPE = "tokenType";
 export const BREAKDOWN_RISK = "risk";
 
@@ -68,15 +69,12 @@ export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
     options: [{ value: BREAKDOWN_TOTAL, label: "Total", icon: Sigma }],
   },
   {
-    heading: "Model & account",
+    // No "Account type" cut here: it's a device-enrollment (agent-fleet)
+    // attribute that billed gram-server completions never carry.
+    heading: "Model & provider",
     options: [
       { value: Dimension.Model, label: "Model", icon: Cpu },
       { value: Dimension.Provider, label: "Provider", icon: Cloud },
-      {
-        value: Dimension.AccountType,
-        label: "Account type",
-        icon: CircleUser,
-      },
     ],
   },
   {
