@@ -37,7 +37,7 @@ export async function proxyRegisterUpstreamClient(
   });
 
   if (!response.ok) {
-    throw new Error(`Registration failed (HTTP ${response.status})`);
+    throw new Error(await registrationErrorMessage(response));
   }
 
   const result = (await response.json()) as {
@@ -55,4 +55,28 @@ export async function proxyRegisterUpstreamClient(
     clientSecret: result.client_secret ?? "",
     tokenEndpointAuthMethod: result.token_endpoint_auth_method ?? null,
   };
+}
+
+// registrationErrorMessage pulls the most actionable message out of a failed
+// /oauth/proxy-register response. The backend passes an upstream 4xx through as
+// a bad request whose `message` already carries the upstream
+// error/error_description; some responses may instead surface the raw RFC 7591
+// `error_description`/`error`. Fall back to the bare status when the body has
+// nothing useful so a genuine gateway outage still reads sensibly.
+async function registrationErrorMessage(response: Response): Promise<string> {
+  const fallback = `Registration failed (HTTP ${response.status})`;
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return fallback;
+  }
+  if (body && typeof body === "object") {
+    const record = body as Record<string, unknown>;
+    for (const key of ["message", "error_description", "error"] as const) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) return value;
+    }
+  }
+  return fallback;
 }
