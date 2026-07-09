@@ -1,4 +1,5 @@
 import { useSdkClient } from "@/contexts/Sdk";
+import { isImplicitlyGated } from "@/lib/mcpOAuth";
 import type { Toolset } from "@/lib/toolTypes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
@@ -20,6 +21,12 @@ export type AuthTarget = {
   /** Current issuer link; null when the target has none yet. */
   userSessionIssuerId: string | null;
   /**
+   * True when the target has no explicit issuer but is implicitly secured by
+   * the project-default Gram issuer (private remote/tunneled mcp_servers).
+   * Always false for toolset-backed targets.
+   */
+  implicitlyGated: boolean;
+  /**
    * Remote MCP server id for the RFC 9728 probe. Undefined for targets with
    * no probeable upstream (tunneled, toolset-backed), leaving the probe idle.
    */
@@ -36,6 +43,7 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
     () => ({
       slug: mcpServer.slug ?? "mcp",
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
+      implicitlyGated: isImplicitlyGated(mcpServer),
       remoteMcpServerId: mcpServer.remoteMcpServerId,
       invalidate: async (queryClient: QueryClient) => {
         await Promise.all([
@@ -55,6 +63,7 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
     () => ({
       slug: toolset.slug,
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,
+      implicitlyGated: false,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
         // Toolsets are already live, so linking only flips auth gating —
         // mcpEnabled / mcpIsPublic stay untouched.

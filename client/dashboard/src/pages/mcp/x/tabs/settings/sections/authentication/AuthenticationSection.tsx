@@ -6,7 +6,6 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Type } from "@/components/ui/type";
-import { isImplicitlyGated } from "@/lib/mcpOAuth";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { CheckCircle } from "lucide-react";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
@@ -158,7 +157,7 @@ export function AuthenticationSectionBody({
     setDeleteOpen(true);
   };
 
-  const implicitlyGated = isImplicitlyGated(mcpServer);
+  const implicitlyGated = target.implicitlyGated;
 
   let authenticationFields: ReactNode;
   if (!issuerConfigured && implicitlyGated) {
