@@ -1278,10 +1278,17 @@ gram_enrich_identity_payload() {
   existing_token="$(gram_hooks_json_top_level_value "$trimmed" "user_email")"
   if [ "$existing_token" = '""' ]; then
     # An empty provider value (Cursor sends user_email:"" when signed out)
-    # must not shadow the device identity. First occurrence only, so a
-    # nested empty pair can only be hit when it precedes the top-level one —
-    # no known provider emits that shape.
-    printf '%s' "$trimmed" | sed -E 's|"user_email"[[:space:]]*:[[:space:]]*""|"user_email":"'"$email"'"|'
+    # must not shadow the device identity. The top-level token is known to
+    # be empty, so when the payload holds exactly one empty pair it IS the
+    # top-level one and can be rewritten textually; more than one is
+    # ambiguous without a parser and passes through unchanged rather than
+    # risk stamping a nested tool argument.
+    if [ "$(printf '%s' "$trimmed" | grep -oE '"user_email"[[:space:]]*:[[:space:]]*""' | wc -l | tr -d '[:space:]')" = "1" ]; then
+      printf '%s' "$trimmed" | sed -E 's|"user_email"[[:space:]]*:[[:space:]]*""|"user_email":"'"$email"'"|'
+      return
+    fi
+    gram_hooks_identity_debug "multiple empty user_email fields; cannot stamp safely without jq, sending unchanged"
+    printf '%s' "$trimmed"
     return
   fi
   if [ -n "$existing_token" ]; then
