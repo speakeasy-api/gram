@@ -815,6 +815,11 @@ WHERE rr.id = @id
 -- (risk_policy_id, rule_id, match), choosing the most recent occurrence. Done
 -- inside a subquery so pagination over the deduped stream stays correct
 -- (client-side dedup over paged data broke "Load more").
+--
+-- @policy_id is optional. When NULL only enabled policies are considered (the
+-- default project-wide view). When set the results are scoped to that policy
+-- AND disabled-but-not-deleted policies are included, so explicitly filtering
+-- to a policy still surfaces its historical findings after it was turned off.
 SELECT
     sub.id, sub.project_id, sub.organization_id, sub.risk_policy_id,
     sub.risk_policy_version, sub.chat_message_id, sub.source, sub.found,
@@ -841,7 +846,8 @@ FROM (
   FROM risk_results rr
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
+    AND (rp.enabled IS TRUE OR rr.risk_policy_id = sqlc.narg(policy_id)::uuid)
   LEFT JOIN LATERAL (
     SELECT tcb.id AS block_id FROM tool_call_blocks tcb
     WHERE tcb.project_id = rr.project_id
@@ -851,6 +857,7 @@ FROM (
   ) blk ON TRUE
   WHERE rr.project_id = @project_id
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+    AND (sqlc.narg(policy_id)::uuid IS NULL OR rr.risk_policy_id = sqlc.narg(policy_id)::uuid)
     AND (sqlc.narg(from_time)::timestamptz IS NULL OR cm.created_at >= sqlc.narg(from_time)::timestamptz)
     AND (sqlc.narg(to_time)::timestamptz IS NULL OR cm.created_at < sqlc.narg(to_time)::timestamptz)
     AND (@rule_id::text = '' OR rr.rule_id ILIKE '%' || @rule_id::text || '%')
