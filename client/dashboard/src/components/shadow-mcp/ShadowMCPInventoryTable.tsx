@@ -1,16 +1,22 @@
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
-import { useDeleteShadowMCPInventoryAllowRuleMutation } from "@gram/client/react-query/deleteShadowMCPInventoryAllowRule.js";
+import { useDeleteShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/deleteShadowMCPInventoryPolicyBypass.js";
+import { useResolveShadowMCPInventoryRequestMutation } from "@gram/client/react-query/resolveShadowMCPInventoryRequest.js";
 import {
   invalidateAllShadowMCPInventory,
   useShadowMCPInventory,
 } from "@gram/client/react-query/shadowMCPInventory.js";
-import { useUpsertShadowMCPInventoryAllowRuleMutation } from "@gram/client/react-query/upsertShadowMCPInventoryAllowRule.js";
+import { useUpsertShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/upsertShadowMCPInventoryPolicyBypass.js";
 import {
   Badge,
   Button,
   type Column,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   Icon,
   type SortDescriptor,
   Table,
@@ -20,11 +26,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
+import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import {
   shadowMCPInventoryStatus,
@@ -37,6 +48,11 @@ import {
 const INVENTORY_PAGE_LIMIT = 50;
 const FIRST_PAGE_CURSOR = "";
 
+type BlockingPolicy = Pick<
+  RiskPolicy,
+  "audienceType" | "audiencePrincipalUrns" | "id" | "name"
+>;
+
 type InventoryPage = {
   cursor: string;
   nextCursor?: string;
@@ -44,6 +60,12 @@ type InventoryPage = {
 };
 
 const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
+type InventoryActionMode = "review" | "add" | "edit" | "delete";
+type ReviewDecision = "approve" | "deny";
+type ActiveInventoryAction = {
+  mode: InventoryActionMode;
+  server: ShadowMCPInventoryServer;
+};
 
 function usageCountLabel(count: number) {
   return `${count} ${count === 1 ? "call" : "calls"}`;
@@ -56,9 +78,22 @@ function userCountLabel(count: number) {
 function InventoryServerCell({ server }: { server: ShadowMCPInventoryServer }) {
   return (
     <div className="min-w-0 space-y-1">
-      <Type variant="small" className="truncate font-medium">
-        {server.serverName || server.urlHost}
-      </Type>
+      <div className="flex gap-2 items-center">
+        <Type variant="small" className="truncate font-medium">
+          {server.serverName || server.urlHost}
+        </Type>
+        {server.requestCount > 0 && (
+          <Badge variant="warning" size="sm" background={false}>
+            <Badge.LeftIcon>
+              <Icon name="shield-alert" />
+            </Badge.LeftIcon>
+            <Badge.Text>
+              {server.requestCount} Access Request
+              {server.requestCount > 1 && "s"}
+            </Badge.Text>
+          </Badge>
+        )}
+      </div>
       <Type variant="small" className="text-muted-foreground truncate text-xs">
         {server.canonicalServerUrl}
       </Type>
@@ -87,6 +122,17 @@ function InventoryStatusCell({
   );
 }
 
+function UsageCell({ server }: { server: ShadowMCPInventoryServer }) {
+  return (
+    <div className="space-y-1">
+      <Type variant="small">{usageCountLabel(server.observedUseCount)}</Type>
+      <Type variant="small" className="text-muted-foreground text-xs">
+        {userCountLabel(server.userCount)}
+      </Type>
+    </div>
+  );
+}
+
 function InventoryEmptyState() {
   return (
     <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16 text-center">
@@ -104,14 +150,378 @@ function InventoryEmptyState() {
   );
 }
 
+function policyAudienceLabel(policy: BlockingPolicy) {
+  if (policy.audienceType === "everyone") {
+    return "Everyone";
+  }
+
+  return `${policy.audiencePrincipalUrns.length} selected`;
+}
+
+function actionSheetTitle(mode: InventoryActionMode) {
+  switch (mode) {
+    case "review":
+      return "Review Request";
+    case "add":
+      return "Add Allow Rule";
+    case "edit":
+      return "Edit Rule";
+    case "delete":
+      return "Delete Rule";
+  }
+}
+
+function actionSheetDescription(mode: InventoryActionMode) {
+  switch (mode) {
+    case "review":
+      return "Resolve the pending Shadow MCP request for this server.";
+    case "add":
+      return "Allow this Shadow MCP server for selected blocking policies.";
+    case "edit":
+      return "Change which blocking policies allow this Shadow MCP server.";
+    case "delete":
+      return "Remove the allow decision for this Shadow MCP server.";
+  }
+}
+
+function actionSheetSubmitLabel(
+  mode: InventoryActionMode,
+  decision: ReviewDecision,
+) {
+  if (mode === "review") {
+    return decision === "approve" ? "Approve Request" : "Deny Request";
+  }
+  if (mode === "delete") {
+    return "Delete Rule";
+  }
+  if (mode === "edit") {
+    return "Save Changes";
+  }
+  return "Add Allow Rule";
+}
+
+function initialPolicyIDsForAction(
+  action: ActiveInventoryAction,
+  blockingPolicies: BlockingPolicy[],
+) {
+  const blockingPolicyIDs = blockingPolicies.map((policy) => policy.id);
+  if (action.server.allowedPolicyIds.length > 0) {
+    return action.server.allowedPolicyIds.filter((policyID) =>
+      blockingPolicyIDs.includes(policyID),
+    );
+  }
+  if (
+    action.mode === "review" &&
+    action.server.latestRequest &&
+    blockingPolicyIDs.includes(action.server.latestRequest.policyId)
+  ) {
+    return [action.server.latestRequest.policyId];
+  }
+  return blockingPolicyIDs;
+}
+
+function InventoryActionMenu({
+  disabled,
+  onOpenAction,
+  server,
+}: {
+  disabled: boolean;
+  onOpenAction: (
+    mode: InventoryActionMode,
+    server: ShadowMCPInventoryServer,
+  ) => void;
+  server: ShadowMCPInventoryServer;
+}) {
+  const hasRequest = server.requestCount > 0;
+  const hasAllowDecision = server.access === "allowed";
+
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          aria-label={`Open actions for ${server.serverName || server.urlHost}`}
+          disabled={disabled}
+          size="xs"
+          variant="tertiary"
+        >
+          <Icon name="ellipsis" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {hasRequest && (
+          <DropdownMenuItem
+            onSelect={() => {
+              window.setTimeout(() => onOpenAction("review", server), 0);
+            }}
+          >
+            Review Request
+          </DropdownMenuItem>
+        )}
+        {!hasRequest && !hasAllowDecision && (
+          <DropdownMenuItem
+            onSelect={() => {
+              window.setTimeout(() => onOpenAction("add", server), 0);
+            }}
+          >
+            Add Allow Rule
+          </DropdownMenuItem>
+        )}
+        {hasAllowDecision && (
+          <>
+            <DropdownMenuItem
+              onSelect={() => {
+                window.setTimeout(() => onOpenAction("edit", server), 0);
+              }}
+            >
+              Edit Rule
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                window.setTimeout(() => onOpenAction("delete", server), 0);
+              }}
+            >
+              Delete Rule
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function PolicySelection({
+  disabled,
+  onSelectionChange,
+  policies,
+  selectedPolicyIDs,
+}: {
+  disabled: boolean;
+  onSelectionChange: (policyIDs: string[]) => void;
+  policies: BlockingPolicy[];
+  selectedPolicyIDs: string[];
+}) {
+  const selectedPolicyIDSet = new Set(selectedPolicyIDs);
+
+  return (
+    <section className="border-border space-y-3 rounded-md border p-3">
+      <Type variant="small" className="font-medium">
+        Policies
+      </Type>
+      <div className="space-y-2">
+        {policies.map((policy) => {
+          const checked = selectedPolicyIDSet.has(policy.id);
+          return (
+            <label
+              key={policy.id}
+              className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 rounded-sm px-3 py-2.5 transition-colors"
+            >
+              <Checkbox
+                checked={checked}
+                disabled={disabled}
+                onCheckedChange={(nextChecked) => {
+                  if (nextChecked) {
+                    onSelectionChange([...selectedPolicyIDs, policy.id]);
+                    return;
+                  }
+                  onSelectionChange(
+                    selectedPolicyIDs.filter(
+                      (policyID) => policyID !== policy.id,
+                    ),
+                  );
+                }}
+              />
+              <span className="min-w-0 flex-1">
+                <Type variant="small" className="truncate font-medium">
+                  {policy.name}
+                </Type>
+                <Type muted small>
+                  Policy applies to {policyAudienceLabel(policy)}
+                </Type>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ShadowMCPInventoryActionSheet({
+  action,
+  blockingPolicies,
+  isSubmitting,
+  onOpenChange,
+  onSubmit,
+  open,
+}: {
+  action: ActiveInventoryAction | null;
+  blockingPolicies: BlockingPolicy[];
+  isSubmitting: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (input: {
+    action: ActiveInventoryAction;
+    decision: ReviewDecision;
+    policyIDs: string[];
+  }) => Promise<void>;
+  open: boolean;
+}) {
+  const [decision, setDecision] = useState<ReviewDecision>("approve");
+  const [selectedPolicyIDs, setSelectedPolicyIDs] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!action || !open) {
+      setDecision("approve");
+      setSelectedPolicyIDs([]);
+      return;
+    }
+    setDecision("approve");
+    setSelectedPolicyIDs(initialPolicyIDsForAction(action, blockingPolicies));
+  }, [action, blockingPolicies, open]);
+
+  if (!action) return null;
+
+  const server = action.server;
+  const canChoosePolicies =
+    action.mode !== "delete" &&
+    (action.mode !== "review" || decision === "approve");
+  const needsPolicySelection = canChoosePolicies;
+  const canSubmit =
+    !isSubmitting &&
+    (action.mode === "delete" ||
+      (action.mode === "review" && decision === "deny") ||
+      selectedPolicyIDs.length > 0);
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="sm:max-w-xl">
+        <SheetHeader>
+          <SheetTitle>{actionSheetTitle(action.mode)}</SheetTitle>
+          <SheetDescription>
+            {actionSheetDescription(action.mode)}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
+          <section className="border-border rounded-md border px-4 py-3">
+            <Type variant="small" className="font-medium">
+              {server.serverName || server.urlHost}
+            </Type>
+            <Type muted small className="mt-1 break-all">
+              {server.canonicalServerUrl}
+            </Type>
+            {server.latestRequest && action.mode === "review" && (
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div className="min-w-0">
+                  <Type muted small>
+                    Requester
+                  </Type>
+                  <Type variant="body" className="mt-1 truncate text-sm">
+                    {server.latestRequest.requesterEmail}
+                  </Type>
+                </div>
+                <div>
+                  <Type muted small>
+                    Requested
+                  </Type>
+                  <Type variant="body" className="mt-1 text-sm">
+                    {formatShortDate(server.latestRequest.requestedAt)}
+                  </Type>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {action.mode === "review" && (
+            <RadioGroup
+              value={decision}
+              onValueChange={(value) => setDecision(value as ReviewDecision)}
+              className="border-border grid grid-cols-2 gap-4 rounded-md border p-3"
+            >
+              <label
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                  decision === "approve" && "border-border bg-card shadow-xs",
+                )}
+              >
+                <RadioGroupItem value="approve" className="mt-1.5" />
+                <span>
+                  <Badge variant="success">
+                    <Badge.Text>Approve</Badge.Text>
+                  </Badge>
+                  <Type muted small>
+                    Add an allow decision.
+                  </Type>
+                </span>
+              </label>
+              <label
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                  decision === "deny" && "border-border bg-card shadow-xs",
+                )}
+              >
+                <RadioGroupItem value="deny" className="mt-1.5" />
+                <span>
+                  <Badge variant="destructive">
+                    <Badge.Text>Deny</Badge.Text>
+                  </Badge>
+                  <Type muted small>
+                    Resolve the request.
+                  </Type>
+                </span>
+              </label>
+            </RadioGroup>
+          )}
+
+          {needsPolicySelection && (
+            <PolicySelection
+              disabled={isSubmitting}
+              onSelectionChange={setSelectedPolicyIDs}
+              policies={blockingPolicies}
+              selectedPolicyIDs={selectedPolicyIDs}
+            />
+          )}
+
+          {action.mode === "delete" && (
+            <Type muted small>
+              This removes the current allow decision for the URL.
+            </Type>
+          )}
+        </div>
+
+        <SheetFooter>
+          <Button
+            className="w-full"
+            disabled={!canSubmit}
+            onClick={() => {
+              void onSubmit({ action, decision, policyIDs: selectedPolicyIDs });
+            }}
+            variant={
+              action.mode === "delete" ? "destructive-primary" : "primary"
+            }
+          >
+            <Button.LeftIcon>
+              {isSubmitting && (
+                <Icon name="loader-circle" className="animate-spin" />
+              )}
+            </Button.LeftIcon>
+            <Button.Text>
+              {actionSheetSubmitLabel(action.mode, decision)}
+            </Button.Text>
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export function ShadowMCPInventoryTable({
-  blockingPolicyIDs,
+  blockingPolicies,
   className,
   enabled = true,
   policyState,
   projectID,
 }: {
-  blockingPolicyIDs: string[];
+  blockingPolicies: BlockingPolicy[];
   className?: string;
   enabled?: boolean;
   policyState: ShadowMCPPolicyState;
@@ -135,15 +545,22 @@ export function ShadowMCPInventoryTable({
   const inventoryQuery = useShadowMCPInventory(inventoryRequest, undefined, {
     enabled: enabled && projectID.length > 0,
   });
-  const upsertAllowRule = useUpsertShadowMCPInventoryAllowRuleMutation();
-  const deleteAllowRule = useDeleteShadowMCPInventoryAllowRuleMutation();
+  const upsertPolicyBypass = useUpsertShadowMCPInventoryPolicyBypassMutation();
+  const deletePolicyBypass = useDeleteShadowMCPInventoryPolicyBypassMutation();
+  const resolveInventoryRequest = useResolveShadowMCPInventoryRequestMutation();
   const [sort, setSort] = useState<SortDescriptor | null>({
     id: "lastCalled",
     direction: "desc",
   });
-  const [pendingServerURL, setPendingServerURL] = useState<string | null>(null);
-  const isMutating = upsertAllowRule.isPending || deleteAllowRule.isPending;
-  const isActionPending = isMutating || pendingServerURL !== null;
+  const [activeAction, setActiveAction] =
+    useState<ActiveInventoryAction | null>(null);
+  const [isSubmittingAction, setIsSubmittingAction] = useState(false);
+  const isSubmitting =
+    isSubmittingAction ||
+    upsertPolicyBypass.isPending ||
+    deletePolicyBypass.isPending ||
+    resolveInventoryRequest.isPending;
+  const isActionPending = isSubmitting || activeAction !== null;
 
   useEffect(() => {
     setPaginationScope(inventoryScope);
@@ -197,8 +614,6 @@ export function ShadowMCPInventoryTable({
   const loadedServers = useMemo(() => {
     return activePages.flatMap((page) => page.servers);
   }, [activePages]);
-  const requestCountForServer = (server: ShadowMCPInventoryServer) =>
-    server.requestCount;
 
   const latestPage = activePages[activePages.length - 1];
   const canUseInventoryQueryData =
@@ -226,87 +641,72 @@ export function ShadowMCPInventoryTable({
     setCursor(nextCursor);
   };
 
-  const allowInventoryServer = async (server: ShadowMCPInventoryServer) => {
-    setPendingServerURL(server.canonicalServerUrl);
-    const label = server.serverName ?? server.canonicalServerUrl;
+  const submitInventoryAction = async ({
+    action,
+    decision,
+    policyIDs,
+  }: {
+    action: ActiveInventoryAction;
+    decision: ReviewDecision;
+    policyIDs: string[];
+  }) => {
+    const label = action.server.serverName ?? action.server.canonicalServerUrl;
+    setIsSubmittingAction(true);
     try {
-      if (blockingPolicyIDs.length === 0) {
-        throw new Error("No blocking Shadow MCP policy is available");
-      }
-      await upsertAllowRule.mutateAsync({
-        request: {
-          shadowMCPInventoryAllowRuleForm: {
-            policyIds: blockingPolicyIDs,
+      if (action.mode === "delete") {
+        await deletePolicyBypass.mutateAsync({
+          request: {
             projectId: projectID,
-            serverUrl: server.canonicalServerUrl,
+            serverUrl: action.server.canonicalServerUrl,
           },
-        },
-      });
+        });
+        toast.success(`Removed allow rule for: ${label}`);
+      } else if (action.mode === "review") {
+        await resolveInventoryRequest.mutateAsync({
+          request: {
+            resolveShadowMCPInventoryRequestForm: {
+              decision,
+              policyIds: decision === "approve" ? policyIDs : undefined,
+              projectId: projectID,
+              serverUrl: action.server.canonicalServerUrl,
+            },
+          },
+        });
+        toast.success(
+          decision === "approve"
+            ? `Request approved for: ${label}`
+            : `Request denied for: ${label}`,
+        );
+      } else {
+        await upsertPolicyBypass.mutateAsync({
+          request: {
+            shadowMCPInventoryPolicyBypassForm: {
+              policyIds: policyIDs,
+              projectId: projectID,
+              serverUrl: action.server.canonicalServerUrl,
+            },
+          },
+        });
+        toast.success(`Allow rule saved for: ${label}`);
+      }
       await refreshInventory();
-      toast.success(`Allow rule added for: ${label}`);
+      setActiveAction(null);
     } catch {
-      toast.error(`Unable to add allow rule for: ${label}`);
+      toast.error(`Unable to update allow rule for: ${label}`);
     } finally {
-      setPendingServerURL(null);
+      setIsSubmittingAction(false);
     }
   };
 
-  const clearInventoryServer = async (server: ShadowMCPInventoryServer) => {
-    setPendingServerURL(server.canonicalServerUrl);
-    const label = server.serverName ?? server.canonicalServerUrl;
-    try {
-      await deleteAllowRule.mutateAsync({
-        request: {
-          projectId: projectID,
-          serverUrl: server.canonicalServerUrl,
-        },
-      });
-      await refreshInventory();
-      toast.success(`Removed allow rule for: ${label}`);
-    } catch {
-      toast.error(`Unable to remove allow rule for: ${label}`);
-    } finally {
-      setPendingServerURL(null);
-    }
-  };
-
-  const renderRuleActionCell = (server: ShadowMCPInventoryServer) => {
-    const isServerPending = pendingServerURL === server.canonicalServerUrl;
-    const label = server.serverName || server.urlHost;
-    const hasAccessRule = server.access === "allowed";
-    const buttonLabel = hasAccessRule ? "Clear" : "Allow";
-    const iconName = hasAccessRule ? "minus" : "plus";
-    const tooltip = hasAccessRule
-      ? `Clear Access Rule for ${label}`
-      : `Add Access Rule for ${label}`;
-
+  const renderActionsCell = (server: ShadowMCPInventoryServer) => {
     return (
-      <Tooltip delayDuration={300}>
-        <TooltipTrigger asChild>
-          <Button
-            size="xs"
-            variant="secondary"
-            disabled={isActionPending}
-            onClick={() => {
-              if (hasAccessRule) {
-                void clearInventoryServer(server);
-              } else {
-                void allowInventoryServer(server);
-              }
-            }}
-          >
-            <Button.LeftIcon>
-              {isServerPending ? (
-                <Icon name="loader-circle" className="animate-spin" />
-              ) : (
-                <Icon name={iconName} />
-              )}
-            </Button.LeftIcon>
-            <Button.Text>{buttonLabel}</Button.Text>
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{tooltip}</TooltipContent>
-      </Tooltip>
+      <InventoryActionMenu
+        disabled={isActionPending}
+        onOpenAction={(mode, selectedServer) =>
+          setActiveAction({ mode, server: selectedServer })
+        }
+        server={server}
+      />
     );
   };
 
@@ -319,7 +719,7 @@ export function ShadowMCPInventoryTable({
         (server.serverName || server.urlHost || server.canonicalServerUrl)
           .trim()
           .toLowerCase(),
-      width: "1.7fr",
+      width: "2fr",
       render: (server) => <InventoryServerCell server={server} />,
     },
     {
@@ -330,7 +730,7 @@ export function ShadowMCPInventoryTable({
         shadowMCPInventoryStatusLabel(
           shadowMCPInventoryStatus(server, policyState),
         ),
-      width: "0.8fr",
+      width: "0.9fr",
       render: (server) => (
         <InventoryStatusCell policyState={policyState} server={server} />
       ),
@@ -340,7 +740,7 @@ export function ShadowMCPInventoryTable({
       header: "Last called",
       sortable: true,
       sortValue: (server) => server.lastCalled?.getTime() ?? 0,
-      width: "0.85fr",
+      width: "0.7fr",
       render: (server) => (
         <Type variant="small">{formatShortDate(server.lastCalled)}</Type>
       ),
@@ -350,7 +750,7 @@ export function ShadowMCPInventoryTable({
       header: "Last seen",
       sortable: true,
       sortValue: (server) => server.lastSeen.getTime(),
-      width: "0.85fr",
+      width: "0.7fr",
       render: (server) => (
         <Type variant="small">{formatShortDate(server.lastSeen)}</Type>
       ),
@@ -360,44 +760,14 @@ export function ShadowMCPInventoryTable({
       header: "Usage",
       sortable: true,
       sortValue: (server) => server.observedUseCount,
-      width: "0.7fr",
-      render: (server) => (
-        <div className="space-y-1">
-          <Type variant="small">
-            {usageCountLabel(server.observedUseCount)}
-          </Type>
-          <Type variant="small" className="text-muted-foreground text-xs">
-            {userCountLabel(server.userCount)}
-          </Type>
-        </div>
-      ),
-    },
-    {
-      key: "requests",
-      header: "Requests",
-      sortable: true,
-      sortValue: requestCountForServer,
-      width: "0.6fr",
-      render: (server) => {
-        const count = requestCountForServer(server);
-        if (count > 0) {
-          return (
-            <Badge variant="warning" background={false}>
-              <Badge.LeftIcon>
-                <Icon name="shield-alert" />
-              </Badge.LeftIcon>
-              <Badge.Text>{count}</Badge.Text>
-            </Badge>
-          );
-        }
-        return <Type variant="small">-</Type>;
-      },
-    },
-    {
-      key: "accessRule",
-      header: "Access Rule",
       width: "0.5fr",
-      render: renderRuleActionCell,
+      render: (server) => <UsageCell server={server} />,
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "0.3fr",
+      render: renderActionsCell,
     },
   ];
 
@@ -421,7 +791,7 @@ export function ShadowMCPInventoryTable({
     return (
       <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
         <Type variant="body" className="font-medium">
-          Access Rules could not be loaded
+          Shadow MCP inventory could not be loaded
         </Type>
         <Type muted small className="max-w-md">
           Refresh the page or try again later.
@@ -436,6 +806,18 @@ export function ShadowMCPInventoryTable({
 
   return (
     <div className={cn("min-h-0 shrink overflow-hidden", className)}>
+      <ShadowMCPInventoryActionSheet
+        action={activeAction}
+        blockingPolicies={blockingPolicies}
+        isSubmitting={isSubmitting}
+        onOpenChange={(open) => {
+          if (!open) {
+            setActiveAction(null);
+          }
+        }}
+        onSubmit={submitInventoryAction}
+        open={activeAction !== null}
+      />
       <Table
         columns={columns}
         className="h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-x-auto overflow-y-hidden"

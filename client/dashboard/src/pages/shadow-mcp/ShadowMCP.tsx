@@ -27,15 +27,13 @@ export default function ShadowMCP(): JSX.Element {
   const policyState = policiesQuery.isError
     ? "unavailable"
     : shadowMCPPolicyState(policiesQuery.data?.policies);
-  const blockingPolicyIDs =
-    policiesQuery.data?.policies
-      .filter(
-        (policy) =>
-          policy.enabled &&
-          policy.action === "block" &&
-          policy.sources.includes("shadow_mcp"),
-      )
-      .map((policy) => policy.id) ?? [];
+  const blockingPolicies =
+    policiesQuery.data?.policies.filter(
+      (policy) =>
+        policy.enabled &&
+        policy.action === "block" &&
+        policy.sources.includes("shadow_mcp"),
+    ) ?? [];
 
   return (
     <Page>
@@ -49,7 +47,7 @@ export default function ShadowMCP(): JSX.Element {
           <Page.Section>
             <Page.Section.Title stage="beta">{pageTitle}</Page.Section.Title>
             <Page.Section.Description>
-              Manage the Shadow MCP server inventory, access rules, and
+              Manage the Shadow MCP server inventory, allow decisions, and
               requests.
             </Page.Section.Description>
             <Page.Section.Body>
@@ -57,7 +55,7 @@ export default function ShadowMCP(): JSX.Element {
                 <div className="flex flex-col gap-4 pb-8">
                   <ShadowMCPPolicyStatus policyState={policyState} />
                   <ShadowMCPInventoryTable
-                    blockingPolicyIDs={blockingPolicyIDs}
+                    blockingPolicies={blockingPolicies}
                     policyState={policyState}
                     projectID={project.id}
                   />

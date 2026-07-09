@@ -33,10 +33,12 @@ function server(
 ): ShadowMCPInventoryServer {
   return {
     access: "none",
+    allowedPolicyIds: [],
     canonicalServerUrl: "https://example.com/mcp",
     firstSeen: new Date("2026-01-01T00:00:00Z"),
     lastSeen: new Date("2026-01-02T00:00:00Z"),
     observedUseCount: 0,
+    requestCount: 0,
     serverName: undefined,
     topUsers: [],
     urlHost: "example.com",

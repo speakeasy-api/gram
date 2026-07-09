@@ -14,14 +14,16 @@ import {
   type ReactNode,
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { ShadowMCPInventoryTable } from "./ShadowMCPInventoryTable";
 
 const mocks = vi.hoisted(() => ({
   useShadowMCPInventory: vi.fn(),
   invalidateShadowMCPInventory: vi.fn(),
-  upsertAllowRuleMutation: vi.fn(),
-  deleteAllowRuleMutation: vi.fn(),
+  upsertPolicyBypassMutation: vi.fn(),
+  deletePolicyBypassMutation: vi.fn(),
+  resolveInventoryRequestMutation: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
@@ -30,18 +32,25 @@ vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
 }));
 
 vi.mock(
-  "@gram/client/react-query/upsertShadowMCPInventoryAllowRule.js",
+  "@gram/client/react-query/upsertShadowMCPInventoryPolicyBypass.js",
   () => ({
-    useUpsertShadowMCPInventoryAllowRuleMutation: mocks.upsertAllowRuleMutation,
+    useUpsertShadowMCPInventoryPolicyBypassMutation:
+      mocks.upsertPolicyBypassMutation,
   }),
 );
 
 vi.mock(
-  "@gram/client/react-query/deleteShadowMCPInventoryAllowRule.js",
+  "@gram/client/react-query/deleteShadowMCPInventoryPolicyBypass.js",
   () => ({
-    useDeleteShadowMCPInventoryAllowRuleMutation: mocks.deleteAllowRuleMutation,
+    useDeleteShadowMCPInventoryPolicyBypassMutation:
+      mocks.deletePolicyBypassMutation,
   }),
 );
+
+vi.mock("@gram/client/react-query/resolveShadowMCPInventoryRequest.js", () => ({
+  useResolveShadowMCPInventoryRequestMutation:
+    mocks.resolveInventoryRequestMutation,
+}));
 
 vi.mock("@speakeasy-api/moonshine", () => ({
   Badge: Object.assign(
@@ -65,7 +74,12 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       onClick?: () => void;
       [key: string]: unknown;
     }) => (
-      <button disabled={disabled} onClick={onClick} {...props}>
+      <button
+        disabled={disabled}
+        onClick={() => onClick?.()}
+        type="button"
+        {...props}
+      >
         {children}
       </button>
     ),
@@ -76,6 +90,55 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+  DropdownMenu: ({
+    children,
+    modal,
+  }: {
+    children: ReactNode;
+    modal?: boolean;
+  }) => <div data-dropdown-modal={String(modal)}>{children}</div>,
+  DropdownMenuContent: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DropdownMenuItem: ({
+    children,
+    disabled,
+    onClick,
+    onSelect,
+  }: {
+    children: ReactNode;
+    disabled?: boolean;
+    onClick?: () => void;
+    onSelect?: () => void;
+  }) => (
+    <button
+      disabled={disabled}
+      onClick={() => {
+        onSelect?.();
+        onClick?.();
+      }}
+    >
+      {children}
+    </button>
+  ),
+  DropdownMenuTrigger: ({
+    asChild,
+    children,
+    ...props
+  }: {
+    asChild?: boolean;
+    children: ReactNode;
+    [key: string]: unknown;
+  }) => {
+    if (asChild && isValidElement(children)) {
+      return cloneElement(
+        children as ReactElement<Record<string, unknown>>,
+        props,
+      );
+    }
+
+    return <>{children}</>;
+  },
   Icon: ({ className }: { className?: string; name: string }) => (
     <span className={className} />
   ),
@@ -214,6 +277,74 @@ vi.mock("@/components/ui/tooltip", () => ({
   },
 }));
 
+vi.mock("@/components/ui/checkbox", () => ({
+  Checkbox: ({
+    checked,
+    disabled,
+    onCheckedChange,
+  }: {
+    checked?: boolean;
+    disabled?: boolean;
+    onCheckedChange?: (checked: boolean) => void;
+  }) => (
+    <input
+      checked={checked}
+      disabled={disabled}
+      onChange={(event) => onCheckedChange?.(event.currentTarget.checked)}
+      type="checkbox"
+    />
+  ),
+}));
+
+vi.mock("@/components/ui/radio-group", () => ({
+  RadioGroup: ({
+    children,
+    onValueChange,
+  }: {
+    children: ReactNode;
+    onValueChange?: (value: string) => void;
+  }) => (
+    <div
+      onChange={(event) => {
+        const target = event.target as HTMLInputElement;
+        onValueChange?.(target.value);
+      }}
+    >
+      {children}
+    </div>
+  ),
+  RadioGroupItem: ({ value }: { value: string }) => (
+    <input name="review-action" type="radio" value={value} />
+  ),
+}));
+
+vi.mock("@/components/ui/sheet", () => ({
+  Sheet: ({
+    children,
+    onOpenChange,
+    open,
+  }: {
+    children: ReactNode;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+  }) =>
+    open ? (
+      <div data-testid="shadow-mcp-action-sheet">
+        <button onClick={() => onOpenChange?.(false)}>Close panel</button>
+        {children}
+      </div>
+    ) : null,
+  SheetContent: ({ children }: { children: ReactNode }) => (
+    <section>{children}</section>
+  ),
+  SheetDescription: ({ children }: { children: ReactNode }) => (
+    <p>{children}</p>
+  ),
+  SheetFooter: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  SheetHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  SheetTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+}));
+
 function inventoryServer(
   overrides: Partial<ShadowMCPInventoryServer> & {
     canonicalServerUrl: string;
@@ -238,17 +369,34 @@ function inventoryServer(
   };
 }
 
+type BlockingPolicy = Pick<
+  RiskPolicy,
+  "audienceType" | "audiencePrincipalUrns" | "id" | "name"
+>;
+
+function blockingPolicy(
+  overrides: Partial<BlockingPolicy> = {},
+): BlockingPolicy {
+  return {
+    audiencePrincipalUrns: ["user:all"],
+    audienceType: "everyone",
+    id: "policy-1",
+    name: "Shadow MCP blocking policy",
+    ...overrides,
+  };
+}
+
 function renderInventoryTable(
   projectID = "project-id-1",
   policyState: "blocking" | "flagging" | "none" | "unavailable" = "blocking",
-  blockingPolicyIDs = ["policy-1"],
+  blockingPolicies = [blockingPolicy()],
 ) {
   const queryClient = new QueryClient();
 
   return render(
     <QueryClientProvider client={queryClient}>
       <ShadowMCPInventoryTable
-        blockingPolicyIDs={blockingPolicyIDs}
+        blockingPolicies={blockingPolicies}
         policyState={policyState}
         projectID={projectID}
       />
@@ -285,11 +433,15 @@ describe("ShadowMCPInventoryTable", () => {
     }
 
     mockShadowMCPInventory();
-    mocks.upsertAllowRuleMutation.mockReturnValue({
+    mocks.upsertPolicyBypassMutation.mockReturnValue({
       isPending: false,
       mutateAsync: vi.fn(),
     });
-    mocks.deleteAllowRuleMutation.mockReturnValue({
+    mocks.deletePolicyBypassMutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: vi.fn(),
+    });
+    mocks.resolveInventoryRequestMutation.mockReturnValue({
       isPending: false,
       mutateAsync: vi.fn(),
     });
@@ -361,14 +513,8 @@ describe("ShadowMCPInventoryTable", () => {
       expect(screen.getByText("GitHub MCP")).toBeTruthy();
     });
 
-    const githubRow = screen.getByText("GitHub MCP").closest("tr");
-    const slackRow = screen.getByText("Slack MCP").closest("tr");
-    if (!githubRow || !slackRow) {
-      throw new Error("Inventory rows not found");
-    }
-
-    expect(within(githubRow).getByText("2")).toBeTruthy();
-    expect(within(slackRow).getByText("-")).toBeTruthy();
+    expect(screen.getByText("2 Access Requests")).toBeTruthy();
+    expect(screen.queryByText("0 Access Requests")).toBeFalsy();
   });
 
   it("sorts inventory columns and uses call count for Usage", async () => {
@@ -514,7 +660,9 @@ describe("ShadowMCPInventoryTable", () => {
 
     expect(screen.getByText("First MCP")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Loading" })).toBeTruthy();
-    expect(screen.queryByText("Access Rules could not be loaded")).toBeFalsy();
+    expect(
+      screen.queryByText("Shadow MCP inventory could not be loaded"),
+    ).toBeFalsy();
   });
 
   it("keeps loaded inventory rows visible and retries after a next page error", async () => {
@@ -556,7 +704,9 @@ describe("ShadowMCPInventoryTable", () => {
     fireEvent.click(screen.getByRole("button", { name: "Load more" }));
 
     expect(screen.getByText("First MCP")).toBeTruthy();
-    expect(screen.queryByText("Access Rules could not be loaded")).toBeFalsy();
+    expect(
+      screen.queryByText("Shadow MCP inventory could not be loaded"),
+    ).toBeFalsy();
 
     fireEvent.click(screen.getByRole("button", { name: "Load more" }));
 
@@ -595,7 +745,7 @@ describe("ShadowMCPInventoryTable", () => {
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
-          blockingPolicyIDs={["policy-1"]}
+          blockingPolicies={[blockingPolicy()]}
           policyState="blocking"
           projectID="project-id-1"
         />
@@ -609,7 +759,7 @@ describe("ShadowMCPInventoryTable", () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
-          blockingPolicyIDs={["policy-1"]}
+          blockingPolicies={[blockingPolicy()]}
           policyState="blocking"
           projectID="project-id-2"
         />
@@ -636,7 +786,7 @@ describe("ShadowMCPInventoryTable", () => {
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
-          blockingPolicyIDs={["policy-1"]}
+          blockingPolicies={[blockingPolicy()]}
           enabled
           policyState="blocking"
           projectID="project-id-1"
@@ -651,7 +801,7 @@ describe("ShadowMCPInventoryTable", () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
-          blockingPolicyIDs={["policy-1"]}
+          blockingPolicies={[blockingPolicy()]}
           enabled={false}
           policyState="blocking"
           projectID="project-id-1"
@@ -663,8 +813,8 @@ describe("ShadowMCPInventoryTable", () => {
   });
 
   it("adds and removes Shadow MCP inventory URL allow rules", async () => {
-    const upsertAllowRule = vi.fn().mockResolvedValue({});
-    const deleteAllowRule = vi.fn().mockResolvedValue({});
+    const upsertPolicyBypass = vi.fn().mockResolvedValue({});
+    const deletePolicyBypass = vi.fn().mockResolvedValue({});
     mockShadowMCPInventory({
       servers: [
         inventoryServer({
@@ -679,13 +829,13 @@ describe("ShadowMCPInventoryTable", () => {
         }),
       ],
     });
-    mocks.upsertAllowRuleMutation.mockReturnValue({
+    mocks.upsertPolicyBypassMutation.mockReturnValue({
       isPending: false,
-      mutateAsync: upsertAllowRule,
+      mutateAsync: upsertPolicyBypass,
     });
-    mocks.deleteAllowRuleMutation.mockReturnValue({
+    mocks.deletePolicyBypassMutation.mockReturnValue({
       isPending: false,
-      mutateAsync: deleteAllowRule,
+      mutateAsync: deletePolicyBypass,
     });
 
     renderInventoryTable();
@@ -700,12 +850,35 @@ describe("ShadowMCPInventoryTable", () => {
       throw new Error("Inventory rows not found");
     }
 
-    fireEvent.click(within(pendingRow).getByRole("button", { name: "Allow" }));
+    fireEvent.click(
+      within(pendingRow).getByRole("button", { name: "Add Allow Rule" }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Add Allow Rule" }),
+      ).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(
+        (
+          within(screen.getByTestId("shadow-mcp-action-sheet")).getByRole(
+            "button",
+            { name: "Add Allow Rule" },
+          ) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false);
+    });
+    fireEvent.click(
+      within(screen.getByTestId("shadow-mcp-action-sheet")).getByRole(
+        "button",
+        { name: "Add Allow Rule" },
+      ),
+    );
 
     await waitFor(() => {
-      expect(upsertAllowRule).toHaveBeenCalledWith({
+      expect(upsertPolicyBypass).toHaveBeenCalledWith({
         request: {
-          shadowMCPInventoryAllowRuleForm: {
+          shadowMCPInventoryPolicyBypassForm: {
             policyIds: ["policy-1"],
             projectId: "project-id-1",
             serverUrl: "https://pending.example.com/mcp",
@@ -713,20 +886,22 @@ describe("ShadowMCPInventoryTable", () => {
         },
       });
     });
+
+    fireEvent.click(
+      within(allowedRow).getByRole("button", { name: "Delete Rule" }),
+    );
     await waitFor(() => {
-      expect(
-        (
-          within(pendingRow).getByRole("button", {
-            name: "Allow",
-          }) as HTMLButtonElement
-        ).disabled,
-      ).toBe(false);
+      expect(screen.getByRole("heading", { name: "Delete Rule" })).toBeTruthy();
     });
-
-    fireEvent.click(within(allowedRow).getByRole("button", { name: "Clear" }));
+    fireEvent.click(
+      within(screen.getByTestId("shadow-mcp-action-sheet")).getByRole(
+        "button",
+        { name: "Delete Rule" },
+      ),
+    );
 
     await waitFor(() => {
-      expect(deleteAllowRule).toHaveBeenCalledWith({
+      expect(deletePolicyBypass).toHaveBeenCalledWith({
         request: {
           projectId: "project-id-1",
           serverUrl: "https://allowed.example.com/mcp",
@@ -736,7 +911,7 @@ describe("ShadowMCPInventoryTable", () => {
     expect(mocks.invalidateShadowMCPInventory).toHaveBeenCalled();
   });
 
-  it("uses the action button as the tooltip trigger", async () => {
+  it("uses a non-modal action menu button", async () => {
     mockShadowMCPInventory({
       servers: [
         inventoryServer({
@@ -755,17 +930,18 @@ describe("ShadowMCPInventoryTable", () => {
 
     expect(
       screen
-        .getByRole("button", { name: "Allow" })
-        .getAttribute("data-tooltip-trigger"),
-    ).toBe("true");
+        .getByRole("button", { name: "Open actions for Pending MCP" })
+        .closest("[data-dropdown-modal]")
+        ?.getAttribute("data-dropdown-modal"),
+    ).toBe("false");
   });
 
-  it("shows a loading indicator on the clicked action", async () => {
-    let resolveAllow: (value: unknown) => void = () => {};
-    const allowPromise = new Promise((resolve) => {
-      resolveAllow = resolve;
+  it("shows a loading indicator in the action sheet", async () => {
+    let resolveAllowDecision: (value: unknown) => void = () => {};
+    const allowDecisionPromise = new Promise((resolve) => {
+      resolveAllowDecision = resolve;
     });
-    const allowServer = vi.fn().mockReturnValue(allowPromise);
+    const allowServer = vi.fn().mockReturnValue(allowDecisionPromise);
     mockShadowMCPInventory({
       servers: [
         inventoryServer({
@@ -775,7 +951,7 @@ describe("ShadowMCPInventoryTable", () => {
         }),
       ],
     });
-    mocks.upsertAllowRuleMutation.mockReturnValue({
+    mocks.upsertPolicyBypassMutation.mockReturnValue({
       isPending: false,
       mutateAsync: allowServer,
     });
@@ -791,23 +967,94 @@ describe("ShadowMCPInventoryTable", () => {
       throw new Error("Inventory row not found");
     }
 
-    fireEvent.click(within(pendingRow).getByRole("button", { name: "Allow" }));
+    fireEvent.click(
+      within(pendingRow).getByRole("button", { name: "Add Allow Rule" }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Add Allow Rule" }),
+      ).toBeTruthy();
+    });
+    const actionSheet = screen.getByTestId("shadow-mcp-action-sheet");
+    const submitButton = within(actionSheet).getByRole("button", {
+      name: "Add Allow Rule",
+    });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(allowServer).toHaveBeenCalled();
+    });
+
+    resolveAllowDecision({});
 
     await waitFor(() => {
       expect(
+        screen.queryByRole("heading", { name: "Add Allow Rule" }),
+      ).toBeNull();
+      expect(
         (
-          within(pendingRow).getByRole("button", {
-            name: "Allow",
+          screen.getByRole("button", {
+            name: "Open actions for Pending MCP",
           }) as HTMLButtonElement
         ).disabled,
-      ).toBe(true);
-      expect(pendingRow.querySelector(".animate-spin")).toBeTruthy();
+      ).toBe(false);
+    });
+  });
+
+  it("resolves pending Shadow MCP requests by URL", async () => {
+    const resolveInventoryRequest = vi.fn().mockResolvedValue({});
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "blocked",
+          canonicalServerUrl: "https://requested.example.com/mcp",
+          latestRequest: {
+            id: "request-1",
+            policyId: "policy-1",
+            requestedAt: new Date("2026-01-04T11:30:00Z"),
+            requesterEmail: "alex@example.com",
+            requesterUserId: "user-1",
+          },
+          requestCount: 3,
+          serverName: "Requested MCP",
+        }),
+      ],
+    });
+    mocks.resolveInventoryRequestMutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: resolveInventoryRequest,
     });
 
-    resolveAllow({});
+    renderInventoryTable();
 
     await waitFor(() => {
-      expect(pendingRow.querySelector(".animate-spin")).toBeFalsy();
+      expect(screen.getByText("Requested MCP")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Review Request" }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Review Request" }),
+      ).toBeTruthy();
+    });
+    fireEvent.click(
+      within(screen.getByTestId("shadow-mcp-action-sheet")).getByRole(
+        "button",
+        { name: "Approve Request" },
+      ),
+    );
+
+    await waitFor(() => {
+      expect(resolveInventoryRequest).toHaveBeenCalledWith({
+        request: {
+          resolveShadowMCPInventoryRequestForm: {
+            decision: "approve",
+            policyIds: ["policy-1"],
+            projectId: "project-id-1",
+            serverUrl: "https://requested.example.com/mcp",
+          },
+        },
+      });
     });
   });
 

@@ -77,17 +77,20 @@ vi.mock("@/components/ui/skeleton", () => ({
 
 vi.mock("@/components/shadow-mcp/ShadowMCPInventoryTable", () => ({
   ShadowMCPInventoryTable: ({
-    blockingPolicyIDs,
+    blockingPolicies,
     policyState,
     projectID,
   }: {
-    blockingPolicyIDs: string[];
+    blockingPolicies: Array<{ id: string }>;
     policyState: string;
     projectID: string;
   }) => (
     <div>
       Shadow MCP inventory for {projectID} with policy {policyState}
-      <span>Blocking policies: {blockingPolicyIDs.join(",") || "none"}</span>
+      <span>
+        Blocking policies:{" "}
+        {blockingPolicies.map((policy) => policy.id).join(",") || "none"}
+      </span>
     </div>
   ),
 }));
@@ -144,7 +147,7 @@ describe("ShadowMCP", () => {
     expect(screen.getByRole("heading", { name: "Shadow MCP" })).toBeTruthy();
     expect(
       screen.getByText(
-        "Manage the Shadow MCP server inventory, access rules, and requests.",
+        "Manage the Shadow MCP server inventory, allow decisions, and requests.",
       ),
     ).toBeTruthy();
     expect(screen.getByText("No Policy")).toBeTruthy();
