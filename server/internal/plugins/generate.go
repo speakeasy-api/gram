@@ -1265,6 +1265,15 @@ gram_enrich_identity_payload() {
       return
     fi
   fi
+  # The top-level extractor lives in hook.sh's normalization helpers; when
+  # this file is sourced standalone without them (and without jq), presence
+  # cannot be checked, so the payload is passed through untouched rather
+  # than risk appending a duplicate key.
+  if ! type gram_hooks_json_top_level_value >/dev/null 2>&1; then
+    gram_hooks_identity_debug "no jq and no JSON helpers in scope; cannot stamp user_email safely, sending unchanged"
+    printf '%s' "$trimmed"
+    return
+  fi
   if [ -n "$(gram_hooks_json_top_level_value "$trimmed" "user_email")" ]; then
     gram_hooks_identity_debug "payload already carries a top-level user_email; keeping it (no jq to rewrite safely)"
     printf '%s' "$trimmed"
