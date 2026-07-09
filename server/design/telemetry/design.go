@@ -332,6 +332,56 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQuery", "type": "query"}`)
 	})
 
+	Method("queryRiskTokens", func() {
+		Description("Org-scoped daily token usage split by risk involvement: tokens from sessions with at least one active risk finding in the window versus all session tokens. Powers the token-usage panel's risk breakdown on the costs page.")
+
+		// Org-scoped like telemetry.query; project_id optionally narrows the
+		// slice to one of the caller's projects.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(TelemetryWindowPayload)
+			security.SessionPayload()
+		})
+
+		Result(QueryRiskTokensResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.queryRiskTokens")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "queryRiskTokens")
+		Meta("openapi:extension:x-speakeasy-name-override", "queryRiskTokens")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQueryRiskTokens", "type": "query"}`)
+	})
+
+	Method("queryTumDetails", func() {
+		Description("Org-scoped daily usage details for the billing page's metrics table, computed in one pass: token type sums, session/tool-call/active-user counts, attribution slices (MCP tools, skills, unattributed users), and message-level stats (tokens in messages with active risk findings, tokens in tool-call messages).")
+
+		// Org-scoped like queryRiskTokens; project_id optionally narrows the
+		// slice to one of the caller's projects.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(TelemetryWindowPayload)
+			security.SessionPayload()
+		})
+
+		Result(TumDetailsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.queryTumDetails")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "queryTumDetails")
+		Meta("openapi:extension:x-speakeasy-name-override", "queryTumDetails")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQueryTumDetails", "type": "query"}`)
+	})
+
 	Method("listSessions", func() {
 		Description("Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.")
 
@@ -1400,6 +1450,114 @@ var QueryFilter = Type("QueryFilter", func() {
 	Required("dimension", "values")
 })
 
+// TelemetryWindowPayload is deliberately shared by queryRiskTokens and
+// queryTumDetails: both take exactly an org-scoped time window with an
+// optional project filter, and a single neutrally-named type keeps the
+// generated SDK from surfacing one endpoint's payload under the other's name.
+var TelemetryWindowPayload = Type("TelemetryWindowPayload", func() {
+	Description("An org-scoped time window, optionally narrowed to one project")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-26T10:00:00Z")
+	})
+	Attribute("project_id", String, "Optional project to scope to; defaults to every project in the organization.", func() {
+		Format(FormatUUID)
+	})
+
+	Required("from", "to")
+})
+
+var RiskTokensPoint = Type("RiskTokensPoint", func() {
+	Description("One UTC day of token usage split by risk involvement")
+
+	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
+	Attribute("risky_tokens", Int64, "Tokens from sessions with at least one active risk finding created in the query window")
+	Attribute("total_tokens", Int64, "All session tokens in the bucket")
+
+	Required("bucket_time_unix_nano", "risky_tokens", "total_tokens")
+})
+
+var QueryRiskTokensResult = Type("QueryRiskTokensResult", func() {
+	Description("Result of the token-by-risk breakdown query")
+
+	Attribute("interval_seconds", Int64, "Timeseries bucket width in seconds. Always 86400 — the source aggregate is bucketed daily.")
+	Attribute("points", ArrayOf(RiskTokensPoint), "Gap-filled daily buckets in ascending time order")
+
+	Required("interval_seconds", "points")
+})
+
+// The per-metric fields shared by the daily points and the range totals.
+func tumDetailsMeasures() {
+	Attribute("input_tokens", Int64, "Input tokens")
+	Attribute("output_tokens", Int64, "Output tokens")
+	Attribute("cache_read_tokens", Int64, "Cache read input tokens")
+	Attribute("cache_write_tokens", Int64, "Cache creation input tokens")
+	Attribute("total_tokens", Int64, "All tokens")
+	Attribute("agent_sessions", Int64, "Distinct chat sessions")
+	Attribute("tool_calls", Int64, "Completed tool calls")
+	Attribute("active_users", Int64, "Distinct attributed users with usage")
+	Attribute("mcp_tool_tokens", Int64, "Tokens attributed to MCP tool usage")
+	Attribute("skill_tokens", Int64, "Tokens attributed to skill usage")
+	Attribute("unattributed_tokens", Int64, "Tokens without user attribution")
+	Attribute("risky_message_tokens", Int64, "Tokens in messages carrying at least one active risk finding")
+	Attribute("tool_message_tokens", Int64, "Tokens in tool-call messages")
+	Required(
+		"input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens",
+		"total_tokens", "agent_sessions", "tool_calls", "active_users",
+		"mcp_tool_tokens", "skill_tokens", "unattributed_tokens",
+		"risky_message_tokens", "tool_message_tokens",
+	)
+}
+
+var TumDetailsPoint = Type("TumDetailsPoint", func() {
+	Description("One UTC day of billing usage details")
+
+	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
+	tumDetailsMeasures()
+	Required("bucket_time_unix_nano")
+})
+
+var TumDetailsTotals = Type("TumDetailsTotals", func() {
+	Description("Whole-range totals for the billing usage details. Distinct counts (sessions, active users) are computed over the full range and cannot be derived by summing the daily points.")
+
+	tumDetailsMeasures()
+})
+
+var TumDetailsBreakdownRow = Type("TumDetailsBreakdownRow", func() {
+	Description("One value of a breakdown dimension with its token usage over the range")
+
+	Attribute("value", String, "The dimension value; empty for rows without the attribute, 'Other' for the top-N remainder rollup")
+	Attribute("total_tokens", Int64, "Tokens for this value over the range")
+	Attribute("series", ArrayOf(Int64), "Daily tokens aligned to the result's points buckets")
+
+	Required("value", "total_tokens", "series")
+})
+
+var TumDetailsBreakdown = Type("TumDetailsBreakdown", func() {
+	Description("Per-dimension token breakdown for the usage details table")
+
+	Attribute("key", String, "The breakdown dimension key (matches telemetry.query group_by)")
+	Attribute("rows", ArrayOf(TumDetailsBreakdownRow), "Top values by tokens in descending order, with the remainder rolled into 'Other'")
+
+	Required("key", "rows")
+})
+
+var TumDetailsResult = Type("TumDetailsResult", func() {
+	Description("Result of the billing usage details query")
+
+	Attribute("interval_seconds", Int64, "Timeseries bucket width in seconds. Always 86400 — the details are bucketed daily.")
+	Attribute("points", ArrayOf(TumDetailsPoint), "Gap-filled daily buckets in ascending time order")
+	Attribute("totals", TumDetailsTotals, "Whole-range totals")
+	Attribute("breakdowns", ArrayOf(TumDetailsBreakdown), "Token usage per breakdown dimension, one entry per supported dimension")
+
+	Required("interval_seconds", "points", "totals", "breakdowns")
+})
+
 var QueryMeasures = Type("QueryMeasures", func() {
 	Description("Aggregated measure values for a group or time bucket")
 
@@ -1815,6 +1973,11 @@ var ToolUsageTargetKind = Type("ToolUsageTargetKind", String, func() {
 	Enum("server", "local_tools", "skill")
 })
 
+var ToolUsageStatus = Type("ToolUsageStatus", String, func() {
+	Description("Tool usage trace outcome")
+	Enum("error", "success", "blocked", "pending")
+})
+
 var ToolUsageUserKind = Type("ToolUsageUserKind", String, func() {
 	Description("Tool usage user identity kind")
 	Enum("email", "external_user_id", "user_id", "unknown")
@@ -1884,6 +2047,7 @@ var ListToolUsageTracesPayload = Type("ListToolUsageTracesPayload", func() {
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
 	Attribute("account_type", String, "Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.")
+	Attribute("statuses", ArrayOf(ToolUsageStatus), "Trace outcomes to include (error, success, blocked, pending). Empty means all.")
 	Attribute("query", String, "Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.")
 	Attribute("filters", ArrayOf(LogFilter), "Arbitrary attribute filter conditions from the af URL param")
 	Attribute("cursor", String, "Cursor for pagination")

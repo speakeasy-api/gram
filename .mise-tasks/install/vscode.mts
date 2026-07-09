@@ -55,7 +55,8 @@ function amendSettings(settingsJSON: string): string {
   edited["python.defaultInterpreterPath"] ??=
     "${workspaceFolder}/.venv/bin/python3";
 
-  edited["js/ts.tsdk.path"] = "node_modules/typescript/lib";
+  // Not needed with TypeScript 7+
+  delete edited["js/ts.tsdk.path"];
   edited["go.lintTool"] = "golangci-lint-v2";
   edited["go.lintFlags"] = [
     "run",

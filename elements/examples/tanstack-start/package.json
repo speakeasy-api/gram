@@ -29,7 +29,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "catalog:",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vite": "catalog:"
   }
 }

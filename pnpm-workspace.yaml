@@ -25,12 +25,14 @@ catalog:
   "@vitejs/plugin-react": ^6.0.3
   ai: ^6.0.209
   "lucide-react": ^1.21.0
-  typescript: 5.9.3
+  typescript: 7.0.2
   vite: ^8.1.2
 
 minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:
+  - "typescript"
+  - "@typescript/*"
   - "@oxfmt/*"
   - "oxfmt"
   - "react-router"

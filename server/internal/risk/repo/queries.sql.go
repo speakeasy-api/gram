@@ -2580,7 +2580,8 @@ FROM (
   FROM risk_results rr
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
+    AND (rp.enabled IS TRUE OR rr.risk_policy_id = $2::uuid)
   LEFT JOIN LATERAL (
     SELECT tcb.id AS block_id FROM tool_call_blocks tcb
     WHERE tcb.project_id = rr.project_id
@@ -2588,13 +2589,14 @@ FROM (
       AND tcb.deleted IS FALSE
     ORDER BY tcb.created_at DESC LIMIT 1
   ) blk ON TRUE
-  WHERE rr.project_id = $2
+  WHERE rr.project_id = $3
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    AND ($3::timestamptz IS NULL OR cm.created_at >= $3::timestamptz)
-    AND ($4::timestamptz IS NULL OR cm.created_at < $4::timestamptz)
-    AND ($5::text = '' OR rr.rule_id ILIKE '%' || $5::text || '%')
-    AND ($6::text = '' OR c.external_user_id ILIKE '%' || $6::text || '%')
-    AND ($7::text = '' OR (
+    AND ($2::uuid IS NULL OR rr.risk_policy_id = $2::uuid)
+    AND ($4::timestamptz IS NULL OR cm.created_at >= $4::timestamptz)
+    AND ($5::timestamptz IS NULL OR cm.created_at < $5::timestamptz)
+    AND ($6::text = '' OR rr.rule_id ILIKE '%' || $6::text || '%')
+    AND ($7::text = '' OR c.external_user_id ILIKE '%' || $7::text || '%')
+    AND ($8::text = '' OR (
     CASE
       WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
@@ -2640,19 +2642,20 @@ FROM (
       WHEN rr.source = 'presidio' THEN 'pii'
       ELSE 'custom'
     END
-  ) = $7::text)
+  ) = $8::text)
 ) sub
 WHERE sub.dedup_rank = 1
   AND (
-    $8::timestamptz IS NULL
-    OR (sub.message_created_at, sub.id) < ($8::timestamptz, $9::uuid)
+    $9::timestamptz IS NULL
+    OR (sub.message_created_at, sub.id) < ($9::timestamptz, $10::uuid)
   )
 ORDER BY sub.message_created_at DESC, sub.id DESC
-LIMIT $10
+LIMIT $11
 `
 
 type ListRiskResultsByProjectFoundParams struct {
 	UniqueMatch            bool
+	PolicyID               uuid.NullUUID
 	ProjectID              uuid.UUID
 	FromTime               pgtype.Timestamptz
 	ToTime                 pgtype.Timestamptz
@@ -2704,9 +2707,15 @@ type ListRiskResultsByProjectFoundRow struct {
 // (risk_policy_id, rule_id, match), choosing the most recent occurrence. Done
 // inside a subquery so pagination over the deduped stream stays correct
 // (client-side dedup over paged data broke "Load more").
+//
+// @policy_id is optional. When NULL only enabled policies are considered (the
+// default project-wide view). When set the results are scoped to that policy
+// AND disabled-but-not-deleted policies are included, so explicitly filtering
+// to a policy still surfaces its historical findings after it was turned off.
 func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRiskResultsByProjectFoundParams) ([]ListRiskResultsByProjectFoundRow, error) {
 	rows, err := q.db.Query(ctx, listRiskResultsByProjectFound,
 		arg.UniqueMatch,
+		arg.PolicyID,
 		arg.ProjectID,
 		arg.FromTime,
 		arg.ToTime,

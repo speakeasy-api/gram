@@ -331,7 +331,7 @@ type temporalClientOptions struct {
 	taskQueue    string
 }
 
-func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (*temporal.Environment, func(context.Context) error, error) {
+func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, opts temporalClientOptions) (*temporal.Environment, func(context.Context) error, error) {
 	var nilShutdownFunc = noopShutdown
 	if opts.address == "" || opts.namespace == "" {
 		return nil, nilShutdownFunc, nil
@@ -364,7 +364,11 @@ func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (*tempor
 	}
 
 	interceptors = append(interceptors, tracingInterceptor)
-	clientOptions.MetricsHandler = opentelemetry.NewMetricsHandler(opentelemetry.MetricsHandlerOptions{})
+	clientOptions.MetricsHandler = opentelemetry.NewMetricsHandler(opentelemetry.MetricsHandlerOptions{
+		// Bind Temporal to the post-SetupOTelSDK meter so counters export as delta counts.
+		// Otherwise Datadog .as_rate() monitors can stick until the worker restarts.
+		Meter: meterProvider.Meter("temporal-sdk-go"),
+	})
 
 	clientOptions.Interceptors = interceptors
 

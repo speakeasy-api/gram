@@ -73,6 +73,21 @@ func TestCreateRemoteSessionIssuer(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
+// TestCreateRemoteSessionIssuer_DuplicateSlug maps a duplicate-slug insert to a
+// 409 conflict rather than an opaque unexpected fault.
+func TestCreateRemoteSessionIssuer_DuplicateSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	_, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-dup-slug"))
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-dup-slug"))
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
 func TestCreateRemoteSessionIssuer_RBACForbidden(t *testing.T) {
 	t.Parallel()
 
