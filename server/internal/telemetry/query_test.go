@@ -777,7 +777,34 @@ func TestQuery_TopNRollupIntoOther(t *testing.T) {
 	require.True(t, hasOther)
 }
 
-func TestQueryTumDetails_CountsOnlyGramManagedCompletions(t *testing.T) {
+// insertChatEvidenceRow inserts a chat event row without token attributes —
+// the stored-session evidence the billed queries qualify chats on.
+func insertChatEvidenceRow(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{"gen_ai.conversation.id": chatID}
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat message",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, "chat:message", "gram-server")
+	require.NoError(t, err)
+}
+
+func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
@@ -794,42 +821,57 @@ func TestQueryTumDetails_CountsOnlyGramManagedCompletions(t *testing.T) {
 	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
-	// A billed completion (playground, a registered usage source) next to two
-	// populations that must not appear anywhere in the billing details — not
-	// in totals, points, or any breakdown: a Claude Code fleet api_request
-	// observed via OTEL, and an assistants completion (Speakeasy covers
-	// assistants inference until BYOK, so it is deliberately unregistered).
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, uuid.NewString(), 0.42, 1000, "anthropic/claude-4.6", "playground", "user@example.com", "Engineering", nil)
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, uuid.NewString(), 0.13, 555, "openai/gpt-5.4", "assistants", "assistant@example.com", "Engineering", nil)
-	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 1.5, 999999, "claude-4.6", "claude-code", "fleet@example.com", "Engineering", nil)
+	// A billed completion (playground, a registered usage source) with stored
+	// evidence, next to two populations that must not appear anywhere in the
+	// billing details: an assistants completion (Speakeasy covers assistants
+	// inference until BYOK, so the surface is deliberately unregistered) and
+	// a Claude Code fleet api_request observed via OTEL (agent-native token
+	// attributes, never part of the billed population).
+	playgroundChat := uuid.NewString()
+	assistantsChat := uuid.NewString()
+	insertAttributeGramCompletionLog(t, ctx, projectID, ts, playgroundChat, 0.42, 1000, "anthropic/claude-4.6", "playground", "user@example.com", "Engineering", []string{"dev"})
+	insertChatEvidenceRow(t, ctx, projectID, ts, playgroundChat)
+	insertAttributeGramCompletionLog(t, ctx, projectID, ts, assistantsChat, 0.13, 555, "openai/gpt-5.4", "assistants", "assistant@example.com", "Engineering", nil)
+	insertChatEvidenceRow(t, ctx, projectID, ts, assistantsChat)
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1.5, 999999, 0, 0, 0, "claude-4.6", "fleet@example.com", "Engineering", nil, "main", "", "", "", "")
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	// Wait until ALL rows have materialized in the analytics aggregate (the
-	// unfiltered query sees every hook source) so the exclusion assertions
-	// below cannot pass vacuously against a half-ingested view.
+	// Wait until BOTH gram completions materialized in the billing aggregate
+	// (the assistants chat included) so the exclusion assertions below cannot
+	// pass vacuously against a half-ingested view.
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:    from,
-			To:      to,
-			GroupBy: conv.PtrEmpty("hook_source"),
-			TopN:    10,
-			SortBy:  "total_tokens",
-		})
-		return err == nil && res != nil && len(res.Table) == 3
+		row := chConn.QueryRow(ctx,
+			"SELECT count(DISTINCT chat_id) FROM tum_breakdown_summaries WHERE gram_project_id = ? AND chat_id IN (?, ?)",
+			projectID, playgroundChat, assistantsChat)
+		var chats uint64
+		if err := row.Scan(&chats); err != nil {
+			return false
+		}
+		return chats == 2
 	}, 10*time.Second, 200*time.Millisecond)
 
-	result, err := ti.service.QueryTumDetails(ctx, &gen.QueryTumDetailsPayload{
-		SessionToken: nil,
-		From:         from,
-		To:           to,
-		ProjectID:    nil,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result.Totals)
+	var result *gen.TumDetailsResult
+	require.Eventually(t, func() bool {
+		res, resErr := ti.service.QueryTumDetails(ctx, &gen.QueryTumDetailsPayload{
+			SessionToken: nil,
+			From:         from,
+			To:           to,
+			ProjectID:    nil,
+		})
+		if resErr != nil || res.Totals == nil {
+			return false
+		}
+		result = res
+		// The stored-evidence rows qualify the chats asynchronously too.
+		return res.Totals.TotalTokens == 1000
+	}, 10*time.Second, 200*time.Millisecond)
 
-	require.Equal(t, int64(1000), result.Totals.TotalTokens, "totals must only count the billed completion")
+	require.Equal(t, int64(1000), result.Totals.InputTokens, "the fixture reports all tokens as input")
+	require.Equal(t, int64(0), result.Totals.OutputTokens)
 
 	var pointSum int64
 	for _, p := range result.Points {
@@ -837,26 +879,19 @@ func TestQueryTumDetails_CountsOnlyGramManagedCompletions(t *testing.T) {
 	}
 	require.Equal(t, int64(1000), pointSum, "daily points must only count the billed completion")
 
+	rowsByKey := map[string]map[string]int64{}
 	for _, b := range result.Breakdowns {
+		rowsByKey[b.Key] = map[string]int64{}
 		for _, row := range b.Rows {
-			require.LessOrEqual(t, row.TotalTokens, int64(1000),
-				"breakdown %s row %q leaked unbilled tokens", b.Key, row.Value)
-			require.NotEqual(t, "fleet@example.com", row.Value,
-				"fleet row leaked into breakdown %s", b.Key)
-			require.NotEqual(t, "assistant@example.com", row.Value,
-				"assistants row leaked into breakdown %s", b.Key)
+			rowsByKey[b.Key][row.Value] = row.TotalTokens
 		}
 	}
-
-	sourceRows := map[string]int64{}
-	for _, b := range result.Breakdowns {
-		if b.Key != "hook_source" {
-			continue
-		}
-		for _, row := range b.Rows {
-			sourceRows[row.Value] = row.TotalTokens
-		}
-	}
-	require.Equal(t, map[string]int64{"playground": 1000}, sourceRows,
+	require.Equal(t, map[string]int64{"playground": 1000}, rowsByKey["hook_source"],
 		"the source breakdown holds exactly the billed surface")
+	require.Equal(t, map[string]int64{"anthropic/claude-4.6": 1000}, rowsByKey["model"])
+	require.Equal(t, map[string]int64{"user@example.com": 1000}, rowsByKey["email"])
+	require.Equal(t, map[string]int64{"dev": 1000}, rowsByKey["role"])
+	// The fixture carries no division attribute; the tokens land on the ''
+	// row (labeled by the frontend).
+	require.Equal(t, map[string]int64{"": 1000}, rowsByKey["division_name"])
 }

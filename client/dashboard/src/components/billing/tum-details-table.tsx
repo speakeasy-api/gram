@@ -44,29 +44,21 @@ type DetailGroup = {
   rows: DetailRow[];
 };
 
-// The dimension sections, split so the headline cuts (model, provider, MCP
-// server) sit directly under Total and the rest follow the token/risk groups.
-const LEAD_DIMENSION_SECTIONS: string[] = [
-  Dimension.Model,
-  Dimension.Provider,
-  Dimension.McpServerName,
-];
+// The dimension sections, split so the headline model cut sits directly
+// under Total and the rest follow the token/risk groups. Only dimensions
+// billed completion rows genuinely carry: the model, the user identity
+// snapshot hydrated at emit time (user, division, roles), and the consuming
+// surface.
+const LEAD_DIMENSION_SECTIONS: string[] = [Dimension.Model];
 const TAIL_DIMENSION_SECTIONS: string[] = [
   Dimension.DivisionName,
   Dimension.Email,
   Dimension.Role,
   Dimension.HookSource,
-  Dimension.SkillName,
-  Dimension.McpToolName,
 ];
 
 // A measure carried by both the daily points and the whole-range totals.
-type MeasureField =
-  | "inputTokens"
-  | "outputTokens"
-  | "cacheReadTokens"
-  | "cacheWriteTokens"
-  | "toolMessageTokens";
+type MeasureField = "inputTokens" | "outputTokens" | "toolMessageTokens";
 
 type MeasureRowSpec = {
   label: string;
@@ -74,11 +66,10 @@ type MeasureRowSpec = {
   field: MeasureField;
 };
 
+// Billed completions carry no cache attributes (input + output = total).
 const TOKEN_TYPE_ROWS: MeasureRowSpec[] = [
   { label: "Input", color: CHART_COLORS[0]!, field: "inputTokens" },
   { label: "Output", color: CHART_COLORS[1]!, field: "outputTokens" },
-  { label: "Cache read", color: CHART_COLORS[2]!, field: "cacheReadTokens" },
-  { label: "Cache write", color: CHART_COLORS[3]!, field: "cacheWriteTokens" },
 ];
 
 const TOOL_MESSAGE_ROW: MeasureRowSpec = {

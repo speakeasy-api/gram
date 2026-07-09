@@ -46,14 +46,14 @@ const GRANULARITIES: { value: Granularity; label: string }[] = [
   { value: "month", label: "Monthly" },
 ];
 
+// Billed completions carry no cache attributes (input + output = total), so
+// the token-type view has exactly these two series.
 const TOKEN_TYPES: {
   label: string;
   value: (p: TumDetailsPoint) => number;
 }[] = [
   { label: "Input", value: (p) => p.inputTokens },
   { label: "Output", value: (p) => p.outputTokens },
-  { label: "Cache read", value: (p) => p.cacheReadTokens },
-  { label: "Cache write", value: (p) => p.cacheWriteTokens },
 ];
 
 const compactTokens = new Intl.NumberFormat("en-US", {
