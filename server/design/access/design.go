@@ -439,7 +439,9 @@ var _ = Service("access", func() {
 			Attribute("project_id", String, func() {
 				Format(FormatUUID)
 			})
-			Attribute("server_url", String, "Shadow MCP server URL to expand.")
+			Attribute("server_url", String, "Shadow MCP server URL to expand.", func() {
+				Format(FormatURI)
+			})
 			Attribute("limit", Int, func() {
 				Default(50)
 				Minimum(1)
@@ -1049,6 +1051,8 @@ var ShadowMCPInventoryUserModel = Type("ShadowMCPInventoryUser", func() {
 	Required("user_key", "last_called", "observed_use_count")
 
 	Attribute("user_key", String)
+	Attribute("name", String)
+	Attribute("email", String)
 	Attribute("last_called", String, func() {
 		Format(FormatDateTime)
 	})

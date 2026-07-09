@@ -350,6 +350,7 @@ type ListShadowMCPInventoryUsersParams struct {
 
 type ShadowMCPInventoryUserRow struct {
 	UserKey    string
+	UserEmail  string
 	LastCalled time.Time
 	CallCount  uint64
 }
@@ -359,6 +360,7 @@ type shadowMCPInventoryTraceUsageRow struct {
 	ServerURL  string    `ch:"server_url"`
 	ServerName string    `ch:"server_name"`
 	UserKey    string    `ch:"user_key"`
+	UserEmail  string    `ch:"user_email"`
 	CalledAt   time.Time `ch:"called_at"`
 }
 
@@ -810,10 +812,14 @@ func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShado
 		if user == nil {
 			user = &ShadowMCPInventoryUserRow{
 				UserKey:    traceRow.UserKey,
+				UserEmail:  shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey),
 				LastCalled: traceRow.CalledAt,
 				CallCount:  0,
 			}
 			users[traceRow.UserKey] = user
+		}
+		if user.UserEmail == "" {
+			user.UserEmail = shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey)
 		}
 		user.CallCount++
 		if traceRow.CalledAt.After(user.LastCalled) {
@@ -864,10 +870,14 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 		if user == nil {
 			user = &ShadowMCPInventoryUserRow{
 				UserKey:    traceRow.UserKey,
+				UserEmail:  shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey),
 				LastCalled: traceRow.CalledAt,
 				CallCount:  0,
 			}
 			users[traceRow.UserKey] = user
+		}
+		if user.UserEmail == "" {
+			user.UserEmail = shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey)
 		}
 		user.CallCount++
 		if traceRow.CalledAt.After(user.LastCalled) {
@@ -891,7 +901,8 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectI
 		"trace_id",
 		"max(mcp_server_url) AS server_url",
 		"max(tool_source) AS server_name",
-		"if(max(user_email) != '', max(user_email), max(user_id)) AS user_key",
+		"if(max(trace_summaries.user_email) != '', max(trace_summaries.user_email), max(trace_summaries.user_id)) AS user_key",
+		"max(trace_summaries.user_email) AS user_email",
 		"fromUnixTimestamp64Nano(max(start_time_unix_nano)) AS called_at",
 	).
 		From("trace_summaries").
@@ -973,6 +984,16 @@ func sortedShadowMCPInventoryUsers(users map[string]*ShadowMCPInventoryUserRow) 
 		return userRows[i].UserKey < userRows[j].UserKey
 	})
 	return userRows
+}
+
+func shadowMCPInventoryEmailValue(userEmail, userKey string) string {
+	if userEmail != "" {
+		return userEmail
+	}
+	if strings.Contains(userKey, "@") {
+		return userKey
+	}
+	return ""
 }
 
 func shadowMCPInventoryUsersAfterCursor(userRows []ShadowMCPInventoryUserRow, cursor shadowMCPInventoryUserCursor) []ShadowMCPInventoryUserRow {

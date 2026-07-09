@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -369,6 +370,8 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 func buildShadowMCPInventoryUser(row telemetryrepo.ShadowMCPInventoryUserRow) *gen.ShadowMCPInventoryUser {
 	return &gen.ShadowMCPInventoryUser{
 		UserKey:          row.UserKey,
+		Name:             nil,
+		Email:            conv.PtrEmpty(row.UserEmail),
 		LastCalled:       formatTimeValue(row.LastCalled),
 		ObservedUseCount: shadowMCPInventoryCount(row.CallCount),
 	}

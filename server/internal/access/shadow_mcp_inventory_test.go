@@ -345,6 +345,9 @@ func TestService_ListShadowMCPInventoryUsers_ReturnsPaginatedUsersForCanonicalUR
 
 	require.NotNil(t, firstPage.NextCursor)
 	require.Equal(t, "ada@example.com", firstPage.Users[0].UserKey)
+	require.Nil(t, firstPage.Users[0].Name)
+	require.NotNil(t, firstPage.Users[0].Email)
+	require.Equal(t, "ada@example.com", *firstPage.Users[0].Email)
 	require.NotEmpty(t, firstPage.Users[0].LastCalled)
 
 	secondPage, err := ti.service.ListShadowMCPInventoryUsers(ctx, &gen.ListShadowMCPInventoryUsersPayload{
@@ -357,6 +360,8 @@ func TestService_ListShadowMCPInventoryUsers_ReturnsPaginatedUsersForCanonicalUR
 	require.Len(t, secondPage.Users, 1)
 	require.Nil(t, secondPage.NextCursor)
 	require.Equal(t, "grace@example.com", secondPage.Users[0].UserKey)
+	require.NotNil(t, secondPage.Users[0].Email)
+	require.Equal(t, "grace@example.com", *secondPage.Users[0].Email)
 	require.Equal(t, 1, secondPage.Users[0].ObservedUseCount)
 }
 

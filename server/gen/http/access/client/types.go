@@ -5224,6 +5224,8 @@ type ShadowMCPInventoryRequestSummaryResponseBody struct {
 // types.
 type ShadowMCPInventoryUserResponseBody struct {
 	UserKey          *string `form:"user_key,omitempty" json:"user_key,omitempty" xml:"user_key,omitempty"`
+	Name             *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Email            *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 	LastCalled       *string `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
 	ObservedUseCount *int    `form:"observed_use_count,omitempty" json:"observed_use_count,omitempty" xml:"observed_use_count,omitempty"`
 }

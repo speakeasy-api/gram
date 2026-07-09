@@ -3332,6 +3332,7 @@ func DecodeListShadowMCPInventoryUsersRequest(mux goahttp.Muxer, decoder func(*h
 		if serverURL == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("server_url", "query string"))
 		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
 		{
 			limitRaw := qp.Get("limit")
 			if limitRaw == "" {
@@ -5814,6 +5815,8 @@ func marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSum
 func marshalAccessShadowMCPInventoryUserToShadowMCPInventoryUserResponseBody(v *access.ShadowMCPInventoryUser) *ShadowMCPInventoryUserResponseBody {
 	res := &ShadowMCPInventoryUserResponseBody{
 		UserKey:          v.UserKey,
+		Name:             v.Name,
+		Email:            v.Email,
 		LastCalled:       v.LastCalled,
 		ObservedUseCount: v.ObservedUseCount,
 	}

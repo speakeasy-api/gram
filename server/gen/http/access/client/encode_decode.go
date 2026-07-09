@@ -6228,6 +6228,8 @@ func unmarshalShadowMCPInventoryRequestSummaryResponseBodyToAccessShadowMCPInven
 func unmarshalShadowMCPInventoryUserResponseBodyToAccessShadowMCPInventoryUser(v *ShadowMCPInventoryUserResponseBody) *access.ShadowMCPInventoryUser {
 	res := &access.ShadowMCPInventoryUser{
 		UserKey:          *v.UserKey,
+		Name:             v.Name,
+		Email:            v.Email,
 		LastCalled:       *v.LastCalled,
 		ObservedUseCount: *v.ObservedUseCount,
 	}

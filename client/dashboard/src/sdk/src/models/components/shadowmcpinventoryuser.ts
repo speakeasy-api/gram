@@ -9,7 +9,9 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ShadowMCPInventoryUser = {
+  email?: string | undefined;
   lastCalled: Date;
+  name?: string | undefined;
   observedUseCount: number;
   userKey: string;
 };
@@ -20,10 +22,12 @@ export const ShadowMCPInventoryUser$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    email: z.optional(z.string()),
     last_called: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    name: z.optional(z.string()),
     observed_use_count: z.int(),
     user_key: z.string(),
   }),

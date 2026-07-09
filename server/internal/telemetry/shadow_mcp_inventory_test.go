@@ -350,9 +350,11 @@ func TestListShadowMCPInventoryUsers_FromTelemetry(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, users, 2)
 	require.Equal(t, "ada@example.com", users[0].UserKey)
+	require.Equal(t, "ada@example.com", users[0].UserEmail)
 	require.EqualValues(t, 2, users[0].CallCount)
 	require.Equal(t, base.Add(time.Minute), users[0].LastCalled)
 	require.Equal(t, "grace@example.com", users[1].UserKey)
+	require.Equal(t, "grace@example.com", users[1].UserEmail)
 	require.EqualValues(t, 1, users[1].CallCount)
 	require.Equal(t, base.Add(2*time.Minute), users[1].LastCalled)
 }

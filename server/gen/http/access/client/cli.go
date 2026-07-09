@@ -684,6 +684,10 @@ func BuildListShadowMCPInventoryUsersPayload(accessListShadowMCPInventoryUsersPr
 	var serverURL string
 	{
 		serverURL = accessListShadowMCPInventoryUsersServerURL
+		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
+		if err != nil {
+			return nil, err
+		}
 	}
 	var limit int
 	{

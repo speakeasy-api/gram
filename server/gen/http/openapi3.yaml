@@ -2851,6 +2851,7 @@ paths:
                   required: true
                   schema:
                     description: Shadow MCP server URL to expand.
+                    format: uri
                     type: string
                 - allowEmptyValue: true
                   in: query
@@ -53293,9 +53294,13 @@ components:
         ShadowMCPInventoryUser:
             type: object
             properties:
+                email:
+                    type: string
                 last_called:
                     type: string
                     format: date-time
+                name:
+                    type: string
                 observed_use_count:
                     type: integer
                     format: int64

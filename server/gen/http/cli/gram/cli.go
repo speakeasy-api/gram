@@ -6443,7 +6443,7 @@ func accessListShadowMCPInventoryUsersUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-inventory-users --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-url \"abc123\" --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-inventory-users --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-url \"https://example.com/foo\" --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
 }
 
 func accessCreateShadowMCPAccessRuleUsage() {

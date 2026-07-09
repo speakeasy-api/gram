@@ -745,6 +745,8 @@ type ShadowMCPInventoryServer struct {
 
 type ShadowMCPInventoryUser struct {
 	UserKey          string
+	Name             *string
+	Email            *string
 	LastCalled       string
 	ObservedUseCount int
 }
