@@ -432,7 +432,17 @@ export function TumDetailsTable({
     // filtered series can't locate the org-wide crossing).
     let billed: number[];
     if (cycle.days.length > 0) {
-      const billedByDate = new Map(cycle.days.map((d) => [d.date, d.tokens]));
+      // The daily series is advisory: it recomputes live under the CURRENT
+      // billing scope, while a sealed cycle's total is the invoiced record
+      // and can describe a larger (or drifted) population. Walking the raw
+      // days against the allowance would then never reach the crossing the
+      // card reports — scale the series to the cycle's billed total first,
+      // the same normalization the chart's billed series applies.
+      const daysSum = cycle.days.reduce((sum, d) => sum + d.tokens, 0);
+      const daysScale = daysSum > 0 ? cycle.tokens / daysSum : 0;
+      const billedByDate = new Map(
+        cycle.days.map((d) => [d.date, d.tokens * daysScale]),
+      );
       billed = points.map(
         (p) => billedByDate.get(bucketDateKey(p.bucketTimeUnixNano)) ?? 0,
       );
