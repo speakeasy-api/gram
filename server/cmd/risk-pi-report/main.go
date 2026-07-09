@@ -411,6 +411,7 @@ func judgeOne(ctx context.Context, client openrouter.CompletionClient, model str
 		UsageSource:    billing.ModelUsageSourceGram,
 		UserID:         "",
 		ExternalUserID: "",
+		UserEmail:      "",
 		HTTPMetadata:   nil,
 		JSONSchema:     &schema,
 	})

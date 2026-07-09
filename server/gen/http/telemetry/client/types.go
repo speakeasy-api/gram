@@ -5109,10 +5109,6 @@ type TumDetailsPointResponseBody struct {
 	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
 	// Billed tokens under management
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens *int64 `form:"risky_message_tokens,omitempty" json:"risky_message_tokens,omitempty" xml:"risky_message_tokens,omitempty"`
-	// Tokens in tool-call messages
-	ToolMessageTokens *int64 `form:"tool_message_tokens,omitempty" json:"tool_message_tokens,omitempty" xml:"tool_message_tokens,omitempty"`
 }
 
 // TumDetailsTotalsResponseBody is used to define fields on response body types.
@@ -5123,16 +5119,15 @@ type TumDetailsTotalsResponseBody struct {
 	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
 	// Billed tokens under management
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens *int64 `form:"risky_message_tokens,omitempty" json:"risky_message_tokens,omitempty" xml:"risky_message_tokens,omitempty"`
-	// Tokens in tool-call messages
-	ToolMessageTokens *int64 `form:"tool_message_tokens,omitempty" json:"tool_message_tokens,omitempty" xml:"tool_message_tokens,omitempty"`
 }
 
 // TumDetailsBreakdownResponseBody is used to define fields on response body
 // types.
 type TumDetailsBreakdownResponseBody struct {
-	// The breakdown dimension key (hook_source, model, email, division_name, role)
+	// The breakdown dimension key (hook_source, risk_analysis_model,
+	// completion_model, email, division_name, role). The two model keys partition
+	// the billed population: risk_analysis_model covers the platform's risk-policy
+	// scanning inference, completion_model covers user-facing completion surfaces.
 	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// Top values by tokens in descending order, with the remainder rolled into
 	// 'Other'
@@ -16242,12 +16237,6 @@ func ValidateTumDetailsPointResponseBody(body *TumDetailsPointResponseBody) (err
 	if body.TotalTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
 	}
-	if body.RiskyMessageTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("risky_message_tokens", "body"))
-	}
-	if body.ToolMessageTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_message_tokens", "body"))
-	}
 	if body.BucketTimeUnixNano == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_time_unix_nano", "body"))
 	}
@@ -16265,12 +16254,6 @@ func ValidateTumDetailsTotalsResponseBody(body *TumDetailsTotalsResponseBody) (e
 	}
 	if body.TotalTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
-	}
-	if body.RiskyMessageTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("risky_message_tokens", "body"))
-	}
-	if body.ToolMessageTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_message_tokens", "body"))
 	}
 	return
 }

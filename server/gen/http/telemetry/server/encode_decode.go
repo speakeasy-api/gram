@@ -5604,8 +5604,6 @@ func marshalTelemetryTumDetailsPointToTumDetailsPointResponseBody(v *telemetry.T
 		InputTokens:        v.InputTokens,
 		OutputTokens:       v.OutputTokens,
 		TotalTokens:        v.TotalTokens,
-		RiskyMessageTokens: v.RiskyMessageTokens,
-		ToolMessageTokens:  v.ToolMessageTokens,
 	}
 
 	return res
@@ -5616,11 +5614,9 @@ func marshalTelemetryTumDetailsPointToTumDetailsPointResponseBody(v *telemetry.T
 // *telemetry.TumDetailsTotals.
 func marshalTelemetryTumDetailsTotalsToTumDetailsTotalsResponseBody(v *telemetry.TumDetailsTotals) *TumDetailsTotalsResponseBody {
 	res := &TumDetailsTotalsResponseBody{
-		InputTokens:        v.InputTokens,
-		OutputTokens:       v.OutputTokens,
-		TotalTokens:        v.TotalTokens,
-		RiskyMessageTokens: v.RiskyMessageTokens,
-		ToolMessageTokens:  v.ToolMessageTokens,
+		InputTokens:  v.InputTokens,
+		OutputTokens: v.OutputTokens,
+		TotalTokens:  v.TotalTokens,
 	}
 
 	return res

@@ -517,7 +517,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		UsageSource:               req.UsageSource,
 		UserID:                    req.UserID,
 		ExternalUserID:            req.ExternalUserID,
-		UserEmail:                 "",
+		UserEmail:                 req.UserEmail,
 		HTTPMetadata:              req.HTTPMetadata,
 		JSONSchema:                req.JSONSchema,
 		CacheControl:              nil,
@@ -776,7 +776,7 @@ func (c *ChatClient) emitGenAITelemetry(
 	c.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  time.Now(),
 		ToolInfo:   toolInfo,
-		UserInfo:   telemetry.UserInfoByID(userID),
+		UserInfo:   telemetry.UserInfoByIDAndEmail(userID, userEmail),
 		Attributes: attrs,
 	})
 }

@@ -41,7 +41,7 @@ import { BREAKDOWN_TOTAL, stackModeFor } from "./breakdown-options";
 import { BreakdownPicker } from "./breakdown-picker";
 import { type GroupSeries, TokenUsagePanel } from "./token-usage-panel";
 import { TumDetailsTable } from "./tum-details-table";
-import { riskPointsQuery, tumDetailsQuery } from "./tum-queries";
+import { tumDetailsQuery } from "./tum-queries";
 import { TumUsageCard } from "./tum-usage-card";
 
 // Org-wide token breakdown for one billing cycle: stacked daily tokens by a
@@ -69,16 +69,15 @@ function TumTokenBreakdown({
   const client = useGramContext();
   const organization = useOrganization();
   // The picker's selection, plus the last-picked dimension so switching to
-  // token type or risk and back doesn't lose the grouping. Opens on the
-  // total view — the billed series that matches the usage card exactly.
+  // token type and back doesn't lose the grouping. Opens on the total view —
+  // the billed series that matches the usage card exactly.
   const [breakdown, setBreakdown] = useState<string>(BREAKDOWN_TOTAL);
-  const [dimension, setDimension] = useState<Dimension>(Dimension.DivisionName);
+  const [dimension, setDimension] = useState<string>(Dimension.DivisionName);
   const stackBy = stackModeFor(breakdown);
 
   const scope = { client, orgId: organization.id, period, projectId };
-  // Shared with the details table (same keys — one request each).
+  // Shared with the details table (same key — one request).
   const { data, isFetching } = useQuery(tumDetailsQuery(scope));
-  const { data: riskData } = useQuery(riskPointsQuery(scope));
 
   const points = useMemo(() => data?.points ?? [], [data]);
 
@@ -86,7 +85,7 @@ function TumTokenBreakdown({
   // (not-applicable) row, same as the details table below.
   const groups = useMemo<GroupSeries[]>(() => {
     const rows = data?.breakdowns.find((b) => b.key === dimension)?.rows ?? [];
-    const visible = isAttributionDim(dimension)
+    const visible = isAttributionDim(dimension as Dimension)
       ? rows.filter((r) => r.value !== "")
       : rows;
     return visible.map((r) => ({
@@ -118,18 +117,15 @@ function TumTokenBreakdown({
     return series;
   }, [points, billedDays, projectId]);
 
-  const riskPoints = riskData?.points ?? null;
-
   const breakdownPicker = (
     <BreakdownPicker
       value={breakdown}
-      showRisk={riskPoints != null}
       onChange={(value) => {
         setBreakdown(value);
         // Only actual dimensions pick a breakdown; the special modes
-        // (total / token type / risk) keep the last-picked dimension.
+        // (total / token type) keep the last-picked dimension.
         if (stackModeFor(value) === "group") {
-          setDimension(value as Dimension);
+          setDimension(value);
         }
       }}
     />
@@ -142,7 +138,6 @@ function TumTokenBreakdown({
       billedSeries={billedSeries}
       stackBy={stackBy}
       breakdownPicker={breakdownPicker}
-      riskPoints={riskPoints}
       loading={isFetching && !data}
       onSelectRange={onSelectRange}
     />

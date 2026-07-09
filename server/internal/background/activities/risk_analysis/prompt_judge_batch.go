@@ -47,6 +47,7 @@ func judgeFanout(
 				verdict := judge.Evaluate(ctx, JudgeInput{
 					OrgID:     orgID,
 					ProjectID: projectID,
+					UserID:    msgs[idx].UserID,
 					Prompt:    prompt,
 					Message:   batchJudgeMessage(msgs[idx]),
 					Config:    cfg,

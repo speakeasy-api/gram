@@ -332,7 +332,7 @@ func (s *Scanner) ScanForEnforcement(
 		}
 
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, text, messageType, toolName, promptPoliciesOn, piEngineOn)
+			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn, piEngineOn)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -459,7 +459,7 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call — its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool, piEngineOn bool) (result *ScanResult, retErr error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool, piEngineOn bool) (result *ScanResult, retErr error) {
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -496,7 +496,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 	}
 
 	if policy.PolicyType == ra.PolicyTypePromptBased {
-		return s.scanPromptPolicy(ctx, policy, text, messageType, toolName, promptPoliciesOn), nil
+		return s.scanPromptPolicy(ctx, policy, userID, text, messageType, toolName, promptPoliciesOn), nil
 	}
 
 	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
@@ -586,7 +586,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				}
 			}
 		case ra.SourcePromptInjection:
-			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), judgemessage.New(messageType, toolName, text), piEngineOn)
+			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), userID, judgemessage.New(messageType, toolName, text), piEngineOn)
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)
 			}
@@ -631,7 +631,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 // filtered policies to those whose message_types apply to this message, so the
 // judge runs for whatever message types the policy declares. Returns nil when
 // the judge does not match (including fail-open on judge error).
-func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool) *ScanResult {
+func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool) *ScanResult {
 	cfg := ra.ParseJudgeConfig(policy.ModelConfig)
 	if !promptPoliciesOn {
 		return nil
@@ -643,6 +643,7 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 	verdict := s.judge.Evaluate(ctx, ra.JudgeInput{
 		OrgID:     policy.OrganizationID,
 		ProjectID: policy.ProjectID.String(),
+		UserID:    userID,
 		Prompt:    policy.Prompt.String,
 		// text is the type-appropriate body the hook layer already flattened:
 		// the prompt for user messages, tool-input JSON for tool_request,

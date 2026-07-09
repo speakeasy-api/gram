@@ -17,9 +17,9 @@ import {
 // satisfies the react-refresh "only export components" rule.
 
 // How the chart's bars stack: by the selected dimension's groups, by token
-// type, by risk involvement, or as a single un-broken-down total. Lives here
-// (not in the panel component) so this module stays import-cycle-free.
-export type StackMode = "group" | "tokenType" | "risk" | "total";
+// type, or as a single un-broken-down total. Lives here (not in the panel
+// component) so this module stays import-cycle-free.
+export type StackMode = "group" | "tokenType" | "total";
 
 // Sentinel values for the non-dimension modes. Dimension values are
 // snake_case attribute keys, so these can't collide.
@@ -27,7 +27,12 @@ export type StackMode = "group" | "tokenType" | "risk" | "total";
 // series, so the billing page opens on the number that matches the usage card.
 export const BREAKDOWN_TOTAL = "total";
 const BREAKDOWN_TOKEN_TYPE = "tokenType";
-export const BREAKDOWN_RISK = "risk";
+
+// The two halves of the billed population's model cut (see the server's
+// tumBreakdownDims): the platform's risk-policy scanning inference — the
+// metered unit of the TUM contracts — and user-facing completion surfaces.
+export const RISK_ANALYSIS_MODEL_DIM = "risk_analysis_model";
+export const COMPLETION_MODEL_DIM = "completion_model";
 
 // The chart series palette, shared with the usage details table so a metric's
 // dot color matches its chart legend color.
@@ -44,8 +49,6 @@ export const CHART_COLORS = [
   "#f472b6", // pink
 ];
 export const OTHER_COLOR = "#94a3b8"; // slate — the top-N remainder rollup
-export const RISKY_COLOR = "#fb7185"; // rose — tokens from sessions with risk findings
-export const CLEAN_COLOR = "#60a5fa"; // blue — everything else
 
 type BreakdownOption = {
   value: string;
@@ -71,13 +74,19 @@ export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
   },
   {
     heading: "Model",
-    options: [{ value: Dimension.Model, label: "Model", icon: Cpu }],
+    options: [
+      {
+        value: RISK_ANALYSIS_MODEL_DIM,
+        label: "Risk Policy Analysis Model",
+        icon: ShieldAlert,
+      },
+      { value: COMPLETION_MODEL_DIM, label: "Completion Model", icon: Cpu },
+    ],
   },
   {
     heading: "Usage",
     options: [
       { value: BREAKDOWN_TOKEN_TYPE, label: "Token type", icon: Layers },
-      { value: BREAKDOWN_RISK, label: "Risk findings", icon: ShieldAlert },
     ],
   },
   {
@@ -109,8 +118,6 @@ export function stackModeFor(breakdown: string): StackMode {
       return "total";
     case BREAKDOWN_TOKEN_TYPE:
       return "tokenType";
-    case BREAKDOWN_RISK:
-      return "risk";
     default:
       return "group";
   }

@@ -2280,6 +2280,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		UsageSource:    billing.ModelUsageSourceGram,
 		UserID:         "",
 		ExternalUserID: "",
+		UserEmail:      "",
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
 	})
@@ -2784,7 +2785,7 @@ func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID,
 	// A rule-test preview runs the deterministic, free L0 heuristics only; the
 	// billable LLM-judge L1 engine is not invoked on a test click (l1Enabled=false),
 	// so the structured message is unused here and carries just the sample text.
-	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, judgemessage.New(message.User, "", text), false)
+	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, "", judgemessage.New(message.User, "", text), false)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run prompt-injection scanner").LogError(ctx, s.logger)
 	}

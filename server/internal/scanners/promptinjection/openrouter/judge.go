@@ -167,18 +167,22 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 		}
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int, msg judgemessage.Message) {
+		userID := ""
+		if i < len(req.UserIDs) {
+			userID = req.UserIDs[i]
+		}
+		go func(i int, msg judgemessage.Message, userID string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = c.classifyOne(ctx, req, msg)
-		}(i, msg)
+			results[i] = c.classifyOne(ctx, req, msg, userID)
+		}(i, msg, userID)
 	}
 	wg.Wait()
 	return results, nil
 }
 
 // classifyOne returns SAFE for every fail-open path.
-func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message) promptinjection.Result {
+func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, userID string) promptinjection.Result {
 	// Bail before spending a rate-limit token (or making the call) on a context
 	// that is already canceled — otherwise a cancellation burst can drain the
 	// org's budget and throttle real requests into fail-open SAFE. (cubic)
@@ -202,7 +206,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 	}
 
 	start := time.Now()
-	verdict, err := c.call(ctx, req, msg)
+	verdict, err := c.call(ctx, req, msg, userID)
 	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(verdict.IsAttack, err), o11y.OutcomeFromError(err), time.Since(start))
 	if err != nil {
 		c.logger.WarnContext(ctx, "pi judge call failed; failing open",
@@ -256,7 +260,7 @@ func cachedSystemMessage() or.ChatMessages {
 	})
 }
 
-func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judgemessage.Message) (judgeVerdict, error) {
+func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, userID string) (judgeVerdict, error) {
 	payload, err := json.Marshal(judgePayload{Message: riskjudge.RenderMessage(msg)})
 	if err != nil {
 		// Unreachable: the payload is strings, bools, and slices. Fall back to the
@@ -288,9 +292,9 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		Temperature:               &c.temperature,
 		Model:                     c.model,
 		Stream:                    false,
-		UsageSource:               billing.ModelUsageSourceGram,
+		UsageSource:               billing.ModelUsageSourceRiskAnalysis,
 		ChatID:                    uuid.Nil,
-		UserID:                    "",
+		UserID:                    userID,
 		ExternalUserID:            "",
 		UserEmail:                 "",
 		HTTPMetadata:              nil,

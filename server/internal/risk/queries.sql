@@ -824,10 +824,13 @@ WHERE id = ANY(@message_ids::uuid[])
   AND project_id = @project_id;
 
 -- name: GetMessageContentBatch :many
-SELECT id, role, content, tool_calls
-FROM chat_messages
-WHERE id = ANY(@ids::uuid[])
-  AND project_id = @project_id;
+-- The chat owner's user id rides along so the LLM judge's completion
+-- telemetry can attribute scanning volume to whose traffic was analyzed.
+SELECT cm.id, cm.role, cm.content, cm.tool_calls, c.user_id AS chat_user_id
+FROM chat_messages cm
+JOIN chats c ON c.id = cm.chat_id
+WHERE cm.id = ANY(@ids::uuid[])
+  AND cm.project_id = @project_id;
 
 -- name: GetBatchChatIdentities :many
 -- One row per chat represented in a batch of messages, for the session-scoped

@@ -5296,15 +5296,40 @@ func (q *Queries) GetTumBreakdownTotalsByDay(ctx context.Context, arg GetTokensU
 	return buckets, nil
 }
 
+// riskAnalysisRowPredicate classifies a billed row as the platform's own
+// risk-policy analysis inference — the metered unit of the enterprise TUM
+// contracts. Declared rows carry the dedicated source
+// (billing.ModelUsageSourceRiskAnalysis); the second clause grandfathers
+// rows emitted before that source existed, fingerprinted as internal
+// inference: gram/” source with the nil chat id (background workers run
+// completions outside any stored chat). Other internal nil-chat inference
+// (title generation, chat resolutions, memory) rides along under the same
+// clause — a deliberate simplification, it is a rounding error next to the
+// judges and is platform-side analysis either way.
+const riskAnalysisRowPredicate = "(hook_source = 'risk-analysis' OR (hook_source IN ('gram', '') AND chat_id = '00000000-0000-0000-0000-000000000000'))"
+
+// tumBreakdownDim describes one billing-page breakdown dimension: the
+// grouping expression over tum_breakdown_summaries, plus an optional row
+// filter for dimensions that slice the billed population (the two model
+// sections) rather than partition it by a column.
+type tumBreakdownDim struct {
+	expr   string
+	filter string
+}
+
 // tumBreakdownDimExprs maps the billing page's breakdown dimensions to
 // their tum_breakdown_summaries expressions. Roles are multi-valued: a
 // session's tokens count once under each held role, so role rows overlap.
-var tumBreakdownDimExprs = map[string]string{
-	"hook_source":   "hook_source",
-	"model":         "model",
-	"email":         "user_email",
-	"division_name": "division_name",
-	"role":          "arrayJoin(roles)",
+// The model dimension is split in two: risk_analysis_model covers the
+// platform's scanning inference and completion_model covers user-facing
+// completion surfaces — together they partition the billed population.
+var tumBreakdownDimExprs = map[string]tumBreakdownDim{
+	"hook_source":         {expr: "hook_source", filter: ""},
+	"risk_analysis_model": {expr: "model", filter: riskAnalysisRowPredicate},
+	"completion_model":    {expr: "model", filter: "NOT " + riskAnalysisRowPredicate},
+	"email":               {expr: "user_email", filter: ""},
+	"division_name":       {expr: "division_name", filter: ""},
+	"role":                {expr: "arrayJoin(roles)", filter: ""},
 }
 
 // TumBreakdownDimDayBucket is one (UTC day, dimension value) slice of
@@ -5325,18 +5350,21 @@ func (q *Queries) GetTumBreakdownDimByDay(ctx context.Context, arg GetTokensUnde
 	if len(arg.ProjectIDs) == 0 {
 		return nil, nil
 	}
-	expr, ok := tumBreakdownDimExprs[dimension]
+	dim, ok := tumBreakdownDimExprs[dimension]
 	if !ok {
 		return nil, fmt.Errorf("unsupported tum breakdown dimension: %q", dimension)
 	}
 
 	sb, err := tumBreakdownBase(sq.Select(
 		"time_bucket",
-		expr+" AS dim_value",
+		dim.expr+" AS dim_value",
 		"sum(total_tokens) AS tokens",
 	), arg)
 	if err != nil {
 		return nil, err
+	}
+	if dim.filter != "" {
+		sb = sb.Where(dim.filter)
 	}
 	sb = sb.GroupBy("time_bucket", "dim_value").OrderBy("time_bucket", "dim_value")
 

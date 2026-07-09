@@ -1008,6 +1008,16 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if source == "assistant" {
 		source = billing.ModelUsageSourceAssistants
 	}
+	// risk-analysis is reserved for the platform's own scanning inference
+	// (risk judge, prompt-injection judge), which never enters through this
+	// proxy. A client claiming it would dodge Polar metering and mislabel its
+	// traffic into the billing page's risk-analysis section, so the claim
+	// falls back to the default customer surface. Client-supplied "gram"
+	// stays accepted: Elements sends it for follow-on-suggestion inference
+	// and relies on its metering exemption.
+	if source == billing.ModelUsageSourceRiskAnalysis {
+		source = billing.ModelUsageSourcePlayground
+	}
 	if source == "" {
 		source = billing.ModelUsageSourcePlayground
 	}
