@@ -43,6 +43,27 @@ jobs:
 
           echo "✅ Checked-in plugins match the generators."
 
+      # The zip is a checked-in install artifact built from hooks/plugin-claude.
+      # A rebuilt zip is never byte-identical (entry mtimes), so compare its
+      # contents against the tree instead.
+      - name: Check the checked-in plugin zip matches the tree
+        run: |
+          tmp=$(mktemp -d)
+          unzip -q hooks/plugin-claude.zip -d "$tmp"
+          if ! diff -r --exclude=.DS_Store "$tmp/plugin-claude" hooks/plugin-claude; then
+            echo ""
+            echo "❌ Error: hooks/plugin-claude.zip is out of date."
+            echo ""
+            echo "Rebuild it with:"
+            echo ""
+            echo "    mise run hooks:zip"
+            echo ""
+            echo "and commit the result."
+            exit 1
+          fi
+
+          echo "✅ hooks/plugin-claude.zip matches hooks/plugin-claude."
+
       - name: Remind to consider a generator version bump
         env:
           BASE_REF: ${{ github.base_ref }}
