@@ -25,12 +25,12 @@ import (
 // acknowledgement in risk_policy_challenges — and then the agent retries, which
 // now passes because GetActiveRiskPolicyAck finds a live acknowledged row.
 //
-// SCOPE: the acknowledgement is keyed on (project, user, policy, tool_name)
-// with an expiry window, NOT on the specific call/input. So within the window
-// it clears ANY call of the same tool under the same policy for that user —
-// e.g. acknowledging one Bash command lets a different Bash command that trips
-// the same policy through until it expires. It is a short "don't re-prompt me
-// for this tool+policy" grant, not a per-call approval.
+// SCOPE: the acknowledgement is keyed on (project, user, policy, tool_name,
+// call_fingerprint) with an expiry window, where call_fingerprint is a digest
+// of the exact scanned input. So within the window it clears only an IDENTICAL
+// retry of the acknowledged call — a different Bash command that trips the same
+// policy is challenged again. It is a per-call approval (with a short grace
+// window for the retry), not a blanket tool+policy grant.
 //
 // The token itself only carries a short opaque id (128-bit random bearer
 // secret) whose state lives in the cache. The redeem handler re-binds the
