@@ -48,7 +48,7 @@ import {
 const INVENTORY_PAGE_LIMIT = 50;
 const FIRST_PAGE_CURSOR = "";
 
-type BlockingPolicy = Pick<
+type ShadowMCPPolicy = Pick<
   RiskPolicy,
   "audienceType" | "audiencePrincipalUrns" | "id" | "name"
 >;
@@ -150,12 +150,30 @@ function InventoryEmptyState() {
   );
 }
 
-function policyAudienceLabel(policy: BlockingPolicy) {
+function humanizePrincipalURN(principalURN: string) {
+  if (principalURN === "user:all") {
+    return "Everyone";
+  }
+
+  const segments = principalURN.split(":").filter(Boolean);
+  const label = segments[segments.length - 1] ?? principalURN;
+  return label
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function policyAudienceLabel(policy: ShadowMCPPolicy) {
   if (policy.audienceType === "everyone") {
     return "Everyone";
   }
 
-  return `${policy.audiencePrincipalUrns.length} selected`;
+  const principalLabels =
+    policy.audiencePrincipalUrns.map(humanizePrincipalURN);
+  if (principalLabels.length <= 2) {
+    return principalLabels.join(", ");
+  }
+
+  return `${principalLabels.slice(0, 2).join(", ")} + ${principalLabels.length - 2} more`;
 }
 
 function actionSheetTitle(mode: InventoryActionMode) {
@@ -176,9 +194,9 @@ function actionSheetDescription(mode: InventoryActionMode) {
     case "review":
       return "Resolve the pending Shadow MCP request for this server.";
     case "add":
-      return "Allow this Shadow MCP server for selected blocking policies.";
+      return "Allow this Shadow MCP server for selected policies.";
     case "edit":
-      return "Change which blocking policies allow this Shadow MCP server.";
+      return "Change which policies allow this Shadow MCP server.";
     case "delete":
       return "Remove the allow decision for this Shadow MCP server.";
   }
@@ -202,22 +220,22 @@ function actionSheetSubmitLabel(
 
 function initialPolicyIDsForAction(
   action: ActiveInventoryAction,
-  blockingPolicies: BlockingPolicy[],
+  shadowMCPPolicies: ShadowMCPPolicy[],
 ) {
-  const blockingPolicyIDs = blockingPolicies.map((policy) => policy.id);
+  const shadowMCPPolicyIDs = shadowMCPPolicies.map((policy) => policy.id);
   if (action.server.allowedPolicyIds.length > 0) {
     return action.server.allowedPolicyIds.filter((policyID) =>
-      blockingPolicyIDs.includes(policyID),
+      shadowMCPPolicyIDs.includes(policyID),
     );
   }
   if (
     action.mode === "review" &&
     action.server.latestRequest &&
-    blockingPolicyIDs.includes(action.server.latestRequest.policyId)
+    shadowMCPPolicyIDs.includes(action.server.latestRequest.policyId)
   ) {
     return [action.server.latestRequest.policyId];
   }
-  return blockingPolicyIDs;
+  return shadowMCPPolicyIDs;
 }
 
 function InventoryActionMenu({
@@ -297,7 +315,7 @@ function PolicySelection({
 }: {
   disabled: boolean;
   onSelectionChange: (policyIDs: string[]) => void;
-  policies: BlockingPolicy[];
+  policies: ShadowMCPPolicy[];
   selectedPolicyIDs: string[];
 }) {
   const selectedPolicyIDSet = new Set(selectedPolicyIDs);
@@ -348,14 +366,14 @@ function PolicySelection({
 
 function ShadowMCPInventoryActionSheet({
   action,
-  blockingPolicies,
+  shadowMCPPolicies,
   isSubmitting,
   onOpenChange,
   onSubmit,
   open,
 }: {
   action: ActiveInventoryAction | null;
-  blockingPolicies: BlockingPolicy[];
+  shadowMCPPolicies: ShadowMCPPolicy[];
   isSubmitting: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: {
@@ -375,8 +393,8 @@ function ShadowMCPInventoryActionSheet({
       return;
     }
     setDecision("approve");
-    setSelectedPolicyIDs(initialPolicyIDsForAction(action, blockingPolicies));
-  }, [action, blockingPolicies, open]);
+    setSelectedPolicyIDs(initialPolicyIDsForAction(action, shadowMCPPolicies));
+  }, [action, shadowMCPPolicies, open]);
 
   if (!action) return null;
 
@@ -476,7 +494,7 @@ function ShadowMCPInventoryActionSheet({
             <PolicySelection
               disabled={isSubmitting}
               onSelectionChange={setSelectedPolicyIDs}
-              policies={blockingPolicies}
+              policies={shadowMCPPolicies}
               selectedPolicyIDs={selectedPolicyIDs}
             />
           )}
@@ -515,13 +533,13 @@ function ShadowMCPInventoryActionSheet({
 }
 
 export function ShadowMCPInventoryTable({
-  blockingPolicies,
+  shadowMCPPolicies,
   className,
   enabled = true,
   policyState,
   projectID,
 }: {
-  blockingPolicies: BlockingPolicy[];
+  shadowMCPPolicies: ShadowMCPPolicy[];
   className?: string;
   enabled?: boolean;
   policyState: ShadowMCPPolicyState;
@@ -808,7 +826,7 @@ export function ShadowMCPInventoryTable({
     <div className={cn("min-h-0 shrink overflow-hidden", className)}>
       <ShadowMCPInventoryActionSheet
         action={activeAction}
-        blockingPolicies={blockingPolicies}
+        shadowMCPPolicies={shadowMCPPolicies}
         isSubmitting={isSubmitting}
         onOpenChange={(open) => {
           if (!open) {

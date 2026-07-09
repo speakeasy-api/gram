@@ -362,6 +362,7 @@ function inventoryServer(
     observedUseCount: 0,
     requestCount: 0,
     serverName: undefined,
+    serverSlug: "example-com-mcp",
     topUsers: [],
     urlHost: new URL(canonicalServerUrl).host,
     userCount: 0,
@@ -389,16 +390,16 @@ function blockingPolicy(
 function renderInventoryTable(
   projectID = "project-id-1",
   policyState: "blocking" | "flagging" | "none" | "unavailable" = "blocking",
-  blockingPolicies = [blockingPolicy()],
+  shadowMCPPolicies = [blockingPolicy()],
 ) {
   const queryClient = new QueryClient();
 
   return render(
     <QueryClientProvider client={queryClient}>
       <ShadowMCPInventoryTable
-        blockingPolicies={blockingPolicies}
         policyState={policyState}
         projectID={projectID}
+        shadowMCPPolicies={shadowMCPPolicies}
       />
     </QueryClientProvider>,
   );
@@ -745,9 +746,9 @@ describe("ShadowMCPInventoryTable", () => {
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
-          blockingPolicies={[blockingPolicy()]}
           policyState="blocking"
           projectID="project-id-1"
+          shadowMCPPolicies={[blockingPolicy()]}
         />
       </QueryClientProvider>,
     );
@@ -759,9 +760,9 @@ describe("ShadowMCPInventoryTable", () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
-          blockingPolicies={[blockingPolicy()]}
           policyState="blocking"
           projectID="project-id-2"
+          shadowMCPPolicies={[blockingPolicy()]}
         />
       </QueryClientProvider>,
     );
@@ -786,10 +787,10 @@ describe("ShadowMCPInventoryTable", () => {
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
-          blockingPolicies={[blockingPolicy()]}
           enabled
           policyState="blocking"
           projectID="project-id-1"
+          shadowMCPPolicies={[blockingPolicy()]}
         />
       </QueryClientProvider>,
     );
@@ -801,10 +802,10 @@ describe("ShadowMCPInventoryTable", () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
-          blockingPolicies={[blockingPolicy()]}
           enabled={false}
           policyState="blocking"
           projectID="project-id-1"
+          shadowMCPPolicies={[blockingPolicy()]}
         />
       </QueryClientProvider>,
     );
@@ -909,6 +910,41 @@ describe("ShadowMCPInventoryTable", () => {
       });
     });
     expect(mocks.invalidateShadowMCPInventory).toHaveBeenCalled();
+  });
+
+  it("shows policy audience role names in the action sheet", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "none",
+          canonicalServerUrl: "https://pending.example.com/mcp",
+          serverName: "Pending MCP",
+        }),
+      ],
+    });
+
+    renderInventoryTable("project-id-1", "blocking", [
+      blockingPolicy({
+        audiencePrincipalUrns: ["role:admin"],
+        audienceType: "targeted",
+        name: "Shadow MCP Scanner",
+      }),
+    ]);
+
+    await waitFor(() => {
+      expect(screen.getByText("Pending MCP")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Allow Rule" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Add Allow Rule" }),
+      ).toBeTruthy();
+    });
+    expect(screen.getByText("Shadow MCP Scanner")).toBeTruthy();
+    expect(screen.getByText("Policy applies to Admin")).toBeTruthy();
+    expect(screen.queryByText("Policy applies to 1 selected")).toBeNull();
   });
 
   it("uses a non-modal action menu button", async () => {

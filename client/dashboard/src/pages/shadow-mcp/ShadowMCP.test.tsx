@@ -77,19 +77,19 @@ vi.mock("@/components/ui/skeleton", () => ({
 
 vi.mock("@/components/shadow-mcp/ShadowMCPInventoryTable", () => ({
   ShadowMCPInventoryTable: ({
-    blockingPolicies,
+    shadowMCPPolicies,
     policyState,
     projectID,
   }: {
-    blockingPolicies: Array<{ id: string }>;
+    shadowMCPPolicies: Array<{ id: string }>;
     policyState: string;
     projectID: string;
   }) => (
     <div>
       Shadow MCP inventory for {projectID} with policy {policyState}
       <span>
-        Blocking policies:{" "}
-        {blockingPolicies.map((policy) => policy.id).join(",") || "none"}
+        Shadow MCP policies:{" "}
+        {shadowMCPPolicies.map((policy) => policy.id).join(",") || "none"}
       </span>
     </div>
   ),
@@ -203,7 +203,9 @@ describe("ShadowMCP", () => {
         "Shadow MCP inventory for project-1 with policy blocking",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("Blocking policies: block-policy-1")).toBeTruthy();
+    expect(
+      screen.getByText("Shadow MCP policies: flag-policy,block-policy-1"),
+    ).toBeTruthy();
   });
 
   it("renders flagging policy status when no blocking policy is enabled", () => {
