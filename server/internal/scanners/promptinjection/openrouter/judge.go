@@ -12,6 +12,7 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
@@ -240,6 +241,21 @@ type judgeVerdict struct {
 	Rationale  string  `json:"rationale"`
 }
 
+// cachedSystemMessage renders SystemPrompt as a text part with an ephemeral
+// cache_control breakpoint. Providers only cache above their prefix minimum
+// (~1024 tokens on the Gemini judge model); below that it's a no-op.
+func cachedSystemMessage() or.ChatMessages {
+	return or.CreateChatMessagesSystem(or.ChatSystemMessage{
+		Role: or.ChatSystemMessageRoleSystem,
+		Content: or.CreateChatSystemMessageContentArrayOfChatContentText([]or.ChatContentText{{
+			Type:         or.ChatContentTextTypeText,
+			Text:         SystemPrompt,
+			CacheControl: &or.ChatContentCacheControl{Type: or.ChatContentCacheControlTypeEphemeral, TTL: nil},
+		}}),
+		Name: nil,
+	})
+}
+
 func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judgemessage.Message) (judgeVerdict, error) {
 	payload, err := json.Marshal(judgePayload{Message: riskjudge.RenderMessage(msg)})
 	if err != nil {
@@ -251,21 +267,41 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
 	defer cancel()
 
-	response, err := c.client.GetObjectCompletion(callCtx, gramopenrouter.ObjectCompletionRequest{
-		OrgID:          req.OrgID,
-		ProjectID:      req.ProjectID,
-		Model:          c.model,
-		SystemPrompt:   SystemPrompt,
-		Prompt:         string(payload),
-		Temperature:    &c.temperature,
-		UsageSource:    billing.ModelUsageSourceGram,
-		UserID:         "",
-		ExternalUserID: "",
-		HTTPMetadata:   nil,
-		JSONSchema:     &c.schema,
+	// Build the request directly (not the GetObjectCompletion string helper) so
+	// the constant SystemPrompt carries a cache_control breakpoint, billing the
+	// resent prefix at the ~10x-cheaper cache-read rate without adding a
+	// non-schema field to the shared client.
+	messages := []or.ChatMessages{
+		cachedSystemMessage(),
+		or.CreateChatMessagesUser(or.ChatUserMessage{
+			Role:    or.ChatUserMessageRoleUser,
+			Content: or.CreateChatUserMessageContentStr(string(payload)),
+			Name:    nil,
+		}),
+	}
+
+	response, err := c.client.GetCompletion(callCtx, gramopenrouter.CompletionRequest{
+		OrgID:                     req.OrgID,
+		Messages:                  messages,
+		ProjectID:                 req.ProjectID,
+		Tools:                     nil,
+		Temperature:               &c.temperature,
+		Model:                     c.model,
+		Stream:                    false,
+		UsageSource:               billing.ModelUsageSourceGram,
+		ChatID:                    uuid.Nil,
+		UserID:                    "",
+		ExternalUserID:            "",
+		UserEmail:                 "",
+		HTTPMetadata:              nil,
+		APIKeyID:                  "",
+		JSONSchema:                &c.schema,
+		Reasoning:                 &gramopenrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
+		CacheControl:              nil,
+		NormalizeOutboundMessages: false,
 	})
 	if err != nil {
-		return judgeVerdict{}, fmt.Errorf("openrouter object completion: %w", err)
+		return judgeVerdict{}, fmt.Errorf("openrouter completion: %w", err)
 	}
 	if response == nil || response.Message == nil {
 		return judgeVerdict{}, fmt.Errorf("empty completion response")
