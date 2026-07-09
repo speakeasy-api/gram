@@ -2239,7 +2239,7 @@ func TestRenderAuthPreflightScriptObservabilityModeFailsOpen(t *testing.T) {
 // checkedInSenderCapturedRequest runs a checked-in per-event sender with no
 // env credentials but a cached browser-login auth file, and returns the curl
 // config lines plus request URL captured by a stubbed curl.
-func checkedInSenderCapturedRequest(t *testing.T, plugin, payload string) string {
+func checkedInSenderCapturedRequest(t *testing.T, plugin, payload string, extraEnv ...string) string {
 	t.Helper()
 
 	senderPath, err := filepath.Abs(filepath.Join("..", "..", "..", "hooks", plugin, "hooks", "hook.sh"))
@@ -2267,10 +2267,10 @@ printf '{}\n200'
 	authFile := filepath.Join(dir, "auth.env")
 	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_cached_browser_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
 
-	env := hookAuthTestEnv(dir,
-		"GRAM_CAPTURE_HEADERS="+headersPath,
-		"GRAM_HOOKS_AUTH_FILE="+authFile,
-	)
+	env := hookAuthTestEnv(dir, append([]string{
+		"GRAM_CAPTURE_HEADERS=" + headersPath,
+		"GRAM_HOOKS_AUTH_FILE=" + authFile,
+	}, extraEnv...)...)
 	for i, kv := range env {
 		if strings.HasPrefix(kv, "PATH=") {
 			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
@@ -2284,6 +2284,22 @@ printf '{}\n200'
 	require.NoError(t, err, string(output))
 
 	return string(requireFileBytes(t, headersPath))
+}
+
+// TestCheckedInSenderEnvProjectOverridesCachedProject verifies an explicit
+// GRAM_HOOKS_PROJECT_SLUG outranks the project the browser-login key was
+// cached with, so switching projects does not require a forced re-login.
+func TestCheckedInSenderEnvProjectOverridesCachedProject(t *testing.T) {
+	t.Parallel()
+
+	headers := checkedInSenderCapturedRequest(t, "plugin-cursor",
+		`{"hook_event_name":"beforeSubmitPrompt","conversation_id":"sess-env-project","prompt":"hi"}`,
+		"GRAM_HOOKS_PROJECT_SLUG=acme-staging")
+	require.Contains(t, headers, "Gram-Key: gram_cached_browser_key",
+		"the cached key still authenticates the env-selected project")
+	require.Contains(t, headers, "Gram-Project: acme-staging",
+		"env-selected project must outrank the cached login project")
+	require.NotContains(t, headers, "Gram-Project: acme-prod")
 }
 
 // TestCheckedInCursorSenderUsesCachedBrowserAuth verifies the checked-in

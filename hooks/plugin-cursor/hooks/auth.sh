@@ -653,7 +653,11 @@ gram_hooks_prepare_auth() {
       fi
     fi
     api_key="${GRAM_HOOKS_CACHED_API_KEY:-}"
-    project="${GRAM_HOOKS_CACHED_PROJECT:-}"
+    # An explicit env project selection outranks the project the key was
+    # cached with; the cached project only outranks the baked default, so a
+    # login-time project choice survives sends but GRAM_HOOKS_PROJECT_SLUG
+    # still switches projects without forcing a re-login.
+    project="${GRAM_HOOKS_PROJECT_SLUG:-${GRAM_HOOKS_CACHED_PROJECT:-}}"
     email="${GRAM_HOOKS_CACHED_EMAIL:-}"
   fi
 
