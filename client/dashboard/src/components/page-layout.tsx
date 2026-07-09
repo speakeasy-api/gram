@@ -148,7 +148,7 @@ function PageSectionTitle({
   if (stage) {
     return (
       <Stack direction="horizontal" align="center" gap={2}>
-        <Heading variant="h3" className={className}>
+        <Heading variant="h2" className={className}>
           {children}
         </Heading>
         <ReleaseStageBadge stage={stage} />
@@ -157,7 +157,7 @@ function PageSectionTitle({
   }
 
   return (
-    <Heading variant="h3" className={className}>
+    <Heading variant="h2" className={className}>
       {children}
     </Heading>
   );

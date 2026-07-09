@@ -7,21 +7,71 @@ import { Heading } from "./heading";
 import { Skeleton, SkeletonParagraph } from "./skeleton";
 import { Type } from "./type";
 
+/**
+ * The design-system card: hairline border on a paper surface, squared
+ * corners, no shadows — hover darkens the border. Passing `icon` (and
+ * optionally `overlay`) adds the signature dot-pattern sidebar on the
+ * left, the visual carried over from the legacy DotCard.
+ */
 const CardComponent = ({
   className,
   size = "default",
+  icon,
+  overlay,
+  children,
   ...props
-}: React.ComponentProps<"div"> & { size?: "default" | "sm" }) => {
+}: React.ComponentProps<"div"> & {
+  size?: "default" | "sm";
+  /** Content centered in a frosted container over the dot-pattern sidebar */
+  icon?: React.ReactNode;
+  /** Extra content layered on the dot sidebar (e.g. an "Added" badge) */
+  overlay?: React.ReactNode;
+}) => {
+  const content = (
+    <div
+      data-slot="card-body"
+      className={cn(
+        "flex min-w-0 flex-1 flex-col gap-5 p-4",
+        size === "sm" && "gap-4 py-4",
+      )}
+    >
+      {children}
+    </div>
+  );
+
   return (
     <div
       data-slot="card"
       className={cn(
-        "bg-card text-card-foreground group/card flex flex-col gap-5 rounded-xl border p-4",
-        size === "sm" && "gap-4 py-4",
+        "bg-card text-card-foreground group/card border-neutral-softest flex border transition-colors",
+        "hover:border-neutral-default",
+        icon
+          ? "h-full min-h-[156px] flex-row overflow-hidden"
+          : cn("flex-col gap-5 p-4", size === "sm" && "gap-4 py-4"),
         className,
       )}
       {...props}
-    />
+    >
+      {icon && (
+        <div className="bg-muted/30 text-muted-foreground/20 relative w-40 shrink-0 overflow-hidden border-r">
+          <div
+            className="scroll-dots-target absolute inset-0"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle, currentColor 1px, transparent 1px)",
+              backgroundSize: "16px 16px",
+            }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="bg-background/90 p-3 backdrop-blur-sm dark:bg-neutral-800 dark:backdrop-blur-none">
+              {icon}
+            </div>
+          </div>
+          {overlay}
+        </div>
+      )}
+      {icon ? content : children}
+    </div>
   );
 };
 

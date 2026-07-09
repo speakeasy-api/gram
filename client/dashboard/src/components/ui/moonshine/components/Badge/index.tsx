@@ -4,6 +4,12 @@ import { cva } from "class-variance-authority";
 
 import { cn } from "@/components/ui/moonshine/lib/utils";
 import { BadgeVariant, BadgeSize } from "@/components/ui/moonshine/types";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip as LocalTooltip,
+  TooltipContent as LocalTooltipContent,
+  TooltipTrigger as LocalTooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const BadgeLeftIcon = React.forwardRef<
   HTMLSpanElement,
@@ -119,6 +125,10 @@ export interface BadgeProps extends Attributes {
    * language/identity tags keep ink text with only the dot colored.
    */
   dot?: boolean;
+  /** Wraps the badge in a tooltip. */
+  tooltip?: React.ReactNode;
+  /** Renders a size-matched skeleton instead of the badge. */
+  isLoading?: boolean;
   className?: string;
   "aria-label"?: string;
 }
@@ -130,6 +140,8 @@ const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
       size = "md",
       background = true,
       dot = false,
+      tooltip,
+      isLoading = false,
       asChild = false,
       className,
       ...props
@@ -218,7 +230,16 @@ const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
       });
     }, [props.children, asChild]);
 
-    return (
+    if (isLoading) {
+      const skeletonSize = {
+        sm: "h-4 w-16",
+        md: "h-5 w-20",
+        lg: "h-6 w-24",
+      }[size];
+      return <Skeleton className={cn(skeletonSize, className)} />;
+    }
+
+    const badge = (
       <Comp
         className={cn(badgeVariants({ variant, size, background }), className)}
         ref={ref}
@@ -236,6 +257,17 @@ const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
         {processedChildren}
       </Comp>
     );
+
+    if (tooltip) {
+      return (
+        <LocalTooltip>
+          <LocalTooltipTrigger asChild>{badge}</LocalTooltipTrigger>
+          <LocalTooltipContent>{tooltip}</LocalTooltipContent>
+        </LocalTooltip>
+      );
+    }
+
+    return badge;
   },
 );
 Badge.displayName = "Badge";

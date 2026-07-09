@@ -104,18 +104,13 @@ function BreadcrumbCrumb({
   }
   if (elem.isCurrentPage || elem.disableLink) {
     return (
-      <span
-        className={elem.isCurrentPage ? undefined : "text-muted-foreground"}
-      >
+      <span className={elem.isCurrentPage ? "text-highlight" : "text-muted"}>
         {elem.display}
       </span>
     );
   }
   return (
-    <Link
-      to={elem.url}
-      className="text-muted-foreground hover:text-foreground trans"
-    >
+    <Link to={elem.url} className="text-muted hover:text-highlight trans">
       {elem.display}
     </Link>
   );
@@ -251,22 +246,30 @@ function PageHeaderBreadcrumbs({
     // it — so it pins to the true right edge of the nav bar. Nested, it would
     // stop at the right edge of the centered max-w-[1270px] band, landing
     // mid-bar on wide screens. Breadcrumbs are unchanged; only the hint moves.
+    // Breadcrumbs read as the brand caption strip: mono, uppercase, tracked,
+    // middot-separated (Claude Design).
     <>
-      <PageHeader.Title
-        className={cn(fullWidth ? "max-w-full" : "", className)}
+      <div
+        className={cn(
+          "ml-1 w-full max-w-[1270px] font-mono text-xs font-light tracking-[0.08em] uppercase",
+          fullWidth ? "max-w-full" : "",
+          className,
+        )}
       >
-        <div className="ml-auto flex items-center gap-2 normal-case">
+        <div className="ml-auto flex items-center gap-2">
           {visibleElements.map((elem, index) => (
             <React.Fragment key={`${elem.url}-${index}`}>
               <BreadcrumbCrumb elem={elem} />
               {index < visibleElements.length - 1 && (
-                <span className="text-muted-foreground"> / </span>
+                <span className="text-muted" aria-hidden>
+                  ·
+                </span>
               )}
             </React.Fragment>
           ))}
           {stage && <ReleaseStageBadge stage={stage} />}
         </div>
-      </PageHeader.Title>
+      </div>
       <InsightsDockShortcutHint className="ml-auto shrink-0" />
     </>
   );
