@@ -23,6 +23,15 @@ func TestKeyTypeOrDefault(t *testing.T) {
 	require.Equal(t, KeyTypeInternal, KeyTypeInternal.OrDefault())
 }
 
+func TestKeyTypeValidate(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, KeyType("").Validate(), "zero value resolves to chat")
+	require.NoError(t, KeyTypeChat.Validate())
+	require.NoError(t, KeyTypeInternal.Validate())
+	require.Error(t, KeyType("internl").Validate(), "a typo must not mint a third key type")
+}
+
 func TestUpstreamKeyIdentity(t *testing.T) {
 	t.Parallel()
 

@@ -33,6 +33,11 @@ type RefreshOpenRouterKeyArgs struct {
 
 func (o *RefreshOpenRouterKey) Do(ctx context.Context, args RefreshOpenRouterKeyArgs) error {
 	keyType := openrouter.KeyType(args.KeyType).OrDefault()
+	// Workflows started directly in Temporal bypass the entry-point check, so
+	// a bad payload must fail fast here instead of erroring against the DB.
+	if err := keyType.Validate(); err != nil {
+		return oops.E(oops.CodeInvalid, err, "invalid openrouter key type").LogError(ctx, o.logger)
+	}
 	limit, err := o.openRouter.RefreshAPIKeyLimit(ctx, args.OrgID, keyType, args.Limit)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error updating openrouter key").LogError(ctx, o.logger)

@@ -56,6 +56,21 @@ func (k KeyType) OrDefault() KeyType {
 	return k
 }
 
+// Validate rejects unknown key types (the zero value counts as chat). The
+// allowed values are deliberately enforced here, not with a DB CHECK
+// constraint, per this repo's schema conventions — and callers that mint
+// rows or pick workflow ids must call it so a typo cannot create a third
+// key type under the chat naming pattern or clobber the chat refresh
+// workflow id.
+func (k KeyType) Validate() error {
+	switch k.OrDefault() {
+	case KeyTypeChat, KeyTypeInternal:
+		return nil
+	default:
+		return fmt.Errorf("invalid openrouter key type %q", string(k))
+	}
+}
+
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
@@ -221,6 +236,9 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 	var openrouterKey string
 
 	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return "", fmt.Errorf("provision openrouter key: %w", err)
+	}
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType),

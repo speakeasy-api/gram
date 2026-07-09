@@ -50,6 +50,11 @@ func (w *OpenRouterKeyRefresher) CancelOpenRouterKeyRefreshWorkflow(ctx context.
 
 // Called by your service to start (or restart) the workflow
 func ExecuteOpenrouterKeyRefreshWorkflow(ctx context.Context, temporalEnv *tenv.Environment, params OpenRouterKeyRefreshParams) (client.WorkflowRun, error) {
+	// A typoed key type must fail here, before the terminate-if-running id
+	// below can clobber the real chat refresh workflow.
+	if err := openrouter.KeyType(params.KeyType).Validate(); err != nil {
+		return nil, fmt.Errorf("refresh openrouter key workflow: %w", err)
+	}
 	// The chat key keeps the historical id format: cancel semantics and the
 	// manual-trigger docs reference it. Only internal keys get a suffix.
 	id := fmt.Sprintf("v1:openrouter-key-refresh:%s", params.OrgID)
