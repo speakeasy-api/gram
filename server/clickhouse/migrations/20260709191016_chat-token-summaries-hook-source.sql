@@ -35,8 +35,9 @@ DROP VIEW `chat_token_summaries_mv`;
 -- statements straddle a midnight. mutations_sync=2 completes the DELETE
 -- before the re-derives run.
 ALTER TABLE `chat_token_summaries` DELETE WHERE time_bucket >= toDateTime('2026-05-25 00:00:00', 'UTC') SETTINGS mutations_sync = 2;
--- Re-derive pass 1: the bulk of the window, up to a static split shortly
--- before the expected deploy. This is the expensive telemetry_logs scan; it
+-- Re-derive pass 1: the bulk of the window, up to a static split that sits
+-- safely in the PAST of any deploy, so pass 2 always covers live traffic
+-- while the MV is absent, whatever day this actually runs. This is the expensive telemetry_logs scan; it
 -- runs while the MV is already gone, so its duration does not extend the
 -- loss window at the end.
 INSERT INTO `chat_token_summaries` (gram_project_id, chat_id, time_bucket, hook_source, total_tokens, stored_event_count)
@@ -55,7 +56,7 @@ SELECT
 FROM telemetry_logs
 WHERE chat_id != ''
   AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= toDateTime('2026-05-25 00:00:00', 'UTC')
-  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') < toDateTime('2026-07-10 00:00:00', 'UTC')
+  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') < toDateTime('2026-07-08 00:00:00', 'UTC')
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source;
 -- Re-derive pass 2: everything since the split — a small scan, so the gap
 -- between this snapshot and the MV creation below stays in the seconds. The
@@ -77,7 +78,7 @@ SELECT
     )) AS stored_event_count
 FROM telemetry_logs
 WHERE chat_id != ''
-  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= toDateTime('2026-07-10 00:00:00', 'UTC')
+  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= toDateTime('2026-07-08 00:00:00', 'UTC')
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source;
 -- Create "chat_token_summaries_mv" view with hook_source in the grouping
 -- key — LAST, closing the rewrite (see the ordering note above).

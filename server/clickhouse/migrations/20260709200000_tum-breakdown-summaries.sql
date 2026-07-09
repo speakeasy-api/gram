@@ -52,7 +52,7 @@ FROM telemetry_logs
 WHERE chat_id != ''
   AND toString(attributes.gen_ai.usage.total_tokens) != ''
   AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= toDateTime('2026-05-25 00:00:00', 'UTC')
-  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') < toDateTime('2026-07-10 00:00:00', 'UTC')
+  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') < toDateTime('2026-07-08 00:00:00', 'UTC')
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles;
 -- Pass 2: everything since the split — a small scan, keeping the gap between
 -- this snapshot and the MV creation below in the seconds (a bounded
@@ -75,7 +75,7 @@ SELECT
 FROM telemetry_logs
 WHERE chat_id != ''
   AND toString(attributes.gen_ai.usage.total_tokens) != ''
-  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= toDateTime('2026-07-10 00:00:00', 'UTC')
+  AND fromUnixTimestamp64Nano(time_unix_nano, 'UTC') >= toDateTime('2026-07-08 00:00:00', 'UTC')
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source, model, user_email, division_name, roles;
 -- Create "tum_breakdown_summaries_mv" view — LAST, closing the backfill.
 CREATE MATERIALIZED VIEW `tum_breakdown_summaries_mv` TO `tum_breakdown_summaries` AS
