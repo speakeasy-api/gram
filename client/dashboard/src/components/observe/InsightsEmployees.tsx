@@ -189,12 +189,17 @@ function deviceAgentState(
 
 // useNow returns a wall-clock timestamp that advances every intervalMs so
 // time-derived values (here, device Active/Stale) recompute on their own on a
-// long-open dashboard. Mirrors the hook on the org-level Device Agent page. Pass
-// intervalMs <= 0 to disable ticking (when the derived value isn't shown).
+// long-open dashboard. Pass intervalMs <= 0 to disable ticking (when the derived
+// value isn't shown).
 function useNow(intervalMs: number): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (intervalMs <= 0) return;
+    // Refresh immediately on (re-)enable: the tick may turn on well after mount
+    // (e.g. once a slow listSyncedUsers query becomes "ready"), and without this
+    // the first render would compute statuses against the mount-time timestamp
+    // until the first interval fires, delaying near-threshold Active→Stale flips.
+    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), intervalMs);
     return () => clearInterval(id);
   }, [intervalMs]);
