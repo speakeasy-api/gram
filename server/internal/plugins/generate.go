@@ -2174,6 +2174,24 @@ gram_hooks_post_authenticated() {
       GRAM_HTTP_CODE="$first_status"
       return 78
     fi
+    # The wiped cache held this machine's only identity: the org key never
+    # attributes to its owner, and the canonical payload was built before
+    # the cache was cleared. The first prepare_auth exported the cached
+    # login email, so stamp it into source.user_email rather than sending
+    # the recovered event unattributed.
+    if [ -n "${GRAM_HOOKS_AUTH_EMAIL:-}" ]; then
+      case "$payload" in
+        *'"user_email"'*) ;;
+        *)
+          local stamped_email stamped_rest
+          stamped_email="$(printf '%s' "$GRAM_HOOKS_AUTH_EMAIL" | gram_hooks_json_escape_string)"
+          stamped_rest="${payload#'{"schema_version":"hook.ingest.v1","source":{'}"
+          if [ "$stamped_rest" != "$payload" ]; then
+            payload='{"schema_version":"hook.ingest.v1","source":{"user_email":"'"$stamped_email"'",'"$stamped_rest"
+          fi
+          ;;
+      esac
+    fi
     gram_http_post "${server_url}/rpc/hooks.ingest" "$payload" "$max_time" \
       "$@" \
       ${auth_config_arg[@]+"${auth_config_arg[@]}"}

@@ -1548,7 +1548,8 @@ while [ "$#" -gt 0 ]; do
     *) url="$1"; shift ;;
   esac
 done
-cat >/dev/null
+payload="$(cat)"
+printf '%s\n---GRAM---\n' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
 printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
 if [ -n "$config" ] && grep -q "gram_local_org_key_xyz" "$config"; then
   printf '{}\n200'
@@ -1560,8 +1561,10 @@ fi
 	authFile := filepath.Join(dir, "auth.env")
 	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_stale_cached_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
 	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
+	payloadsPath := filepath.Join(dir, "payloads.txt")
 	env := hookAuthTestEnv(dir,
 		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_CAPTURE_PAYLOADS="+payloadsPath,
 		"GRAM_HOOKS_AUTH_FILE="+authFile,
 	)
 	for i, kv := range env {
@@ -1586,6 +1589,15 @@ fi
 	require.Equal(t, 2, strings.Count(requests, "/rpc/hooks.ingest"), "exactly one retry through the org key")
 	require.NoFileExists(t, authFile, "rejected cached key must be cleared")
 	require.FileExists(t, authFile+".established", "recovery must preserve the fail-closed ratchet marker")
+
+	// The org key never attributes to its owner, so the retry must carry the
+	// wiped cache's login email as the payload's self-reported identity.
+	payloads := strings.Split(string(requireFileBytes(t, payloadsPath)), "\n---GRAM---\n")
+	require.GreaterOrEqual(t, len(payloads), 2)
+	require.NotContains(t, payloads[0], `"user_email"`,
+		"the first attempt rode the personal key, which attributes via its owner")
+	require.Contains(t, payloads[1], `"user_email":"dev@example.com"`,
+		"the org-key retry must stamp the cached login email for attribution")
 }
 
 // TestRenderHookScriptClaudeRejectedCachedKeyStillBlocksToolUse verifies that
