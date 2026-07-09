@@ -79,11 +79,15 @@ func (s *SnapshotBillingCycleUsage) maybeSendUsageAlert(
 	}
 
 	// From here on the alert is reserved: any failure releases the key so
-	// the next hourly run retries the send.
+	// the next hourly run retries the send. The release must survive the
+	// failure that triggered it — including activity cancellation — or the
+	// stale reservation suppresses the alert for the rest of the cycle.
 	release := func(msg string, err error) {
 		logger.ErrorContext(ctx, msg, attr.SlogError(err))
-		if err := s.cache.Delete(ctx, key); err != nil {
-			logger.ErrorContext(ctx, "failed to release tum usage alert reservation", attr.SlogError(err))
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if err := s.cache.Delete(releaseCtx, key); err != nil {
+			logger.ErrorContext(releaseCtx, "failed to release tum usage alert reservation", attr.SlogError(err))
 		}
 	}
 
