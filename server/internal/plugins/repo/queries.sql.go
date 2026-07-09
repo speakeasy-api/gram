@@ -155,7 +155,7 @@ func (q *Queries) DeletePlugin(ctx context.Context, arg DeletePluginParams) erro
 }
 
 const getGitHubConnection = `-- name: GetGitHubConnection :one
-SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, created_at, updated_at
+SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, published_mcp_fingerprints, published_hooks_version, created_at, updated_at
 FROM plugin_github_connections
 WHERE project_id = $1
 `
@@ -171,6 +171,8 @@ func (q *Queries) GetGitHubConnection(ctx context.Context, projectID uuid.UUID) 
 		&i.RepoName,
 		&i.MarketplaceToken,
 		&i.PublishedFingerprint,
+		&i.PublishedMcpFingerprints,
+		&i.PublishedHooksVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -178,7 +180,7 @@ func (q *Queries) GetGitHubConnection(ctx context.Context, projectID uuid.UUID) 
 }
 
 const getGitHubConnectionByMarketplaceToken = `-- name: GetGitHubConnectionByMarketplaceToken :one
-SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, created_at, updated_at
+SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, published_mcp_fingerprints, published_hooks_version, created_at, updated_at
 FROM plugin_github_connections
 WHERE marketplace_token = $1
 `
@@ -196,6 +198,8 @@ func (q *Queries) GetGitHubConnectionByMarketplaceToken(ctx context.Context, mar
 		&i.RepoName,
 		&i.MarketplaceToken,
 		&i.PublishedFingerprint,
+		&i.PublishedMcpFingerprints,
+		&i.PublishedHooksVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -897,7 +901,7 @@ ON CONFLICT (project_id) DO UPDATE
       marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
       published_fingerprint = EXCLUDED.published_fingerprint,
       updated_at = clock_timestamp()
-RETURNING id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, created_at, updated_at
+RETURNING id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, published_mcp_fingerprints, published_hooks_version, created_at, updated_at
 `
 
 type UpsertGitHubConnectionParams struct {
@@ -934,6 +938,8 @@ func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubCo
 		&i.RepoName,
 		&i.MarketplaceToken,
 		&i.PublishedFingerprint,
+		&i.PublishedMcpFingerprints,
+		&i.PublishedHooksVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
