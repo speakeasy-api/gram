@@ -9,35 +9,15 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Whole-range totals for the billing usage details. Distinct counts (sessions, active users) are computed over the full range and cannot be derived by summing the daily points.
+ * Whole-range totals for the billing usage details
  */
 export type TumDetailsTotals = {
   /**
-   * Distinct attributed users with usage
-   */
-  activeUsers: number;
-  /**
-   * Distinct chat sessions
-   */
-  agentSessions: number;
-  /**
-   * Cache read input tokens
-   */
-  cacheReadTokens: number;
-  /**
-   * Cache creation input tokens
-   */
-  cacheWriteTokens: number;
-  /**
-   * Input tokens
+   * Billed input tokens
    */
   inputTokens: number;
   /**
-   * Tokens attributed to MCP tool usage
-   */
-  mcpToolTokens: number;
-  /**
-   * Output tokens
+   * Billed output tokens
    */
   outputTokens: number;
   /**
@@ -45,25 +25,13 @@ export type TumDetailsTotals = {
    */
   riskyMessageTokens: number;
   /**
-   * Tokens attributed to skill usage
-   */
-  skillTokens: number;
-  /**
-   * Completed tool calls
-   */
-  toolCalls: number;
-  /**
    * Tokens in tool-call messages
    */
   toolMessageTokens: number;
   /**
-   * All tokens
+   * Billed tokens under management
    */
   totalTokens: number;
-  /**
-   * Tokens without user attribution
-   */
-  unattributedTokens: number;
 };
 
 /** @internal */
@@ -72,35 +40,19 @@ export const TumDetailsTotals$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    active_users: z.int(),
-    agent_sessions: z.int(),
-    cache_read_tokens: z.int(),
-    cache_write_tokens: z.int(),
     input_tokens: z.int(),
-    mcp_tool_tokens: z.int(),
     output_tokens: z.int(),
     risky_message_tokens: z.int(),
-    skill_tokens: z.int(),
-    tool_calls: z.int(),
     tool_message_tokens: z.int(),
     total_tokens: z.int(),
-    unattributed_tokens: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "active_users": "activeUsers",
-      "agent_sessions": "agentSessions",
-      "cache_read_tokens": "cacheReadTokens",
-      "cache_write_tokens": "cacheWriteTokens",
       "input_tokens": "inputTokens",
-      "mcp_tool_tokens": "mcpToolTokens",
       "output_tokens": "outputTokens",
       "risky_message_tokens": "riskyMessageTokens",
-      "skill_tokens": "skillTokens",
-      "tool_calls": "toolCalls",
       "tool_message_tokens": "toolMessageTokens",
       "total_tokens": "totalTokens",
-      "unattributed_tokens": "unattributedTokens",
     });
   }),
 );

@@ -496,7 +496,7 @@ type QueryTumDetailsResponseBody struct {
 	Points []*TumDetailsPointResponseBody `form:"points" json:"points" xml:"points"`
 	// Whole-range totals
 	Totals *TumDetailsTotalsResponseBody `form:"totals" json:"totals" xml:"totals"`
-	// Token usage per breakdown dimension, one entry per supported dimension
+	// Billed token usage per breakdown dimension
 	Breakdowns []*TumDetailsBreakdownResponseBody `form:"breakdowns" json:"breakdowns" xml:"breakdowns"`
 }
 
@@ -4989,28 +4989,12 @@ type RiskTokensPointResponseBody struct {
 type TumDetailsPointResponseBody struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano string `form:"bucket_time_unix_nano" json:"bucket_time_unix_nano" xml:"bucket_time_unix_nano"`
-	// Input tokens
+	// Billed input tokens
 	InputTokens int64 `form:"input_tokens" json:"input_tokens" xml:"input_tokens"`
-	// Output tokens
+	// Billed output tokens
 	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
-	// Cache read input tokens
-	CacheReadTokens int64 `form:"cache_read_tokens" json:"cache_read_tokens" xml:"cache_read_tokens"`
-	// Cache creation input tokens
-	CacheWriteTokens int64 `form:"cache_write_tokens" json:"cache_write_tokens" xml:"cache_write_tokens"`
-	// All tokens
+	// Billed tokens under management
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
-	// Distinct chat sessions
-	AgentSessions int64 `form:"agent_sessions" json:"agent_sessions" xml:"agent_sessions"`
-	// Completed tool calls
-	ToolCalls int64 `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
-	// Distinct attributed users with usage
-	ActiveUsers int64 `form:"active_users" json:"active_users" xml:"active_users"`
-	// Tokens attributed to MCP tool usage
-	McpToolTokens int64 `form:"mcp_tool_tokens" json:"mcp_tool_tokens" xml:"mcp_tool_tokens"`
-	// Tokens attributed to skill usage
-	SkillTokens int64 `form:"skill_tokens" json:"skill_tokens" xml:"skill_tokens"`
-	// Tokens without user attribution
-	UnattributedTokens int64 `form:"unattributed_tokens" json:"unattributed_tokens" xml:"unattributed_tokens"`
 	// Tokens in messages carrying at least one active risk finding
 	RiskyMessageTokens int64 `form:"risky_message_tokens" json:"risky_message_tokens" xml:"risky_message_tokens"`
 	// Tokens in tool-call messages
@@ -5019,28 +5003,12 @@ type TumDetailsPointResponseBody struct {
 
 // TumDetailsTotalsResponseBody is used to define fields on response body types.
 type TumDetailsTotalsResponseBody struct {
-	// Input tokens
+	// Billed input tokens
 	InputTokens int64 `form:"input_tokens" json:"input_tokens" xml:"input_tokens"`
-	// Output tokens
+	// Billed output tokens
 	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
-	// Cache read input tokens
-	CacheReadTokens int64 `form:"cache_read_tokens" json:"cache_read_tokens" xml:"cache_read_tokens"`
-	// Cache creation input tokens
-	CacheWriteTokens int64 `form:"cache_write_tokens" json:"cache_write_tokens" xml:"cache_write_tokens"`
-	// All tokens
+	// Billed tokens under management
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
-	// Distinct chat sessions
-	AgentSessions int64 `form:"agent_sessions" json:"agent_sessions" xml:"agent_sessions"`
-	// Completed tool calls
-	ToolCalls int64 `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
-	// Distinct attributed users with usage
-	ActiveUsers int64 `form:"active_users" json:"active_users" xml:"active_users"`
-	// Tokens attributed to MCP tool usage
-	McpToolTokens int64 `form:"mcp_tool_tokens" json:"mcp_tool_tokens" xml:"mcp_tool_tokens"`
-	// Tokens attributed to skill usage
-	SkillTokens int64 `form:"skill_tokens" json:"skill_tokens" xml:"skill_tokens"`
-	// Tokens without user attribution
-	UnattributedTokens int64 `form:"unattributed_tokens" json:"unattributed_tokens" xml:"unattributed_tokens"`
 	// Tokens in messages carrying at least one active risk finding
 	RiskyMessageTokens int64 `form:"risky_message_tokens" json:"risky_message_tokens" xml:"risky_message_tokens"`
 	// Tokens in tool-call messages
@@ -5050,7 +5018,7 @@ type TumDetailsTotalsResponseBody struct {
 // TumDetailsBreakdownResponseBody is used to define fields on response body
 // types.
 type TumDetailsBreakdownResponseBody struct {
-	// The breakdown dimension key (matches telemetry.query group_by)
+	// The breakdown dimension key (hook_source, model, email, division_name, role)
 	Key string `form:"key" json:"key" xml:"key"`
 	// Top values by tokens in descending order, with the remainder rolled into
 	// 'Other'
@@ -5060,10 +5028,9 @@ type TumDetailsBreakdownResponseBody struct {
 // TumDetailsBreakdownRowResponseBody is used to define fields on response body
 // types.
 type TumDetailsBreakdownRowResponseBody struct {
-	// The dimension value; empty for rows without the attribute, 'Other' for the
-	// top-N remainder rollup
+	// The dimension value; empty for rows recorded before the dimension existed
 	Value string `form:"value" json:"value" xml:"value"`
-	// Tokens for this value over the range
+	// Billed tokens for this value over the range
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
 	// Daily tokens aligned to the result's points buckets
 	Series []int64 `form:"series" json:"series" xml:"series"`

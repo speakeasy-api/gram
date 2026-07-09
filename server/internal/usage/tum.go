@@ -11,6 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -158,9 +159,10 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 	history := make([]*gen.TUMPeriod, 0, len(cycles))
 	for _, cycle := range cycles {
 		days, err := s.telemetryRepo.GetTokensUnderManagementByDay(ctx, telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:    ids,
-			StartUnixNano: cycle.Start.UnixNano(),
-			EndUnixNano:   cycle.End.UnixNano(),
+			ProjectIDs:        ids,
+			StartUnixNano:     cycle.Start.UnixNano(),
+			EndUnixNano:       cycle.End.UnixNano(),
+			BilledHookSources: billing.ModelUsageSourceStrings(),
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to compute tokens under management").LogError(ctx, s.logger)
