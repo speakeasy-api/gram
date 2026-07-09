@@ -6,19 +6,23 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
- * Input for a remote MCP server header
+ * Form for updating a remote MCP server header. Replaces every mutable field, so omitted optional fields are reset to their defaults. The one exception is value: omitting it for a header that is already secret preserves the stored value rather than clearing it.
  */
-export type HeaderInput = {
+export type UpdateServerHeaderForm = {
   /**
    * Description of the header
    */
   description?: string | undefined;
   /**
-   * Whether the header is required
+   * The ID of the header to update
+   */
+  id: string;
+  /**
+   * Whether the header is required. Defaults to false.
    */
   isRequired?: boolean | undefined;
   /**
-   * Whether the header value is a secret
+   * Whether the header value is a secret. Defaults to false. Incompatible with value_from_request_header.
    */
   isSecret?: boolean | undefined;
   /**
@@ -26,7 +30,7 @@ export type HeaderInput = {
    */
   name: string;
   /**
-   * Static header value (mutually exclusive with value_from_request_header)
+   * Static header value (mutually exclusive with value_from_request_header). Omit on an existing secret header to preserve its stored value.
    */
   value?: string | undefined;
   /**
@@ -36,8 +40,9 @@ export type HeaderInput = {
 };
 
 /** @internal */
-export type HeaderInput$Outbound = {
+export type UpdateServerHeaderForm$Outbound = {
   description?: string | undefined;
+  id: string;
   is_required?: boolean | undefined;
   is_secret?: boolean | undefined;
   name: string;
@@ -46,12 +51,13 @@ export type HeaderInput$Outbound = {
 };
 
 /** @internal */
-export const HeaderInput$outboundSchema: z.ZodMiniType<
-  HeaderInput$Outbound,
-  HeaderInput
+export const UpdateServerHeaderForm$outboundSchema: z.ZodMiniType<
+  UpdateServerHeaderForm$Outbound,
+  UpdateServerHeaderForm
 > = z.pipe(
   z.object({
     description: z.optional(z.string()),
+    id: z.string(),
     isRequired: z.optional(z.boolean()),
     isSecret: z.optional(z.boolean()),
     name: z.string(),
@@ -67,6 +73,10 @@ export const HeaderInput$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function headerInputToJSON(headerInput: HeaderInput): string {
-  return JSON.stringify(HeaderInput$outboundSchema.parse(headerInput));
+export function updateServerHeaderFormToJSON(
+  updateServerHeaderForm: UpdateServerHeaderForm,
+): string {
+  return JSON.stringify(
+    UpdateServerHeaderForm$outboundSchema.parse(updateServerHeaderForm),
+  );
 }

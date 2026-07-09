@@ -23,10 +23,7 @@ func BuildCreateServerPayload(remoteMcpCreateServerBody string, remoteMcpCreateS
 	{
 		err = json.Unmarshal([]byte(remoteMcpCreateServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"abc123\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }'")
-		}
-		if body.Headers == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
 		if err != nil {
@@ -55,18 +52,6 @@ func BuildCreateServerPayload(remoteMcpCreateServerBody string, remoteMcpCreateS
 		Name:          body.Name,
 		URL:           body.URL,
 		TransportType: body.TransportType,
-	}
-	if body.Headers != nil {
-		v.Headers = make([]*remotemcp.HeaderInput, len(body.Headers))
-		for i, val := range body.Headers {
-			if val == nil {
-				v.Headers[i] = nil
-				continue
-			}
-			v.Headers[i] = marshalHeaderInputRequestBodyToRemotemcpHeaderInput(val)
-		}
-	} else {
-		v.Headers = []*remotemcp.HeaderInput{}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -160,7 +145,7 @@ func BuildUpdateServerPayload(remoteMcpUpdateServerBody string, remoteMcpUpdateS
 	{
 		err = json.Unmarshal([]byte(remoteMcpUpdateServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"abc123\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }'")
 		}
 		if body.URL != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
@@ -192,16 +177,6 @@ func BuildUpdateServerPayload(remoteMcpUpdateServerBody string, remoteMcpUpdateS
 		Name:          body.Name,
 		URL:           body.URL,
 		TransportType: body.TransportType,
-	}
-	if body.Headers != nil {
-		v.Headers = make([]*remotemcp.HeaderInput, len(body.Headers))
-		for i, val := range body.Headers {
-			if val == nil {
-				v.Headers[i] = nil
-				continue
-			}
-			v.Headers[i] = marshalHeaderInputRequestBodyToRemotemcpHeaderInput(val)
-		}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -323,6 +298,221 @@ func BuildDeleteServerPayload(remoteMcpDeleteServerID string, remoteMcpDeleteSer
 		}
 	}
 	v := &remotemcp.DeleteServerPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListServerHeadersPayload builds the payload for the remoteMcp
+// listServerHeaders endpoint from CLI flags.
+func BuildListServerHeadersPayload(remoteMcpListServerHeadersRemoteMcpServerID string, remoteMcpListServerHeadersSessionToken string, remoteMcpListServerHeadersApikeyToken string, remoteMcpListServerHeadersProjectSlugInput string) (*remotemcp.ListServerHeadersPayload, error) {
+	var err error
+	var remoteMcpServerID string
+	{
+		remoteMcpServerID = remoteMcpListServerHeadersRemoteMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("remote_mcp_server_id", remoteMcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteMcpListServerHeadersSessionToken != "" {
+			sessionToken = &remoteMcpListServerHeadersSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteMcpListServerHeadersApikeyToken != "" {
+			apikeyToken = &remoteMcpListServerHeadersApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteMcpListServerHeadersProjectSlugInput != "" {
+			projectSlugInput = &remoteMcpListServerHeadersProjectSlugInput
+		}
+	}
+	v := &remotemcp.ListServerHeadersPayload{}
+	v.RemoteMcpServerID = remoteMcpServerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetServerHeaderPayload builds the payload for the remoteMcp
+// getServerHeader endpoint from CLI flags.
+func BuildGetServerHeaderPayload(remoteMcpGetServerHeaderID string, remoteMcpGetServerHeaderSessionToken string, remoteMcpGetServerHeaderApikeyToken string, remoteMcpGetServerHeaderProjectSlugInput string) (*remotemcp.GetServerHeaderPayload, error) {
+	var err error
+	var id string
+	{
+		id = remoteMcpGetServerHeaderID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteMcpGetServerHeaderSessionToken != "" {
+			sessionToken = &remoteMcpGetServerHeaderSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteMcpGetServerHeaderApikeyToken != "" {
+			apikeyToken = &remoteMcpGetServerHeaderApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteMcpGetServerHeaderProjectSlugInput != "" {
+			projectSlugInput = &remoteMcpGetServerHeaderProjectSlugInput
+		}
+	}
+	v := &remotemcp.GetServerHeaderPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCreateServerHeaderPayload builds the payload for the remoteMcp
+// createServerHeader endpoint from CLI flags.
+func BuildCreateServerHeaderPayload(remoteMcpCreateServerHeaderBody string, remoteMcpCreateServerHeaderSessionToken string, remoteMcpCreateServerHeaderApikeyToken string, remoteMcpCreateServerHeaderProjectSlugInput string) (*remotemcp.CreateServerHeaderPayload, error) {
+	var err error
+	var body CreateServerHeaderRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteMcpCreateServerHeaderBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"is_required\": false,\n      \"is_secret\": false,\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"value\": \"abc123\",\n      \"value_from_request_header\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", body.RemoteMcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteMcpCreateServerHeaderSessionToken != "" {
+			sessionToken = &remoteMcpCreateServerHeaderSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteMcpCreateServerHeaderApikeyToken != "" {
+			apikeyToken = &remoteMcpCreateServerHeaderApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteMcpCreateServerHeaderProjectSlugInput != "" {
+			projectSlugInput = &remoteMcpCreateServerHeaderProjectSlugInput
+		}
+	}
+	v := &remotemcp.CreateServerHeaderPayload{
+		RemoteMcpServerID:      body.RemoteMcpServerID,
+		Name:                   body.Name,
+		Description:            body.Description,
+		IsRequired:             body.IsRequired,
+		IsSecret:               body.IsSecret,
+		Value:                  body.Value,
+		ValueFromRequestHeader: body.ValueFromRequestHeader,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpdateServerHeaderPayload builds the payload for the remoteMcp
+// updateServerHeader endpoint from CLI flags.
+func BuildUpdateServerHeaderPayload(remoteMcpUpdateServerHeaderBody string, remoteMcpUpdateServerHeaderSessionToken string, remoteMcpUpdateServerHeaderApikeyToken string, remoteMcpUpdateServerHeaderProjectSlugInput string) (*remotemcp.UpdateServerHeaderPayload, error) {
+	var err error
+	var body UpdateServerHeaderRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteMcpUpdateServerHeaderBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"is_required\": false,\n      \"is_secret\": false,\n      \"name\": \"abc123\",\n      \"value\": \"abc123\",\n      \"value_from_request_header\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteMcpUpdateServerHeaderSessionToken != "" {
+			sessionToken = &remoteMcpUpdateServerHeaderSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteMcpUpdateServerHeaderApikeyToken != "" {
+			apikeyToken = &remoteMcpUpdateServerHeaderApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteMcpUpdateServerHeaderProjectSlugInput != "" {
+			projectSlugInput = &remoteMcpUpdateServerHeaderProjectSlugInput
+		}
+	}
+	v := &remotemcp.UpdateServerHeaderPayload{
+		ID:                     body.ID,
+		Name:                   body.Name,
+		Description:            body.Description,
+		IsRequired:             body.IsRequired,
+		IsSecret:               body.IsSecret,
+		Value:                  body.Value,
+		ValueFromRequestHeader: body.ValueFromRequestHeader,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDeleteServerHeaderPayload builds the payload for the remoteMcp
+// deleteServerHeader endpoint from CLI flags.
+func BuildDeleteServerHeaderPayload(remoteMcpDeleteServerHeaderID string, remoteMcpDeleteServerHeaderSessionToken string, remoteMcpDeleteServerHeaderApikeyToken string, remoteMcpDeleteServerHeaderProjectSlugInput string) (*remotemcp.DeleteServerHeaderPayload, error) {
+	var err error
+	var id string
+	{
+		id = remoteMcpDeleteServerHeaderID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteMcpDeleteServerHeaderSessionToken != "" {
+			sessionToken = &remoteMcpDeleteServerHeaderSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteMcpDeleteServerHeaderApikeyToken != "" {
+			apikeyToken = &remoteMcpDeleteServerHeaderApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteMcpDeleteServerHeaderProjectSlugInput != "" {
+			projectSlugInput = &remoteMcpDeleteServerHeaderProjectSlugInput
+		}
+	}
+	v := &remotemcp.DeleteServerHeaderPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

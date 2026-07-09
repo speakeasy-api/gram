@@ -7,10 +7,6 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-import {
-  RemoteMcpServerHeader,
-  RemoteMcpServerHeader$inboundSchema,
-} from "./remotemcpserverheader.js";
 
 /**
  * A remote MCP server configuration
@@ -20,10 +16,6 @@ export type RemoteMcpServer = {
    * When the remote MCP server was created
    */
   createdAt: Date;
-  /**
-   * Headers configured for this remote MCP server
-   */
-  headers: Array<RemoteMcpServerHeader>;
   /**
    * The ID of the remote MCP server
    */
@@ -64,7 +56,6 @@ export const RemoteMcpServer$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
-    headers: z.array(RemoteMcpServerHeader$inboundSchema),
     id: z.string(),
     name: z.optional(z.string()),
     project_id: z.string(),
