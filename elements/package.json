@@ -7,58 +7,47 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/elements.js",
-      "require": "./dist/elements.cjs"
+      "default": "./dist/elements.js"
     },
     "./server": {
       "types": "./dist/server.d.ts",
-      "import": "./dist/server.js",
-      "require": "./dist/server.cjs"
+      "default": "./dist/server.js"
     },
     "./server/core": {
       "types": "./dist/server/core.d.ts",
-      "import": "./dist/server/core.js",
-      "require": "./dist/server/core.cjs"
+      "default": "./dist/server/core.js"
     },
     "./server/express": {
       "types": "./dist/server/express.d.ts",
-      "import": "./dist/server/express.js",
-      "require": "./dist/server/express.cjs"
+      "default": "./dist/server/express.js"
     },
     "./server/nextjs": {
       "types": "./dist/server/nextjs.d.ts",
-      "import": "./dist/server/nextjs.js",
-      "require": "./dist/server/nextjs.cjs"
+      "default": "./dist/server/nextjs.js"
     },
     "./server/fastify": {
       "types": "./dist/server/fastify.d.ts",
-      "import": "./dist/server/fastify.js",
-      "require": "./dist/server/fastify.cjs"
+      "default": "./dist/server/fastify.js"
     },
     "./server/hono": {
       "types": "./dist/server/hono.d.ts",
-      "import": "./dist/server/hono.js",
-      "require": "./dist/server/hono.cjs"
+      "default": "./dist/server/hono.js"
     },
     "./server/bun": {
       "types": "./dist/server/bun.d.ts",
-      "import": "./dist/server/bun.js",
-      "require": "./dist/server/bun.cjs"
+      "default": "./dist/server/bun.js"
     },
     "./server/tanstack-start": {
       "types": "./dist/server/tanstack-start.d.ts",
-      "import": "./dist/server/tanstack-start.js",
-      "require": "./dist/server/tanstack-start.cjs"
+      "default": "./dist/server/tanstack-start.js"
     },
     "./plugins": {
       "types": "./dist/plugins/index.d.ts",
-      "import": "./dist/plugins.js",
-      "require": "./dist/plugins.cjs"
+      "default": "./dist/plugins.js"
     },
     "./compat": {
       "types": "./dist/compat-plugin.d.ts",
-      "import": "./dist/compat-plugin.js",
-      "require": "./dist/compat-plugin.cjs"
+      "default": "./dist/compat-plugin.js"
     },
     "./elements.css": "./dist/elements.css"
   },
