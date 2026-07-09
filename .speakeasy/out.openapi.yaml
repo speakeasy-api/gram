@@ -40522,6 +40522,12 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour. Default false.
+        op_policy_uri:
+          type: string
+          description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
+        op_tos_uri:
+          type: string
+          description: RFC 8414 op_tos_uri; the issuer's terms of service. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
         passthrough:
           type: boolean
           description: When true, the MCP client registers and transacts directly with this issuer. Default false.
@@ -40542,6 +40548,9 @@ components:
           items:
             type: string
           description: Scopes advertised by the issuer.
+        service_documentation:
+          type: string
+          description: RFC 8414 service_documentation; developer documentation for the issuer. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
         slug:
           type: string
           description: Project-unique slug.
@@ -40905,6 +40914,12 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour. Default false.
+        op_policy_uri:
+          type: string
+          description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
+        op_tos_uri:
+          type: string
+          description: RFC 8414 op_tos_uri; the issuer's terms of service. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
         passthrough:
           type: boolean
           description: When true, the MCP client registers and transacts directly with this issuer. Default false.
@@ -40921,6 +40936,9 @@ components:
           items:
             type: string
           description: Scopes advertised by the issuer.
+        service_documentation:
+          type: string
+          description: RFC 8414 service_documentation; developer documentation for the issuer. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
         slug:
           type: string
           description: Project-unique slug.
@@ -48575,6 +48593,12 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour.
+        op_policy_uri:
+          type: string
+          description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised.
+        op_tos_uri:
+          type: string
+          description: RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
         organization_id:
           type: string
           description: The owning organization id. Empty for legacy rows not yet backfilled.
@@ -48595,6 +48619,9 @@ components:
           type: array
           items:
             type: string
+        service_documentation:
+          type: string
+          description: RFC 8414 service_documentation; developer documentation for the issuer. Null when not advertised.
         slug:
           type: string
           description: Project-unique slug.
@@ -48647,6 +48674,12 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour.
+        op_policy_uri:
+          type: string
+          description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised or when the advertised value is not an absolute http(s) URL.
+        op_tos_uri:
+          type: string
+          description: RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised or when the advertised value is not an absolute http(s) URL.
         passthrough:
           type: boolean
           description: When true, the MCP client registers and transacts directly with this issuer.
@@ -48661,6 +48694,9 @@ components:
           type: array
           items:
             type: string
+        service_documentation:
+          type: string
+          description: RFC 8414 service_documentation; developer documentation for the issuer. Null when not advertised or when the advertised value is not an absolute http(s) URL.
         token_endpoint:
           type: string
           description: Upstream token endpoint.
@@ -53736,6 +53772,12 @@ components:
           description: Set or clear the display name. An empty string clears it to NULL.
         oidc:
           type: boolean
+        op_policy_uri:
+          type: string
+          description: Set or clear RFC 8414 op_policy_uri. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
+        op_tos_uri:
+          type: string
+          description: Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
         passthrough:
           type: boolean
         registration_endpoint:
@@ -53749,6 +53791,9 @@ components:
           type: array
           items:
             type: string
+        service_documentation:
+          type: string
+          description: Set or clear RFC 8414 service_documentation. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
         slug:
           type: string
           description: Rename the slug.

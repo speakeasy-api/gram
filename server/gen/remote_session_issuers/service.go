@@ -80,6 +80,16 @@ type CreateRemoteSessionIssuerPayload struct {
 	RegistrationEndpoint *string
 	// Upstream JWKS URI.
 	JwksURI *string
+	// RFC 8414 service_documentation; developer documentation for the issuer.
+	// Discovered from the issuer metadata document; rejected unless an absolute
+	// http(s) URL.
+	ServiceDocumentation *string
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered
+	// from the issuer metadata document; rejected unless an absolute http(s) URL.
+	OpPolicyURI *string
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Discovered from the
+	// issuer metadata document; rejected unless an absolute http(s) URL.
+	OpTosURI *string
 	// Scopes advertised by the issuer.
 	ScopesSupported []string
 	// Grant types advertised by the issuer.
@@ -174,7 +184,16 @@ type UpdateRemoteSessionIssuerPayload struct {
 	// Upstream RFC 7591 registration endpoint.
 	RegistrationEndpoint *string
 	// Upstream JWKS URI.
-	JwksURI                           *string
+	JwksURI *string
+	// Set or clear RFC 8414 service_documentation. An empty string clears it to
+	// NULL; any other value must be an absolute http(s) URL.
+	ServiceDocumentation *string
+	// Set or clear RFC 8414 op_policy_uri. An empty string clears it to NULL; any
+	// other value must be an absolute http(s) URL.
+	OpPolicyURI *string
+	// Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any
+	// other value must be an absolute http(s) URL.
+	OpTosURI                          *string
 	ScopesSupported                   []string
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string

@@ -267,6 +267,13 @@ export function AttachRemoteIdentityProviderSheet({
             // offer the CIMD client type. False when discovery did not run.
             clientIdMetadataDocumentSupported:
               discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false,
+            // RFC 8414 documentation URLs are discovery-only — there are no form
+            // inputs for them. Undefined when discovery did not run or the issuer
+            // advertised nothing usable.
+            serviceDocumentation:
+              discoveredSnapshot?.serviceDocumentation || undefined,
+            opPolicyUri: discoveredSnapshot?.opPolicyUri || undefined,
+            opTosUri: discoveredSnapshot?.opTosUri || undefined,
           },
         });
         remoteIssuerId = created.id;
