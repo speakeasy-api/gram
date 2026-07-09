@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { riskOverviewUserBreakdown } from "../funcs/riskOverviewUserBreakdown.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RiskUserBreakdownResult } from "../models/components/riskuserbreakdownresult.js";
+import {
+  GetRiskUserBreakdownRequest,
+  GetRiskUserBreakdownSecurity,
+} from "../models/operations/getriskuserbreakdown.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskUserBreakdownQueryData = components.RiskUserBreakdownResult;
+export type RiskUserBreakdownQueryData = RiskUserBreakdownResult;
 
 export function prefetchRiskUserBreakdown(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetRiskUserBreakdownRequest,
-  security?: operations.GetRiskUserBreakdownSecurity | undefined,
+  request: GetRiskUserBreakdownRequest,
+  security?: GetRiskUserBreakdownSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchRiskUserBreakdown(
 
 export function buildRiskUserBreakdownQuery(
   client$: GramCore,
-  request: operations.GetRiskUserBreakdownRequest,
-  security?: operations.GetRiskUserBreakdownSecurity | undefined,
+  request: GetRiskUserBreakdownRequest,
+  security?: GetRiskUserBreakdownSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListServerNameOverridesRequest,
+  ListServerNameOverridesSecurity,
+} from "../models/operations/listservernameoverrides.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type HooksServerNamesListServerNameOverridesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type HooksServerNamesListServerNameOverridesQueryError =
  * List all server name display overrides for a project
  */
 export function useHooksServerNamesListServerNameOverrides(
-  request?: operations.ListServerNameOverridesRequest | undefined,
-  security?: operations.ListServerNameOverridesSecurity | undefined,
+  request?: ListServerNameOverridesRequest | undefined,
+  security?: ListServerNameOverridesSecurity | undefined,
   options?: QueryHookOptions<
     HooksServerNamesListServerNameOverridesQueryData,
     HooksServerNamesListServerNameOverridesQueryError
@@ -88,8 +91,8 @@ export function useHooksServerNamesListServerNameOverrides(
  * List all server name display overrides for a project
  */
 export function useHooksServerNamesListServerNameOverridesSuspense(
-  request?: operations.ListServerNameOverridesRequest | undefined,
-  security?: operations.ListServerNameOverridesSecurity | undefined,
+  request?: ListServerNameOverridesRequest | undefined,
+  security?: ListServerNameOverridesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     HooksServerNamesListServerNameOverridesQueryData,
     HooksServerNamesListServerNameOverridesQueryError

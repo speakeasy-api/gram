@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type RevokeAllOrganizationRemoteSessionClientSessionsSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -13,6 +12,10 @@ export type RevokeAllOrganizationRemoteSessionClientSessionsSecurity = {
 
 export type RevokeAllOrganizationRemoteSessionClientSessionsRequest = {
   /**
+   * The remote_session_client id.
+   */
+  clientId: string;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -20,8 +23,6 @@ export type RevokeAllOrganizationRemoteSessionClientSessionsRequest = {
    * API Key header
    */
   gramKey?: string | undefined;
-  revokeAllClientSessionsRequestBody:
-    components.RevokeAllClientSessionsRequestBody;
 };
 
 /** @internal */
@@ -61,10 +62,9 @@ export function revokeAllOrganizationRemoteSessionClientSessionsSecurityToJSON(
 
 /** @internal */
 export type RevokeAllOrganizationRemoteSessionClientSessionsRequest$Outbound = {
+  client_id: string;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
-  RevokeAllClientSessionsRequestBody:
-    components.RevokeAllClientSessionsRequestBody$Outbound;
 };
 
 /** @internal */
@@ -74,17 +74,15 @@ export const RevokeAllOrganizationRemoteSessionClientSessionsRequest$outboundSch
     RevokeAllOrganizationRemoteSessionClientSessionsRequest
   > = z.pipe(
     z.object({
+      clientId: z.string(),
       gramSession: z.optional(z.string()),
       gramKey: z.optional(z.string()),
-      revokeAllClientSessionsRequestBody:
-        components.RevokeAllClientSessionsRequestBody$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {
+        clientId: "client_id",
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
-        revokeAllClientSessionsRequestBody:
-          "RevokeAllClientSessionsRequestBody",
       });
     }),
   );

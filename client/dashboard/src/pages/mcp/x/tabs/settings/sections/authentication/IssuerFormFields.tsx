@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
 import { getServerURL } from "@/lib/utils";
-import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
+import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import {
   CLIENT_TYPE_LABELS,

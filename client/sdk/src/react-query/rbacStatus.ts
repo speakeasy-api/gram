@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetRBACStatusRequest,
+  GetRBACStatusSecurity,
+} from "../models/operations/getrbacstatus.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RbacStatusQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RbacStatusQueryError =
  * Returns whether RBAC is currently enabled for the current organization.
  */
 export function useRbacStatus(
-  request?: operations.GetRBACStatusRequest | undefined,
-  security?: operations.GetRBACStatusSecurity | undefined,
+  request?: GetRBACStatusRequest | undefined,
+  security?: GetRBACStatusSecurity | undefined,
   options?: QueryHookOptions<RbacStatusQueryData, RbacStatusQueryError>,
 ): UseQueryResult<RbacStatusQueryData, RbacStatusQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useRbacStatus(
  * Returns whether RBAC is currently enabled for the current organization.
  */
 export function useRbacStatusSuspense(
-  request?: operations.GetRBACStatusRequest | undefined,
-  security?: operations.GetRBACStatusSecurity | undefined,
+  request?: GetRBACStatusRequest | undefined,
+  security?: GetRBACStatusSecurity | undefined,
   options?: SuspenseQueryHookOptions<RbacStatusQueryData, RbacStatusQueryError>,
 ): UseSuspenseQueryResult<RbacStatusQueryData, RbacStatusQueryError> {
   const client = useGramContext();

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SendInviteRequestBody,
+  SendInviteRequestBody$Outbound,
+  SendInviteRequestBody$outboundSchema,
+} from "../components/sendinviterequestbody.js";
 
 export type SendInviteSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,7 +19,7 @@ export type SendInviteRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  sendInviteRequestBody: components.SendInviteRequestBody;
+  sendInviteRequestBody: SendInviteRequestBody;
 };
 
 /** @internal */
@@ -49,7 +53,7 @@ export function sendInviteSecurityToJSON(
 /** @internal */
 export type SendInviteRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  SendInviteRequestBody: components.SendInviteRequestBody$Outbound;
+  SendInviteRequestBody: SendInviteRequestBody$Outbound;
 };
 
 /** @internal */
@@ -59,7 +63,7 @@ export const SendInviteRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    sendInviteRequestBody: components.SendInviteRequestBody$outboundSchema,
+    sendInviteRequestBody: SendInviteRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

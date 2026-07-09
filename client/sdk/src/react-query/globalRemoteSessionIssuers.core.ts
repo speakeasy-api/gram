@@ -11,28 +11,32 @@ import { GramCore } from "../core.js";
 import { adminRemoteSessionsListGlobalIssuers } from "../funcs/adminRemoteSessionsListGlobalIssuers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ListGlobalRemoteSessionIssuersRequest,
+  ListGlobalRemoteSessionIssuersResponse,
+  ListGlobalRemoteSessionIssuersSecurity,
+} from "../models/operations/listglobalremotesessionissuers.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 import { pageIteratorToJSON } from "./_types.js";
 export type GlobalRemoteSessionIssuersQueryData =
-  operations.ListGlobalRemoteSessionIssuersResponse;
+  ListGlobalRemoteSessionIssuersResponse;
 
 export type GlobalRemoteSessionIssuersInfiniteQueryData = PageIterator<
-  operations.ListGlobalRemoteSessionIssuersResponse,
+  ListGlobalRemoteSessionIssuersResponse,
   { cursor: string }
 >;
 
 export type GlobalRemoteSessionIssuersPageParams = PageIterator<
-  operations.ListGlobalRemoteSessionIssuersResponse,
+  ListGlobalRemoteSessionIssuersResponse,
   { cursor: string }
 >["~next"];
 
 export function prefetchGlobalRemoteSessionIssuers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListGlobalRemoteSessionIssuersRequest | undefined,
-  security?: operations.ListGlobalRemoteSessionIssuersSecurity | undefined,
+  request?: ListGlobalRemoteSessionIssuersRequest | undefined,
+  security?: ListGlobalRemoteSessionIssuersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -48,8 +52,8 @@ export function prefetchGlobalRemoteSessionIssuers(
 export function prefetchGlobalRemoteSessionIssuersInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListGlobalRemoteSessionIssuersRequest | undefined,
-  security?: operations.ListGlobalRemoteSessionIssuersSecurity | undefined,
+  request?: ListGlobalRemoteSessionIssuersRequest | undefined,
+  security?: ListGlobalRemoteSessionIssuersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -68,8 +72,8 @@ export function prefetchGlobalRemoteSessionIssuersInfinite(
 
 export function buildGlobalRemoteSessionIssuersQuery(
   client$: GramCore,
-  request?: operations.ListGlobalRemoteSessionIssuersRequest | undefined,
-  security?: operations.ListGlobalRemoteSessionIssuersSecurity | undefined,
+  request?: ListGlobalRemoteSessionIssuersRequest | undefined,
+  security?: ListGlobalRemoteSessionIssuersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -109,8 +113,8 @@ export function buildGlobalRemoteSessionIssuersQuery(
 
 export function buildGlobalRemoteSessionIssuersInfiniteQuery(
   client$: GramCore,
-  request?: operations.ListGlobalRemoteSessionIssuersRequest | undefined,
-  security?: operations.ListGlobalRemoteSessionIssuersSecurity | undefined,
+  request?: ListGlobalRemoteSessionIssuersRequest | undefined,
+  security?: ListGlobalRemoteSessionIssuersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

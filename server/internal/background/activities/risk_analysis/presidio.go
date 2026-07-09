@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/presidiofp"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // SourcePresidio is the source label written on every risk_results row
@@ -45,13 +46,13 @@ func DescribePresidioEntity(rawEntityType string) (string, string) {
 	if !ok {
 		desc = "Identified potentially sensitive personal information."
 	}
-	return guard(ruleID), desc
+	return scanners.GuardRuleID(ruleID), desc
 }
 
 // DescribePresidioDeadLetter returns the canonical (rule_id, description)
 // for a Presidio dead-letter sentinel row.
 func DescribePresidioDeadLetter() (string, string) {
-	return guard(DeadLetterRuleID), "Presidio could not analyze this message after exhausting its retry budget."
+	return scanners.GuardRuleID(DeadLetterRuleID), "Presidio could not analyze this message after exhausting its retry budget."
 }
 
 // presidioEntityDescriptions maps canonical Presidio rule ids to their
@@ -115,7 +116,7 @@ type PIIScanner interface {
 	// Permanent per-message failures surface as a single Finding with
 	// DeadLetterReason populated rather than as an error; the returned
 	// error is non-nil only on outer-ctx cancellation.
-	AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) ([][]Finding, error)
+	AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) ([][]scanners.Finding, error)
 }
 
 // DefaultPresidioScoreThreshold is the minimum recognizer confidence applied
@@ -376,7 +377,7 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 // Returns a non-nil error only on outer-ctx cancellation. Per-message
 // failures surface as DeadLetterReason sentinels so the rest of the batch
 // can still write.
-func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) (_ [][]Finding, err error) {
+func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) (_ [][]scanners.Finding, err error) {
 	n := len(texts)
 	if n == 0 {
 		return nil, nil
@@ -395,7 +396,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 		}
 	}
 	if allEmpty {
-		return make([][]Finding, n), nil
+		return make([][]scanners.Finding, n), nil
 	}
 
 	// Apply the entity blocklist at the lowest level so every caller (hook
@@ -403,7 +404,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	filtered := filterEntities(entities)
 	if len(entities) > 0 && len(filtered) == 0 {
 		// Caller pinned only blocklisted entities; nothing to scan for.
-		return make([][]Finding, n), nil
+		return make([][]scanners.Finding, n), nil
 	}
 	entities = filtered
 
@@ -418,7 +419,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 		span.End()
 	}()
 
-	results := make([][]Finding, n)
+	results := make([][]scanners.Finding, n)
 	var deadLetters atomic.Int64
 
 	var wg sync.WaitGroup
@@ -444,7 +445,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 // analyzeOne runs the retry loop for a single text. Returns the per-text
 // findings slice (real findings, or a single dead-letter sentinel) and a
 // boolean indicating whether the result was a dead letter.
-func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, entities []string, scoreThreshold float64, onProgress func()) ([]Finding, bool) {
+func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, entities []string, scoreThreshold float64, onProgress func()) ([]scanners.Finding, bool) {
 	if onProgress != nil {
 		onProgress()
 	}
@@ -520,7 +521,7 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 	}
 
 	ruleID, description := DescribePresidioDeadLetter()
-	return []Finding{{
+	return []scanners.Finding{{
 		Source:              SourcePresidio,
 		RuleID:              ruleID,
 		Description:         description,
@@ -530,17 +531,17 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 		Tags:                []string{},
 		Confidence:          0,
 		DeadLetterReason:    lastErr.Error(),
-		mcpLookupToolCallID: "",
-		spanGroupKey:        "",
-		field:               "",
-		path:                "",
+		McpLookupToolCallID: "",
+		SpanGroupKey:        "",
+		Field:               "",
+		Path:                "",
 	}}, true
 }
 
 // analyzeOnce issues a single POST /analyze for one text, gated by the
 // byte-budget semaphore. Returns Presidio's findings on 200, or an error
 // (HTTP failure, non-200, decode failure) on anything else. No retry.
-func (p *PresidioClient) analyzeOnce(ctx context.Context, text string, entities []string, scoreThreshold float64, onProgress func()) ([]Finding, error) {
+func (p *PresidioClient) analyzeOnce(ctx context.Context, text string, entities []string, scoreThreshold float64, onProgress func()) ([]scanners.Finding, error) {
 	cost := requestByteCost(text, p.throttleBudget)
 	if err := p.acquireThrottle(ctx, cost, onProgress); err != nil {
 		return nil, err
@@ -582,7 +583,7 @@ func (p *PresidioClient) acquireThrottle(ctx context.Context, cost int64, onProg
 	}
 }
 
-func (p *PresidioClient) analyze(ctx context.Context, text string, entities []string, scoreThreshold float64) (_ []Finding, err error) {
+func (p *PresidioClient) analyze(ctx context.Context, text string, entities []string, scoreThreshold float64) (_ []scanners.Finding, err error) {
 	ctx, span := p.tracer.Start(ctx, "presidio.analyze")
 	start := time.Now()
 	defer func() {
@@ -645,12 +646,12 @@ func (p *PresidioClient) analyze(ctx context.Context, text string, entities []st
 	return findings, nil
 }
 
-func convertPresidioFindings(text string, results []presidioResult) []Finding {
+func convertPresidioFindings(text string, results []presidioResult) []scanners.Finding {
 	// Presidio returns character (rune) offsets, not byte offsets.
 	// Convert to runes for correct slicing, then map back to byte positions.
 	runes := []rune(text)
 
-	findings := make([]Finding, 0, len(results))
+	findings := make([]scanners.Finding, 0, len(results))
 	for _, r := range results {
 		// Clamp offsets to valid rune range to prevent out-of-bounds panics.
 		start := max(0, min(r.Start, len(runes)))
@@ -675,7 +676,7 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 		endByte := len(string(runes[:end]))
 
 		ruleID, description := DescribePresidioEntity(r.EntityType)
-		findings = append(findings, Finding{
+		findings = append(findings, scanners.Finding{
 			RuleID:              ruleID,
 			Description:         description,
 			Match:               match,
@@ -685,10 +686,10 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 			Source:              SourcePresidio,
 			Confidence:          r.Score,
 			DeadLetterReason:    "",
-			mcpLookupToolCallID: "",
-			spanGroupKey:        "",
-			field:               "",
-			path:                "",
+			McpLookupToolCallID: "",
+			SpanGroupKey:        "",
+			Field:               "",
+			Path:                "",
 		})
 	}
 	return findings
@@ -839,6 +840,6 @@ func isCancelErr(err error) bool {
 // StubPIIScanner is a no-op implementation for environments without Presidio.
 type StubPIIScanner struct{}
 
-func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([][]Finding, error) {
-	return make([][]Finding, len(texts)), nil
+func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([][]scanners.Finding, error) {
+	return make([][]scanners.Finding, len(texts)), nil
 }

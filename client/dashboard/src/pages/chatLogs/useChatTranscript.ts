@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import type { Chat, ChatMessage } from "@gram/client/models/components";
+import type { Chat } from "@gram/client/models/components/chat.js";
+import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useSdkClient } from "@/contexts/Sdk";
 

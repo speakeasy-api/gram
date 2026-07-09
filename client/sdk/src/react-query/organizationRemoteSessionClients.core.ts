@@ -8,33 +8,35 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersListClients } from "../funcs/organizationRemoteSessionIssuersListClients.js";
+import { organizationRemoteSessionClientsList } from "../funcs/organizationRemoteSessionClientsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ListOrganizationRemoteSessionClientsRequest,
+  ListOrganizationRemoteSessionClientsResponse,
+  ListOrganizationRemoteSessionClientsSecurity,
+} from "../models/operations/listorganizationremotesessionclients.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 import { pageIteratorToJSON } from "./_types.js";
 export type OrganizationRemoteSessionClientsQueryData =
-  operations.ListOrganizationRemoteSessionClientsResponse;
+  ListOrganizationRemoteSessionClientsResponse;
 
 export type OrganizationRemoteSessionClientsInfiniteQueryData = PageIterator<
-  operations.ListOrganizationRemoteSessionClientsResponse,
+  ListOrganizationRemoteSessionClientsResponse,
   { cursor: string }
 >;
 
 export type OrganizationRemoteSessionClientsPageParams = PageIterator<
-  operations.ListOrganizationRemoteSessionClientsResponse,
+  ListOrganizationRemoteSessionClientsResponse,
   { cursor: string }
 >["~next"];
 
 export function prefetchOrganizationRemoteSessionClients(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListOrganizationRemoteSessionClientsRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientsSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientsRequest,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -50,10 +52,8 @@ export function prefetchOrganizationRemoteSessionClients(
 export function prefetchOrganizationRemoteSessionClientsInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListOrganizationRemoteSessionClientsRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientsSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientsRequest,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -72,10 +72,8 @@ export function prefetchOrganizationRemoteSessionClientsInfinite(
 
 export function buildOrganizationRemoteSessionClientsQuery(
   client$: GramCore,
-  request: operations.ListOrganizationRemoteSessionClientsRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientsSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientsRequest,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -105,7 +103,7 @@ export function buildOrganizationRemoteSessionClientsQuery(
         signal: sig,
       };
 
-      return unwrapAsync(organizationRemoteSessionIssuersListClients(
+      return unwrapAsync(organizationRemoteSessionClientsList(
         client$,
         request,
         security,
@@ -117,10 +115,8 @@ export function buildOrganizationRemoteSessionClientsQuery(
 
 export function buildOrganizationRemoteSessionClientsInfiniteQuery(
   client$: GramCore,
-  request: operations.ListOrganizationRemoteSessionClientsRequest,
-  security?:
-    | operations.ListOrganizationRemoteSessionClientsSecurity
-    | undefined,
+  request: ListOrganizationRemoteSessionClientsRequest,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -150,7 +146,7 @@ export function buildOrganizationRemoteSessionClientsInfiniteQuery(
 
       if (!ctx.pageParam) {
         const pageResult = await unwrapResultIterator(
-          organizationRemoteSessionIssuersListClients(
+          organizationRemoteSessionClientsList(
             client$,
             request,
             security,
@@ -160,7 +156,7 @@ export function buildOrganizationRemoteSessionClientsInfiniteQuery(
         return pageIteratorToJSON(pageResult);
       }
       const pageResult = await unwrapResultIterator(
-        organizationRemoteSessionIssuersListClients(
+        organizationRemoteSessionClientsList(
           client$,
           {
             ...request,
@@ -186,8 +182,8 @@ export function queryKeyOrganizationRemoteSessionClients(
 ): QueryKey {
   return [
     "@gram/client",
-    "organizationRemoteSessionIssuers",
-    "listClients",
+    "organizationRemoteSessionClients",
+    "list",
     parameters,
   ];
 }
@@ -203,8 +199,8 @@ export function queryKeyOrganizationRemoteSessionClientsInfinite(
 ): QueryKey {
   return [
     "@gram/client",
-    "organizationRemoteSessionIssuers",
-    "listClients",
+    "organizationRemoteSessionClients",
+    "list",
     "infinite",
     parameters,
   ];

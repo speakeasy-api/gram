@@ -10,11 +10,12 @@ import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
 import {
   formatRemoteMcpUrlForDisplay,
+  formatTunneledMcpDisplay,
   sourceTypeToUrnKind,
 } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import { Asset } from "@gram/client/models/components";
-import { useLatestDeployment } from "@gram/client/react-query/index.js";
+import { Asset } from "@gram/client/models/components/asset.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { Badge } from "@speakeasy-api/moonshine";
 import { ArrowRight, CircleAlertIcon, FileCode, Network } from "lucide-react";
@@ -43,6 +44,15 @@ export type NamedAsset =
       name?: string | null;
       url: string;
       type: "remotemcp";
+    }
+  | {
+      id: string;
+      deploymentAssetId: string;
+      slug: string;
+      name: string;
+      type: "tunneledmcp";
+      createdAt?: Date;
+      updatedAt?: Date;
     };
 
 const sourceTypeConfig = {
@@ -57,6 +67,9 @@ const sourceTypeConfig = {
   },
   remotemcp: {
     label: "Remote MCP",
+  },
+  tunneledmcp: {
+    label: "Tunneled MCP",
   },
 };
 
@@ -86,11 +99,9 @@ export function SourceCard({
 
   const sourceKind = sourceTypeToUrnKind(asset.type);
 
-  // Remote MCP cards delegate management actions (delete, edit) to the detail
-  // page's Settings tab — the delete confirmation needs to enumerate related
-  // mcp_servers and mcp_endpoints, which doesn't fit a card-level dialog.
+  // Remote/tunneled MCP deletion lives in Settings because it touches linked server/endpoint state.
   const actions =
-    asset.type === "remotemcp"
+    asset.type === "remotemcp" || asset.type === "tunneledmcp"
       ? []
       : [
           ...(asset.type === "openapi"
@@ -136,7 +147,9 @@ export function SourceCard({
   const displayName =
     asset.type === "remotemcp"
       ? remoteMcpTrimmedName || remoteMcpUrlDisplay || ""
-      : asset.name;
+      : asset.type === "tunneledmcp"
+        ? formatTunneledMcpDisplay(asset)
+        : asset.name;
   const displaySubtitle =
     asset.type === "remotemcp" && remoteMcpTrimmedName
       ? remoteMcpUrlDisplay
@@ -152,7 +165,11 @@ export function SourceCard({
         />
       );
     }
-    if (asset.type === "externalmcp" || asset.type === "remotemcp") {
+    if (
+      asset.type === "externalmcp" ||
+      asset.type === "remotemcp" ||
+      asset.type === "tunneledmcp"
+    ) {
       return <Network className="text-muted-foreground h-8 w-8" />;
     }
     return <FileCode className="text-muted-foreground h-8 w-8" />;

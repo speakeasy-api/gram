@@ -24,10 +24,14 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListUserSessionsQueryParamStatus,
+  ListUserSessionsRequest,
+  ListUserSessionsSecurity,
+} from "../models/operations/listusersessions.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -60,7 +64,7 @@ export {
 };
 
 export type UserSessionsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -77,8 +81,8 @@ export type UserSessionsQueryError =
  * List issued user_sessions in the caller's project. refresh_token_hash is never returned.
  */
 export function useUserSessions(
-  request?: operations.ListUserSessionsRequest | undefined,
-  security?: operations.ListUserSessionsSecurity | undefined,
+  request?: ListUserSessionsRequest | undefined,
+  security?: ListUserSessionsSecurity | undefined,
   options?: QueryHookOptions<UserSessionsQueryData, UserSessionsQueryError>,
 ): UseQueryResult<UserSessionsQueryData, UserSessionsQueryError> {
   const client = useGramContext();
@@ -100,8 +104,8 @@ export function useUserSessions(
  * List issued user_sessions in the caller's project. refresh_token_hash is never returned.
  */
 export function useUserSessionsSuspense(
-  request?: operations.ListUserSessionsRequest | undefined,
-  security?: operations.ListUserSessionsSecurity | undefined,
+  request?: ListUserSessionsRequest | undefined,
+  security?: ListUserSessionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     UserSessionsQueryData,
     UserSessionsQueryError
@@ -126,8 +130,8 @@ export function useUserSessionsSuspense(
  * List issued user_sessions in the caller's project. refresh_token_hash is never returned.
  */
 export function useUserSessionsInfinite(
-  request?: operations.ListUserSessionsRequest | undefined,
-  security?: operations.ListUserSessionsSecurity | undefined,
+  request?: ListUserSessionsRequest | undefined,
+  security?: ListUserSessionsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     UserSessionsInfiniteQueryData,
     UserSessionsQueryError
@@ -163,8 +167,8 @@ export function useUserSessionsInfinite(
  * List issued user_sessions in the caller's project. refresh_token_hash is never returned.
  */
 export function useUserSessionsInfiniteSuspense(
-  request?: operations.ListUserSessionsRequest | undefined,
-  security?: operations.ListUserSessionsSecurity | undefined,
+  request?: ListUserSessionsRequest | undefined,
+  security?: ListUserSessionsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     UserSessionsInfiniteQueryData,
     UserSessionsQueryError
@@ -199,7 +203,7 @@ export function setUserSessionsData(
     parameters: {
       subjectUrn?: string | undefined;
       userSessionIssuerId?: string | undefined;
-      status?: operations.ListUserSessionsQueryParamStatus | undefined;
+      status?: ListUserSessionsQueryParamStatus | undefined;
       clientId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
@@ -221,7 +225,7 @@ export function invalidateUserSessions(
     [parameters: {
       subjectUrn?: string | undefined;
       userSessionIssuerId?: string | undefined;
-      status?: operations.ListUserSessionsQueryParamStatus | undefined;
+      status?: ListUserSessionsQueryParamStatus | undefined;
       clientId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;

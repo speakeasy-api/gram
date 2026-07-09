@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { riskCategoriesList } from "../funcs/riskCategoriesList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { RiskCategoriesResult } from "../models/components/riskcategoriesresult.js";
+import {
+  ListRiskCategoriesRequest,
+  ListRiskCategoriesSecurity,
+} from "../models/operations/listriskcategories.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskCategoriesQueryData = components.RiskCategoriesResult;
+export type RiskCategoriesQueryData = RiskCategoriesResult;
 
 export function prefetchRiskCategories(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListRiskCategoriesRequest | undefined,
-  security?: operations.ListRiskCategoriesSecurity | undefined,
+  request?: ListRiskCategoriesRequest | undefined,
+  security?: ListRiskCategoriesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchRiskCategories(
 
 export function buildRiskCategoriesQuery(
   client$: GramCore,
-  request?: operations.ListRiskCategoriesRequest | undefined,
-  security?: operations.ListRiskCategoriesSecurity | undefined,
+  request?: ListRiskCategoriesRequest | undefined,
+  security?: ListRiskCategoriesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  ListHooksTracesPayload,
+  ListHooksTracesPayload$Outbound,
+  ListHooksTracesPayload$outboundSchema,
+} from "../components/listhookstracespayload.js";
 
 export type ListHooksTracesSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type ListHooksTracesRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  listHooksTracesPayload: components.ListHooksTracesPayload;
+  listHooksTracesPayload: ListHooksTracesPayload;
 };
 
 /** @internal */
@@ -143,7 +147,7 @@ export type ListHooksTracesRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  ListHooksTracesPayload: components.ListHooksTracesPayload$Outbound;
+  ListHooksTracesPayload: ListHooksTracesPayload$Outbound;
 };
 
 /** @internal */
@@ -155,7 +159,7 @@ export const ListHooksTracesRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    listHooksTracesPayload: components.ListHooksTracesPayload$outboundSchema,
+    listHooksTracesPayload: ListHooksTracesPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

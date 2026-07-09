@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ClearMCPRegistryCacheRequest,
+  ClearMCPRegistryCacheSecurity,
+} from "../models/operations/clearmcpregistrycache.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type McpRegistriesClearCacheMutationVariables = {
-  request: operations.ClearMCPRegistryCacheRequest;
-  security?: operations.ClearMCPRegistryCacheSecurity | undefined;
+  request: ClearMCPRegistryCacheRequest;
+  security?: ClearMCPRegistryCacheSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type McpRegistriesClearCacheMutationData = void;
 
 export type McpRegistriesClearCacheMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

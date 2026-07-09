@@ -11,17 +11,21 @@ import { GramCore } from "../core.js";
 import { riskPolicyBypassRequestsList } from "../funcs/riskPolicyBypassRequestsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListRiskPolicyBypassRequestsResult } from "../models/components/listriskpolicybypassrequestsresult.js";
+import {
+  ListRiskPolicyBypassRequestsRequest,
+  ListRiskPolicyBypassRequestsSecurity,
+  QueryParamStatus,
+} from "../models/operations/listriskpolicybypassrequests.js";
 import { unwrapAsync } from "../types/fp.js";
 export type RiskListPolicyBypassRequestsQueryData =
-  components.ListRiskPolicyBypassRequestsResult;
+  ListRiskPolicyBypassRequestsResult;
 
 export function prefetchRiskListPolicyBypassRequests(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListRiskPolicyBypassRequestsRequest | undefined,
-  security?: operations.ListRiskPolicyBypassRequestsSecurity | undefined,
+  request?: ListRiskPolicyBypassRequestsRequest | undefined,
+  security?: ListRiskPolicyBypassRequestsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +40,8 @@ export function prefetchRiskListPolicyBypassRequests(
 
 export function buildRiskListPolicyBypassRequestsQuery(
   client$: GramCore,
-  request?: operations.ListRiskPolicyBypassRequestsRequest | undefined,
-  security?: operations.ListRiskPolicyBypassRequestsSecurity | undefined,
+  request?: ListRiskPolicyBypassRequestsRequest | undefined,
+  security?: ListRiskPolicyBypassRequestsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -80,7 +84,7 @@ export function buildRiskListPolicyBypassRequestsQuery(
 export function queryKeyRiskListPolicyBypassRequests(
   parameters: {
     policyId?: string | undefined;
-    status?: operations.QueryParamStatus | undefined;
+    status?: QueryParamStatus | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

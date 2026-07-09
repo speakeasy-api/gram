@@ -11,17 +11,20 @@ import { GramCore } from "../core.js";
 import { riskCustomRulesList } from "../funcs/riskCustomRulesList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListCustomDetectionRulesResult } from "../models/components/listcustomdetectionrulesresult.js";
+import {
+  ListCustomDetectionRulesRequest,
+  ListCustomDetectionRulesSecurity,
+} from "../models/operations/listcustomdetectionrules.js";
 import { unwrapAsync } from "../types/fp.js";
 export type RiskListCustomDetectionRulesQueryData =
-  components.ListCustomDetectionRulesResult;
+  ListCustomDetectionRulesResult;
 
 export function prefetchRiskListCustomDetectionRules(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListCustomDetectionRulesRequest | undefined,
-  security?: operations.ListCustomDetectionRulesSecurity | undefined,
+  request?: ListCustomDetectionRulesRequest | undefined,
+  security?: ListCustomDetectionRulesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +39,8 @@ export function prefetchRiskListCustomDetectionRules(
 
 export function buildRiskListCustomDetectionRulesQuery(
   client$: GramCore,
-  request?: operations.ListCustomDetectionRulesRequest | undefined,
-  security?: operations.ListCustomDetectionRulesSecurity | undefined,
+  request?: ListCustomDetectionRulesRequest | undefined,
+  security?: ListCustomDetectionRulesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

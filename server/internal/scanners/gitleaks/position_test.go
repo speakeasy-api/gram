@@ -1,0 +1,257 @@
+package gitleaks
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestLineColToBytePos(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		content string
+		line    int
+		col     int
+		want    int
+	}{
+		{
+			name:    "first character",
+			content: "hello world",
+			line:    0,
+			col:     1,
+			want:    0,
+		},
+		{
+			name:    "middle of first line",
+			content: "hello world",
+			line:    0,
+			col:     7,
+			want:    6,
+		},
+		{
+			name:    "end of first line",
+			content: "hello world",
+			line:    0,
+			col:     12,
+			want:    11,
+		},
+		{
+			// gitleaks reports the first byte after a newline as column 2
+			// (the newline holds column 1), so 'w' at byte 6 is column 2.
+			name:    "second line start",
+			content: "hello\nworld",
+			line:    1,
+			col:     2,
+			want:    6,
+		},
+		{
+			// 'r' at byte 8: (8 - newlineIndex 5) + 1 = column 4.
+			name:    "second line middle",
+			content: "hello\nworld",
+			line:    1,
+			col:     4,
+			want:    8,
+		},
+		{
+			// 'l' at byte 24: (24 - preceding newlineIndex 17) + 1 = column 8.
+			name:    "multi-line with various lengths",
+			content: "first line\nsecond\nthird line here",
+			line:    2,
+			col:     8,
+			want:    24,
+		},
+		{
+			// 'f' at byte 8: (8 - preceding newlineIndex 7) + 1 = column 2.
+			name:    "empty lines",
+			content: "first\n\n\nfourth",
+			line:    3,
+			col:     2,
+			want:    8,
+		},
+		{
+			name:    "beyond end of content",
+			content: "hello",
+			line:    0,
+			col:     10,
+			want:    5,
+		},
+		{
+			name:    "invalid line",
+			content: "hello",
+			line:    -1,
+			col:     1,
+			want:    0,
+		},
+		{
+			name:    "invalid column",
+			content: "hello",
+			line:    0,
+			col:     0,
+			want:    0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := lineColToBytePos(tt.content, tt.line, tt.col)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestLineColToBytePosWithActualSecrets(t *testing.T) {
+	t.Parallel()
+	// Test with actual secret patterns that gitleaks would detect
+	tests := []struct {
+		name        string
+		content     string
+		matchString string
+		startLine   int
+		startCol    int
+		endLine     int
+		endCol      int
+	}{
+		{
+			name:        "AWS key in single line",
+			content:     `AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE`,
+			matchString: "AKIAIOSFODNN7EXAMPLE",
+			startLine:   0,
+			startCol:    19,
+			endLine:     0,
+			endCol:      39,
+		},
+		{
+			name: "API key in JSON",
+			content: `{
+  "api_key": "sk-proj-1234567890abcdef",
+  "other": "value"
+}`,
+			matchString: "sk-proj-1234567890abcdef",
+			startLine:   1,
+			startCol:    16,
+			endLine:     1,
+			endCol:      40,
+		},
+		{
+			name: "Database URL spanning line",
+			content: `const db =
+  "postgresql://user:password123@localhost/db";`,
+			matchString: "password123",
+			startLine:   1,
+			startCol:    23,
+			endLine:     1,
+			endCol:      34,
+		},
+		{
+			name: "GitHub token in config",
+			content: `# Configuration
+github_token: ghp_1234567890abcdefghijklmnopqrstuvwxyz
+environment: production`,
+			matchString: "ghp_1234567890abcdefghijklmnopqrstuvwxyz",
+			startLine:   1,
+			startCol:    16,
+			endLine:     1,
+			endCol:      56,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			// Calculate byte positions
+			startPos := lineColToBytePos(tt.content, tt.startLine, tt.startCol)
+			endPos := lineColToBytePos(tt.content, tt.endLine, tt.endCol)
+
+			// Extract the substring using byte positions
+			extracted := tt.content[startPos:endPos]
+
+			// Verify we extracted the correct match
+			assert.Equal(t, tt.matchString, extracted,
+				"Extracted string should match the expected secret")
+
+			// Also verify the positions are correct
+			assert.Contains(t, tt.content, tt.matchString,
+				"Content should contain the match string")
+			assert.Equal(t, startPos, strings.Index(tt.content, tt.matchString),
+				"Start position should match string index")
+		})
+	}
+}
+
+func TestBytePosEdgeCases(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		content string
+		line    int
+		col     int
+	}{
+		{
+			name:    "Tabs and spaces",
+			content: "\t\tAPI_KEY=secret123",
+			line:    0,
+			col:     11,
+		},
+		{
+			name:    "Windows line endings",
+			content: "First line\r\nSecond line",
+			line:    1,
+			col:     1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			pos := lineColToBytePos(tt.content, tt.line, tt.col)
+			assert.True(t, pos >= 0 && pos <= len(tt.content))
+		})
+	}
+}
+
+func TestLineColToBytePos_MultiByte(t *testing.T) {
+	t.Parallel()
+	// Gitleaks columns are byte offsets, not rune offsets.
+	// 🔒 is 4 bytes (U+1F512). With byte-based columns, the character
+	// after "🔒 " starts at byte 5, not rune 3.
+	tests := []struct {
+		name    string
+		content string
+		line    int
+		col     int
+		want    int
+	}{
+		{
+			name:    "after 4-byte emoji",
+			content: "🔒 SECRET=abc",
+			line:    0,
+			col:     6, // byte 5 = 'S', col is 1-indexed so col 6
+			want:    5, // "🔒" = 4 bytes, " " = 1 byte
+		},
+		{
+			name:    "CJK characters are 3 bytes each",
+			content: "世界KEY=val",
+			line:    0,
+			col:     7, // byte 6 = 'K', col 7
+			want:    6, // "世" = 3 bytes, "界" = 3 bytes
+		},
+		{
+			name:    "emoji on second line before secret",
+			content: "line1\n🔑 token=abc123",
+			line:    1,
+			col:     11, // 'n' at byte 15: (15 - newlineIndex 5) + 1 = 11 (first byte after '\n' is col 2)
+			want:    15, // 6 (line1\n) + 4 (🔑) + 1 ( ) + 5 (token) - 1 = 15
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := lineColToBytePos(tt.content, tt.line, tt.col)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

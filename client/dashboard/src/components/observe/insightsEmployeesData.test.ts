@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type {
-  AccessMember,
-  Role,
-  UserSummary,
-} from "@gram/client/models/components";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { Role } from "@gram/client/models/components/role.js";
+import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import {
   buildEmployees,
   isUnattributedEmployee,

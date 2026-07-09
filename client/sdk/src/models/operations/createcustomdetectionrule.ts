@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateCustomDetectionRuleRequestBody,
+  CreateCustomDetectionRuleRequestBody$Outbound,
+  CreateCustomDetectionRuleRequestBody$outboundSchema,
+} from "../components/createcustomdetectionrulerequestbody.js";
 
 export type CreateCustomDetectionRuleSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,8 +38,7 @@ export type CreateCustomDetectionRuleRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  createCustomDetectionRuleRequestBody:
-    components.CreateCustomDetectionRuleRequestBody;
+  createCustomDetectionRuleRequestBody: CreateCustomDetectionRuleRequestBody;
 };
 
 /** @internal */
@@ -151,7 +154,7 @@ export type CreateCustomDetectionRuleRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   CreateCustomDetectionRuleRequestBody:
-    components.CreateCustomDetectionRuleRequestBody$Outbound;
+    CreateCustomDetectionRuleRequestBody$Outbound;
 };
 
 /** @internal */
@@ -164,7 +167,7 @@ export const CreateCustomDetectionRuleRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     createCustomDetectionRuleRequestBody:
-      components.CreateCustomDetectionRuleRequestBody$outboundSchema,
+      CreateCustomDetectionRuleRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

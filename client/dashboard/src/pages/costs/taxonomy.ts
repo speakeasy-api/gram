@@ -1,4 +1,4 @@
-import { Dimension } from "@gram/client/models/components";
+import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { providerLabel } from "@/components/observe/account-display-utils";
 
 // Shared cost-taxonomy config + helpers, used by both the CostsExplorer

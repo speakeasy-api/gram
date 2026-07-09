@@ -387,7 +387,8 @@ candidate_chats AS (
     c.created_at,
     c.updated_at,
     COALESCE(rc.cnt, 0) AS risk_findings_count,
-    COALESCE(ua.account_type, '')::text AS account_type
+    COALESCE(ua.account_type, '')::text AS account_type,
+    COALESCE(ua.email, '')::text AS account_email
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   -- Resolve the AI account that produced the chat (chats.user_account_id has no FK,
@@ -476,7 +477,8 @@ filtered_chats AS (
     cs.num_messages,
     cs.last_message_timestamp,
     cc.risk_findings_count,
-    cc.account_type
+    cc.account_type,
+    cc.account_email
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
   WHERE (@from_time::timestamptz IS NULL OR cs.last_message_timestamp >= @from_time)
@@ -494,7 +496,8 @@ limited_chats AS (
     (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
     fc.risk_findings_count,
-    fc.account_type
+    fc.account_type,
+    fc.account_email
   FROM filtered_chats fc
   ORDER BY
     CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
@@ -517,7 +520,8 @@ SELECT
   lc.num_messages,
   lc.last_message_timestamp,
   lc.risk_findings_count,
-  lc.account_type
+  lc.account_type,
+  lc.account_email
 FROM limited_chats lc;
 
 -- name: ListChatSources :many
@@ -545,8 +549,9 @@ ORDER BY source;
 -- name: GetChat :one
 -- Loads a chat plus the team/personal classification of the AI account that
 -- produced it (chats.user_account_id has no FK), scoped by organization. Returns
--- '' for account_type when the chat has no linked account or it is unclassified.
-SELECT c.*, COALESCE(ua.account_type, '')::text AS account_type
+-- '' for account_type/account_email when the chat has no linked account or it
+-- is unclassified.
+SELECT c.*, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
 WHERE c.id = @id AND c.deleted IS FALSE;

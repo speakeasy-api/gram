@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { userSessionsListFacets } from "../funcs/userSessionsListFacets.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListUserSessionFacetsResult } from "../models/components/listusersessionfacetsresult.js";
+import {
+  ListUserSessionFacetsRequest,
+  ListUserSessionFacetsSecurity,
+} from "../models/operations/listusersessionfacets.js";
 import { unwrapAsync } from "../types/fp.js";
-export type UserSessionFacetsQueryData = components.ListUserSessionFacetsResult;
+export type UserSessionFacetsQueryData = ListUserSessionFacetsResult;
 
 export function prefetchUserSessionFacets(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListUserSessionFacetsRequest | undefined,
-  security?: operations.ListUserSessionFacetsSecurity | undefined,
+  request?: ListUserSessionFacetsRequest | undefined,
+  security?: ListUserSessionFacetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchUserSessionFacets(
 
 export function buildUserSessionFacetsQuery(
   client$: GramCore,
-  request?: operations.ListUserSessionFacetsRequest | undefined,
-  security?: operations.ListUserSessionFacetsSecurity | undefined,
+  request?: ListUserSessionFacetsRequest | undefined,
+  security?: ListUserSessionFacetsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

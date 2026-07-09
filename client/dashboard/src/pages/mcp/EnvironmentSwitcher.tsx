@@ -1,7 +1,22 @@
+import { Button as UIButton } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Button } from "@speakeasy-api/moonshine";
-import { Plus, Unlink } from "lucide-react";
+import { Check, ChevronsUpDown, Link, Plus, Unlink } from "lucide-react";
+import { useState } from "react";
 import {
   EnvironmentVariable,
   environmentHasAllRequiredVariables,
@@ -44,6 +59,8 @@ export function EnvironmentSwitcher({
   onDetachEnvironment,
   onCreateEnvironment,
 }: EnvironmentSwitcherProps): JSX.Element | null {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   // Sort environments with attached environment first, falling back to default for sort order only
   const sortSlug =
     mcpAttachedEnvironmentSlug || defaultEnvironmentSlug || "default";
@@ -69,49 +86,103 @@ export function EnvironmentSwitcher({
       )
     : false;
 
+  // Dropdown row indicator: a chain-link icon (with an "Attached" tooltip) on
+  // the attached env, transparent spacer of the same size on the rest so
+  // labels stay aligned.
+  const renderAttachedIndicator = (env: Environment) => {
+    const isAttachedEnv =
+      mcpAttachedEnvironmentSlug != null &&
+      env.slug === mcpAttachedEnvironmentSlug;
+    if (!isAttachedEnv) {
+      return <div className="h-3 w-3 shrink-0" />;
+    }
+    return (
+      <SimpleTooltip tooltip="Attached">
+        <Link className="text-foreground h-3 w-3 shrink-0" />
+      </SimpleTooltip>
+    );
+  };
+
+  const selectedEnv = sortedEnvironments.find(
+    (env) => env.slug === selectedEnvironmentView,
+  );
+  const selectedLabel = selectedEnv
+    ? getEnvironmentDisplayName(selectedEnv)
+    : selectedEnvironmentView;
+  const selectedIsAttached =
+    mcpAttachedEnvironmentSlug != null &&
+    selectedEnvironmentView === mcpAttachedEnvironmentSlug;
+
   if (environments.length === 0) {
     return null;
   }
 
   return (
     <div className="flex items-center gap-1 border-b">
-      {/* Environment tabs */}
-      {sortedEnvironments.map((env) => {
-        const isSelected = selectedEnvironmentView === env.slug;
-        const isAttachedEnv =
-          mcpAttachedEnvironmentSlug != null &&
-          env.slug === mcpAttachedEnvironmentSlug;
-        const envHasAllRequired = environmentHasAllRequiredVariables(
-          env.slug,
-          requiredVars,
-        );
-
-        return (
-          <button
-            key={env.slug}
-            onClick={() => onEnvironmentSelect(env.slug)}
-            className={cn(
-              "relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors",
-              isSelected
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {isAttachedEnv && (
-              <div
-                className={cn(
-                  "h-2 w-2 rounded-full",
-                  envHasAllRequired ? "bg-green-500" : "bg-yellow-500",
+      {/* Environment selector */}
+      <div className="py-2 pl-3">
+        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+          <PopoverTrigger asChild>
+            <UIButton
+              variant="outline"
+              role="combobox"
+              aria-expanded={pickerOpen}
+              className="min-w-[200px] justify-between gap-2 px-3"
+            >
+              <span className="flex items-center gap-2 truncate">
+                {selectedIsAttached && (
+                  <SimpleTooltip tooltip="Attached">
+                    <Link className="text-foreground h-3 w-3 shrink-0" />
+                  </SimpleTooltip>
                 )}
-              />
-            )}
-            {getEnvironmentDisplayName(env)}
-            {isSelected && (
-              <div className="bg-primary absolute right-0 bottom-0 left-0 h-0.5" />
-            )}
-          </button>
-        );
-      })}
+                <span className="truncate">{selectedLabel}</span>
+              </span>
+              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+            </UIButton>
+          </PopoverTrigger>
+          <PopoverContent className="w-[280px] p-0" align="start">
+            <Command>
+              {sortedEnvironments.length > 4 && (
+                <CommandInput
+                  placeholder="Search environments..."
+                  className="h-9"
+                />
+              )}
+              <CommandList>
+                <CommandEmpty>No environments found.</CommandEmpty>
+                <CommandGroup>
+                  {sortedEnvironments.map((env) => {
+                    const isSelected = selectedEnvironmentView === env.slug;
+                    return (
+                      <CommandItem
+                        key={env.slug}
+                        value={env.slug}
+                        keywords={[getEnvironmentDisplayName(env)]}
+                        className="cursor-pointer gap-2"
+                        onSelect={(slug) => {
+                          onEnvironmentSelect(slug);
+                          setPickerOpen(false);
+                        }}
+                      >
+                        {renderAttachedIndicator(env)}
+                        <span className="truncate">
+                          {getEnvironmentDisplayName(env)}
+                        </span>
+                        <Check
+                          className={cn(
+                            "ml-auto h-4 w-4 shrink-0",
+                            isSelected ? "opacity-100" : "opacity-0",
+                          )}
+                        />
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      </div>
 
       {/* Right side actions */}
       <div className="ml-auto flex items-center gap-3 py-1.5 pr-3">

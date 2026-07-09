@@ -4,10 +4,8 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Toolset } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
-import {
-  invalidateAllToolset,
-  useUpdateToolsetMutation,
-} from "@gram/client/react-query";
+import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
+import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, ListOrdered, Search } from "lucide-react";

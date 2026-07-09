@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListEnvironmentsRequest,
+  ListEnvironmentsSecurity,
+} from "../models/operations/listenvironments.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListEnvironmentsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListEnvironmentsQueryError =
  * List all environments for an organization
  */
 export function useListEnvironments(
-  request?: operations.ListEnvironmentsRequest | undefined,
-  security?: operations.ListEnvironmentsSecurity | undefined,
+  request?: ListEnvironmentsRequest | undefined,
+  security?: ListEnvironmentsSecurity | undefined,
   options?: QueryHookOptions<
     ListEnvironmentsQueryData,
     ListEnvironmentsQueryError
@@ -85,8 +88,8 @@ export function useListEnvironments(
  * List all environments for an organization
  */
 export function useListEnvironmentsSuspense(
-  request?: operations.ListEnvironmentsRequest | undefined,
-  security?: operations.ListEnvironmentsSecurity | undefined,
+  request?: ListEnvironmentsRequest | undefined,
+  security?: ListEnvironmentsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListEnvironmentsQueryData,
     ListEnvironmentsQueryError

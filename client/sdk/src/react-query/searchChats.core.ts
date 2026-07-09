@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { SearchChatsResult } from "../models/components/searchchatsresult.js";
+import {
+  SearchChatsRequest,
+  SearchChatsSecurity,
+} from "../models/operations/searchchats.js";
 import { unwrapAsync } from "../types/fp.js";
-export type SearchChatsQueryData = components.SearchChatsResult;
+export type SearchChatsQueryData = SearchChatsResult;
 
 export function prefetchSearchChats(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.SearchChatsRequest,
-  security?: operations.SearchChatsSecurity | undefined,
+  request: SearchChatsRequest,
+  security?: SearchChatsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchSearchChats(
 
 export function buildSearchChatsQuery(
   client$: GramCore,
-  request: operations.SearchChatsRequest,
-  security?: operations.SearchChatsSecurity | undefined,
+  request: SearchChatsRequest,
+  security?: SearchChatsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  UpdateMemberRolesForm,
+  UpdateMemberRolesForm$Outbound,
+  UpdateMemberRolesForm$outboundSchema,
+} from "../components/updatememberrolesform.js";
 
 export type UpdateMemberRolesSecurity = {
   apikeyHeaderGramKey?: string | undefined;
@@ -20,7 +24,7 @@ export type UpdateMemberRolesRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  updateMemberRolesForm: components.UpdateMemberRolesForm;
+  updateMemberRolesForm: UpdateMemberRolesForm;
 };
 
 /** @internal */
@@ -58,7 +62,7 @@ export function updateMemberRolesSecurityToJSON(
 export type UpdateMemberRolesRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
-  UpdateMemberRolesForm: components.UpdateMemberRolesForm$Outbound;
+  UpdateMemberRolesForm: UpdateMemberRolesForm$Outbound;
 };
 
 /** @internal */
@@ -69,7 +73,7 @@ export const UpdateMemberRolesRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-    updateMemberRolesForm: components.UpdateMemberRolesForm$outboundSchema,
+    updateMemberRolesForm: UpdateMemberRolesForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

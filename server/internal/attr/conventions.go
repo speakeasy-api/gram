@@ -12,46 +12,50 @@ import (
 type Key = attribute.Key
 
 const (
-	ErrorIDKey                        = attribute.Key("error.id")
-	ErrorMessageKey                   = attribute.Key("error.message")
-	ErrorStackKey                     = attribute.Key("error.stack")
-	ErrorKindKey                      = attribute.Key("error.kind")
-	ExternalUserIDKey                 = attribute.Key("gram.external_user.id")
-	APIKeyIDKey                       = attribute.Key("gram.api_key.id")
-	ContainerIDKey                    = semconv.ContainerIDKey
-	ContainerNetworkIDKey             = attribute.Key("container.network.id")
-	FilePathKey                       = semconv.FilePathKey
-	HostNameKey                       = semconv.HostNameKey
-	HTTPRefererHostKey                = attribute.Key("http.request.referer_host")
-	HTTPRequestIDKey                  = attribute.Key("http.request_id")
-	HTTPRequestHeaderRefererKey       = attribute.Key("http.request.header.referer")
-	HTTPRequestHeaderContentTypeKey   = attribute.Key("http.request.header.content_type")
-	HTTPRequestHeaderUserAgentKey     = attribute.Key("http.request.header.user_agent")
-	HTTPRequestMethodKey              = semconv.HTTPRequestMethodKey
-	HTTPRequestBodyKey                = attribute.Key("http.request.body")
-	HTTPResponseBodyKey               = attribute.Key("http.response.body")
-	HTTPRequestHeadersKey             = attribute.Key("http.request.headers")
-	HTTPResponseHeadersKey            = attribute.Key("http.response.headers")
-	HTTPResponseHeaderContentTypeKey  = attribute.Key("http.response.header.content_type")
-	HTTPResponseStatusCodeKey         = semconv.HTTPResponseStatusCodeKey
-	HTTPResponseOriginalStatusCodeKey = attribute.Key("http.response.original_status_code")
-	HTTPRouteKey                      = semconv.HTTPRouteKey
-	HTTPServerRequestDurationKey      = attribute.Key("http.server.request.duration")
-	HTTPClientRequestDurationKey      = attribute.Key("http.client.request.duration_ms")
-	HTTPRequestSizeKey                = semconv.HTTPRequestSizeKey
-	HTTPResponseSizeKey               = semconv.HTTPResponseSizeKey
-	ObservedTimeUnixNanoKey           = attribute.Key("observed_time_unix_nano")
-	ServerAddressKey                  = semconv.ServerAddressKey
-	ServiceEnvKey                     = semconv.DeploymentEnvironmentNameKey
-	ServiceNameKey                    = semconv.ServiceNameKey
-	ServiceVersionKey                 = semconv.ServiceVersionKey
-	TimeUnixNanoKey                   = attribute.Key("time_unix_nano")
-	URLDomainKey                      = semconv.URLDomainKey
-	URLFullKey                        = semconv.URLFullKey
-	URLOriginalKey                    = semconv.URLOriginalKey
-	UserIDKey                         = semconv.UserIDKey
-	UserEmailKey                      = semconv.UserEmailKey
-	UserRolesKey                      = semconv.UserRolesKey
+	ErrorIDKey                       = attribute.Key("error.id")
+	ErrorMessageKey                  = attribute.Key("error.message")
+	ErrorStackKey                    = attribute.Key("error.stack")
+	ErrorKindKey                     = attribute.Key("error.kind")
+	ExternalUserIDKey                = attribute.Key("gram.external_user.id")
+	APIKeyIDKey                      = attribute.Key("gram.api_key.id")
+	ContainerIDKey                   = semconv.ContainerIDKey
+	ContainerNetworkIDKey            = attribute.Key("container.network.id")
+	FilePathKey                      = semconv.FilePathKey
+	HostNameKey                      = semconv.HostNameKey
+	HTTPRefererHostKey               = attribute.Key("http.request.referer_host")
+	HTTPRequestIDKey                 = attribute.Key("http.request_id")
+	HTTPRequestHeaderRefererKey      = attribute.Key("http.request.header.referer")
+	HTTPRequestHeaderContentTypeKey  = attribute.Key("http.request.header.content_type")
+	HTTPRequestHeaderUserAgentKey    = attribute.Key("http.request.header.user_agent")
+	HTTPRequestMethodKey             = semconv.HTTPRequestMethodKey
+	HTTPRequestBodyKey               = attribute.Key("http.request.body")
+	HTTPResponseBodyKey              = attribute.Key("http.response.body")
+	HTTPRequestHeadersKey            = attribute.Key("http.request.headers")
+	HTTPResponseHeadersKey           = attribute.Key("http.response.headers")
+	HTTPResponseHeaderContentTypeKey = attribute.Key("http.response.header.content_type")
+	// HTTPResponseHeaderWWWAuthenticateKey carries the RFC 6750 challenge an
+	// upstream returned on 401/403 — the machine-readable rejection reason
+	// (error, error_description) for a refused bearer token.
+	HTTPResponseHeaderWWWAuthenticateKey = attribute.Key("http.response.header.www_authenticate")
+	HTTPResponseStatusCodeKey            = semconv.HTTPResponseStatusCodeKey
+	HTTPResponseOriginalStatusCodeKey    = attribute.Key("http.response.original_status_code")
+	HTTPRouteKey                         = semconv.HTTPRouteKey
+	HTTPServerRequestDurationKey         = attribute.Key("http.server.request.duration")
+	HTTPClientRequestDurationKey         = attribute.Key("http.client.request.duration_ms")
+	HTTPRequestSizeKey                   = semconv.HTTPRequestSizeKey
+	HTTPResponseSizeKey                  = semconv.HTTPResponseSizeKey
+	ObservedTimeUnixNanoKey              = attribute.Key("observed_time_unix_nano")
+	ServerAddressKey                     = semconv.ServerAddressKey
+	ServiceEnvKey                        = semconv.DeploymentEnvironmentNameKey
+	ServiceNameKey                       = semconv.ServiceNameKey
+	ServiceVersionKey                    = semconv.ServiceVersionKey
+	TimeUnixNanoKey                      = attribute.Key("time_unix_nano")
+	URLDomainKey                         = semconv.URLDomainKey
+	URLFullKey                           = semconv.URLFullKey
+	URLOriginalKey                       = semconv.URLOriginalKey
+	UserIDKey                            = semconv.UserIDKey
+	UserEmailKey                         = semconv.UserEmailKey
+	UserRolesKey                         = semconv.UserRolesKey
 
 	// UserAttributesKey and UserGroupsKey carry the denormalized WorkOS
 	// Directory Sync snapshot stamped onto telemetry logs at write time.
@@ -113,11 +117,16 @@ const (
 	// Personal-account tracking. These are stamped by hook/OTEL ingest and
 	// materialized into ClickHouse columns of the same suffix (provider,
 	// external_org_id, account_type) for org-level usage dashboards.
+	// account_email is the AI account's own (observed) email, kept separate
+	// from user.email — the authenticated actor — so adopting cached
+	// attribution never rewrites the canonical user identity; it has no
+	// materialized column yet.
 	ProviderKey                    = attribute.Key("gram.provider")
 	ExternalOrgIDKey               = attribute.Key("gram.external_org_id")
 	AccountTypeKey                 = attribute.Key("gram.account_type")
 	BillingModeKey                 = attribute.Key("gram.billing_mode")
 	DeviceIDKey                    = attribute.Key("gram.device_id")
+	AccountEmailKey                = attribute.Key("gram.account_email")
 	ChatIDKey                      = attribute.Key("gram.chat.id")
 	MessageIDKey                   = attribute.Key("gram.message.id")
 	MCPRegistryIDKey               = attribute.Key("gram.mcp_registry.id")
@@ -412,6 +421,7 @@ const (
 	RemoteMCPProxyRemoteStatusClassKey = attribute.Key("gram.remote_mcp.proxy.remote_status_class")
 	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
 	RemoteMCPServerURLKey              = attribute.Key("gram.remote_mcp_server.url")
+	TunneledMCPServerIDKey             = attribute.Key("gram.tunneled_mcp_server.id")
 
 	WorkOSEventIDKey             = attribute.Key("gram.workos_event.id")
 	WorkOSEventTypeKey           = attribute.Key("gram.workos_event.type")
@@ -508,6 +518,14 @@ func HTTPResponseHeaderContentType(v string) attribute.KeyValue {
 
 func SlogHTTPResponseHeaderContentType(v string) slog.Attr {
 	return slog.String(string(HTTPResponseHeaderContentTypeKey), v)
+}
+
+func HTTPResponseHeaderWWWAuthenticate(v string) attribute.KeyValue {
+	return HTTPResponseHeaderWWWAuthenticateKey.String(v)
+}
+
+func SlogHTTPResponseHeaderWWWAuthenticate(v string) slog.Attr {
+	return slog.String(string(HTTPResponseHeaderWWWAuthenticateKey), v)
 }
 
 func HTTPResponseStatusCode(v int) attribute.KeyValue { return HTTPResponseStatusCodeKey.Int(v) }
@@ -1228,6 +1246,11 @@ func SlogRemoteMCPServerID(v string) slog.Attr {
 func RemoteMCPServerURL(v string) attribute.KeyValue { return RemoteMCPServerURLKey.String(v) }
 func SlogRemoteMCPServerURL(v string) slog.Attr {
 	return slog.String(string(RemoteMCPServerURLKey), v)
+}
+
+func TunneledMCPServerID(v string) attribute.KeyValue { return TunneledMCPServerIDKey.String(v) }
+func SlogTunneledMCPServerID(v string) slog.Attr {
+	return slog.String(string(TunneledMCPServerIDKey), v)
 }
 
 func RemoteMCPProxyInterceptor(v string) attribute.KeyValue {

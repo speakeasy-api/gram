@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { instancesGetBySlug } from "../funcs/instancesGetBySlug.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetInstanceResult } from "../models/components/getinstanceresult.js";
+import {
+  GetInstanceRequest,
+  GetInstanceSecurity,
+} from "../models/operations/getinstance.js";
 import { unwrapAsync } from "../types/fp.js";
-export type InstanceQueryData = components.GetInstanceResult;
+export type InstanceQueryData = GetInstanceResult;
 
 export function prefetchInstance(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetInstanceRequest,
-  security?: operations.GetInstanceSecurity | undefined,
+  request: GetInstanceRequest,
+  security?: GetInstanceSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchInstance(
 
 export function buildInstanceQuery(
   client$: GramCore,
-  request: operations.GetInstanceRequest,
-  security?: operations.GetInstanceSecurity | undefined,
+  request: GetInstanceRequest,
+  security?: GetInstanceSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

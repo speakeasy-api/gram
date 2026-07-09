@@ -293,6 +293,20 @@ run();
 
 * [receiveWorkOSWebhook](docs/sdks/external/README.md#receiveworkoswebhook) - receiveWorkOSWebhook external
 
+### [ExternalCredentials](docs/sdks/externalcredentials/README.md)
+
+* [createAwsIam](docs/sdks/externalcredentials/README.md#createawsiam) - createAwsIamCredential externalCredentials
+* [createGcpIam](docs/sdks/externalcredentials/README.md#creategcpiam) - createGcpIamCredential externalCredentials
+* [deleteAwsIam](docs/sdks/externalcredentials/README.md#deleteawsiam) - deleteAwsIamCredential externalCredentials
+* [deleteGcpIam](docs/sdks/externalcredentials/README.md#deletegcpiam) - deleteGcpIamCredential externalCredentials
+* [getAwsIam](docs/sdks/externalcredentials/README.md#getawsiam) - getAwsIamCredential externalCredentials
+* [getGcpIam](docs/sdks/externalcredentials/README.md#getgcpiam) - getGcpIamCredential externalCredentials
+* [list](docs/sdks/externalcredentials/README.md#list) - listExternalCredentials externalCredentials
+* [listAwsIam](docs/sdks/externalcredentials/README.md#listawsiam) - listAwsIamCredentials externalCredentials
+* [listGcpIam](docs/sdks/externalcredentials/README.md#listgcpiam) - listGcpIamCredentials externalCredentials
+* [updateAwsIam](docs/sdks/externalcredentials/README.md#updateawsiam) - updateAwsIamCredential externalCredentials
+* [updateGcpIam](docs/sdks/externalcredentials/README.md#updategcpiam) - updateGcpIamCredential externalCredentials
+
 ### [Features](docs/sdks/features/README.md)
 
 * [get](docs/sdks/features/README.md#get) - getProductFeatures features
@@ -360,28 +374,34 @@ run();
 * [listToolFilters](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 * [update](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 
+### [OrganizationRemoteSessionClients](docs/sdks/organizationremotesessionclients/README.md)
+
+* [create](docs/sdks/organizationremotesessionclients/README.md#create) - createClient organizationRemoteSessionClients
+* [createCimd](docs/sdks/organizationremotesessionclients/README.md#createcimd) - createCimdClient organizationRemoteSessionClients
+* [delete](docs/sdks/organizationremotesessionclients/README.md#delete) - deleteClient organizationRemoteSessionClients
+* [get](docs/sdks/organizationremotesessionclients/README.md#get) - getClient organizationRemoteSessionClients
+* [getDeletePreflight](docs/sdks/organizationremotesessionclients/README.md#getdeletepreflight) - getClientDeletePreflight organizationRemoteSessionClients
+* [list](docs/sdks/organizationremotesessionclients/README.md#list) - listClients organizationRemoteSessionClients
+* [listMcpServers](docs/sdks/organizationremotesessionclients/README.md#listmcpservers) - listClientMcpServers organizationRemoteSessionClients
+* [removeFromMcpServer](docs/sdks/organizationremotesessionclients/README.md#removefrommcpserver) - removeClientFromMcpServer organizationRemoteSessionClients
+* [update](docs/sdks/organizationremotesessionclients/README.md#update) - updateClient organizationRemoteSessionClients
+
 ### [OrganizationRemoteSessionIssuers](docs/sdks/organizationremotesessionissuers/README.md)
 
-* [createCimdClient](docs/sdks/organizationremotesessionissuers/README.md#createcimdclient) - createCimdClient organizationRemoteSessionIssuers
-* [createClient](docs/sdks/organizationremotesessionissuers/README.md#createclient) - createClient organizationRemoteSessionIssuers
-* [createIssuer](docs/sdks/organizationremotesessionissuers/README.md#createissuer) - createIssuer organizationRemoteSessionIssuers
-* [deleteClient](docs/sdks/organizationremotesessionissuers/README.md#deleteclient) - deleteClient organizationRemoteSessionIssuers
-* [deleteIssuer](docs/sdks/organizationremotesessionissuers/README.md#deleteissuer) - deleteIssuer organizationRemoteSessionIssuers
-* [getClient](docs/sdks/organizationremotesessionissuers/README.md#getclient) - getClient organizationRemoteSessionIssuers
-* [getClientDeletePreflight](docs/sdks/organizationremotesessionissuers/README.md#getclientdeletepreflight) - getClientDeletePreflight organizationRemoteSessionIssuers
-* [getIssuer](docs/sdks/organizationremotesessionissuers/README.md#getissuer) - getIssuer organizationRemoteSessionIssuers
-* [getIssuerDeletePreflight](docs/sdks/organizationremotesessionissuers/README.md#getissuerdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
-* [listClientMcpServers](docs/sdks/organizationremotesessionissuers/README.md#listclientmcpservers) - listClientMcpServers organizationRemoteSessionIssuers
-* [listClientSessions](docs/sdks/organizationremotesessionissuers/README.md#listclientsessions) - listClientSessions organizationRemoteSessionIssuers
-* [listClients](docs/sdks/organizationremotesessionissuers/README.md#listclients) - listClients organizationRemoteSessionIssuers
-* [listIssuers](docs/sdks/organizationremotesessionissuers/README.md#listissuers) - listIssuers organizationRemoteSessionIssuers
-* [moveIssuer](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
-* [refreshSession](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
-* [removeClientFromMcpServer](docs/sdks/organizationremotesessionissuers/README.md#removeclientfrommcpserver) - removeClientFromMcpServer organizationRemoteSessionIssuers
-* [revokeAllClientSessions](docs/sdks/organizationremotesessionissuers/README.md#revokeallclientsessions) - revokeAllClientSessions organizationRemoteSessionIssuers
-* [revokeSession](docs/sdks/organizationremotesessionissuers/README.md#revokesession) - revokeSession organizationRemoteSessionIssuers
-* [updateClient](docs/sdks/organizationremotesessionissuers/README.md#updateclient) - updateClient organizationRemoteSessionIssuers
-* [updateIssuer](docs/sdks/organizationremotesessionissuers/README.md#updateissuer) - updateIssuer organizationRemoteSessionIssuers
+* [create](docs/sdks/organizationremotesessionissuers/README.md#create) - createIssuer organizationRemoteSessionIssuers
+* [delete](docs/sdks/organizationremotesessionissuers/README.md#delete) - deleteIssuer organizationRemoteSessionIssuers
+* [get](docs/sdks/organizationremotesessionissuers/README.md#get) - getIssuer organizationRemoteSessionIssuers
+* [getDeletePreflight](docs/sdks/organizationremotesessionissuers/README.md#getdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
+* [list](docs/sdks/organizationremotesessionissuers/README.md#list) - listIssuers organizationRemoteSessionIssuers
+* [move](docs/sdks/organizationremotesessionissuers/README.md#move) - moveIssuer organizationRemoteSessionIssuers
+* [update](docs/sdks/organizationremotesessionissuers/README.md#update) - updateIssuer organizationRemoteSessionIssuers
+
+### [OrganizationRemoteSessions](docs/sdks/organizationremotesessions/README.md)
+
+* [list](docs/sdks/organizationremotesessions/README.md#list) - listClientSessions organizationRemoteSessions
+* [refresh](docs/sdks/organizationremotesessions/README.md#refresh) - refreshSession organizationRemoteSessions
+* [revoke](docs/sdks/organizationremotesessions/README.md#revoke) - revokeSession organizationRemoteSessions
+* [revokeAll](docs/sdks/organizationremotesessions/README.md#revokeall) - revokeAllClientSessions organizationRemoteSessions
 
 ### [Organizations](docs/sdks/organizations/README.md)
 
@@ -513,6 +533,7 @@ run();
 
 * [create](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 * [delete](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
+* [listBuiltinExclusions](docs/sdks/exclusions/README.md#listbuiltinexclusions) - listBuiltinExclusions risk
 * [list](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
 * [update](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
 
@@ -625,6 +646,16 @@ run();
 * [pause](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 * [resume](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
 * [update](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
+
+### [TunneledMcp](docs/sdks/tunneledmcp/README.md)
+
+* [createServer](docs/sdks/tunneledmcp/README.md#createserver) - createServer tunneledMcp
+* [deleteServer](docs/sdks/tunneledmcp/README.md#deleteserver) - deleteServer tunneledMcp
+* [getServer](docs/sdks/tunneledmcp/README.md#getserver) - getServer tunneledMcp
+* [listServerConnections](docs/sdks/tunneledmcp/README.md#listserverconnections) - listServerConnections tunneledMcp
+* [listServers](docs/sdks/tunneledmcp/README.md#listservers) - listServers tunneledMcp
+* [rotateServerKey](docs/sdks/tunneledmcp/README.md#rotateserverkey) - rotateServerKey tunneledMcp
+* [updateServer](docs/sdks/tunneledmcp/README.md#updateserver) - updateServer tunneledMcp
 
 ### [Usage](docs/sdks/usage/README.md)
 
@@ -800,6 +831,17 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsSetSourceLink`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`environmentsSetToolsetLink`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`externalCredentialsCreateAwsIam`](docs/sdks/externalcredentials/README.md#createawsiam) - createAwsIamCredential externalCredentials
+- [`externalCredentialsCreateGcpIam`](docs/sdks/externalcredentials/README.md#creategcpiam) - createGcpIamCredential externalCredentials
+- [`externalCredentialsDeleteAwsIam`](docs/sdks/externalcredentials/README.md#deleteawsiam) - deleteAwsIamCredential externalCredentials
+- [`externalCredentialsDeleteGcpIam`](docs/sdks/externalcredentials/README.md#deletegcpiam) - deleteGcpIamCredential externalCredentials
+- [`externalCredentialsGetAwsIam`](docs/sdks/externalcredentials/README.md#getawsiam) - getAwsIamCredential externalCredentials
+- [`externalCredentialsGetGcpIam`](docs/sdks/externalcredentials/README.md#getgcpiam) - getGcpIamCredential externalCredentials
+- [`externalCredentialsList`](docs/sdks/externalcredentials/README.md#list) - listExternalCredentials externalCredentials
+- [`externalCredentialsListAwsIam`](docs/sdks/externalcredentials/README.md#listawsiam) - listAwsIamCredentials externalCredentials
+- [`externalCredentialsListGcpIam`](docs/sdks/externalcredentials/README.md#listgcpiam) - listGcpIamCredentials externalCredentials
+- [`externalCredentialsUpdateAwsIam`](docs/sdks/externalcredentials/README.md#updateawsiam) - updateAwsIamCredential externalCredentials
+- [`externalCredentialsUpdateGcpIam`](docs/sdks/externalcredentials/README.md#updategcpiam) - updateGcpIamCredential externalCredentials
 - [`externalReceiveWorkOSWebhook`](docs/sdks/external/README.md#receiveworkoswebhook) - receiveWorkOSWebhook external
 - [`featuresGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
@@ -838,26 +880,26 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpServersList`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`mcpServersListToolFilters`](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 - [`mcpServersUpdate`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
-- [`organizationRemoteSessionIssuersCreateCimdClient`](docs/sdks/organizationremotesessionissuers/README.md#createcimdclient) - createCimdClient organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersCreateClient`](docs/sdks/organizationremotesessionissuers/README.md#createclient) - createClient organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersCreateIssuer`](docs/sdks/organizationremotesessionissuers/README.md#createissuer) - createIssuer organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersDeleteClient`](docs/sdks/organizationremotesessionissuers/README.md#deleteclient) - deleteClient organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersDeleteIssuer`](docs/sdks/organizationremotesessionissuers/README.md#deleteissuer) - deleteIssuer organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersGetClient`](docs/sdks/organizationremotesessionissuers/README.md#getclient) - getClient organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersGetClientDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getclientdeletepreflight) - getClientDeletePreflight organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersGetIssuer`](docs/sdks/organizationremotesessionissuers/README.md#getissuer) - getIssuer organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersGetIssuerDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getissuerdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersListClientMcpServers`](docs/sdks/organizationremotesessionissuers/README.md#listclientmcpservers) - listClientMcpServers organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersListClients`](docs/sdks/organizationremotesessionissuers/README.md#listclients) - listClients organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersListClientSessions`](docs/sdks/organizationremotesessionissuers/README.md#listclientsessions) - listClientSessions organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersListIssuers`](docs/sdks/organizationremotesessionissuers/README.md#listissuers) - listIssuers organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersMoveIssuer`](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersRefreshSession`](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersRemoveClientFromMcpServer`](docs/sdks/organizationremotesessionissuers/README.md#removeclientfrommcpserver) - removeClientFromMcpServer organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersRevokeAllClientSessions`](docs/sdks/organizationremotesessionissuers/README.md#revokeallclientsessions) - revokeAllClientSessions organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersRevokeSession`](docs/sdks/organizationremotesessionissuers/README.md#revokesession) - revokeSession organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersUpdateClient`](docs/sdks/organizationremotesessionissuers/README.md#updateclient) - updateClient organizationRemoteSessionIssuers
-- [`organizationRemoteSessionIssuersUpdateIssuer`](docs/sdks/organizationremotesessionissuers/README.md#updateissuer) - updateIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionClientsCreate`](docs/sdks/organizationremotesessionclients/README.md#create) - createClient organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsCreateCimd`](docs/sdks/organizationremotesessionclients/README.md#createcimd) - createCimdClient organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsDelete`](docs/sdks/organizationremotesessionclients/README.md#delete) - deleteClient organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsGet`](docs/sdks/organizationremotesessionclients/README.md#get) - getClient organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsGetDeletePreflight`](docs/sdks/organizationremotesessionclients/README.md#getdeletepreflight) - getClientDeletePreflight organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsList`](docs/sdks/organizationremotesessionclients/README.md#list) - listClients organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsListMcpServers`](docs/sdks/organizationremotesessionclients/README.md#listmcpservers) - listClientMcpServers organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsRemoveFromMcpServer`](docs/sdks/organizationremotesessionclients/README.md#removefrommcpserver) - removeClientFromMcpServer organizationRemoteSessionClients
+- [`organizationRemoteSessionClientsUpdate`](docs/sdks/organizationremotesessionclients/README.md#update) - updateClient organizationRemoteSessionClients
+- [`organizationRemoteSessionIssuersCreate`](docs/sdks/organizationremotesessionissuers/README.md#create) - createIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersDelete`](docs/sdks/organizationremotesessionissuers/README.md#delete) - deleteIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersGet`](docs/sdks/organizationremotesessionissuers/README.md#get) - getIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersGetDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersList`](docs/sdks/organizationremotesessionissuers/README.md#list) - listIssuers organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersMove`](docs/sdks/organizationremotesessionissuers/README.md#move) - moveIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersUpdate`](docs/sdks/organizationremotesessionissuers/README.md#update) - updateIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionsList`](docs/sdks/organizationremotesessions/README.md#list) - listClientSessions organizationRemoteSessions
+- [`organizationRemoteSessionsRefresh`](docs/sdks/organizationremotesessions/README.md#refresh) - refreshSession organizationRemoteSessions
+- [`organizationRemoteSessionsRevoke`](docs/sdks/organizationremotesessions/README.md#revoke) - revokeSession organizationRemoteSessions
+- [`organizationRemoteSessionsRevokeAll`](docs/sdks/organizationremotesessions/README.md#revokeall) - revokeAllClientSessions organizationRemoteSessions
 - [`organizationsCreatePortalSession`](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
 - [`organizationsDisableWebhooks`](docs/sdks/organizations/README.md#disablewebhooks) - disableWebhooks organizations
 - [`organizationsEnableWebhooks`](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
@@ -945,6 +987,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskExclusionsCreate`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 - [`riskExclusionsDelete`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`riskExclusionsList`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
+- [`riskExclusionsListBuiltinExclusions`](docs/sdks/exclusions/README.md#listbuiltinexclusions) - listBuiltinExclusions risk
 - [`riskExclusionsUpdate`](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
 - [`riskExprCompile`](docs/sdks/expr/README.md#compile) - compileExpr risk
 - [`riskOverviewGet`](docs/sdks/overview/README.md#get) - getRiskOverview risk
@@ -1020,6 +1063,13 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`triggersPause`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`triggersResume`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
 - [`triggersUpdate`](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
+- [`tunneledMcpCreateServer`](docs/sdks/tunneledmcp/README.md#createserver) - createServer tunneledMcp
+- [`tunneledMcpDeleteServer`](docs/sdks/tunneledmcp/README.md#deleteserver) - deleteServer tunneledMcp
+- [`tunneledMcpGetServer`](docs/sdks/tunneledmcp/README.md#getserver) - getServer tunneledMcp
+- [`tunneledMcpListServerConnections`](docs/sdks/tunneledmcp/README.md#listserverconnections) - listServerConnections tunneledMcp
+- [`tunneledMcpListServers`](docs/sdks/tunneledmcp/README.md#listservers) - listServers tunneledMcp
+- [`tunneledMcpRotateServerKey`](docs/sdks/tunneledmcp/README.md#rotateserverkey) - rotateServerKey tunneledMcp
+- [`tunneledMcpUpdateServer`](docs/sdks/tunneledmcp/README.md#updateserver) - updateServer tunneledMcp
 - [`usageCreateCheckout`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`usageCreateCustomerSession`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`usageCreateTopUpCheckout`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
@@ -1090,6 +1140,7 @@ To learn about this feature and how to get started, check
 - [`useAttachUserSessionIssuerMutation`](docs/sdks/remotesessionclients/README.md#attachusersessionissuer) - attachUserSessionIssuer remoteSessionClients
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
+- [`useBuiltinExclusions`](docs/sdks/exclusions/README.md#listbuiltinexclusions) - listBuiltinExclusions risk
 - [`useChallengeBuckets`](docs/sdks/access/README.md#listchallengebuckets) - listChallengeBuckets access
 - [`useChallenges`](docs/sdks/access/README.md#listchallenges) - listChallenges access
 - [`useChatDeleteMutation`](docs/sdks/chat/README.md#delete) - deleteChat chat
@@ -1112,19 +1163,21 @@ To learn about this feature and how to get started, check
 - [`useCollectionsListServers`](docs/sdks/collections/README.md#listservers) - listServers collections
 - [`useCollectionsUpdateMutation`](docs/sdks/collections/README.md#update) - update collections
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
+- [`useCreateAwsIamCredentialMutation`](docs/sdks/externalcredentials/README.md#createawsiam) - createAwsIamCredential externalCredentials
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
-- [`useCreateCimdOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionissuers/README.md#createcimdclient) - createCimdClient organizationRemoteSessionIssuers
+- [`useCreateCimdOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionclients/README.md#createcimd) - createCimdClient organizationRemoteSessionClients
 - [`useCreateCimdRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#createcimd) - createCimd remoteSessionClients
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
+- [`useCreateGcpIamCredentialMutation`](docs/sdks/externalcredentials/README.md#creategcpiam) - createGcpIamCredential externalCredentials
 - [`useCreateGlobalRemoteSessionClientMutation`](docs/sdks/adminremotesessions/README.md#createglobalclient) - createGlobalClient adminRemoteSessions
 - [`useCreateGlobalRemoteSessionIssuerMutation`](docs/sdks/adminremotesessions/README.md#createglobalissuer) - createGlobalIssuer adminRemoteSessions
 - [`useCreateGlobalToolVariationGroupMutation`](docs/sdks/variations/README.md#createglobal) - createGlobal variations
 - [`useCreateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
 - [`useCreateMcpServerMutation`](docs/sdks/mcpservers/README.md#create) - createMcpServer mcpServers
-- [`useCreateOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionissuers/README.md#createclient) - createClient organizationRemoteSessionIssuers
-- [`useCreateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#createissuer) - createIssuer organizationRemoteSessionIssuers
+- [`useCreateOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionclients/README.md#create) - createClient organizationRemoteSessionClients
+- [`useCreateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#create) - createIssuer organizationRemoteSessionIssuers
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreatePluginMutation`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 - [`useCreatePortalSessionMutation`](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
@@ -1140,18 +1193,21 @@ To learn about this feature and how to get started, check
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useCreateTopUpCheckoutMutation`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 - [`useCreateTriggerMutation`](docs/sdks/triggers/README.md#create) - createTriggerInstance triggers
+- [`useCreateTunneledMcpServerMutation`](docs/sdks/tunneledmcp/README.md#createserver) - createServer tunneledMcp
 - [`useCreateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#create) - createUserSessionIssuer userSessionIssuers
 - [`useCustomDomainMcpEndpoints`](docs/sdks/domains/README.md#listmcpendpoints) - listMcpEndpoints domains
 - [`useDeleteAIIntegrationConfigMutation`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
+- [`useDeleteAwsIamCredentialMutation`](docs/sdks/externalcredentials/README.md#deleteawsiam) - deleteAwsIamCredential externalCredentials
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
+- [`useDeleteGcpIamCredentialMutation`](docs/sdks/externalcredentials/README.md#deletegcpiam) - deleteGcpIamCredential externalCredentials
 - [`useDeleteGlobalRemoteSessionClientMutation`](docs/sdks/adminremotesessions/README.md#deleteglobalclient) - deleteGlobalClient adminRemoteSessions
 - [`useDeleteGlobalRemoteSessionIssuerMutation`](docs/sdks/adminremotesessions/README.md#deleteglobalissuer) - deleteGlobalIssuer adminRemoteSessions
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`useDeleteMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#delete) - deleteMcpEndpoint mcpEndpoints
 - [`useDeleteMcpServerMutation`](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
-- [`useDeleteOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionissuers/README.md#deleteclient) - deleteClient organizationRemoteSessionIssuers
-- [`useDeleteOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#deleteissuer) - deleteIssuer organizationRemoteSessionIssuers
+- [`useDeleteOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionclients/README.md#delete) - deleteClient organizationRemoteSessionClients
+- [`useDeleteOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#delete) - deleteIssuer organizationRemoteSessionIssuers
 - [`useDeleteOtelForwardingConfigMutation`](docs/sdks/otelforwarding/README.md#deleteconfig) - deleteConfig otelForwarding
 - [`useDeletePluginMutation`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 - [`useDeleteProjectMutation`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
@@ -1165,6 +1221,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletetoolsetlink) - deleteToolsetEnvironmentLink environments
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeleteTriggerMutation`](docs/sdks/triggers/README.md#delete) - deleteTriggerInstance triggers
+- [`useDeleteTunneledMcpServerMutation`](docs/sdks/tunneledmcp/README.md#deleteserver) - deleteServer tunneledMcp
 - [`useDeleteUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 - [`useDenyShadowMCPApprovalRequestMutation`](docs/sdks/access/README.md#denyshadowmcpapprovalrequest) - denyShadowMCPApprovalRequest access
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
@@ -1183,9 +1240,11 @@ To learn about this feature and how to get started, check
 - [`useFetchOpenAPIv3FromURLMutation`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`useGenerateWorkOSAdminPortalLinkMutation`](docs/sdks/organizations/README.md#generateworkosadminportallink) - generateWorkOSAdminPortalLink organizations
 - [`useGetAssistantMemory`](docs/sdks/assistantmemories/README.md#get) - getAssistantMemory assistantMemories
+- [`useGetAwsIamCredential`](docs/sdks/externalcredentials/README.md#getawsiam) - getAwsIamCredential externalCredentials
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`useGetEmployeeDataFlowGraph`](docs/sdks/telemetry/README.md#getemployeedataflowgraph) - getEmployeeDataFlowGraph telemetry
+- [`useGetGcpIamCredential`](docs/sdks/externalcredentials/README.md#getgcpiam) - getGcpIamCredential externalCredentials
 - [`useGetHooksSummary`](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
 - [`useGetMcpEndpoint`](docs/sdks/mcpendpoints/README.md#get) - getMcpEndpoint mcpEndpoints
 - [`useGetMcpMetadata`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
@@ -1200,6 +1259,7 @@ To learn about this feature and how to get started, check
 - [`useGetToolsetEnvironment`](docs/sdks/environments/README.md#getbytoolset) - getToolsetEnvironment environments
 - [`useGetToolUsageFilterOptions`](docs/sdks/telemetry/README.md#gettoolusagefilteroptions) - getToolUsageFilterOptions telemetry
 - [`useGetToolUsageSummary`](docs/sdks/telemetry/README.md#gettoolusagesummary) - getToolUsageSummary telemetry
+- [`useGetTunneledMcpServer`](docs/sdks/tunneledmcp/README.md#getserver) - getServer tunneledMcp
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGlobalRemoteSessionClient`](docs/sdks/adminremotesessions/README.md#getglobalclient) - getGlobalClient adminRemoteSessions
@@ -1225,12 +1285,15 @@ To learn about this feature and how to get started, check
 - [`useListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
 - [`useListAssistantMemories`](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
 - [`useListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
+- [`useListAwsIamCredentials`](docs/sdks/externalcredentials/README.md#listawsiam) - listAwsIamCredentials externalCredentials
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
 - [`useListChatSources`](docs/sdks/chat/README.md#listsources) - listSources chat
 - [`useListCollections`](docs/sdks/collections/README.md#list) - list collections
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
+- [`useListExternalCredentials`](docs/sdks/externalcredentials/README.md#list) - listExternalCredentials externalCredentials
 - [`useListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
+- [`useListGcpIamCredentials`](docs/sdks/externalcredentials/README.md#listgcpiam) - listGcpIamCredentials externalCredentials
 - [`useListHooksTraces`](docs/sdks/telemetry/README.md#listhookstraces) - listHooksTraces telemetry
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
 - [`useListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
@@ -1248,6 +1311,7 @@ To learn about this feature and how to get started, check
 - [`useListToolsetsForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
 - [`useListToolsetToolFilters`](docs/sdks/toolsets/README.md#listtoolfilters) - listToolFilters toolsets
 - [`useListToolUsageTraces`](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
+- [`useListTunneledMcpServerConnections`](docs/sdks/tunneledmcp/README.md#listserverconnections) - listServerConnections tunneledMcp
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
@@ -1260,17 +1324,17 @@ To learn about this feature and how to get started, check
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`useMigrateLegacyGramRegistrationsMutation`](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 - [`useMintUserSessionMutation`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
-- [`useMoveOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
+- [`useMoveOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#move) - moveIssuer organizationRemoteSessionIssuers
 - [`useOnboardingStatus`](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations
 - [`useOrganization`](docs/sdks/organizations/README.md#get) - get organizations
-- [`useOrganizationRemoteSessionClient`](docs/sdks/organizationremotesessionissuers/README.md#getclient) - getClient organizationRemoteSessionIssuers
-- [`useOrganizationRemoteSessionClientDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getclientdeletepreflight) - getClientDeletePreflight organizationRemoteSessionIssuers
-- [`useOrganizationRemoteSessionClientMcpServers`](docs/sdks/organizationremotesessionissuers/README.md#listclientmcpservers) - listClientMcpServers organizationRemoteSessionIssuers
-- [`useOrganizationRemoteSessionClients`](docs/sdks/organizationremotesessionissuers/README.md#listclients) - listClients organizationRemoteSessionIssuers
-- [`useOrganizationRemoteSessionClientSessions`](docs/sdks/organizationremotesessionissuers/README.md#listclientsessions) - listClientSessions organizationRemoteSessionIssuers
-- [`useOrganizationRemoteSessionIssuer`](docs/sdks/organizationremotesessionissuers/README.md#getissuer) - getIssuer organizationRemoteSessionIssuers
-- [`useOrganizationRemoteSessionIssuerDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getissuerdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
-- [`useOrganizationRemoteSessionIssuers`](docs/sdks/organizationremotesessionissuers/README.md#listissuers) - listIssuers organizationRemoteSessionIssuers
+- [`useOrganizationRemoteSessionClient`](docs/sdks/organizationremotesessionclients/README.md#get) - getClient organizationRemoteSessionClients
+- [`useOrganizationRemoteSessionClientDeletePreflight`](docs/sdks/organizationremotesessionclients/README.md#getdeletepreflight) - getClientDeletePreflight organizationRemoteSessionClients
+- [`useOrganizationRemoteSessionClientMcpServers`](docs/sdks/organizationremotesessionclients/README.md#listmcpservers) - listClientMcpServers organizationRemoteSessionClients
+- [`useOrganizationRemoteSessionClients`](docs/sdks/organizationremotesessionclients/README.md#list) - listClients organizationRemoteSessionClients
+- [`useOrganizationRemoteSessionClientSessions`](docs/sdks/organizationremotesessions/README.md#list) - listClientSessions organizationRemoteSessions
+- [`useOrganizationRemoteSessionIssuer`](docs/sdks/organizationremotesessionissuers/README.md#get) - getIssuer organizationRemoteSessionIssuers
+- [`useOrganizationRemoteSessionIssuerDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
+- [`useOrganizationRemoteSessionIssuers`](docs/sdks/organizationremotesessionissuers/README.md#list) - listIssuers organizationRemoteSessionIssuers
 - [`useOtelForwardingConfig`](docs/sdks/otelforwarding/README.md#getconfig) - getConfig otelForwarding
 - [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`usePlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
@@ -1286,7 +1350,7 @@ To learn about this feature and how to get started, check
 - [`usePublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`useRbacStatus`](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
-- [`useRefreshOrganizationRemoteSessionMutation`](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
+- [`useRefreshOrganizationRemoteSessionMutation`](docs/sdks/organizationremotesessions/README.md#refresh) - refreshSession organizationRemoteSessions
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
 - [`useRemoteMcpServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
@@ -1296,17 +1360,17 @@ To learn about this feature and how to get started, check
 - [`useRemoteSessionIssuers`](docs/sdks/remotesessionissuers/README.md#list) - listRemoteSessionIssuers remoteSessionIssuers
 - [`useRemoteSessions`](docs/sdks/remotesessions/README.md#list) - listRemoteSessions remoteSessions
 - [`useRemoveOAuthServerMutation`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
-- [`useRemoveOrganizationRemoteSessionClientFromMcpServerMutation`](docs/sdks/organizationremotesessionissuers/README.md#removeclientfrommcpserver) - removeClientFromMcpServer organizationRemoteSessionIssuers
+- [`useRemoveOrganizationRemoteSessionClientFromMcpServerMutation`](docs/sdks/organizationremotesessionclients/README.md#removefrommcpserver) - removeClientFromMcpServer organizationRemoteSessionClients
 - [`useRemoveOrganizationUserMutation`](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 - [`useRemovePluginServerMutation`](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useResolveChallengeMutation`](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
 - [`useResumeTriggerMutation`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
-- [`useRevokeAllOrganizationRemoteSessionClientSessionsMutation`](docs/sdks/organizationremotesessionissuers/README.md#revokeallclientsessions) - revokeAllClientSessions organizationRemoteSessionIssuers
+- [`useRevokeAllOrganizationRemoteSessionClientSessionsMutation`](docs/sdks/organizationremotesessions/README.md#revokeall) - revokeAllClientSessions organizationRemoteSessions
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useRevokeInviteMutation`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
-- [`useRevokeOrganizationRemoteSessionMutation`](docs/sdks/organizationremotesessionissuers/README.md#revokesession) - revokeSession organizationRemoteSessionIssuers
+- [`useRevokeOrganizationRemoteSessionMutation`](docs/sdks/organizationremotesessions/README.md#revoke) - revokeSession organizationRemoteSessions
 - [`useRevokeRemoteSessionMutation`](docs/sdks/remotesessions/README.md#revoke) - revokeRemoteSession remoteSessions
 - [`useRevokeUserSessionClientMutation`](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
 - [`useRevokeUserSessionConsentMutation`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
@@ -1354,6 +1418,7 @@ To learn about this feature and how to get started, check
 - [`useRiskUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
 - [`useRole`](docs/sdks/access/README.md#getrole) - getRole access
 - [`useRoles`](docs/sdks/access/README.md#listroles) - listRoles access
+- [`useRotateTunneledMcpServerKeyMutation`](docs/sdks/tunneledmcp/README.md#rotateserverkey) - rotateServerKey tunneledMcp
 - [`useSearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 - [`useSearchLogsMutation`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
@@ -1386,8 +1451,11 @@ To learn about this feature and how to get started, check
 - [`useTrigger`](docs/sdks/triggers/README.md#get) - getTriggerInstance triggers
 - [`useTriggerDefinitions`](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
 - [`useTriggers`](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers
+- [`useTunneledMcpServers`](docs/sdks/tunneledmcp/README.md#listservers) - listServers tunneledMcp
+- [`useUpdateAwsIamCredentialMutation`](docs/sdks/externalcredentials/README.md#updateawsiam) - updateAwsIamCredential externalCredentials
 - [`useUpdateDomainMutation`](docs/sdks/domains/README.md#updatedomain) - updateDomain domains
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`useUpdateGcpIamCredentialMutation`](docs/sdks/externalcredentials/README.md#updategcpiam) - updateGcpIamCredential externalCredentials
 - [`useUpdateGlobalRemoteSessionClientMutation`](docs/sdks/adminremotesessions/README.md#updateglobalclient) - updateGlobalClient adminRemoteSessions
 - [`useUpdateGlobalRemoteSessionIssuerMutation`](docs/sdks/adminremotesessions/README.md#updateglobalissuer) - updateGlobalIssuer adminRemoteSessions
 - [`useUpdateInviteRoleMutation`](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
@@ -1396,8 +1464,8 @@ To learn about this feature and how to get started, check
 - [`useUpdateMcpServerMutation`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 - [`useUpdateMemberRolesMutation`](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 - [`useUpdateOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
-- [`useUpdateOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionissuers/README.md#updateclient) - updateClient organizationRemoteSessionIssuers
-- [`useUpdateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#updateissuer) - updateIssuer organizationRemoteSessionIssuers
+- [`useUpdateOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionclients/README.md#update) - updateClient organizationRemoteSessionClients
+- [`useUpdateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#update) - updateIssuer organizationRemoteSessionIssuers
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`useUpdatePluginMutation`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 - [`useUpdatePluginServerMutation`](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
@@ -1409,6 +1477,7 @@ To learn about this feature and how to get started, check
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`useUpdateTriggerMutation`](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
+- [`useUpdateTunneledMcpServerMutation`](docs/sdks/tunneledmcp/README.md#updateserver) - updateServer tunneledMcp
 - [`useUpdateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 - [`useUploadChatAttachmentMutation`](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 - [`useUploadFunctionsMutation`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
@@ -1595,7 +1664,8 @@ run();
 ### Example
 ```typescript
 import { Gram } from "@gram/client";
-import * as errors from "@gram/client/models/errors";
+import { GramError } from "@gram/client/models/errors/gramerror.js.js";
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 
 const gram = new Gram();
 
@@ -1614,14 +1684,14 @@ async function run() {
     console.log(result);
   } catch (error) {
     // The base class for HTTP error responses
-    if (error instanceof errors.GramError) {
+    if (error instanceof GramError) {
       console.log(error.message);
       console.log(error.statusCode);
       console.log(error.body);
       console.log(error.headers);
 
       // Depending on the method different errors may be thrown
-      if (error instanceof errors.ServiceError) {
+      if (error instanceof ServiceError) {
         console.log(error.data$.fault); // boolean
         console.log(error.data$.id); // string
         console.log(error.data$.message); // string

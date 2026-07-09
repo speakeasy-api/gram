@@ -14,8 +14,54 @@ import { environmentsSetSourceLink } from "../funcs/environmentsSetSourceLink.js
 import { environmentsSetToolsetLink } from "../funcs/environmentsSetToolsetLink.js";
 import { environmentsUpdateBySlug } from "../funcs/environmentsUpdateBySlug.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { Environment } from "../models/components/environment.js";
+import { ListEnvironmentsResult } from "../models/components/listenvironmentsresult.js";
+import { SourceEnvironmentLink } from "../models/components/sourceenvironmentlink.js";
+import { ToolsetEnvironmentLink } from "../models/components/toolsetenvironmentlink.js";
+import {
+  CloneEnvironmentRequest,
+  CloneEnvironmentSecurity,
+} from "../models/operations/cloneenvironment.js";
+import {
+  CreateEnvironmentRequest,
+  CreateEnvironmentSecurity,
+} from "../models/operations/createenvironment.js";
+import {
+  DeleteEnvironmentRequest,
+  DeleteEnvironmentSecurity,
+} from "../models/operations/deleteenvironment.js";
+import {
+  DeleteSourceEnvironmentLinkRequest,
+  DeleteSourceEnvironmentLinkSecurity,
+} from "../models/operations/deletesourceenvironmentlink.js";
+import {
+  DeleteToolsetEnvironmentLinkRequest,
+  DeleteToolsetEnvironmentLinkSecurity,
+} from "../models/operations/deletetoolsetenvironmentlink.js";
+import {
+  GetSourceEnvironmentRequest,
+  GetSourceEnvironmentSecurity,
+} from "../models/operations/getsourceenvironment.js";
+import {
+  GetToolsetEnvironmentRequest,
+  GetToolsetEnvironmentSecurity,
+} from "../models/operations/gettoolsetenvironment.js";
+import {
+  ListEnvironmentsRequest,
+  ListEnvironmentsSecurity,
+} from "../models/operations/listenvironments.js";
+import {
+  SetSourceEnvironmentLinkRequest,
+  SetSourceEnvironmentLinkSecurity,
+} from "../models/operations/setsourceenvironmentlink.js";
+import {
+  SetToolsetEnvironmentLinkRequest,
+  SetToolsetEnvironmentLinkSecurity,
+} from "../models/operations/settoolsetenvironmentlink.js";
+import {
+  UpdateEnvironmentRequest,
+  UpdateEnvironmentSecurity,
+} from "../models/operations/updateenvironment.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Environments extends ClientSDK {
@@ -26,10 +72,10 @@ export class Environments extends ClientSDK {
    * Clone an environment into a new one. Either copies only the variable names with empty placeholder values, or copies the encrypted values verbatim. Encrypted secret values are never decrypted by the application during the clone operation.
    */
   async clone(
-    request: operations.CloneEnvironmentRequest,
-    security?: operations.CloneEnvironmentSecurity | undefined,
+    request: CloneEnvironmentRequest,
+    security?: CloneEnvironmentSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Environment> {
+  ): Promise<Environment> {
     return unwrapAsync(environmentsClone(
       this,
       request,
@@ -45,10 +91,10 @@ export class Environments extends ClientSDK {
    * Create a new environment
    */
   async create(
-    request: operations.CreateEnvironmentRequest,
-    security?: operations.CreateEnvironmentSecurity | undefined,
+    request: CreateEnvironmentRequest,
+    security?: CreateEnvironmentSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Environment> {
+  ): Promise<Environment> {
     return unwrapAsync(environmentsCreate(
       this,
       request,
@@ -64,8 +110,8 @@ export class Environments extends ClientSDK {
    * Delete an environment
    */
   async deleteBySlug(
-    request: operations.DeleteEnvironmentRequest,
-    security?: operations.DeleteEnvironmentSecurity | undefined,
+    request: DeleteEnvironmentRequest,
+    security?: DeleteEnvironmentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(environmentsDeleteBySlug(
@@ -83,8 +129,8 @@ export class Environments extends ClientSDK {
    * Delete a link between a source and an environment
    */
   async deleteSourceLink(
-    request: operations.DeleteSourceEnvironmentLinkRequest,
-    security?: operations.DeleteSourceEnvironmentLinkSecurity | undefined,
+    request: DeleteSourceEnvironmentLinkRequest,
+    security?: DeleteSourceEnvironmentLinkSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(environmentsDeleteSourceLink(
@@ -102,8 +148,8 @@ export class Environments extends ClientSDK {
    * Delete a link between a toolset and an environment
    */
   async deleteToolsetLink(
-    request: operations.DeleteToolsetEnvironmentLinkRequest,
-    security?: operations.DeleteToolsetEnvironmentLinkSecurity | undefined,
+    request: DeleteToolsetEnvironmentLinkRequest,
+    security?: DeleteToolsetEnvironmentLinkSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(environmentsDeleteToolsetLink(
@@ -121,10 +167,10 @@ export class Environments extends ClientSDK {
    * Get the environment linked to a source
    */
   async getBySource(
-    request: operations.GetSourceEnvironmentRequest,
-    security?: operations.GetSourceEnvironmentSecurity | undefined,
+    request: GetSourceEnvironmentRequest,
+    security?: GetSourceEnvironmentSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Environment> {
+  ): Promise<Environment> {
     return unwrapAsync(environmentsGetBySource(
       this,
       request,
@@ -140,10 +186,10 @@ export class Environments extends ClientSDK {
    * Get the environment linked to a toolset
    */
   async getByToolset(
-    request: operations.GetToolsetEnvironmentRequest,
-    security?: operations.GetToolsetEnvironmentSecurity | undefined,
+    request: GetToolsetEnvironmentRequest,
+    security?: GetToolsetEnvironmentSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Environment> {
+  ): Promise<Environment> {
     return unwrapAsync(environmentsGetByToolset(
       this,
       request,
@@ -159,10 +205,10 @@ export class Environments extends ClientSDK {
    * List all environments for an organization
    */
   async list(
-    request?: operations.ListEnvironmentsRequest | undefined,
-    security?: operations.ListEnvironmentsSecurity | undefined,
+    request?: ListEnvironmentsRequest | undefined,
+    security?: ListEnvironmentsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListEnvironmentsResult> {
+  ): Promise<ListEnvironmentsResult> {
     return unwrapAsync(environmentsList(
       this,
       request,
@@ -178,10 +224,10 @@ export class Environments extends ClientSDK {
    * Set (upsert) a link between a source and an environment
    */
   async setSourceLink(
-    request: operations.SetSourceEnvironmentLinkRequest,
-    security?: operations.SetSourceEnvironmentLinkSecurity | undefined,
+    request: SetSourceEnvironmentLinkRequest,
+    security?: SetSourceEnvironmentLinkSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.SourceEnvironmentLink> {
+  ): Promise<SourceEnvironmentLink> {
     return unwrapAsync(environmentsSetSourceLink(
       this,
       request,
@@ -197,10 +243,10 @@ export class Environments extends ClientSDK {
    * Set (upsert) a link between a toolset and an environment
    */
   async setToolsetLink(
-    request: operations.SetToolsetEnvironmentLinkRequest,
-    security?: operations.SetToolsetEnvironmentLinkSecurity | undefined,
+    request: SetToolsetEnvironmentLinkRequest,
+    security?: SetToolsetEnvironmentLinkSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ToolsetEnvironmentLink> {
+  ): Promise<ToolsetEnvironmentLink> {
     return unwrapAsync(environmentsSetToolsetLink(
       this,
       request,
@@ -216,10 +262,10 @@ export class Environments extends ClientSDK {
    * Update an environment
    */
   async updateBySlug(
-    request: operations.UpdateEnvironmentRequest,
-    security?: operations.UpdateEnvironmentSecurity | undefined,
+    request: UpdateEnvironmentRequest,
+    security?: UpdateEnvironmentSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Environment> {
+  ): Promise<Environment> {
     return unwrapAsync(environmentsUpdateBySlug(
       this,
       request,

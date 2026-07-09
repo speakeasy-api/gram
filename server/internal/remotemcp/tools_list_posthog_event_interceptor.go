@@ -85,14 +85,15 @@ func (i *ToolsListPostHogEventInterceptor) InterceptToolsListRequest(ctx context
 	}
 
 	if err := i.posthog.CaptureEvent(ctx, eventMCPServerToolsList, sessionID, map[string]any{
-		"project_id":           projectID,
-		"authenticated":        authenticated,
-		"remote_mcp_server_id": i.identity.RemoteMCPServerID,
-		"mcp_server_id":        i.identity.McpServerID,
-		"mcp_domain":           requestContext.Host,
-		"mcp_url":              requestContext.Host + requestContext.ReqURL,
-		"disable_notification": true,
-		"mcp_session_id":       sessionID,
+		"project_id":             projectID,
+		"authenticated":          authenticated,
+		"remote_mcp_server_id":   i.identity.RemoteMCPServerID,
+		"tunneled_mcp_server_id": i.identity.TunneledMCPServerID,
+		"mcp_server_id":          i.identity.McpServerID,
+		"mcp_domain":             requestContext.Host,
+		"mcp_url":                requestContext.Host + requestContext.ReqURL,
+		"disable_notification":   true,
+		"mcp_session_id":         sessionID,
 	}); err != nil {
 		i.logger.ErrorContext(ctx, "failed to capture "+eventMCPServerToolsList+" event", attr.SlogError(err))
 	}

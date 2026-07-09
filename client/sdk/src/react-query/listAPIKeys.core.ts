@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { keysList } from "../funcs/keysList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListKeysResult } from "../models/components/listkeysresult.js";
+import {
+  ListAPIKeysRequest,
+  ListAPIKeysSecurity,
+} from "../models/operations/listapikeys.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListAPIKeysQueryData = components.ListKeysResult;
+export type ListAPIKeysQueryData = ListKeysResult;
 
 export function prefetchListAPIKeys(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListAPIKeysRequest | undefined,
-  security?: operations.ListAPIKeysSecurity | undefined,
+  request?: ListAPIKeysRequest | undefined,
+  security?: ListAPIKeysSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListAPIKeys(
 
 export function buildListAPIKeysQuery(
   client$: GramCore,
-  request?: operations.ListAPIKeysRequest | undefined,
-  security?: operations.ListAPIKeysSecurity | undefined,
+  request?: ListAPIKeysRequest | undefined,
+  security?: ListAPIKeysSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

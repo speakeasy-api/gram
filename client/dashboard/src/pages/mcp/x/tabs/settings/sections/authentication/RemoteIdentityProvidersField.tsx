@@ -3,7 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Type } from "@/components/ui/type";
 import { formatRemoteSessionIssuerDisplay } from "@/lib/sources";
-import type { RemoteSessionIssuer } from "@gram/client/models/components";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";

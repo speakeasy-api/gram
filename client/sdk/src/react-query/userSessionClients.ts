@@ -24,10 +24,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListUserSessionClientsRequest,
+  ListUserSessionClientsSecurity,
+} from "../models/operations/listusersessionclients.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -60,7 +63,7 @@ export {
 };
 
 export type UserSessionClientsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -77,8 +80,8 @@ export type UserSessionClientsQueryError =
  * List user_session_clients in the caller's project.
  */
 export function useUserSessionClients(
-  request?: operations.ListUserSessionClientsRequest | undefined,
-  security?: operations.ListUserSessionClientsSecurity | undefined,
+  request?: ListUserSessionClientsRequest | undefined,
+  security?: ListUserSessionClientsSecurity | undefined,
   options?: QueryHookOptions<
     UserSessionClientsQueryData,
     UserSessionClientsQueryError
@@ -103,8 +106,8 @@ export function useUserSessionClients(
  * List user_session_clients in the caller's project.
  */
 export function useUserSessionClientsSuspense(
-  request?: operations.ListUserSessionClientsRequest | undefined,
-  security?: operations.ListUserSessionClientsSecurity | undefined,
+  request?: ListUserSessionClientsRequest | undefined,
+  security?: ListUserSessionClientsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     UserSessionClientsQueryData,
     UserSessionClientsQueryError
@@ -132,8 +135,8 @@ export function useUserSessionClientsSuspense(
  * List user_session_clients in the caller's project.
  */
 export function useUserSessionClientsInfinite(
-  request?: operations.ListUserSessionClientsRequest | undefined,
-  security?: operations.ListUserSessionClientsSecurity | undefined,
+  request?: ListUserSessionClientsRequest | undefined,
+  security?: ListUserSessionClientsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     UserSessionClientsInfiniteQueryData,
     UserSessionClientsQueryError
@@ -175,8 +178,8 @@ export function useUserSessionClientsInfinite(
  * List user_session_clients in the caller's project.
  */
 export function useUserSessionClientsInfiniteSuspense(
-  request?: operations.ListUserSessionClientsRequest | undefined,
-  security?: operations.ListUserSessionClientsSecurity | undefined,
+  request?: ListUserSessionClientsRequest | undefined,
+  security?: ListUserSessionClientsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     UserSessionClientsInfiniteQueryData,
     UserSessionClientsQueryError

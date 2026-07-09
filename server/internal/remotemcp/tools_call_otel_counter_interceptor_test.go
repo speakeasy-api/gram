@@ -21,7 +21,11 @@ import (
 func newCounterInterceptorForTest(t *testing.T) *ToolsCallOTELCounterInterceptor {
 	t.Helper()
 	logger := testenv.NewLogger(t)
-	return NewToolsCallOTELCounterInterceptor(NewProxyMetrics(testenv.NewMeterProvider(t).Meter("test"), logger), proxy.ServerIdentity{RemoteMCPServerID: "srv-test", McpServerID: "mcp-test"}, logger)
+	return NewToolsCallOTELCounterInterceptor(NewProxyMetrics(testenv.NewMeterProvider(t).Meter("test"), logger), proxy.ServerIdentity{
+		RemoteMCPServerID:   "srv-test",
+		TunneledMCPServerID: "",
+		McpServerID:         "mcp-test",
+	}, logger)
 }
 
 func newToolsCallRequestForCounter(t *testing.T, toolName string) *proxy.ToolsCallRequest {

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetDeploymentRequest,
+  GetDeploymentSecurity,
+} from "../models/operations/getdeployment.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type DeploymentQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type DeploymentQueryError =
  * Get a deployment by its ID.
  */
 export function useDeployment(
-  request: operations.GetDeploymentRequest,
-  security?: operations.GetDeploymentSecurity | undefined,
+  request: GetDeploymentRequest,
+  security?: GetDeploymentSecurity | undefined,
   options?: QueryHookOptions<DeploymentQueryData, DeploymentQueryError>,
 ): UseQueryResult<DeploymentQueryData, DeploymentQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useDeployment(
  * Get a deployment by its ID.
  */
 export function useDeploymentSuspense(
-  request: operations.GetDeploymentRequest,
-  security?: operations.GetDeploymentSecurity | undefined,
+  request: GetDeploymentRequest,
+  security?: GetDeploymentSecurity | undefined,
   options?: SuspenseQueryHookOptions<DeploymentQueryData, DeploymentQueryError>,
 ): UseSuspenseQueryResult<DeploymentQueryData, DeploymentQueryError> {
   const client = useGramContext();

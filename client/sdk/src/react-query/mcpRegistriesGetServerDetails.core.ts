@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { mcpRegistriesGetServerDetails } from "../funcs/mcpRegistriesGetServerDetails.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ExternalMCPServer } from "../models/components/externalmcpserver.js";
+import {
+  GetMCPServerDetailsRequest,
+  GetMCPServerDetailsSecurity,
+} from "../models/operations/getmcpserverdetails.js";
 import { unwrapAsync } from "../types/fp.js";
-export type McpRegistriesGetServerDetailsQueryData =
-  components.ExternalMCPServer;
+export type McpRegistriesGetServerDetailsQueryData = ExternalMCPServer;
 
 export function prefetchMcpRegistriesGetServerDetails(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetMCPServerDetailsRequest,
-  security?: operations.GetMCPServerDetailsSecurity | undefined,
+  request: GetMCPServerDetailsRequest,
+  security?: GetMCPServerDetailsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchMcpRegistriesGetServerDetails(
 
 export function buildMcpRegistriesGetServerDetailsQuery(
   client$: GramCore,
-  request: operations.GetMCPServerDetailsRequest,
-  security?: operations.GetMCPServerDetailsSecurity | undefined,
+  request: GetMCPServerDetailsRequest,
+  security?: GetMCPServerDetailsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

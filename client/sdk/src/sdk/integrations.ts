@@ -5,8 +5,16 @@
 import { integrationsIntegrationsNumberGet } from "../funcs/integrationsIntegrationsNumberGet.js";
 import { integrationsList } from "../funcs/integrationsList.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetIntegrationResult } from "../models/components/getintegrationresult.js";
+import { ListIntegrationsResult } from "../models/components/listintegrationsresult.js";
+import {
+  IntegrationsNumberGetRequest,
+  IntegrationsNumberGetSecurity,
+} from "../models/operations/integrationsnumberget.js";
+import {
+  ListIntegrationsRequest,
+  ListIntegrationsSecurity,
+} from "../models/operations/listintegrations.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Integrations extends ClientSDK {
@@ -17,10 +25,10 @@ export class Integrations extends ClientSDK {
    * Get a third-party integration by ID or name.
    */
   async integrationsNumberGet(
-    request?: operations.IntegrationsNumberGetRequest | undefined,
-    security?: operations.IntegrationsNumberGetSecurity | undefined,
+    request?: IntegrationsNumberGetRequest | undefined,
+    security?: IntegrationsNumberGetSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetIntegrationResult> {
+  ): Promise<GetIntegrationResult> {
     return unwrapAsync(integrationsIntegrationsNumberGet(
       this,
       request,
@@ -36,10 +44,10 @@ export class Integrations extends ClientSDK {
    * List available third-party integrations.
    */
   async list(
-    request?: operations.ListIntegrationsRequest | undefined,
-    security?: operations.ListIntegrationsSecurity | undefined,
+    request?: ListIntegrationsRequest | undefined,
+    security?: ListIntegrationsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListIntegrationsResult> {
+  ): Promise<ListIntegrationsResult> {
     return unwrapAsync(integrationsList(
       this,
       request,

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetToolUsageFilterOptionsRequest,
+  GetToolUsageFilterOptionsSecurity,
+} from "../models/operations/gettoolusagefilteroptions.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type GetToolUsageFilterOptionsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type GetToolUsageFilterOptionsQueryError =
  * Get filter options for target-aware MCP and tool usage metrics
  */
 export function useGetToolUsageFilterOptions(
-  request: operations.GetToolUsageFilterOptionsRequest,
-  security?: operations.GetToolUsageFilterOptionsSecurity | undefined,
+  request: GetToolUsageFilterOptionsRequest,
+  security?: GetToolUsageFilterOptionsSecurity | undefined,
   options?: QueryHookOptions<
     GetToolUsageFilterOptionsQueryData,
     GetToolUsageFilterOptionsQueryError
@@ -88,8 +91,8 @@ export function useGetToolUsageFilterOptions(
  * Get filter options for target-aware MCP and tool usage metrics
  */
 export function useGetToolUsageFilterOptionsSuspense(
-  request: operations.GetToolUsageFilterOptionsRequest,
-  security?: operations.GetToolUsageFilterOptionsSecurity | undefined,
+  request: GetToolUsageFilterOptionsRequest,
+  security?: GetToolUsageFilterOptionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetToolUsageFilterOptionsQueryData,
     GetToolUsageFilterOptionsQueryError

@@ -33,8 +33,10 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
-import type { UserSummary } from "@gram/client/models/components";
-import { useGramContext, useMembers, useRoles } from "@gram/client/react-query";
+import type { UserSummary } from "@gram/client/models/components/usersummary.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
 import { useQuery } from "@tanstack/react-query";

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SetSourceEnvironmentLinkRequestBody,
+  SetSourceEnvironmentLinkRequestBody$Outbound,
+  SetSourceEnvironmentLinkRequestBody$outboundSchema,
+} from "../components/setsourceenvironmentlinkrequestbody.js";
 
 export type SetSourceEnvironmentLinkSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -20,8 +24,7 @@ export type SetSourceEnvironmentLinkRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  setSourceEnvironmentLinkRequestBody:
-    components.SetSourceEnvironmentLinkRequestBody;
+  setSourceEnvironmentLinkRequestBody: SetSourceEnvironmentLinkRequestBody;
 };
 
 /** @internal */
@@ -62,7 +65,7 @@ export type SetSourceEnvironmentLinkRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   SetSourceEnvironmentLinkRequestBody:
-    components.SetSourceEnvironmentLinkRequestBody$Outbound;
+    SetSourceEnvironmentLinkRequestBody$Outbound;
 };
 
 /** @internal */
@@ -74,7 +77,7 @@ export const SetSourceEnvironmentLinkRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     setSourceEnvironmentLinkRequestBody:
-      components.SetSourceEnvironmentLinkRequestBody$outboundSchema,
+      SetSourceEnvironmentLinkRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

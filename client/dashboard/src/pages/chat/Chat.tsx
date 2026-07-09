@@ -21,17 +21,17 @@ import {
   SquarePen,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ChatOverview } from "@gram/client/models/components";
+import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import {
   Pinned,
   SortBy,
   SortOrder,
 } from "@gram/client/models/operations/listchats";
+import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
 import {
   invalidateAllListChats,
-  useChatSetPinnedMutation,
   useListChats,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/listChats.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";

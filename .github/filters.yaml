@@ -97,3 +97,9 @@ webhooks-catalog:
 
 otel-collector:
   - "otel-collector/**"
+
+tunnel:
+  - ".github/**"
+  - "go.mod"
+  - "go.sum"
+  - "tunnel/**"

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -44,7 +45,7 @@ type instrumentedPIIScanner struct {
 	slowStartOnce sync.Once
 }
 
-func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, entities []string, _ float64, _ func()) ([][]risk_analysis.Finding, error) {
+func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, entities []string, _ float64, _ func()) ([][]scanners.Finding, error) {
 	l.callCount.Add(1)
 	cur := l.inflight.Add(1)
 	defer l.inflight.Add(-1)
@@ -66,9 +67,9 @@ func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []strin
 				case <-time.After(500 * time.Millisecond):
 				}
 			}
-			out := make([][]risk_analysis.Finding, len(texts))
+			out := make([][]scanners.Finding, len(texts))
 			for i := range texts {
-				out[i] = []risk_analysis.Finding{{
+				out[i] = []scanners.Finding{{
 					RuleID:      l.findOnEntity,
 					Description: l.findOnEntity,
 					Match:       "x",
@@ -91,7 +92,7 @@ func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []strin
 		return nil, fmt.Errorf("context canceled: %w", ctx.Err())
 	}
 
-	return make([][]risk_analysis.Finding, len(texts)), nil
+	return make([][]scanners.Finding, len(texts)), nil
 }
 
 // insertPresidioBlockPolicy inserts a single enforcing policy with
@@ -174,6 +175,7 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
 		nil,
 		nil,
@@ -210,6 +212,7 @@ func TestScanner_ScanForEnforcement_SkipsGrantResolutionWhenNoPolicies(t *testin
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
 		nil,
 		nil,
 		nil,
@@ -247,6 +250,7 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
 		nil,
 		nil,
@@ -318,6 +322,7 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
 		nil,
 		nil,
 		nil,
@@ -392,6 +397,7 @@ func TestScanner_ScanForEnforcement_BlockWinsOverWarn(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
 		nil,
 		nil,
 		nil,
@@ -422,6 +428,7 @@ func TestScanner_RespectsMessageTypes(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
 		nil,
 		nil,

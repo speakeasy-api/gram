@@ -4,38 +4,20 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/accountidentity"
 )
-
-// SourceAccountIdentity is the policy source value flagging sessions
-// authenticated with a non-corporate AI account. Unlike the content scanners
-// it inspects the chat's account attribution (personal-account tracking data
-// on user_accounts), not the message text.
-const SourceAccountIdentity = "account_identity"
-
-// DescribeIdentityPersonalAccount returns the canonical rule and description.
-func DescribeIdentityPersonalAccount(email string) (string, string) {
-	if email == "" {
-		return guard(RuleIdentityPersonalAccount), "Session authenticated with a personal AI account."
-	}
-	return guard(RuleIdentityPersonalAccount), fmt.Sprintf("Session authenticated with the personal AI account %q.", email)
-}
-
-// DescribeIdentityUnapprovedDomain returns the canonical rule and description.
-func DescribeIdentityUnapprovedDomain(email string) (string, string) {
-	return guard(RuleIdentityUnapprovedDomain), fmt.Sprintf("Session authenticated with the AI account %q, whose email domain is not on the approved corporate domain list.", email)
-}
 
 // sessionFinding attaches session-scoped findings to the batch message that
 // carries them.
 type sessionFinding struct {
 	messageID uuid.UUID
-	findings  []Finding
+	findings  []scanners.Finding
 }
 
 // scanAccountIdentity evaluates the batch's chats against the account
@@ -67,7 +49,7 @@ func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatc
 		return nil, fmt.Errorf("get batch chat identities: %w", err)
 	}
 
-	approvedDomains := normalizeApprovedDomains(args.ApprovedEmailDomains)
+	scanner := accountidentity.NewScanner()
 	var out []sessionFinding
 	for _, row := range rows {
 		accountType := conv.FromPGTextOrEmpty[string](row.AccountType)
@@ -81,8 +63,8 @@ func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatc
 		// idempotent. Only personal_account can be recorded match-less — the
 		// unapproved_domain rule only fires once an email is present.
 		if accountType == "personal" && email != "" &&
-			slices.Contains(row.FlaggedRuleIds, guard(RuleIdentityPersonalAccount)) {
-			ruleID, description := DescribeIdentityPersonalAccount(email)
+			slices.Contains(row.FlaggedRuleIds, scanners.GuardRuleID(accountidentity.RulePersonalAccount)) {
+			ruleID, description := accountidentity.DescribePersonalAccount(email)
 			if _, err := r.RefreshAccountIdentityFindingMatch(ctx, repo.RefreshAccountIdentityFindingMatchParams{
 				Description:       conv.ToPGText(description),
 				Match:             conv.ToPGText(email),
@@ -96,8 +78,12 @@ func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatc
 			}
 		}
 
-		findings := evaluateAccountIdentity(accountType, email, approvedDomains)
-		findings = slices.DeleteFunc(findings, func(f Finding) bool {
+		findings := scanner.Scan(ctx, accountidentity.ScanRequest{
+			ApprovedDomains: args.ApprovedEmailDomains,
+			AccountType:     accountType,
+			Email:           email,
+		})
+		findings = slices.DeleteFunc(findings, func(f scanners.Finding) bool {
 			return slices.Contains(row.FlaggedRuleIds, f.RuleID)
 		})
 		if len(findings) == 0 {
@@ -106,68 +92,4 @@ func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatc
 		out = append(out, sessionFinding{messageID: row.EarliestMessageID, findings: findings})
 	}
 	return out, nil
-}
-
-func evaluateAccountIdentity(accountType string, email string, approvedDomains map[string]struct{}) []Finding {
-	var findings []Finding
-	if accountType == "personal" {
-		ruleID, description := DescribeIdentityPersonalAccount(email)
-		findings = append(findings, accountIdentityFinding(ruleID, description, email))
-	}
-	if len(approvedDomains) > 0 && email != "" {
-		if domain := emailDomain(email); domain != "" {
-			if _, ok := approvedDomains[domain]; !ok {
-				ruleID, description := DescribeIdentityUnapprovedDomain(email)
-				findings = append(findings, accountIdentityFinding(ruleID, description, email))
-			}
-		}
-	}
-	return findings
-}
-
-func accountIdentityFinding(ruleID string, description string, email string) Finding {
-	return Finding{
-		Source:              SourceAccountIdentity,
-		RuleID:              ruleID,
-		Description:         description,
-		Match:               email,
-		StartPos:            0,
-		EndPos:              0,
-		Tags:                []string{},
-		Confidence:          1.0,
-		DeadLetterReason:    "",
-		mcpLookupToolCallID: "",
-		spanGroupKey:        "",
-		field:               "",
-		path:                "",
-	}
-}
-
-// normalizeApprovedDomains lowercases entries and strips a leading "@" so
-// "@Acme.com" and "acme.com" configure the same domain. Matching is exact:
-// subdomains must be listed explicitly.
-func normalizeApprovedDomains(domains []string) map[string]struct{} {
-	if len(domains) == 0 {
-		return nil
-	}
-	out := make(map[string]struct{}, len(domains))
-	for _, domain := range domains {
-		domain = strings.ToLower(strings.TrimSpace(domain))
-		domain = strings.TrimPrefix(domain, "@")
-		if domain == "" {
-			continue
-		}
-		out[domain] = struct{}{}
-	}
-	return out
-}
-
-// emailDomain extracts the lowercased domain of an email address, or "" when
-// the value has no usable domain part.
-func emailDomain(email string) string {
-	at := strings.LastIndex(email, "@")
-	if at < 0 || at == len(email)-1 {
-		return ""
-	}
-	return strings.ToLower(strings.TrimSpace(email[at+1:]))
 }

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  RenderTemplateByIDRequest,
+  RenderTemplateByIDSecurity,
+} from "../models/operations/rendertemplatebyid.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RenderTemplateByIDQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RenderTemplateByIDQueryError =
  * Render a prompt template by ID with provided input data.
  */
 export function useRenderTemplateByID(
-  request: operations.RenderTemplateByIDRequest,
-  security?: operations.RenderTemplateByIDSecurity | undefined,
+  request: RenderTemplateByIDRequest,
+  security?: RenderTemplateByIDSecurity | undefined,
   options?: QueryHookOptions<
     RenderTemplateByIDQueryData,
     RenderTemplateByIDQueryError
@@ -85,8 +88,8 @@ export function useRenderTemplateByID(
  * Render a prompt template by ID with provided input data.
  */
 export function useRenderTemplateByIDSuspense(
-  request: operations.RenderTemplateByIDRequest,
-  security?: operations.RenderTemplateByIDSecurity | undefined,
+  request: RenderTemplateByIDRequest,
+  security?: RenderTemplateByIDSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RenderTemplateByIDQueryData,
     RenderTemplateByIDQueryError

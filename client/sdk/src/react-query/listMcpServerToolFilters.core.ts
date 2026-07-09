@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { mcpServersListToolFilters } from "../funcs/mcpServersListToolFilters.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListToolFiltersResult } from "../models/components/listtoolfiltersresult.js";
+import {
+  ListMcpServerToolFiltersRequest,
+  ListMcpServerToolFiltersSecurity,
+} from "../models/operations/listmcpservertoolfilters.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListMcpServerToolFiltersQueryData =
-  components.ListToolFiltersResult;
+export type ListMcpServerToolFiltersQueryData = ListToolFiltersResult;
 
 export function prefetchListMcpServerToolFilters(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListMcpServerToolFiltersRequest | undefined,
-  security?: operations.ListMcpServerToolFiltersSecurity | undefined,
+  request?: ListMcpServerToolFiltersRequest | undefined,
+  security?: ListMcpServerToolFiltersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchListMcpServerToolFilters(
 
 export function buildListMcpServerToolFiltersQuery(
   client$: GramCore,
-  request?: operations.ListMcpServerToolFiltersRequest | undefined,
-  security?: operations.ListMcpServerToolFiltersSecurity | undefined,
+  request?: ListMcpServerToolFiltersRequest | undefined,
+  security?: ListMcpServerToolFiltersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

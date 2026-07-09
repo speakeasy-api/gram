@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListAPIKeysRequest,
+  ListAPIKeysSecurity,
+} from "../models/operations/listapikeys.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListAPIKeysQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListAPIKeysQueryError =
  * List all api keys for an organization
  */
 export function useListAPIKeys(
-  request?: operations.ListAPIKeysRequest | undefined,
-  security?: operations.ListAPIKeysSecurity | undefined,
+  request?: ListAPIKeysRequest | undefined,
+  security?: ListAPIKeysSecurity | undefined,
   options?: QueryHookOptions<ListAPIKeysQueryData, ListAPIKeysQueryError>,
 ): UseQueryResult<ListAPIKeysQueryData, ListAPIKeysQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useListAPIKeys(
  * List all api keys for an organization
  */
 export function useListAPIKeysSuspense(
-  request?: operations.ListAPIKeysRequest | undefined,
-  security?: operations.ListAPIKeysSecurity | undefined,
+  request?: ListAPIKeysRequest | undefined,
+  security?: ListAPIKeysSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListAPIKeysQueryData,
     ListAPIKeysQueryError

@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetOrganizationRemoteSessionIssuerRequest,
+  GetOrganizationRemoteSessionIssuerSecurity,
+} from "../models/operations/getorganizationremotesessionissuer.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type OrganizationRemoteSessionIssuerQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type OrganizationRemoteSessionIssuerQueryError =
  * Get any remote_session_issuer (organizational or project-specific) in the caller's organization by id. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuer(
-  request: operations.GetOrganizationRemoteSessionIssuerRequest,
-  security?: operations.GetOrganizationRemoteSessionIssuerSecurity | undefined,
+  request: GetOrganizationRemoteSessionIssuerRequest,
+  security?: GetOrganizationRemoteSessionIssuerSecurity | undefined,
   options?: QueryHookOptions<
     OrganizationRemoteSessionIssuerQueryData,
     OrganizationRemoteSessionIssuerQueryError
@@ -88,8 +91,8 @@ export function useOrganizationRemoteSessionIssuer(
  * Get any remote_session_issuer (organizational or project-specific) in the caller's organization by id. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuerSuspense(
-  request: operations.GetOrganizationRemoteSessionIssuerRequest,
-  security?: operations.GetOrganizationRemoteSessionIssuerSecurity | undefined,
+  request: GetOrganizationRemoteSessionIssuerRequest,
+  security?: GetOrganizationRemoteSessionIssuerSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     OrganizationRemoteSessionIssuerQueryData,
     OrganizationRemoteSessionIssuerQueryError
@@ -145,7 +148,7 @@ export function invalidateOrganizationRemoteSessionIssuer(
     queryKey: [
       "@gram/client",
       "organizationRemoteSessionIssuers",
-      "getIssuer",
+      "get",
       ...queryKeyBase,
     ],
   });
@@ -157,6 +160,6 @@ export function invalidateAllOrganizationRemoteSessionIssuer(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "organizationRemoteSessionIssuers", "getIssuer"],
+    queryKey: ["@gram/client", "organizationRemoteSessionIssuers", "get"],
   });
 }

@@ -574,6 +574,143 @@ func TestIngest_ThoughtEventsExcludedFromTranscript(t *testing.T) {
 	require.Equal(t, "assistant", msgs[0].Role)
 }
 
+// TestIngest_LinksChatToUserAccount confirms the canonical ingest path adopts
+// the account attribution the OTEL path cached for the session, so a chat
+// created here is linked to its user_accounts row — the join the
+// account-identity risk rules and the personal/team classification read.
+// Without the merge, chats captured through /rpc/hooks.ingest are never
+// linked (the payload itself carries no AI-account identity). The link is
+// adopted without rewriting the canonical user identity: UserID/UserEmail
+// stay the authenticated actor's, and the account's own email rides
+// separately (ObservedUserEmail / gram.account_email).
+func TestIngest_LinksChatToUserAccount(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "canonical-account-link-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	userAccountID := uuid.NewString()
+
+	// Seed session metadata as the OTEL path would for an attributed personal
+	// account. No ObservedUserEmail: entries cached before the field existed
+	// must still adopt via the UserEmail fallback.
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:     sessionID,
+		ServiceName:   "claude-code",
+		UserEmail:     "personal@gmail.com",
+		UserID:        "bridged-employee",
+		Provider:      providerAnthropic,
+		AccountType:   accountTypePersonal,
+		UserAccountID: userAccountID,
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     authCtx.ProjectID.String(),
+	}, time.Hour))
+
+	prompt := "hello from a canonical hook"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &prompt},
+	}
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+	require.True(t, chat.UserAccountID.Valid)
+	require.Equal(t, userAccountID, chat.UserAccountID.UUID.String())
+
+	// The canonical identity is the authenticated actor, not the cached
+	// account identity: the session was sent under the actor's token.
+	require.Equal(t, authCtx.UserID, chat.UserID.String)
+	require.NotEqual(t, "personal@gmail.com", chat.ExternalUserID.String,
+		"account email must not replace the actor's on the chat")
+
+	// Message rows carry the same identity as the linked chat — both are
+	// written from the hydrated session metadata, not the raw auth context.
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, chat.UserID.String, msgs[0].UserID.String)
+	require.Equal(t, chat.ExternalUserID.String, msgs[0].ExternalUserID.String)
+}
+
+// TestIngest_StampsAccountAttributionOnTelemetry confirms canonical hook rows
+// carry the cached account attribution (provider, account_type, external org
+// id) with the account's own email as the gram.account_email attribute, while
+// user.email stays the authenticated actor — dashboards and policies reading
+// telemetry see both the AI account behind the session and the Gram identity
+// that sent it, without one masquerading as the other.
+func TestIngest_StampsAccountAttributionOnTelemetry(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	sessionID := "canonical-stamp-" + uuid.NewString()
+	externalOrgID := "stamp-ext-org-" + sessionID
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:         sessionID,
+		ServiceName:       "claude-code",
+		UserEmail:         "personal@gmail.com",
+		UserID:            "bridged-employee",
+		Provider:          providerAnthropic,
+		ExternalOrgID:     externalOrgID,
+		AccountType:       accountTypePersonal,
+		UserAccountID:     uuid.NewString(),
+		ObservedUserEmail: "personal@gmail.com",
+		GramOrgID:         authCtx.ActiveOrganizationID,
+		ProjectID:         authCtx.ProjectID.String(),
+	}, time.Hour))
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	occurredAt := timestamp.Format(time.RFC3339Nano)
+	prompt := "attribution should ride on this row"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Event.OccurredAt = &occurredAt
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &prompt},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision)
+
+	var logs []telemetryrepo.TelemetryLog
+	require.Eventually(t, func() bool {
+		logs, err = chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramURNs:      nil,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		return err == nil && len(logs) == 1
+	}, 2*time.Second, 50*time.Millisecond, "expected the hook row to land in telemetry")
+
+	require.Contains(t, logs[0].Attributes, providerAnthropic)
+	require.Contains(t, logs[0].Attributes, accountTypePersonal)
+	require.Contains(t, logs[0].Attributes, externalOrgID)
+	// Attribute keys nest on dots in the stored JSON: gram.account_email
+	// carries the account's own email while user.email stays the actor.
+	require.Contains(t, logs[0].Attributes, `"account_email":"personal@gmail.com"`,
+		"account email must ride as its own attribute")
+	require.NotContains(t, logs[0].Attributes, `"email":"personal@gmail.com"`,
+		"account email must not replace the actor's user.email")
+}
+
 func TestIngest_PersistsRenderableToolCalls(t *testing.T) {
 	t.Parallel()
 

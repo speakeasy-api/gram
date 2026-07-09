@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -27,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -38,6 +40,21 @@ func testCELEngine(t *testing.T) *celenv.Engine {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 	return eng
+}
+
+func testPresetLibrary(t *testing.T) *presetlib.Library {
+	t.Helper()
+	lib, err := presetlib.New()
+	require.NoError(t, err)
+	return lib
+}
+
+func newTestCustomRuleAnalyzer(t *testing.T, conn riskrepo.DBTX) *customruleanalyzer.Scanner {
+	t.Helper()
+	scanner, err := customruleanalyzer.NewScanner(conn)
+	require.NoError(t, err)
+
+	return scanner
 }
 
 var infra *testenv.Environment
@@ -145,7 +162,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 
 	judge := &stubJudge{evaluate: nil}
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, nil, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", nil, nil, flags, testCELEngine(t), judge)
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, nil, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge)
 
 	return ctx, &testInstance{
 		service:        svc,

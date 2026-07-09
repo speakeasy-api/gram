@@ -19,8 +19,81 @@ import { pluginsUpdateMarketplaceSettings } from "../funcs/pluginsUpdateMarketpl
 import { pluginsUpdatePlugin } from "../funcs/pluginsUpdatePlugin.js";
 import { pluginsUpdatePluginServer } from "../funcs/pluginsUpdatePluginServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListPluginsResult } from "../models/components/listpluginsresult.js";
+import { MarketplaceSettingsResult } from "../models/components/marketplacesettingsresult.js";
+import { Plugin } from "../models/components/plugin.js";
+import { PluginServer } from "../models/components/pluginserver.js";
+import { PublishPluginsResult } from "../models/components/publishpluginsresult.js";
+import { PublishStatusResult } from "../models/components/publishstatusresult.js";
+import { SetPluginAssignmentsResponseBody } from "../models/components/setpluginassignmentsresponsebody.js";
+import { UpdateMarketplaceSettingsResult } from "../models/components/updatemarketplacesettingsresult.js";
+import {
+  AddPluginServerRequest,
+  AddPluginServerSecurity,
+} from "../models/operations/addpluginserver.js";
+import {
+  CreatePluginRequest,
+  CreatePluginSecurity,
+} from "../models/operations/createplugin.js";
+import {
+  DeletePluginRequest,
+  DeletePluginSecurity,
+} from "../models/operations/deleteplugin.js";
+import {
+  DownloadCodexInstallScriptRequest,
+  DownloadCodexInstallScriptResponse,
+  DownloadCodexInstallScriptSecurity,
+} from "../models/operations/downloadcodexinstallscript.js";
+import {
+  DownloadObservabilityPluginRequest,
+  DownloadObservabilityPluginResponse,
+  DownloadObservabilityPluginSecurity,
+} from "../models/operations/downloadobservabilityplugin.js";
+import {
+  DownloadPluginPackageRequest,
+  DownloadPluginPackageResponse,
+  DownloadPluginPackageSecurity,
+} from "../models/operations/downloadpluginpackage.js";
+import {
+  GetMarketplaceSettingsRequest,
+  GetMarketplaceSettingsSecurity,
+} from "../models/operations/getmarketplacesettings.js";
+import {
+  GetPluginRequest,
+  GetPluginSecurity,
+} from "../models/operations/getplugin.js";
+import {
+  GetPublishStatusRequest,
+  GetPublishStatusSecurity,
+} from "../models/operations/getpublishstatus.js";
+import {
+  ListPluginsRequest,
+  ListPluginsSecurity,
+} from "../models/operations/listplugins.js";
+import {
+  PublishPluginsRequest,
+  PublishPluginsSecurity,
+} from "../models/operations/publishplugins.js";
+import {
+  RemovePluginServerRequest,
+  RemovePluginServerSecurity,
+} from "../models/operations/removepluginserver.js";
+import {
+  SetPluginAssignmentsRequest,
+  SetPluginAssignmentsSecurity,
+} from "../models/operations/setpluginassignments.js";
+import {
+  UpdateMarketplaceSettingsRequest,
+  UpdateMarketplaceSettingsSecurity,
+} from "../models/operations/updatemarketplacesettings.js";
+import {
+  UpdatePluginRequest,
+  UpdatePluginSecurity,
+} from "../models/operations/updateplugin.js";
+import {
+  UpdatePluginServerRequest,
+  UpdatePluginServerSecurity,
+} from "../models/operations/updatepluginserver.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Plugins extends ClientSDK {
@@ -31,10 +104,10 @@ export class Plugins extends ClientSDK {
    * Add an MCP server to a plugin.
    */
   async addPluginServer(
-    request: operations.AddPluginServerRequest,
-    security?: operations.AddPluginServerSecurity | undefined,
+    request: AddPluginServerRequest,
+    security?: AddPluginServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.PluginServer> {
+  ): Promise<PluginServer> {
     return unwrapAsync(pluginsAddPluginServer(
       this,
       request,
@@ -50,10 +123,10 @@ export class Plugins extends ClientSDK {
    * Create a new plugin.
    */
   async createPlugin(
-    request: operations.CreatePluginRequest,
-    security?: operations.CreatePluginSecurity | undefined,
+    request: CreatePluginRequest,
+    security?: CreatePluginSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Plugin> {
+  ): Promise<Plugin> {
     return unwrapAsync(pluginsCreatePlugin(
       this,
       request,
@@ -69,8 +142,8 @@ export class Plugins extends ClientSDK {
    * Delete a plugin.
    */
   async deletePlugin(
-    request: operations.DeletePluginRequest,
-    security?: operations.DeletePluginSecurity | undefined,
+    request: DeletePluginRequest,
+    security?: DeletePluginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(pluginsDeletePlugin(
@@ -88,10 +161,10 @@ export class Plugins extends ClientSDK {
    * Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.
    */
   async downloadCodexInstallScript(
-    request?: operations.DownloadCodexInstallScriptRequest | undefined,
-    security?: operations.DownloadCodexInstallScriptSecurity | undefined,
+    request?: DownloadCodexInstallScriptRequest | undefined,
+    security?: DownloadCodexInstallScriptSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<operations.DownloadCodexInstallScriptResponse> {
+  ): Promise<DownloadCodexInstallScriptResponse> {
     return unwrapAsync(pluginsDownloadCodexInstallScript(
       this,
       request,
@@ -107,10 +180,10 @@ export class Plugins extends ClientSDK {
    * Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
    */
   async downloadObservabilityPlugin(
-    request: operations.DownloadObservabilityPluginRequest,
-    security?: operations.DownloadObservabilityPluginSecurity | undefined,
+    request: DownloadObservabilityPluginRequest,
+    security?: DownloadObservabilityPluginSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<operations.DownloadObservabilityPluginResponse> {
+  ): Promise<DownloadObservabilityPluginResponse> {
     return unwrapAsync(pluginsDownloadObservabilityPlugin(
       this,
       request,
@@ -126,10 +199,10 @@ export class Plugins extends ClientSDK {
    * Download a ZIP of a single plugin package for direct installation.
    */
   async downloadPluginPackage(
-    request: operations.DownloadPluginPackageRequest,
-    security?: operations.DownloadPluginPackageSecurity | undefined,
+    request: DownloadPluginPackageRequest,
+    security?: DownloadPluginPackageSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<operations.DownloadPluginPackageResponse> {
+  ): Promise<DownloadPluginPackageResponse> {
     return unwrapAsync(pluginsDownloadPluginPackage(
       this,
       request,
@@ -145,10 +218,10 @@ export class Plugins extends ClientSDK {
    * Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.
    */
   async getMarketplaceSettings(
-    request?: operations.GetMarketplaceSettingsRequest | undefined,
-    security?: operations.GetMarketplaceSettingsSecurity | undefined,
+    request?: GetMarketplaceSettingsRequest | undefined,
+    security?: GetMarketplaceSettingsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.MarketplaceSettingsResult> {
+  ): Promise<MarketplaceSettingsResult> {
     return unwrapAsync(pluginsGetMarketplaceSettings(
       this,
       request,
@@ -164,10 +237,10 @@ export class Plugins extends ClientSDK {
    * Get a plugin with its servers and assignments.
    */
   async getPlugin(
-    request: operations.GetPluginRequest,
-    security?: operations.GetPluginSecurity | undefined,
+    request: GetPluginRequest,
+    security?: GetPluginSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Plugin> {
+  ): Promise<Plugin> {
     return unwrapAsync(pluginsGetPlugin(
       this,
       request,
@@ -183,10 +256,10 @@ export class Plugins extends ClientSDK {
    * Check whether GitHub publishing is configured and connected for this project.
    */
   async getPublishStatus(
-    request?: operations.GetPublishStatusRequest | undefined,
-    security?: operations.GetPublishStatusSecurity | undefined,
+    request?: GetPublishStatusRequest | undefined,
+    security?: GetPublishStatusSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.PublishStatusResult> {
+  ): Promise<PublishStatusResult> {
     return unwrapAsync(pluginsGetPublishStatus(
       this,
       request,
@@ -202,10 +275,10 @@ export class Plugins extends ClientSDK {
    * List all plugins for the current project.
    */
   async listPlugins(
-    request?: operations.ListPluginsRequest | undefined,
-    security?: operations.ListPluginsSecurity | undefined,
+    request?: ListPluginsRequest | undefined,
+    security?: ListPluginsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListPluginsResult> {
+  ): Promise<ListPluginsResult> {
     return unwrapAsync(pluginsListPlugins(
       this,
       request,
@@ -221,10 +294,10 @@ export class Plugins extends ClientSDK {
    * Generate and publish all plugin packages to a GitHub repository.
    */
   async publishPlugins(
-    request: operations.PublishPluginsRequest,
-    security?: operations.PublishPluginsSecurity | undefined,
+    request: PublishPluginsRequest,
+    security?: PublishPluginsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.PublishPluginsResult> {
+  ): Promise<PublishPluginsResult> {
     return unwrapAsync(pluginsPublishPlugins(
       this,
       request,
@@ -240,8 +313,8 @@ export class Plugins extends ClientSDK {
    * Remove a server from a plugin.
    */
   async removePluginServer(
-    request: operations.RemovePluginServerRequest,
-    security?: operations.RemovePluginServerSecurity | undefined,
+    request: RemovePluginServerRequest,
+    security?: RemovePluginServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(pluginsRemovePluginServer(
@@ -259,10 +332,10 @@ export class Plugins extends ClientSDK {
    * Replace all assignments for a plugin with the given list of principal URNs.
    */
   async setPluginAssignments(
-    request: operations.SetPluginAssignmentsRequest,
-    security?: operations.SetPluginAssignmentsSecurity | undefined,
+    request: SetPluginAssignmentsRequest,
+    security?: SetPluginAssignmentsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.SetPluginAssignmentsResponseBody> {
+  ): Promise<SetPluginAssignmentsResponseBody> {
     return unwrapAsync(pluginsSetPluginAssignments(
       this,
       request,
@@ -278,10 +351,10 @@ export class Plugins extends ClientSDK {
    * Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.
    */
   async updateMarketplaceSettings(
-    request: operations.UpdateMarketplaceSettingsRequest,
-    security?: operations.UpdateMarketplaceSettingsSecurity | undefined,
+    request: UpdateMarketplaceSettingsRequest,
+    security?: UpdateMarketplaceSettingsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.UpdateMarketplaceSettingsResult> {
+  ): Promise<UpdateMarketplaceSettingsResult> {
     return unwrapAsync(pluginsUpdateMarketplaceSettings(
       this,
       request,
@@ -297,10 +370,10 @@ export class Plugins extends ClientSDK {
    * Update plugin metadata.
    */
   async updatePlugin(
-    request: operations.UpdatePluginRequest,
-    security?: operations.UpdatePluginSecurity | undefined,
+    request: UpdatePluginRequest,
+    security?: UpdatePluginSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Plugin> {
+  ): Promise<Plugin> {
     return unwrapAsync(pluginsUpdatePlugin(
       this,
       request,
@@ -316,10 +389,10 @@ export class Plugins extends ClientSDK {
    * Update a server's configuration within a plugin.
    */
   async updatePluginServer(
-    request: operations.UpdatePluginServerRequest,
-    security?: operations.UpdatePluginServerSecurity | undefined,
+    request: UpdatePluginServerRequest,
+    security?: UpdatePluginServerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.PluginServer> {
+  ): Promise<PluginServer> {
     return unwrapAsync(pluginsUpdatePluginServer(
       this,
       request,

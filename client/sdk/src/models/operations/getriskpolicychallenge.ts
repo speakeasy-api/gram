@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  AcknowledgeRiskPolicyChallengeRequestBody,
+  AcknowledgeRiskPolicyChallengeRequestBody$Outbound,
+  AcknowledgeRiskPolicyChallengeRequestBody$outboundSchema,
+} from "../components/acknowledgeriskpolicychallengerequestbody.js";
 
 export type GetRiskPolicyChallengeSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -16,7 +20,7 @@ export type GetRiskPolicyChallengeRequest = {
    */
   gramSession?: string | undefined;
   acknowledgeRiskPolicyChallengeRequestBody:
-    components.AcknowledgeRiskPolicyChallengeRequestBody;
+    AcknowledgeRiskPolicyChallengeRequestBody;
 };
 
 /** @internal */
@@ -53,7 +57,7 @@ export function getRiskPolicyChallengeSecurityToJSON(
 export type GetRiskPolicyChallengeRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   AcknowledgeRiskPolicyChallengeRequestBody:
-    components.AcknowledgeRiskPolicyChallengeRequestBody$Outbound;
+    AcknowledgeRiskPolicyChallengeRequestBody$Outbound;
 };
 
 /** @internal */
@@ -64,7 +68,7 @@ export const GetRiskPolicyChallengeRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     acknowledgeRiskPolicyChallengeRequestBody:
-      components.AcknowledgeRiskPolicyChallengeRequestBody$outboundSchema,
+      AcknowledgeRiskPolicyChallengeRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

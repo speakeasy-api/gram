@@ -19,31 +19,41 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // AnalyzeBatch scans a batch of messages against one risk policy and replaces
 // that policy's stored results for the fetched message IDs.
 type AnalyzeBatch struct {
-	logger          *slog.Logger
-	tracer          trace.Tracer
-	metrics         *riskMetrics
-	db              *pgxpool.Pool
-	scanner         *gitleaks.Scanner
-	piiScanner      PIIScanner
-	piScanner       *PromptInjectionScanner
-	shadowMCPClient *shadowmcp.Client
-	mcpMatchLookup  MCPMatchLookup
-	judge           PromptJudge
-	flags           feature.Provider
-	presidioPub     gcp.Publisher[*riskv1.PresidioAnalysis]
-	gitleaksPub     gcp.Publisher[*riskv1.GitleaksAnalysis]
-	customRulesPub  gcp.Publisher[*riskv1.CustomRulesAnalysis]
-	celEng          *celenv.Engine
+	logger                 *slog.Logger
+	tracer                 trace.Tracer
+	metrics                *riskMetrics
+	db                     *pgxpool.Pool
+	gitleaksScanner        *gitleaks.Scanner
+	piiScanner             PIIScanner
+	promptInjectionScanner *promptinjection.Scanner
+	shadowMCPScanner       *shadowmcpscan.Scanner
+	judge                  PromptJudge
+	flags                  feature.Provider
+	presidioPub            gcp.Publisher[*riskv1.PresidioAnalysis]
+	gitleaksPub            gcp.Publisher[*riskv1.GitleaksAnalysis]
+	customRulesPub         gcp.Publisher[*riskv1.CustomRulesAnalysis]
+	customRuleScanner      *customruleanalyzer.Scanner
+	cliDestructiveScanner  *clidestructive.Scanner
+	destructiveToolScanner *destructivetool.Scanner
+	celEng                 *celenv.Engine
+	builtinPresets         *presetlib.Library
 }
 
 func NewAnalyzeBatch(
@@ -52,7 +62,7 @@ func NewAnalyzeBatch(
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	piiScanner PIIScanner,
-	piScanner *PromptInjectionScanner,
+	promptInjectionScanner *promptinjection.Scanner,
 	shadowMCPClient *shadowmcp.Client,
 	mcpMatchLookup MCPMatchLookup,
 	judge PromptJudge,
@@ -60,30 +70,38 @@ func NewAnalyzeBatch(
 	presidioPub gcp.Publisher[*riskv1.PresidioAnalysis],
 	gitleaksPub gcp.Publisher[*riskv1.GitleaksAnalysis],
 	customRulesPub gcp.Publisher[*riskv1.CustomRulesAnalysis],
+	customRuleScanner *customruleanalyzer.Scanner,
 	celEng *celenv.Engine,
+	builtinPresets *presetlib.Library,
 ) *AnalyzeBatch {
+	logger = logger.With(attr.SlogComponent("risk-analysis-dispatcher"))
+
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
 	}
-	if piScanner == nil {
-		piScanner = NewPromptInjectionScanner(logger, nil)
+	if promptInjectionScanner == nil {
+		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopEngine)
 	}
+
 	return &AnalyzeBatch{
-		logger:          logger.With(attr.SlogComponent("risk-analysis-dispatcher")),
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
-		metrics:         newRiskMetrics(meterProvider, logger),
-		db:              db,
-		scanner:         gitleaks.NewScanner(),
-		piiScanner:      piiScanner,
-		piScanner:       piScanner,
-		shadowMCPClient: shadowMCPClient,
-		mcpMatchLookup:  mcpMatchLookup,
-		judge:           judge,
-		flags:           flags,
-		presidioPub:     presidioPub,
-		gitleaksPub:     gitleaksPub,
-		customRulesPub:  customRulesPub,
-		celEng:          celEng,
+		logger:                 logger,
+		tracer:                 tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
+		metrics:                newRiskMetrics(meterProvider, logger),
+		db:                     db,
+		gitleaksScanner:        gitleaks.NewScanner(),
+		piiScanner:             piiScanner,
+		promptInjectionScanner: promptInjectionScanner,
+		shadowMCPScanner:       shadowmcpscan.NewScanner(logger, shadowMCPClient, mcpMatchLookup),
+		judge:                  judge,
+		flags:                  flags,
+		presidioPub:            presidioPub,
+		gitleaksPub:            gitleaksPub,
+		customRulesPub:         customRulesPub,
+		customRuleScanner:      customRuleScanner,
+		cliDestructiveScanner:  clidestructive.NewScanner(),
+		destructiveToolScanner: destructivetool.NewScanner(shadowMCPClient),
+		celEng:                 celEng,
+		builtinPresets:         builtinPresets,
 	}
 }
 
@@ -106,6 +124,10 @@ type AnalyzeBatchArgs struct {
 	// Like PresidioScoreThreshold, Do derives it from the refetched policy's
 	// analyzer_config, so it is not a caller input.
 	ApprovedEmailDomains []string
+	// BuiltinPresetsEnabled toggles scan-time suppression of built-in catalog
+	// false positives. Do derives it from the refetched policy's analyzer_config
+	// (defaulting ON), so it is not a caller input.
+	BuiltinPresetsEnabled bool
 }
 
 type AnalyzeBatchResult struct {
@@ -159,6 +181,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	// refetched, rather than trusting (possibly omitted) caller values.
 	args.PresidioScoreThreshold = PresidioScoreThresholdFromConfig(policy.AnalyzerConfig)
 	args.ApprovedEmailDomains = ApprovedEmailDomainsFromConfig(policy.AnalyzerConfig)
+	args.BuiltinPresetsEnabled = BuiltinPresetsEnabledFromConfig(policy.AnalyzerConfig)
 
 	rows, err := a.fetchContent(ctx, args)
 	if err != nil {
@@ -198,7 +221,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
 
-	findings := make([][]Finding, len(messages))
+	findings := make([][]scanners.Finding, len(messages))
 	if len(messages) > 0 {
 		scope, err := CompileScope(a.celEng, policy.ScopeInclude.String, policy.ScopeExempt.String)
 		if err != nil {
@@ -210,7 +233,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		case PolicyTypePromptBased:
 			findings = a.scanPromptPolicy(ctx, args, policy, messages, outOfPolicyScope)
 		default:
-			findings, err = a.scanStandardPolicyBatch(ctx, args, policy, messages, outOfPolicyScope, exclusions)
+			findings, err = a.scanStandardPolicy(ctx, args, messages, policy.CustomRuleIds, exclusions, outOfPolicyScope)
 			if err != nil {
 				return nil, err
 			}
@@ -246,15 +269,6 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	}, nil
 }
 
-func (a *AnalyzeBatch) scanStandardPolicyBatch(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, outOfPolicyScope []bool, exclusions ExclusionSet) ([][]Finding, error) {
-	customRules, err := a.customRulesForPolicy(ctx, args.ProjectID, policy.CustomRuleIds)
-	if err != nil {
-		return nil, err
-	}
-
-	return a.scanStandardPolicy(ctx, args, messages, customRules, exclusions, outOfPolicyScope)
-}
-
 // policyExclusionSet loads the enabled exclusions that apply to the policy
 // (its own plus globals). Fetched once in Do and shared by the content
 // scanners (via mergeFindings) and the session-scoped account_identity path.
@@ -277,7 +291,7 @@ func (a *AnalyzeBatch) policyExclusionSet(ctx context.Context, args AnalyzeBatch
 // policy's message-type filter — keeping the "message has findings → no
 // sentinel row" invariant — and appends a new (id, findings) entry
 // otherwise, since session findings deliberately bypass message scoping.
-func mergeSessionFindings(ids []uuid.UUID, findings [][]Finding, session []sessionFinding, exclusions ExclusionSet) ([]uuid.UUID, [][]Finding) {
+func mergeSessionFindings(ids []uuid.UUID, findings [][]scanners.Finding, session []sessionFinding, exclusions ExclusionSet) ([]uuid.UUID, [][]scanners.Finding) {
 	if len(session) == 0 {
 		return ids, findings
 	}

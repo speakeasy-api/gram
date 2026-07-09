@@ -193,6 +193,12 @@ func TestParseTool(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name:    "valid tunneled MCP tool",
+			input:   "tools:tunneledmcp:11111111-1111-1111-1111-111111111111:list_things",
+			want:    urn.NewTool(urn.ToolKindTunneledMCP, "11111111-1111-1111-1111-111111111111", "list_things"),
+			wantErr: nil,
+		},
+		{
 			name:    "wrong URN namespace",
 			input:   "tool:externalmcp:atlassian:getAccessibleResources",
 			want:    urn.Tool{Kind: "", Source: "", Name: ""},

@@ -876,7 +876,7 @@ func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanal
 }
 
 const getActiveRiskPolicyAck = `-- name: GetActiveRiskPolicyAck :one
-SELECT id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
 FROM risk_policy_challenges
 WHERE project_id = $1
   AND user_id = $2
@@ -917,6 +917,7 @@ func (q *Queries) GetActiveRiskPolicyAck(ctx context.Context, arg GetActiveRiskP
 		&i.PolicyName,
 		&i.Entity,
 		&i.RuleID,
+		&i.CallFingerprint,
 		&i.ChallengedAt,
 		&i.AcknowledgedAt,
 		&i.ExpiresAt,
@@ -3127,7 +3128,7 @@ SET status = 'acknowledged'
   , expires_at = EXCLUDED.expires_at
   , policy_name = COALESCE(EXCLUDED.policy_name, risk_policy_challenges.policy_name)
   , updated_at = clock_timestamp()
-RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
 type MarkRiskPolicyChallengeAcknowledgedParams struct {
@@ -3166,6 +3167,7 @@ func (q *Queries) MarkRiskPolicyChallengeAcknowledged(ctx context.Context, arg M
 		&i.PolicyName,
 		&i.Entity,
 		&i.RuleID,
+		&i.CallFingerprint,
 		&i.ChallengedAt,
 		&i.AcknowledgedAt,
 		&i.ExpiresAt,
@@ -3208,7 +3210,7 @@ SET status = 'declined'
   , expires_at = NULL
   , policy_name = COALESCE(EXCLUDED.policy_name, risk_policy_challenges.policy_name)
   , updated_at = clock_timestamp()
-RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
 type MarkRiskPolicyChallengeDeclinedParams struct {
@@ -3245,6 +3247,7 @@ func (q *Queries) MarkRiskPolicyChallengeDeclined(ctx context.Context, arg MarkR
 		&i.PolicyName,
 		&i.Entity,
 		&i.RuleID,
+		&i.CallFingerprint,
 		&i.ChallengedAt,
 		&i.AcknowledgedAt,
 		&i.ExpiresAt,
@@ -3944,7 +3947,7 @@ SET status = CASE
       ELSE clock_timestamp()
     END
   , updated_at = clock_timestamp()
-RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertRiskPolicyChallengeParams struct {
@@ -3986,6 +3989,7 @@ func (q *Queries) UpsertRiskPolicyChallenge(ctx context.Context, arg UpsertRiskP
 		&i.PolicyName,
 		&i.Entity,
 		&i.RuleID,
+		&i.CallFingerprint,
 		&i.ChallengedAt,
 		&i.AcknowledgedAt,
 		&i.ExpiresAt,

@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { usageSetBillingMetadata } from "../funcs/usageSetBillingMetadata.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { TokensUnderManagement } from "../models/components/tokensundermanagement.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  SetBillingMetadataRequest,
+  SetBillingMetadataSecurity,
+} from "../models/operations/setbillingmetadata.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type SetBillingMetadataMutationVariables = {
-  request: operations.SetBillingMetadataRequest;
-  security?: operations.SetBillingMetadataSecurity | undefined;
+  request: SetBillingMetadataRequest;
+  security?: SetBillingMetadataSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type SetBillingMetadataMutationData = components.TokensUnderManagement;
+export type SetBillingMetadataMutationData = TokensUnderManagement;
 
 export type SetBillingMetadataMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

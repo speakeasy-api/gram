@@ -311,8 +311,12 @@ func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) 
 }
 
 func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, timestamp time.Time, blockReason string) {
-	s.writeCanonicalTelemetry(ctx, payload, authCtx, timestamp, blockReason)
-	if err := s.persistCanonicalConversationEvent(ctx, payload, authCtx); err != nil {
+	// Resolve the session identity once, before the telemetry write, so the
+	// hook row and the chat persistence below stamp the same AI-account
+	// attribution.
+	metadata := s.canonicalSessionMetadata(ctx, payload, authCtx)
+	s.writeCanonicalTelemetry(ctx, payload, authCtx, &metadata, timestamp, blockReason)
+	if err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata); err != nil {
 		s.logger.WarnContext(ctx, "failed to persist canonical hook conversation event",
 			attr.SlogEvent("hooks_ingest_chat_persist_failed"),
 			attr.SlogError(err),
@@ -324,7 +328,71 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	}
 }
 
-func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, timestamp time.Time, blockReason string) {
+// canonicalSessionMetadata builds the session identity for a canonical hook
+// event: the token owner from the auth context, enriched with the AI-account
+// attribution the OTEL path cached for the session (user_accounts link,
+// account_type, provider identity, device-bridge owner). Canonical payloads
+// carry no account identity of their own, so without the cached attribution
+// telemetry rows and chats captured here reflect only the Gram key owner —
+// invisible to the account-identity risk rules and the personal/team
+// classification. UserID/UserEmail stay the authenticated actor's — the
+// predictable canonical identity — while the AI account's own email rides
+// separately in ObservedUserEmail (the gram.account_email attribute). The
+// session cache is keyed by session id alone, so only trust an entry the
+// same org+project seeded.
+func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) SessionMetadata {
+	actorEmail := ""
+	if authCtx.Email != nil {
+		actorEmail = strings.TrimSpace(*authCtx.Email)
+	}
+	metadata := SessionMetadata{
+		SessionID:           canonicalSessionID(payload),
+		ServiceName:         strings.TrimSpace(payload.Source.Adapter),
+		UserEmail:           actorEmail,
+		UserID:              authCtx.UserID,
+		Provider:            "",
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
+		AccountType:         "",
+		BillingMode:         "",
+		UserAccountID:       "",
+		ObservedUserEmail:   "",
+		GramOrgID:           authCtx.ActiveOrganizationID,
+		ProjectID:           authCtx.ProjectID.String(),
+	}
+	if metadata.SessionID == "" {
+		return metadata
+	}
+
+	if cached, err := s.getSessionMetadata(ctx, metadata.SessionID); err == nil &&
+		cached.GramOrgID == metadata.GramOrgID && cached.ProjectID == metadata.ProjectID {
+		metadata.Provider = cached.Provider
+		metadata.ExternalOrgID = cached.ExternalOrgID
+		metadata.ExternalAccountUUID = cached.ExternalAccountUUID
+		metadata.ExternalAccountID = cached.ExternalAccountID
+		metadata.DeviceID = cached.DeviceID
+		metadata.AccountType = cached.AccountType
+		metadata.BillingMode = cached.BillingMode
+		metadata.UserAccountID = cached.UserAccountID
+		// The OTEL path's UserEmail is the account's own report; fall back to it
+		// for cache entries written before ObservedUserEmail existed.
+		metadata.ObservedUserEmail = conv.Default(cached.ObservedUserEmail, cached.UserEmail)
+		// Fill identity only when the auth context carried none (org-scoped
+		// ingest keys): the device bridge may have attributed the owning
+		// employee. A token-derived identity is never overwritten.
+		if metadata.UserEmail == "" {
+			metadata.UserEmail = cached.UserEmail
+		}
+		if metadata.UserID == "" {
+			metadata.UserID = cached.UserID
+		}
+	}
+	return metadata
+}
+
+func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time, blockReason string) {
 	if s.telemetryLogger == nil {
 		return
 	}
@@ -395,7 +463,12 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})
 	}
 
-	s.logHookTelemetry(ctx, authCtx, timestamp, toolName, attrs)
+	// Carry the account attribution (provider, external_org_id, account_type,
+	// device_id) onto every hook event row so per-tool-call telemetry can be
+	// split by personal vs team account, matching the legacy per-provider paths.
+	stampAccountAttribution(attrs, *metadata)
+
+	s.logHookTelemetry(ctx, authCtx, metadata, timestamp, toolName, attrs)
 
 	// A skill name on an ordinary tool/prompt event is an inferred activation
 	// (Codex has no dedicated Skill tool): the underlying event was recorded
@@ -414,7 +487,8 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 		attrs[attr.TraceIDKey] = generateTraceID()
 		attrs[attr.ToolNameKey] = "Skill"
 		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})
-		s.logHookTelemetry(ctx, authCtx, timestamp, "Skill", attrs)
+		stampAccountAttribution(attrs, *metadata)
+		s.logHookTelemetry(ctx, authCtx, metadata, timestamp, "Skill", attrs)
 	}
 }
 
@@ -444,7 +518,7 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 	return attrs
 }
 
-func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
+func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp: timestamp,
 		ToolInfo: telemetry.ToolInfo{
@@ -456,7 +530,7 @@ func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.A
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},
-		UserInfo:   telemetry.UserInfoByID(authCtx.UserID),
+		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
 		Attributes: attrs,
 	})
 }
@@ -518,31 +592,10 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 	}
 }
 
-func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) error {
+func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata) error {
 	sessionID := canonicalSessionID(payload)
 	if sessionID == "" || authCtx.ProjectID == nil {
 		return nil
-	}
-
-	actorEmail := ""
-	if authCtx.Email != nil {
-		actorEmail = strings.TrimSpace(*authCtx.Email)
-	}
-	metadata := SessionMetadata{
-		SessionID:           sessionID,
-		ServiceName:         strings.TrimSpace(payload.Source.Adapter),
-		UserEmail:           actorEmail,
-		UserID:              authCtx.UserID,
-		Provider:            "",
-		ExternalOrgID:       "",
-		ExternalAccountUUID: "",
-		ExternalAccountID:   "",
-		DeviceID:            "",
-		AccountType:         "",
-		BillingMode:         "",
-		UserAccountID:       "",
-		GramOrgID:           authCtx.ActiveOrganizationID,
-		ProjectID:           authCtx.ProjectID.String(),
 	}
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
@@ -556,8 +609,8 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			Model:            conv.ToPGTextEmpty(canonicalModel(payload)),
 			MessageID:        conv.ToPGTextEmpty(""),
 			ToolCallID:       conv.ToPGTextEmpty(""),
-			UserID:           conv.ToPGTextEmpty(authCtx.UserID),
-			ExternalUserID:   conv.ToPGTextEmpty(actorEmail),
+			UserID:           conv.ToPGTextEmpty(metadata.UserID),
+			ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
 			FinishReason:     conv.ToPGTextEmpty(""),
 			ToolCalls:        nil,
 			PromptTokens:     0,
@@ -622,7 +675,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		return nil
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, &metadata, msg.ChatID, *authCtx.ProjectID, msg, canonicalChatTitle(payload, titleContent))
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, msg.ChatID, *authCtx.ProjectID, msg, canonicalChatTitle(payload, titleContent))
 }
 
 func canonicalToolCallsJSON(payload *gen.IngestPayload) ([]byte, error) {

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  VerifyURLForm,
+  VerifyURLForm$Outbound,
+  VerifyURLForm$outboundSchema,
+} from "../components/verifyurlform.js";
 
 export type VerifyRemoteMcpURLSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type VerifyRemoteMcpURLRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  verifyURLForm: components.VerifyURLForm;
+  verifyURLForm: VerifyURLForm;
 };
 
 /** @internal */
@@ -143,7 +147,7 @@ export type VerifyRemoteMcpURLRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  VerifyURLForm: components.VerifyURLForm$Outbound;
+  VerifyURLForm: VerifyURLForm$Outbound;
 };
 
 /** @internal */
@@ -155,7 +159,7 @@ export const VerifyRemoteMcpURLRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    verifyURLForm: components.VerifyURLForm$outboundSchema,
+    verifyURLForm: VerifyURLForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

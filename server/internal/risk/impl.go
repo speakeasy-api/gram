@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -49,7 +50,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -101,11 +106,13 @@ type Service struct {
 	// so the dashboard sees the exact same matcher output the worker
 	// produces during chat-message analysis. Optional: when nil the
 	// playground returns an "unsupported" response for that scanner family.
-	piiScanner ra.PIIScanner
-	piScanner  *ra.PromptInjectionScanner
+	piiScanner      ra.PIIScanner
+	piScanner       *promptinjection.Scanner
+	gitleaksScanner *gitleaks.Scanner
 	// celEng is the shared CEL env, injected at construction; used to compile
 	// and validate scope/detection expressions. nil in the lightweight observer.
-	celEng *celenv.Engine
+	celEng         *celenv.Engine
+	builtinPresets *presetlib.Library
 	// promptJudge replays an inline guardrail against a chat session for the
 	// policy-eval workbench (EvaluatePromptGuardrail). It is the same LLM judge
 	// the realtime scanner uses. Optional: when nil the eval endpoint returns
@@ -143,8 +150,10 @@ func NewObserver(
 		jwtSecret:        "",
 		piiScanner:       nil,
 		piScanner:        nil,
+		gitleaksScanner:  nil,
 		flags:            nil,
 		celEng:           nil,
+		builtinPresets:   nil,
 		promptJudge:      nil,
 	}
 }
@@ -164,9 +173,10 @@ func NewService(
 	cacheImpl cache.Cache,
 	jwtSecret string,
 	piiScanner ra.PIIScanner,
-	piScanner *ra.PromptInjectionScanner,
+	piScanner *promptinjection.Scanner,
 	flags feature.Provider,
 	celEng *celenv.Engine,
+	builtinPresets *presetlib.Library,
 	promptJudge ra.PromptJudge,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
@@ -188,8 +198,10 @@ func NewService(
 		jwtSecret:        jwtSecret,
 		piiScanner:       piiScanner,
 		piScanner:        piScanner,
+		gitleaksScanner:  gitleaks.NewScanner(),
 		flags:            flags,
 		celEng:           celEng,
+		builtinPresets:   builtinPresets,
 		promptJudge:      promptJudge,
 	}
 }
@@ -465,6 +477,46 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 	}
 
 	return &gen.ListRiskPoliciesResult{Policies: policies}, nil
+}
+
+// ListBuiltinExclusions returns the built-in exclusion library grouped by
+// category. The catalog is static, embedded reference data (see presetlib), so
+// this is a read gated by org admin with no project data access.
+func (s *Service) ListBuiltinExclusions(ctx context.Context, _ *gen.ListBuiltinExclusionsPayload) (*gen.ListBuiltinExclusionsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	categories := make([]*gen.BuiltinExclusionCategory, 0)
+	index := make(map[string]int)
+	for _, e := range s.builtinPresets.Entries() {
+		label := cmp.Or(e.Category, "Other")
+		idx, seen := index[label]
+		if !seen {
+			idx = len(categories)
+			index[label] = idx
+			categories = append(categories, &gen.BuiltinExclusionCategory{Label: label, Entries: nil})
+		}
+		// Deliberately omit engine-internal fields (sources, rule ids, matcher
+		// type) — the library is presented to end users without detection-engine
+		// details.
+		categories[idx].Entries = append(categories[idx].Entries, &gen.BuiltinExclusionEntry{
+			ID:          e.ID,
+			Reason:      e.Reason,
+			Description: e.Description,
+			Samples:     e.Samples,
+		})
+	}
+
+	return &gen.ListBuiltinExclusionsResult{
+		Version:    s.builtinPresets.Version(),
+		Categories: categories,
+	}, nil
 }
 
 func (s *Service) GetRiskPolicy(ctx context.Context, payload *gen.GetRiskPolicyPayload) (*types.RiskPolicy, error) {
@@ -2307,7 +2359,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 // TestDetectionRule runs a single detection rule against pasted sample text
 // and returns its matches. The handler dispatches to the same scanners the
 // worker uses during chat-message analysis (gitleaks for secrets.*, the
-// configured PIIScanner for pii.*, the PromptInjectionScanner for
+// configured PIIScanner for pii.*, the prompt-injection scanner for
 // prompt_injection.*, and a regex matcher for custom.*) so the playground
 // output mirrors what would be recorded as a risk_result in production.
 //
@@ -2688,7 +2740,7 @@ func evalReviewToType(row repo.RiskPolicyEvalReview) *types.RiskPolicyEvalReview
 }
 
 func (s *Service) testGitleaksRule(ctx context.Context, ruleID, text string) (*gen.TestDetectionRuleResult, error) {
-	findings, err := ra.ScanWithGitleaks(text)
+	findings, err := s.gitleaksScanner.Scan(ctx, text)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run gitleaks").LogError(ctx, s.logger)
 	}
@@ -2750,7 +2802,7 @@ func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID,
 	// A rule-test preview runs the deterministic, free L0 heuristics only; the
 	// billable LLM-judge L1 engine is not invoked on a test click (l1Enabled=false),
 	// so the structured message is unused here and carries just the sample text.
-	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, ra.NewJudgeMessage(message.User, "", text), false)
+	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, judgemessage.New(message.User, "", text), false)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run prompt-injection scanner").LogError(ctx, s.logger)
 	}
@@ -2808,7 +2860,7 @@ func (s *Service) testCustomRule(ruleID, detectionExpr, text string) (*gen.TestD
 	}, nil
 }
 
-func findingToMatch(f ra.Finding) *gen.TestDetectionRuleMatch {
+func findingToMatch(f scanners.Finding) *gen.TestDetectionRuleMatch {
 	return &gen.TestDetectionRuleMatch{
 		RuleID:      f.RuleID,
 		Description: new(f.Description),

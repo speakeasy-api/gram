@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  RevokeInviteRequest,
+  RevokeInviteSecurity,
+} from "../models/operations/revokeinvite.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RevokeInviteMutationVariables = {
-  request: operations.RevokeInviteRequest;
-  security?: operations.RevokeInviteSecurity | undefined;
+  request: RevokeInviteRequest;
+  security?: RevokeInviteSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type RevokeInviteMutationData = void;
 
 export type RevokeInviteMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { environmentsList } from "../funcs/environmentsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListEnvironmentsResult } from "../models/components/listenvironmentsresult.js";
+import {
+  ListEnvironmentsRequest,
+  ListEnvironmentsSecurity,
+} from "../models/operations/listenvironments.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListEnvironmentsQueryData = components.ListEnvironmentsResult;
+export type ListEnvironmentsQueryData = ListEnvironmentsResult;
 
 export function prefetchListEnvironments(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListEnvironmentsRequest | undefined,
-  security?: operations.ListEnvironmentsSecurity | undefined,
+  request?: ListEnvironmentsRequest | undefined,
+  security?: ListEnvironmentsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListEnvironments(
 
 export function buildListEnvironmentsQuery(
   client$: GramCore,
-  request?: operations.ListEnvironmentsRequest | undefined,
-  security?: operations.ListEnvironmentsSecurity | undefined,
+  request?: ListEnvironmentsRequest | undefined,
+  security?: ListEnvironmentsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

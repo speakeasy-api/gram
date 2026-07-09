@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersDeleteClient } from "../funcs/organizationRemoteSessionIssuersDeleteClient.js";
+import { organizationRemoteSessionClientsDelete } from "../funcs/organizationRemoteSessionClientsDelete.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GramError } from "../models/errors/gramerror.js";
@@ -19,26 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DeleteOrganizationRemoteSessionClientRequest,
+  DeleteOrganizationRemoteSessionClientSecurity,
+} from "../models/operations/deleteorganizationremotesessionclient.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type DeleteOrganizationRemoteSessionClientMutationVariables = {
-  request: operations.DeleteOrganizationRemoteSessionClientRequest;
-  security?:
-    | operations.DeleteOrganizationRemoteSessionClientSecurity
-    | undefined;
+  request: DeleteOrganizationRemoteSessionClientRequest;
+  security?: DeleteOrganizationRemoteSessionClientSecurity | undefined;
   options?: RequestOptions;
 };
 
 export type DeleteOrganizationRemoteSessionClientMutationData = void;
 
 export type DeleteOrganizationRemoteSessionClientMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -49,7 +50,7 @@ export type DeleteOrganizationRemoteSessionClientMutationError =
   | SDKValidationError;
 
 /**
- * deleteClient organizationRemoteSessionIssuers
+ * deleteClient organizationRemoteSessionClients
  *
  * @remarks
  * Soft-delete a remote_session_client in the caller's organization. Cascades to the remote_sessions minted against it. Requires org:admin.
@@ -73,7 +74,7 @@ export function useDeleteOrganizationRemoteSessionClientMutation(
 }
 
 export function mutationKeyDeleteOrganizationRemoteSessionClient(): MutationKey {
-  return ["@gram/client", "organizationRemoteSessionIssuers", "deleteClient"];
+  return ["@gram/client", "organizationRemoteSessionClients", "delete"];
 }
 
 export function buildDeleteOrganizationRemoteSessionClientMutation(
@@ -104,7 +105,7 @@ export function buildDeleteOrganizationRemoteSessionClientMutation(
           ),
         },
       };
-      return unwrapAsync(organizationRemoteSessionIssuersDeleteClient(
+      return unwrapAsync(organizationRemoteSessionClientsDelete(
         client$,
         request,
         security,

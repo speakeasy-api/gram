@@ -97,12 +97,7 @@ func (m *Metrics) Record(ctx context.Context, identity ServerIdentity, method st
 		attr.HTTPRequestMethod(method),
 		attr.RemoteMCPProxyRemoteStatusClass(statusClass(upstreamStatus)),
 	}
-	if identity.RemoteMCPServerID != "" {
-		labels = append(labels, attr.RemoteMCPServerID(identity.RemoteMCPServerID))
-	}
-	if identity.McpServerID != "" {
-		labels = append(labels, attr.McpServerID(identity.McpServerID))
-	}
+	labels = identity.AppendAttributes(labels)
 
 	attrsOpt := metric.WithAttributes(labels...)
 

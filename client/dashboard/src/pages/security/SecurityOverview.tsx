@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { type DateRangePreset } from "@gram-ai/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { useRiskOverview } from "@gram/client/react-query/index.js";
+import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";

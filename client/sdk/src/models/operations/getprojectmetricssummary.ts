@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  GetProjectMetricsSummaryPayload,
+  GetProjectMetricsSummaryPayload$Outbound,
+  GetProjectMetricsSummaryPayload$outboundSchema,
+} from "../components/getprojectmetricssummarypayload.js";
 
 export type GetProjectMetricsSummarySecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type GetProjectMetricsSummaryRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  getProjectMetricsSummaryPayload: components.GetProjectMetricsSummaryPayload;
+  getProjectMetricsSummaryPayload: GetProjectMetricsSummaryPayload;
 };
 
 /** @internal */
@@ -149,8 +153,7 @@ export type GetProjectMetricsSummaryRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  GetProjectMetricsSummaryPayload:
-    components.GetProjectMetricsSummaryPayload$Outbound;
+  GetProjectMetricsSummaryPayload: GetProjectMetricsSummaryPayload$Outbound;
 };
 
 /** @internal */
@@ -163,7 +166,7 @@ export const GetProjectMetricsSummaryRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     getProjectMetricsSummaryPayload:
-      components.GetProjectMetricsSummaryPayload$outboundSchema,
+      GetProjectMetricsSummaryPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

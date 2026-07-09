@@ -1,5 +1,6 @@
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
-import type { McpEndpoint, McpServer } from "@gram/client/models/components";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { RemoteMcpToolsSection } from "./RemoteMcpToolsSection";
 
 type ToolsTabProps = {

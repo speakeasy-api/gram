@@ -21,6 +21,9 @@ type Service interface {
 	CreateRiskPolicy(context.Context, *CreateRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// List all risk analysis policies for the current project.
 	ListRiskPolicies(context.Context, *ListRiskPoliciesPayload) (res *ListRiskPoliciesResult, err error)
+	// List the built-in exclusion library (known-safe values suppressed before
+	// they reach exclusions), grouped by category.
+	ListBuiltinExclusions(context.Context, *ListBuiltinExclusionsPayload) (res *ListBuiltinExclusionsResult, err error)
 	// Get a risk analysis policy by ID.
 	GetRiskPolicy(context.Context, *GetRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// Update a risk analysis policy.
@@ -167,7 +170,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [41]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [42]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -199,6 +202,28 @@ type ApproveRiskPolicyBypassRequestPayload struct {
 	// Principal URNs to grant bypass access to. Defaults to the requester when
 	// omitted.
 	GrantedPrincipalUrns []string
+}
+
+// A named group of built-in exclusion rules.
+type BuiltinExclusionCategory struct {
+	// Human category label, e.g. "Test credit cards".
+	Label string
+	// The rules in this category.
+	Entries []*BuiltinExclusionEntry
+}
+
+// One rule in the built-in exclusion library. Deliberately omits internal
+// detection-engine identifiers (sources, rule ids) so they are not exposed to
+// end users.
+type BuiltinExclusionEntry struct {
+	// Stable rule id.
+	ID string
+	// Label surfaced when this rule suppresses a finding.
+	Reason string
+	// Human rationale for why these values are known-safe.
+	Description string
+	// Example values — published test/documentation data, never real secrets.
+	Samples []string
 }
 
 // CompileExprPayload is the payload type of the risk service compileExpr
@@ -526,6 +551,23 @@ type GetRiskUserBreakdownPayload struct {
 	From *string
 	// Exclusive end of the window. Defaults to now.
 	To *string
+}
+
+// ListBuiltinExclusionsPayload is the payload type of the risk service
+// listBuiltinExclusions method.
+type ListBuiltinExclusionsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListBuiltinExclusionsResult is the result type of the risk service
+// listBuiltinExclusions method.
+type ListBuiltinExclusionsResult struct {
+	// Catalog checksum/version, for provenance.
+	Version string
+	// The library grouped by category.
+	Categories []*BuiltinExclusionCategory
 }
 
 // ListCustomDetectionRulesPayload is the payload type of the risk service

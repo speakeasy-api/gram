@@ -2,7 +2,7 @@ import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { type ReactElement, type ReactNode, useMemo } from "react";
 import { Link } from "react-router";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
-import type { RiskResult } from "@gram/client/models/components";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   Popover,
   PopoverContent,

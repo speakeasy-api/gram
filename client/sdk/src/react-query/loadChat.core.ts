@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { chatLoad } from "../funcs/chatLoad.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { Chat } from "../models/components/chat.js";
+import {
+  LoadChatRequest,
+  LoadChatSecurity,
+} from "../models/operations/loadchat.js";
 import { unwrapAsync } from "../types/fp.js";
-export type LoadChatQueryData = components.Chat;
+export type LoadChatQueryData = Chat;
 
 export function prefetchLoadChat(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.LoadChatRequest,
-  security?: operations.LoadChatSecurity | undefined,
+  request: LoadChatRequest,
+  security?: LoadChatSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchLoadChat(
 
 export function buildLoadChatQuery(
   client$: GramCore,
-  request: operations.LoadChatRequest,
-  security?: operations.LoadChatSecurity | undefined,
+  request: LoadChatRequest,
+  security?: LoadChatSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

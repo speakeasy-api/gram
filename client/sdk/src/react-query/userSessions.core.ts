@@ -11,27 +11,32 @@ import { GramCore } from "../core.js";
 import { userSessionsList } from "../funcs/userSessionsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ListUserSessionsQueryParamStatus,
+  ListUserSessionsRequest,
+  ListUserSessionsResponse,
+  ListUserSessionsSecurity,
+} from "../models/operations/listusersessions.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 import { pageIteratorToJSON } from "./_types.js";
-export type UserSessionsQueryData = operations.ListUserSessionsResponse;
+export type UserSessionsQueryData = ListUserSessionsResponse;
 
 export type UserSessionsInfiniteQueryData = PageIterator<
-  operations.ListUserSessionsResponse,
+  ListUserSessionsResponse,
   { cursor: string }
 >;
 
 export type UserSessionsPageParams = PageIterator<
-  operations.ListUserSessionsResponse,
+  ListUserSessionsResponse,
   { cursor: string }
 >["~next"];
 
 export function prefetchUserSessions(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListUserSessionsRequest | undefined,
-  security?: operations.ListUserSessionsSecurity | undefined,
+  request?: ListUserSessionsRequest | undefined,
+  security?: ListUserSessionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -47,8 +52,8 @@ export function prefetchUserSessions(
 export function prefetchUserSessionsInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListUserSessionsRequest | undefined,
-  security?: operations.ListUserSessionsSecurity | undefined,
+  request?: ListUserSessionsRequest | undefined,
+  security?: ListUserSessionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -66,8 +71,8 @@ export function prefetchUserSessionsInfinite(
 
 export function buildUserSessionsQuery(
   client$: GramCore,
-  request?: operations.ListUserSessionsRequest | undefined,
-  security?: operations.ListUserSessionsSecurity | undefined,
+  request?: ListUserSessionsRequest | undefined,
+  security?: ListUserSessionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -111,8 +116,8 @@ export function buildUserSessionsQuery(
 
 export function buildUserSessionsInfiniteQuery(
   client$: GramCore,
-  request?: operations.ListUserSessionsRequest | undefined,
-  security?: operations.ListUserSessionsSecurity | undefined,
+  request?: ListUserSessionsRequest | undefined,
+  security?: ListUserSessionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -168,7 +173,7 @@ export function queryKeyUserSessions(
   parameters: {
     subjectUrn?: string | undefined;
     userSessionIssuerId?: string | undefined;
-    status?: operations.ListUserSessionsQueryParamStatus | undefined;
+    status?: ListUserSessionsQueryParamStatus | undefined;
     clientId?: string | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
@@ -184,7 +189,7 @@ export function queryKeyUserSessionsInfinite(
   parameters: {
     subjectUrn?: string | undefined;
     userSessionIssuerId?: string | undefined;
-    status?: operations.ListUserSessionsQueryParamStatus | undefined;
+    status?: ListUserSessionsQueryParamStatus | undefined;
     clientId?: string | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;

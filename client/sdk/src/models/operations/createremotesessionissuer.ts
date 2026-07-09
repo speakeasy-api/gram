@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  CreateRemoteSessionIssuerForm,
+  CreateRemoteSessionIssuerForm$Outbound,
+  CreateRemoteSessionIssuerForm$outboundSchema,
+} from "../components/createremotesessionissuerform.js";
 
 export type CreateRemoteSessionIssuerSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -34,7 +38,7 @@ export type CreateRemoteSessionIssuerRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  createRemoteSessionIssuerForm: components.CreateRemoteSessionIssuerForm;
+  createRemoteSessionIssuerForm: CreateRemoteSessionIssuerForm;
 };
 
 /** @internal */
@@ -149,8 +153,7 @@ export type CreateRemoteSessionIssuerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  CreateRemoteSessionIssuerForm:
-    components.CreateRemoteSessionIssuerForm$Outbound;
+  CreateRemoteSessionIssuerForm: CreateRemoteSessionIssuerForm$Outbound;
 };
 
 /** @internal */
@@ -162,8 +165,7 @@ export const CreateRemoteSessionIssuerRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    createRemoteSessionIssuerForm:
-      components.CreateRemoteSessionIssuerForm$outboundSchema,
+    createRemoteSessionIssuerForm: CreateRemoteSessionIssuerForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

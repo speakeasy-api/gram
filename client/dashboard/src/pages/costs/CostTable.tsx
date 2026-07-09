@@ -6,7 +6,8 @@ import {
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import { Dimension, type QueryRow } from "@gram/client/models/components";
+import { Dimension } from "@gram/client/models/components/queryfilter.js";
+import { type QueryRow } from "@gram/client/models/components/queryrow.js";
 import { Box, ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {

@@ -26,6 +26,8 @@ type CreateMcpServerRequestBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	// The ID of the tunneled MCP server to use as the backend
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// The ID of the toolset to use as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
@@ -50,6 +52,8 @@ type UpdateMcpServerRequestBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	// The ID of the tunneled MCP server to use as the backend
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// The ID of the toolset to use as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
@@ -78,6 +82,8 @@ type CreateMcpServerResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	// The ID of the tunneled MCP server used as the backend
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
@@ -109,6 +115,8 @@ type GetMcpServerResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	// The ID of the tunneled MCP server used as the backend
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
@@ -146,6 +154,8 @@ type UpdateMcpServerResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	// The ID of the tunneled MCP server used as the backend
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
@@ -1306,6 +1316,8 @@ type McpServerResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	// The ID of the tunneled MCP server used as the backend
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
@@ -1349,6 +1361,7 @@ func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerRespon
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
+		TunneledMcpServerID:   res.TunneledMcpServerID,
 		ToolsetID:             res.ToolsetID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		Visibility:            string(res.Visibility),
@@ -1369,6 +1382,7 @@ func NewGetMcpServerResponseBody(res *types.McpServer) *GetMcpServerResponseBody
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
+		TunneledMcpServerID:   res.TunneledMcpServerID,
 		ToolsetID:             res.ToolsetID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		Visibility:            string(res.Visibility),
@@ -1408,6 +1422,7 @@ func NewUpdateMcpServerResponseBody(res *types.McpServer) *UpdateMcpServerRespon
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
+		TunneledMcpServerID:   res.TunneledMcpServerID,
 		ToolsetID:             res.ToolsetID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		Visibility:            string(res.Visibility),
@@ -2317,6 +2332,7 @@ func NewCreateMcpServerPayload(body *CreateMcpServerRequestBody, sessionToken *s
 		EnvironmentID:         body.EnvironmentID,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		RemoteMcpServerID:     body.RemoteMcpServerID,
+		TunneledMcpServerID:   body.TunneledMcpServerID,
 		ToolsetID:             body.ToolsetID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		Visibility:            types.McpServerVisibility(*body.Visibility),
@@ -2343,9 +2359,10 @@ func NewGetMcpServerPayload(id *string, slug *string, sessionToken *string, apik
 
 // NewListMcpServersPayload builds a mcpServers service listMcpServers endpoint
 // payload.
-func NewListMcpServersPayload(remoteMcpServerID *string, toolsetID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.ListMcpServersPayload {
+func NewListMcpServersPayload(remoteMcpServerID *string, tunneledMcpServerID *string, toolsetID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.ListMcpServersPayload {
 	v := &mcpservers.ListMcpServersPayload{}
 	v.RemoteMcpServerID = remoteMcpServerID
+	v.TunneledMcpServerID = tunneledMcpServerID
 	v.ToolsetID = toolsetID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2363,6 +2380,7 @@ func NewUpdateMcpServerPayload(body *UpdateMcpServerRequestBody, sessionToken *s
 		EnvironmentID:         body.EnvironmentID,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		RemoteMcpServerID:     body.RemoteMcpServerID,
+		TunneledMcpServerID:   body.TunneledMcpServerID,
 		ToolsetID:             body.ToolsetID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		Visibility:            types.McpServerVisibility(*body.Visibility),
@@ -2417,6 +2435,9 @@ func ValidateCreateMcpServerRequestBody(body *CreateMcpServerRequestBody) (err e
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
 	}
+	if body.TunneledMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
+	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
 	}
@@ -2451,6 +2472,9 @@ func ValidateUpdateMcpServerRequestBody(body *UpdateMcpServerRequestBody) (err e
 	}
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
+	}
+	if body.TunneledMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))

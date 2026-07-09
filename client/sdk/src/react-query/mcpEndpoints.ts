@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListMcpEndpointsRequest,
+  ListMcpEndpointsSecurity,
+} from "../models/operations/listmcpendpoints.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type McpEndpointsQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type McpEndpointsQueryError =
  * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.
  */
 export function useMcpEndpoints(
-  request?: operations.ListMcpEndpointsRequest | undefined,
-  security?: operations.ListMcpEndpointsSecurity | undefined,
+  request?: ListMcpEndpointsRequest | undefined,
+  security?: ListMcpEndpointsSecurity | undefined,
   options?: QueryHookOptions<McpEndpointsQueryData, McpEndpointsQueryError>,
 ): UseQueryResult<McpEndpointsQueryData, McpEndpointsQueryError> {
   const client = useGramContext();
@@ -82,8 +85,8 @@ export function useMcpEndpoints(
  * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.
  */
 export function useMcpEndpointsSuspense(
-  request?: operations.ListMcpEndpointsRequest | undefined,
-  security?: operations.ListMcpEndpointsSecurity | undefined,
+  request?: ListMcpEndpointsRequest | undefined,
+  security?: ListMcpEndpointsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     McpEndpointsQueryData,
     McpEndpointsQueryError

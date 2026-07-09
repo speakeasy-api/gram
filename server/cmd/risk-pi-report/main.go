@@ -18,17 +18,19 @@ import (
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
-	"github.com/speakeasy-api/gram/server/internal/pijudge"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 const (
-	defaultCorpusDir = "server/internal/background/activities/risk_analysis/testdata/prompt_injection"
+	defaultCorpusDir = "server/internal/scanners/promptinjection/testdata/prompt_injection"
 	defaultOutFile   = "server/risk_accuracy_metrics.json"
 )
 
@@ -121,9 +123,7 @@ type options struct {
 }
 
 const (
-	// defaultJudgeModel mirrors pijudge's stage-1 default (Haiku 4.5): the model
-	// the production L1 engine runs. The bench drives the same model so its
-	// accuracy numbers reflect what ships.
+	// defaultJudgeModel is the report's L1 judge model when none is provided.
 	defaultJudgeModel = "anthropic/claude-haiku-4.5"
 	// judgeConcurrency bounds concurrent judge calls. The corpus is a few hundred
 	// rows; 8 keeps it brisk without tripping provider rate limits.
@@ -287,10 +287,10 @@ func loadFloors(dir string) (floors, error) {
 	return fl, nil
 }
 
-func scanL0(ctx context.Context, corpus []labeledCase) ([][]risk_analysis.Finding, error) {
-	out := make([][]risk_analysis.Finding, len(corpus))
+func scanL0(ctx context.Context, corpus []labeledCase) ([][]scanners.Finding, error) {
+	out := make([][]scanners.Finding, len(corpus))
 	for i, c := range corpus {
-		findings, err := risk_analysis.DetectPromptInjection(ctx, c.Text)
+		findings, err := promptinjection.Detect(ctx, c.Text)
 		if err != nil {
 			return nil, fmt.Errorf("scan L0 %s: %w", c.ID, err)
 		}
@@ -301,12 +301,12 @@ func scanL0(ctx context.Context, corpus []labeledCase) ([][]risk_analysis.Findin
 
 // scanJudgeMode evaluates the L1 LLM judge over the corpus and folds its
 // findings on top of L0 — the "L0 + L1" operational mode an opted-in org runs.
-// It calls GetObjectCompletion directly (the same request pijudge builds, minus
+// It calls GetObjectCompletion directly (the same request piopenrouter builds, minus
 // the engine's per-org rate limiter and fail-open), so the numbers reflect the
 // model's raw accuracy on every case rather than a throttled subset. Returns a
 // skipped mode when no OpenRouter key is configured, so CI and keyless dev runs
 // still produce the L0 report.
-func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase, l0Findings [][]risk_analysis.Finding) (modeSummary, error) {
+func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase, l0Findings [][]scanners.Finding) (modeSummary, error) {
 	apiKey := firstEnv("OPENROUTER_DEV_KEY", "OPENROUTER_API_KEY")
 	if apiKey == "" || apiKey == "unset" {
 		return skippedMode("l1_opt_in", "OPENROUTER_DEV_KEY not set"), nil
@@ -325,9 +325,9 @@ func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase, l0Fi
 // appends an L1 finding wherever it flags an attack, on a clone of the L0
 // findings. A judge failure leaves the row with its L0 verdict — a stuck or
 // erroring model degrades to L0, matching the engine's fail-open posture.
-func scanJudge(ctx context.Context, opts options, client openrouter.CompletionClient, corpus []labeledCase, l0Findings [][]risk_analysis.Finding) [][]risk_analysis.Finding {
+func scanJudge(ctx context.Context, opts options, client openrouter.CompletionClient, corpus []labeledCase, l0Findings [][]scanners.Finding) [][]scanners.Finding {
 	out := cloneFindings(l0Findings)
-	ruleID, description := risk_analysis.DescribePromptInjection()
+	ruleID, description := promptinjection.Describe()
 
 	sem := make(chan struct{}, opts.judgeConcurrency)
 	var wg sync.WaitGroup
@@ -342,7 +342,7 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 			defer func() { <-sem }()
 
 			text := corpus[i].Text
-			msg := risk_analysis.NewJudgeMessage(message.User, "", text)
+			msg := judgemessage.New(message.User, "", text)
 			isAttack, confidence, err := judgeOne(ctx, client, opts.judgeModel, msg)
 
 			mu.Lock()
@@ -354,16 +354,21 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 			if err != nil || !isAttack {
 				return
 			}
-			out[i] = append(out[i], risk_analysis.Finding{
+			out[i] = append(out[i], scanners.Finding{
 				RuleID:           ruleID,
 				Description:      description,
 				Match:            text,
 				StartPos:         0,
 				EndPos:           len(text),
-				Source:           risk_analysis.SourcePromptInjection,
+				Source:           promptinjection.Source,
 				Confidence:       confidence,
 				Tags:             []string{"llm-judge", "layer-1"},
 				DeadLetterReason: "",
+
+				McpLookupToolCallID: "",
+				SpanGroupKey:        "",
+				Field:               "",
+				Path:                "",
 			})
 		}(i)
 	}
@@ -372,11 +377,11 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 	return out
 }
 
-// judgeOne issues one GetObjectCompletion shaped exactly like pijudge's call:
-// the structured "message" payload (riskjudge.RenderMessage), pijudge's system
+// judgeOne issues one GetObjectCompletion shaped exactly like piopenrouter's call:
+// the structured "message" payload (riskjudge.RenderMessage), piopenrouter's system
 // prompt and verdict schema, temperature 0. No copy of the prompt/schema to keep
 // in sync — it drives the production constants directly.
-func judgeOne(ctx context.Context, client openrouter.CompletionClient, model string, msg risk_analysis.JudgeMessage) (isAttack bool, confidence float64, err error) {
+func judgeOne(ctx context.Context, client openrouter.CompletionClient, model string, msg judgemessage.Message) (isAttack bool, confidence float64, err error) {
 	payload, err := json.Marshal(struct {
 		Message riskjudge.MessagePayload `json:"message"`
 	}{Message: riskjudge.RenderMessage(msg)})
@@ -387,7 +392,7 @@ func judgeOne(ctx context.Context, client openrouter.CompletionClient, model str
 	strict := true
 	schema := or.ChatJSONSchemaConfig{
 		Name:        "prompt_attack_verdict",
-		Schema:      pijudge.VerdictSchema(),
+		Schema:      piopenrouter.VerdictSchema(),
 		Description: nil,
 		Strict:      optionalnullable.From(&strict),
 	}
@@ -400,7 +405,7 @@ func judgeOne(ctx context.Context, client openrouter.CompletionClient, model str
 		OrgID:          benchOrgID,
 		ProjectID:      benchProjectID,
 		Model:          model,
-		SystemPrompt:   pijudge.SystemPrompt,
+		SystemPrompt:   piopenrouter.SystemPrompt,
 		Prompt:         string(payload),
 		Temperature:    &temp,
 		UsageSource:    billing.ModelUsageSourceGram,
@@ -473,7 +478,7 @@ func (d *devProvisioner) GetModelUsage(_ context.Context, _ string, _ string) (*
 
 var _ openrouter.Provisioner = (*devProvisioner)(nil)
 
-func summarizeFindings(mode string, corpus []labeledCase, findings [][]risk_analysis.Finding) modeSummary {
+func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.Finding) modeSummary {
 	overall := counts{TP: 0, FP: 0, TN: 0, FN: 0}
 	bySource := map[string]*counts{}
 	ruleTP := map[string]int{}
@@ -552,7 +557,7 @@ func summarizeFindings(mode string, corpus []labeledCase, findings [][]risk_anal
 // but the candidate mode now flags — i.e. judge-recovered true positives
 // (label "malicious") or judge-introduced false positives (label "benign").
 // Sorted by confidence desc, capped at limit.
-func changedExamples(corpus []labeledCase, baseline, candidate [][]risk_analysis.Finding, label string, limit int) []exampleCase {
+func changedExamples(corpus []labeledCase, baseline, candidate [][]scanners.Finding, label string, limit int) []exampleCase {
 	examples := []exampleCase{}
 	for i, c := range corpus {
 		if c.Label != label || len(baseline[i]) > 0 || len(candidate[i]) == 0 {
@@ -579,7 +584,7 @@ func changedExamples(corpus []labeledCase, baseline, candidate [][]risk_analysis
 	return examples
 }
 
-func highestConfidenceFinding(findings []risk_analysis.Finding) risk_analysis.Finding {
+func highestConfidenceFinding(findings []scanners.Finding) scanners.Finding {
 	out := findings[0]
 	for _, f := range findings[1:] {
 		if f.Confidence > out.Confidence {
@@ -589,10 +594,10 @@ func highestConfidenceFinding(findings []risk_analysis.Finding) risk_analysis.Fi
 	return out
 }
 
-func cloneFindings(lhs [][]risk_analysis.Finding) [][]risk_analysis.Finding {
-	out := make([][]risk_analysis.Finding, len(lhs))
+func cloneFindings(lhs [][]scanners.Finding) [][]scanners.Finding {
+	out := make([][]scanners.Finding, len(lhs))
 	for i := range lhs {
-		out[i] = append([]risk_analysis.Finding{}, lhs[i]...)
+		out[i] = append([]scanners.Finding{}, lhs[i]...)
 	}
 	return out
 }

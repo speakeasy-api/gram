@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  ApproveShadowMCPApprovalRequestForm,
+  ApproveShadowMCPApprovalRequestForm$Outbound,
+  ApproveShadowMCPApprovalRequestForm$outboundSchema,
+} from "../components/approveshadowmcpapprovalrequestform.js";
 
 export type ApproveShadowMCPApprovalRequestSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,8 +19,7 @@ export type ApproveShadowMCPApprovalRequestRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  approveShadowMCPApprovalRequestForm:
-    components.ApproveShadowMCPApprovalRequestForm;
+  approveShadowMCPApprovalRequestForm: ApproveShadowMCPApprovalRequestForm;
 };
 
 /** @internal */
@@ -55,7 +58,7 @@ export function approveShadowMCPApprovalRequestSecurityToJSON(
 export type ApproveShadowMCPApprovalRequestRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   ApproveShadowMCPApprovalRequestForm:
-    components.ApproveShadowMCPApprovalRequestForm$Outbound;
+    ApproveShadowMCPApprovalRequestForm$Outbound;
 };
 
 /** @internal */
@@ -67,7 +70,7 @@ export const ApproveShadowMCPApprovalRequestRequest$outboundSchema:
     z.object({
       gramSession: z.optional(z.string()),
       approveShadowMCPApprovalRequestForm:
-        components.ApproveShadowMCPApprovalRequestForm$outboundSchema,
+        ApproveShadowMCPApprovalRequestForm$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {

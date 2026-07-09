@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  GetSignedAssetURLForm,
+  GetSignedAssetURLForm$Outbound,
+  GetSignedAssetURLForm$outboundSchema,
+} from "../components/getsignedasseturlform.js";
 
 export type SetProjectLogoSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -34,7 +38,7 @@ export type SetProjectLogoRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  getSignedAssetURLForm: components.GetSignedAssetURLForm;
+  getSignedAssetURLForm: GetSignedAssetURLForm;
 };
 
 /** @internal */
@@ -143,7 +147,7 @@ export type SetProjectLogoRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  GetSignedAssetURLForm: components.GetSignedAssetURLForm$Outbound;
+  GetSignedAssetURLForm: GetSignedAssetURLForm$Outbound;
 };
 
 /** @internal */
@@ -155,7 +159,7 @@ export const SetProjectLogoRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    getSignedAssetURLForm: components.GetSignedAssetURLForm$outboundSchema,
+    getSignedAssetURLForm: GetSignedAssetURLForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

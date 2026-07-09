@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListMcpServerToolFiltersRequest,
+  ListMcpServerToolFiltersSecurity,
+} from "../models/operations/listmcpservertoolfilters.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type ListMcpServerToolFiltersQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type ListMcpServerToolFiltersQueryError =
  * List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
  */
 export function useListMcpServerToolFilters(
-  request?: operations.ListMcpServerToolFiltersRequest | undefined,
-  security?: operations.ListMcpServerToolFiltersSecurity | undefined,
+  request?: ListMcpServerToolFiltersRequest | undefined,
+  security?: ListMcpServerToolFiltersSecurity | undefined,
   options?: QueryHookOptions<
     ListMcpServerToolFiltersQueryData,
     ListMcpServerToolFiltersQueryError
@@ -88,8 +91,8 @@ export function useListMcpServerToolFilters(
  * List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
  */
 export function useListMcpServerToolFiltersSuspense(
-  request?: operations.ListMcpServerToolFiltersRequest | undefined,
-  security?: operations.ListMcpServerToolFiltersSecurity | undefined,
+  request?: ListMcpServerToolFiltersRequest | undefined,
+  security?: ListMcpServerToolFiltersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListMcpServerToolFiltersQueryData,
     ListMcpServerToolFiltersQueryError

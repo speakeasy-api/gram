@@ -42,6 +42,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -81,7 +84,9 @@ type WorkerOptions struct {
 	AssistantsCore                 *assistants.ServiceCore
 	TemporalEnv                    *tenv.Environment
 	PIIScanner                     risk_analysis.PIIScanner
-	PIScanner                      *risk_analysis.PromptInjectionScanner
+	PIScanner                      *promptinjection.Scanner
+	CustomRuleScanner              *customruleanalyzer.Scanner
+	BuiltinPresets                 *presetlib.Library
 	ShadowMCPClient                *shadowmcp.Client
 	AuditLogger                    *audit.Logger
 	WorkOSClient                   activities.WorkOSClient
@@ -131,6 +136,8 @@ func ForDeploymentProcessing(
 		TemporalEnv:                    nil,
 		PIIScanner:                     nil,
 		PIScanner:                      nil,
+		CustomRuleScanner:              nil,
+		BuiltinPresets:                 nil,
 		ShadowMCPClient:                nil,
 		WorkOSClient:                   workos.NewStubClient(),
 		SvixClient:                     nil,
@@ -181,6 +188,8 @@ func NewTemporalWorker(
 		TemporalEnv:                    env,
 		PIIScanner:                     nil,
 		PIScanner:                      nil,
+		CustomRuleScanner:              nil,
+		BuiltinPresets:                 nil,
 		ShadowMCPClient:                nil,
 		AuditLogger:                    nil,
 		WorkOSClient:                   workos.NewStubClient(),
@@ -221,6 +230,8 @@ func NewTemporalWorker(
 			TemporalEnv:                    conv.Default(o.TemporalEnv, opts.TemporalEnv),
 			PIIScanner:                     conv.Default(o.PIIScanner, opts.PIIScanner),
 			PIScanner:                      conv.Default(o.PIScanner, opts.PIScanner),
+			CustomRuleScanner:              conv.Default(o.CustomRuleScanner, opts.CustomRuleScanner),
+			BuiltinPresets:                 conv.Default(o.BuiltinPresets, opts.BuiltinPresets),
 			ShadowMCPClient:                conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
 			AuditLogger:                    conv.Default(o.AuditLogger, opts.AuditLogger),
 			WorkOSClient:                   conv.Default(o.WorkOSClient, opts.WorkOSClient),
@@ -294,6 +305,7 @@ func NewTemporalWorker(
 		opts.AssistantsCore,
 		opts.PIIScanner,
 		opts.PIScanner,
+		opts.CustomRuleScanner,
 		opts.ShadowMCPClient,
 		opts.AuditLogger,
 		opts.WorkOSClient,
@@ -304,6 +316,7 @@ func NewTemporalWorker(
 		opts.Publishers,
 		celEng,
 		judgeRateLimiter,
+		opts.BuiltinPresets,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -320,6 +333,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
+	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
@@ -418,7 +432,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
-	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {

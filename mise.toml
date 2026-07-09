@@ -117,6 +117,8 @@ GRAM_REDIS_CACHE_PORT = "5445"
 GRAM_REDIS_CACHE_ADDR = "{{env.GRAM_REDIS_CACHE_HOST}}:{{env.GRAM_REDIS_CACHE_PORT}}"
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
 GRAM_REDIS_ENABLE_TRACING = "false"
+## Local-only value; real deployments inject this via secrets.
+GRAM_TUNNEL_FORWARD_TOKEN = "local-dev-tunnel-forward-token"
 OPENROUTER_DEV_KEY = "unset"
 ## The dev-idp is a top-level project (dev-idp/) backed by SQLite.
 ## GRAM_DEVIDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.
@@ -187,7 +189,7 @@ GRAM_LOG_PRETTY = 1
 ## This config is used by the Elements SDK and CLI to point to the correct Gram
 ## API server
 GRAM_API_URL = "{{env.GRAM_SERVER_URL}}"
-VITE_DEV_HOSTNAMES = "localhost,gram.local"
+VITE_DEV_HOSTNAMES = "localhost"
 TEMPORAL_WEB_PORT = "8233"
 ## If you want to enable/disable certain feature flags during local development,
 ## copy the following line to mise.local.toml and point to a CSV file containing

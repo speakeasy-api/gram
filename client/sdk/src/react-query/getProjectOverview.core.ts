@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { telemetryGetProjectOverview } from "../funcs/telemetryGetProjectOverview.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetProjectOverviewResult } from "../models/components/getprojectoverviewresult.js";
+import {
+  GetProjectOverviewRequest,
+  GetProjectOverviewSecurity,
+} from "../models/operations/getprojectoverview.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetProjectOverviewQueryData = components.GetProjectOverviewResult;
+export type GetProjectOverviewQueryData = GetProjectOverviewResult;
 
 export function prefetchGetProjectOverview(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetProjectOverviewRequest,
-  security?: operations.GetProjectOverviewSecurity | undefined,
+  request: GetProjectOverviewRequest,
+  security?: GetProjectOverviewSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGetProjectOverview(
 
 export function buildGetProjectOverviewQuery(
   client$: GramCore,
-  request: operations.GetProjectOverviewRequest,
-  security?: operations.GetProjectOverviewSecurity | undefined,
+  request: GetProjectOverviewRequest,
+  security?: GetProjectOverviewSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

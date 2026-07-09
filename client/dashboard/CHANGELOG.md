@@ -1,5 +1,15 @@
 # dashboard
 
+## 0.83.1
+
+### Patch Changes
+
+- 956bde5: fix: restore Non-Corporate Accounts risk-policy card and remove duplicate Off-Policy Content card
+
+  The risk-policy eval refactor dropped the Non-Corporate Accounts detector (including its approved-email-domains config) from the new policy detail form and rendered Off-Policy Content twice. This re-adds `account_identity` to the available/display/flag-only category sets and payload mapping, restores the approved-domains state and Customize-sheet UI, and de-duplicates Off-Policy Content.
+
+- 7882ed7: Add a built-in preset exclusion library that suppresses known false positives (test credit cards, example API keys/tokens, module/content hashes, placeholder emails) across all detection sources. Adds the `risk.listBuiltinPresets` endpoint and a read-only "Built-in library" section on the Exclusions tab that lists the live catalog.
+
 ## 0.83.0
 
 ### Minor Changes

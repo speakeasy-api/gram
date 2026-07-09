@@ -11,17 +11,19 @@ import { GramCore } from "../core.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetMetricsSummaryResult } from "../models/components/getmetricssummaryresult.js";
+import {
+  GetProjectMetricsSummaryRequest,
+  GetProjectMetricsSummarySecurity,
+} from "../models/operations/getprojectmetricssummary.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetProjectMetricsSummaryQueryData =
-  components.GetMetricsSummaryResult;
+export type GetProjectMetricsSummaryQueryData = GetMetricsSummaryResult;
 
 export function prefetchGetProjectMetricsSummary(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetProjectMetricsSummaryRequest,
-  security?: operations.GetProjectMetricsSummarySecurity | undefined,
+  request: GetProjectMetricsSummaryRequest,
+  security?: GetProjectMetricsSummarySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +38,8 @@ export function prefetchGetProjectMetricsSummary(
 
 export function buildGetProjectMetricsSummaryQuery(
   client$: GramCore,
-  request: operations.GetProjectMetricsSummaryRequest,
-  security?: operations.GetProjectMetricsSummarySecurity | undefined,
+  request: GetProjectMetricsSummaryRequest,
+  security?: GetProjectMetricsSummarySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

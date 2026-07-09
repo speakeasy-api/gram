@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  ListRiskPoliciesRequest,
+  ListRiskPoliciesSecurity,
+} from "../models/operations/listriskpolicies.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskListPoliciesQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskListPoliciesQueryError =
  * List all risk analysis policies for the current project.
  */
 export function useRiskListPolicies(
-  request?: operations.ListRiskPoliciesRequest | undefined,
-  security?: operations.ListRiskPoliciesSecurity | undefined,
+  request?: ListRiskPoliciesRequest | undefined,
+  security?: ListRiskPoliciesSecurity | undefined,
   options?: QueryHookOptions<
     RiskListPoliciesQueryData,
     RiskListPoliciesQueryError
@@ -85,8 +88,8 @@ export function useRiskListPolicies(
  * List all risk analysis policies for the current project.
  */
 export function useRiskListPoliciesSuspense(
-  request?: operations.ListRiskPoliciesRequest | undefined,
-  security?: operations.ListRiskPoliciesSecurity | undefined,
+  request?: ListRiskPoliciesRequest | undefined,
+  security?: ListRiskPoliciesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskListPoliciesQueryData,
     RiskListPoliciesQueryError

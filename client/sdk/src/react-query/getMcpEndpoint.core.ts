@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { mcpEndpointsGet } from "../funcs/mcpEndpointsGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { McpEndpoint } from "../models/components/mcpendpoint.js";
+import {
+  GetMcpEndpointRequest,
+  GetMcpEndpointSecurity,
+} from "../models/operations/getmcpendpoint.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GetMcpEndpointQueryData = components.McpEndpoint;
+export type GetMcpEndpointQueryData = McpEndpoint;
 
 export function prefetchGetMcpEndpoint(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetMcpEndpointRequest | undefined,
-  security?: operations.GetMcpEndpointSecurity | undefined,
+  request?: GetMcpEndpointRequest | undefined,
+  security?: GetMcpEndpointSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchGetMcpEndpoint(
 
 export function buildGetMcpEndpointQuery(
   client$: GramCore,
-  request?: operations.GetMcpEndpointRequest | undefined,
-  security?: operations.GetMcpEndpointSecurity | undefined,
+  request?: GetMcpEndpointRequest | undefined,
+  security?: GetMcpEndpointSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

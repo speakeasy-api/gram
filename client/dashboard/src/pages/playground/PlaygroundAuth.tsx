@@ -9,10 +9,8 @@ import { useMcpOAuthRequired } from "@/lib/mcpOAuth";
 import { Toolset } from "@/lib/toolTypes";
 import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import {
-  useGetMcpMetadata,
-  useListEnvironments,
-} from "@gram/client/react-query";
+import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
+import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, ExternalLink, Loader2, LogOut } from "lucide-react";

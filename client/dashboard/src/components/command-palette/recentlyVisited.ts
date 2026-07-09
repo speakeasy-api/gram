@@ -1,5 +1,5 @@
 import { RECENTS_STORAGE_PREFIX } from "@/lib/local-storage-keys";
-import { useSessionInfo } from "@gram/client/react-query";
+import { useSessionInfo } from "@gram/client/react-query/sessionInfo.js";
 import { useEffect, useState } from "react";
 
 /**

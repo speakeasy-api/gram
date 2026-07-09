@@ -8,7 +8,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { intro, log, outro } from "@clack/prompts";
+import { intro, log as clackLog, outro } from "@clack/prompts";
 import { GramCore } from "@gram/client/core.js";
 import { accessEnableRBAC } from "@gram/client/funcs/accessEnableRBAC.js";
 import { assetsUploadFunctions } from "@gram/client/funcs/assetsUploadFunctions.js";
@@ -28,8 +28,51 @@ import { toolsetsCreate } from "@gram/client/funcs/toolsetsCreate.js";
 import { toolsetsUpdateBySlug } from "@gram/client/funcs/toolsetsUpdateBySlug.js";
 import { environmentsCreate } from "@gram/client/funcs/environmentsCreate.js";
 import { environmentsList } from "@gram/client/funcs/environmentsList.js";
-import { ServiceError } from "@gram/client/models/errors";
-import { $ } from "zx";
+import { $, chalk } from "zx";
+import { seedTunnel } from "./seed/tunnel.mts";
+
+function isConflictError(error: unknown): boolean {
+  const data = (error as { data$?: { name?: unknown } } | null)?.data$;
+  return data?.name === "conflict";
+}
+
+const seedStartedAt = performance.now();
+let lastLogAt = seedStartedAt;
+
+function formatDuration(ms: number): string {
+  return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+function lap(): string {
+  const now = performance.now();
+  const elapsed = now - lastLogAt;
+  lastLogAt = now;
+  return chalk.dim(`[+${formatDuration(elapsed)}]`);
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Timed out after ${ms}ms: ${label}`)),
+      ms,
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() =>
+    clearTimeout(timer),
+  ) as Promise<T>;
+}
+
+/** clack log with time-since-previous-statement appended, to surface slow seed steps. */
+const log = {
+  info: (message: string) => clackLog.info(`${message} ${lap()}`),
+  warn: (message: string) => clackLog.warn(`${message} ${lap()}`),
+  error: (message: string) => clackLog.error(`${message} ${lap()}`),
+};
 
 type Asset = {
   slug: string;
@@ -129,7 +172,12 @@ async function seed() {
   intro("Seeding local development environment...");
   using _ = {
     [Symbol.dispose]() {
-      outro(success ? "Seeding complete!" : "Seeding failed.");
+      const total = formatDuration(performance.now() - seedStartedAt);
+      outro(
+        success
+          ? `Seeding complete in ${total}!`
+          : `Seeding failed after ${total}.`,
+      );
     },
   };
   const serverURL = process.env["GRAM_SERVER_URL"];
@@ -164,6 +212,11 @@ async function seed() {
   if (!activeOrgID) {
     abort("Active organization ID not found", sessionJSON);
   }
+  const activeUserID = sessionInfo.result.userId;
+  if (!activeUserID) {
+    abort("Active user ID not found", sessionJSON);
+  }
+  await seedCurrentUserSuperAdmin(activeUserID);
 
   const orgs = sessionInfo.result.organizations;
   const org = orgs.find(
@@ -204,6 +257,20 @@ async function seed() {
     const err = e as { stderr?: string; message?: string };
     log.warn(
       `Failed to set org whitelisted: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
+  }
+
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs:`.quiet();
+    log.info("Enabled local logs and tool_io_logs features");
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.warn(
+      `Failed to enable local log features: ${err.message || err.stderr || JSON.stringify(e)}`,
     );
   }
 
@@ -313,6 +380,7 @@ async function seed() {
       `${env.created ? "Created" : "Found existing"} environment '${env.slug}' for project '${projectSlug}'`,
     );
   }
+  await seedTunnel();
 
   // Seed observability data for the first seeded project
   const firstSeededProjectSlug = Object.keys(projectToolUrns)[0];
@@ -375,7 +443,131 @@ async function seed() {
     );
   }
 
+  const enableRBACRes = await accessEnableRBAC(gram, undefined, {
+    sessionHeaderGramSession: sessionId,
+  });
+  if (!enableRBACRes.ok) {
+    abort("Failed to enable RBAC and seed system roles", enableRBACRes.error);
+  }
+  log.info("Enabled RBAC and seeded system roles");
+
+  await seedCurrentUserAdminRole({
+    organizationId: activeOrgID,
+    userId: activeUserID,
+  });
+
   success = true;
+}
+
+async function seedCurrentUserAdminRole(init: {
+  organizationId: string;
+  userId: string;
+}): Promise<void> {
+  const { organizationId, userId } = init;
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const sql = `
+WITH admin_role AS (
+  SELECT id
+  FROM global_roles
+  WHERE workos_slug = 'admin'
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+  LIMIT 1
+),
+active_user AS (
+  SELECT users.id AS user_id, users.workos_id, our.workos_membership_id
+  FROM users
+  JOIN organization_user_relationships AS our
+    ON our.user_id = users.id
+  WHERE users.id = :'user_id'
+    AND our.organization_id = :'organization_id'
+    AND users.workos_id IS NOT NULL
+    AND our.deleted IS FALSE
+  LIMIT 1
+),
+upserted AS (
+  INSERT INTO organization_role_assignments (
+    organization_id,
+    workos_user_id,
+    user_id,
+    role_urn,
+    workos_membership_id,
+    workos_updated_at,
+    workos_last_event_id
+  )
+  SELECT
+    :'organization_id',
+    active_user.workos_id,
+    active_user.user_id,
+    'role:global:' || admin_role.id::text,
+    active_user.workos_membership_id,
+    clock_timestamp(),
+    NULL
+  FROM active_user
+  CROSS JOIN admin_role
+  ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL
+  DO UPDATE SET
+    user_id = EXCLUDED.user_id,
+    workos_membership_id = EXCLUDED.workos_membership_id,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = NULL,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+  RETURNING id
+)
+SELECT COUNT(*) FROM upserted;
+`;
+  const result = await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v organization_id=${organizationId} -v user_id=${userId} -tA -f -`.quiet();
+
+  if (result.stdout.trim() !== "1") {
+    abort("Failed to assign current user to seeded Admin role", {
+      organizationId,
+      userId,
+      assignments: result.stdout.trim(),
+    });
+  }
+  log.info("Assigned current user to seeded Admin role");
+}
+
+async function seedCurrentUserSuperAdmin(userId: string): Promise<void> {
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const sql = `
+WITH updated AS (
+  UPDATE users
+  SET admin = TRUE,
+      updated_at = clock_timestamp()
+  WHERE id = :'user_id'
+  RETURNING id
+)
+SELECT COALESCE((SELECT id FROM updated), '');
+`;
+  const result = await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v user_id=${userId} -tA -f -`.quiet();
+
+  if (result.stdout.trim() !== userId) {
+    abort("Failed to mark current user as super admin", {
+      userId,
+      updatedUserId: result.stdout.trim(),
+    });
+  }
+
+  try {
+    const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL ${`userInfo:${userId}:`}`.quiet();
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.warn(
+      `Marked current user as super admin, but failed to clear user info cache: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
+    return;
+  }
+
+  log.info("Marked current user as super admin");
 }
 
 async function initAPIKey(init: {
@@ -496,9 +688,7 @@ async function getOrCreateProject(init: {
     },
   );
   switch (true) {
-    case !res.ok &&
-      res.error instanceof ServiceError &&
-      res.error.data$.name === "conflict":
+    case !res.ok && isConflictError(res.error):
       const getRes = await projectsRead(
         gram,
         { slug },
@@ -546,7 +736,10 @@ async function deployAssets(init: {
       let contentType: string;
 
       if ("url" in asset) {
-        const response = await fetch(asset.url);
+        log.info(`Fetching OpenAPI spec from ${asset.url}...`);
+        const response = await fetch(asset.url, {
+          signal: AbortSignal.timeout(30_000),
+        });
         if (!response.ok) {
           abort(
             `Failed to fetch OpenAPI spec from ${asset.url}`,
@@ -555,15 +748,56 @@ async function deployAssets(init: {
         }
         spec = await response.text();
         contentType = "application/json";
+        log.info(`Fetched OpenAPI spec '${asset.slug}' (${spec.length} bytes)`);
       } else {
         spec = await fs.readFile(asset.filename, "utf-8");
         contentType = asset.filename.endsWith(".yaml")
           ? "application/x-yaml"
           : "application/json";
+        log.info(`Read OpenAPI spec '${asset.slug}' (${spec.length} bytes)`);
       }
 
       const requestBody = new Blob([spec], { type: contentType });
-      const res = await assetsUploadOpenAPIv3(
+      const res = await withTimeout(
+        assetsUploadOpenAPIv3(
+          init.gram,
+          {
+            contentLength: requestBody.size,
+            requestBody,
+          },
+          {
+            option2: {
+              projectSlugHeaderGramProject: projectSlug,
+              sessionHeaderGramSession: sessionId,
+            },
+          },
+        ),
+        60_000,
+        `upload OpenAPI asset '${asset.slug}'`,
+      );
+
+      if (!res.ok) {
+        const source = "url" in asset ? asset.url : asset.filename;
+        abort(`Failed to upload asset \`${source}\``, res.error);
+      }
+
+      const { id: assetId } = await res.value.asset;
+      log.info(
+        `Uploaded OpenAPI asset '${asset.slug}' (asset_id = ${assetId})`,
+      );
+      oapi.push({ assetId, name: asset.slug, slug: asset.slug });
+      continue;
+    }
+
+    const archive = await buildSeedFunctionArchive(asset);
+    log.info(
+      `Built functions archive '${asset.slug}' (${archive.length} bytes)`,
+    );
+    const requestBody = new Blob([new Uint8Array(archive)], {
+      type: "application/zip",
+    });
+    const res = await withTimeout(
+      assetsUploadFunctions(
         init.gram,
         {
           contentLength: requestBody.size,
@@ -575,34 +809,9 @@ async function deployAssets(init: {
             sessionHeaderGramSession: sessionId,
           },
         },
-      );
-
-      if (!res.ok) {
-        const source = "url" in asset ? asset.url : asset.filename;
-        abort(`Failed to upload asset \`${source}\``, res.error);
-      }
-
-      const { id: assetId } = await res.value.asset;
-      oapi.push({ assetId, name: asset.slug, slug: asset.slug });
-      continue;
-    }
-
-    const archive = await buildSeedFunctionArchive(asset);
-    const requestBody = new Blob([new Uint8Array(archive)], {
-      type: "application/zip",
-    });
-    const res = await assetsUploadFunctions(
-      init.gram,
-      {
-        contentLength: requestBody.size,
-        requestBody,
-      },
-      {
-        option2: {
-          projectSlugHeaderGramProject: projectSlug,
-          sessionHeaderGramSession: sessionId,
-        },
-      },
+      ),
+      60_000,
+      `upload functions asset '${asset.slug}'`,
     );
 
     if (!res.ok) {
@@ -610,6 +819,9 @@ async function deployAssets(init: {
     }
 
     const { id: assetId } = await res.value.asset;
+    log.info(
+      `Uploaded functions asset '${asset.slug}' (asset_id = ${assetId})`,
+    );
     functions.push({
       assetId,
       name: asset.slug,
@@ -618,20 +830,25 @@ async function deployAssets(init: {
     });
   }
 
-  const evolveRes = await deploymentsEvolveDeployment(
-    init.gram,
-    {
-      evolveForm: {
-        upsertOpenapiv3Assets: oapi,
-        upsertFunctions: functions,
+  log.info(`Evolving deployment for '${projectSlug}'...`);
+  const evolveRes = await withTimeout(
+    deploymentsEvolveDeployment(
+      init.gram,
+      {
+        evolveForm: {
+          upsertOpenapiv3Assets: oapi,
+          upsertFunctions: functions,
+        },
       },
-    },
-    {
-      option2: {
-        projectSlugHeaderGramProject: projectSlug,
-        sessionHeaderGramSession: sessionId,
+      {
+        option2: {
+          projectSlugHeaderGramProject: projectSlug,
+          sessionHeaderGramSession: sessionId,
+        },
       },
-    },
+    ),
+    60_000,
+    `evolve deployment for '${projectSlug}'`,
   );
 
   if (!evolveRes.ok) {
@@ -643,6 +860,7 @@ async function deployAssets(init: {
     abort("Deployment ID not found", evolveRes.value);
   }
 
+  log.info(`Waiting for deployment ${deploymentId} to complete...`);
   await waitForDeploymentCompletion({
     deploymentId,
     gram: init.gram,
@@ -1283,9 +1501,7 @@ async function upsertToolset(init: {
     },
   );
   switch (true) {
-    case !createRes.ok &&
-      createRes.error instanceof ServiceError &&
-      createRes.error.data$.name === "conflict":
+    case !createRes.ok && isConflictError(createRes.error):
       const updateRes = await toolsetsUpdateBySlug(
         gram,
         {
@@ -1445,9 +1661,7 @@ async function upsertMcpLogsToolset(init: {
 
   let toolset: Toolset;
   switch (true) {
-    case !createRes.ok &&
-      createRes.error instanceof ServiceError &&
-      createRes.error.data$.name === "conflict":
+    case !createRes.ok && isConflictError(createRes.error):
       const updateRes = await toolsetsUpdateBySlug(
         gram,
         {

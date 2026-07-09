@@ -23,21 +23,21 @@
     "react-router-dom": "^7.18.0",
     "remark-gfm": "^4.0.1",
     "shiki": "^3.23.0",
-    "tailwindcss": "^4.3.1",
+    "tailwindcss": "^4.3.2",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.1",
+    "@tailwindcss/vite": "catalog:",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.20.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.0",
-    "@vitejs/plugin-react": "^5.2.0",
+    "@vitejs/plugin-react": "catalog:",
     "concurrently": "^10.0.3",
     "esbuild": "^0.25.12",
     "tsx": "^4.22.4",
     "typescript": "^5.9.3",
-    "vite": "^7.3.5"
+    "vite": "catalog:"
   }
 }

@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  DiscoverProtectedResourceMetadataRequestBody,
+  DiscoverProtectedResourceMetadataRequestBody$Outbound,
+  DiscoverProtectedResourceMetadataRequestBody$outboundSchema,
+} from "../components/discoverprotectedresourcemetadatarequestbody.js";
 
 export type DiscoverRemoteMcpProtectedResourceMetadataSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -39,7 +43,7 @@ export type DiscoverRemoteMcpProtectedResourceMetadataRequest = {
    */
   gramProject?: string | undefined;
   discoverProtectedResourceMetadataRequestBody:
-    components.DiscoverProtectedResourceMetadataRequestBody;
+    DiscoverProtectedResourceMetadataRequestBody;
 };
 
 /** @internal */
@@ -161,7 +165,7 @@ export type DiscoverRemoteMcpProtectedResourceMetadataRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   DiscoverProtectedResourceMetadataRequestBody:
-    components.DiscoverProtectedResourceMetadataRequestBody$Outbound;
+    DiscoverProtectedResourceMetadataRequestBody$Outbound;
 };
 
 /** @internal */
@@ -175,7 +179,7 @@ export const DiscoverRemoteMcpProtectedResourceMetadataRequest$outboundSchema:
       gramKey: z.optional(z.string()),
       gramProject: z.optional(z.string()),
       discoverProtectedResourceMetadataRequestBody:
-        components.DiscoverProtectedResourceMetadataRequestBody$outboundSchema,
+        DiscoverProtectedResourceMetadataRequestBody$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {

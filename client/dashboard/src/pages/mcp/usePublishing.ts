@@ -5,11 +5,9 @@ import {
   useDetachServer,
 } from "@/pages/collections/hooks";
 import type { Collection } from "@/pages/collections/types";
-import type {
-  AttachServerRequestBody,
-  ExternalMCPServer,
-} from "@gram/client/models/components";
-import { buildCollectionsListServersQuery } from "@gram/client/react-query";
+import type { AttachServerRequestBody } from "@gram/client/models/components/attachserverrequestbody.js";
+import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
+import { buildCollectionsListServersQuery } from "@gram/client/react-query/collectionsListServers.js";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 

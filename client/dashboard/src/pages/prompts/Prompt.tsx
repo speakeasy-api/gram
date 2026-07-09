@@ -2,8 +2,8 @@ import { Page } from "@/components/page-layout";
 import {
   invalidateTemplate,
   useTemplate,
-  useUpdateTemplateMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/template.js";
+import { useUpdateTemplateMutation } from "@gram/client/react-query/updateTemplate.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router";
 import { PromptEditor } from "./PromptEditor";

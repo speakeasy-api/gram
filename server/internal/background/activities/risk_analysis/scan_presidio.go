@@ -11,9 +11,10 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
-func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, contents []string) ([][]Finding, error) {
+func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, contents []string) ([][]scanners.Finding, error) {
 	scoreThreshold := resolvePresidioScoreThreshold(args.PresidioScoreThreshold)
 	a.publishPresidioScanRequests(ctx, args, requestID, messages, scoreThreshold)
 
@@ -21,7 +22,7 @@ func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, 
 		activity.RecordHeartbeat(ctx, SourcePresidio)
 	})
 	if results == nil {
-		results = make([][]Finding, len(messages))
+		results = make([][]scanners.Finding, len(messages))
 	}
 	if err != nil {
 		a.logger.WarnContext(ctx, "presidio scan returned errors, using partial results", attr.SlogError(err))

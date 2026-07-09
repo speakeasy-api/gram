@@ -11,8 +11,41 @@ import { assistantsList } from "../funcs/assistantsList.js";
 import { assistantsSendMessage } from "../funcs/assistantsSendMessage.js";
 import { assistantsUpdate } from "../funcs/assistantsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { Assistant } from "../models/components/assistant.js";
+import { ListAssistantsResult } from "../models/components/listassistantsresult.js";
+import { SendMessageResult } from "../models/components/sendmessageresult.js";
+import {
+  CreateAssistantRequest,
+  CreateAssistantSecurity,
+} from "../models/operations/createassistant.js";
+import {
+  DeleteAssistantRequest,
+  DeleteAssistantSecurity,
+} from "../models/operations/deleteassistant.js";
+import {
+  EnsureManagedAssistantRequest,
+  EnsureManagedAssistantSecurity,
+} from "../models/operations/ensuremanagedassistant.js";
+import {
+  GetAssistantRequest,
+  GetAssistantSecurity,
+} from "../models/operations/getassistant.js";
+import {
+  GetManagedAssistantRequest,
+  GetManagedAssistantSecurity,
+} from "../models/operations/getmanagedassistant.js";
+import {
+  ListAssistantsRequest,
+  ListAssistantsSecurity,
+} from "../models/operations/listassistants.js";
+import {
+  SendAssistantMessageRequest,
+  SendAssistantMessageSecurity,
+} from "../models/operations/sendassistantmessage.js";
+import {
+  UpdateAssistantRequest,
+  UpdateAssistantSecurity,
+} from "../models/operations/updateassistant.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Assistants extends ClientSDK {
@@ -23,10 +56,10 @@ export class Assistants extends ClientSDK {
    * Create an assistant.
    */
   async create(
-    request: operations.CreateAssistantRequest,
-    security?: operations.CreateAssistantSecurity | undefined,
+    request: CreateAssistantRequest,
+    security?: CreateAssistantSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Assistant> {
+  ): Promise<Assistant> {
     return unwrapAsync(assistantsCreate(
       this,
       request,
@@ -42,8 +75,8 @@ export class Assistants extends ClientSDK {
    * Delete an assistant.
    */
   async delete(
-    request: operations.DeleteAssistantRequest,
-    security?: operations.DeleteAssistantSecurity | undefined,
+    request: DeleteAssistantRequest,
+    security?: DeleteAssistantSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(assistantsDelete(
@@ -61,10 +94,10 @@ export class Assistants extends ClientSDK {
    * Get the project's built-in Project Assistant, provisioning it on first access. Idempotent — safe to call on every sidebar open.
    */
   async ensureManaged(
-    request?: operations.EnsureManagedAssistantRequest | undefined,
-    security?: operations.EnsureManagedAssistantSecurity | undefined,
+    request?: EnsureManagedAssistantRequest | undefined,
+    security?: EnsureManagedAssistantSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Assistant> {
+  ): Promise<Assistant> {
     return unwrapAsync(assistantsEnsureManaged(
       this,
       request,
@@ -80,10 +113,10 @@ export class Assistants extends ClientSDK {
    * Get an assistant by ID.
    */
   async get(
-    request: operations.GetAssistantRequest,
-    security?: operations.GetAssistantSecurity | undefined,
+    request: GetAssistantRequest,
+    security?: GetAssistantSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Assistant> {
+  ): Promise<Assistant> {
     return unwrapAsync(assistantsGet(
       this,
       request,
@@ -99,10 +132,10 @@ export class Assistants extends ClientSDK {
    * Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.
    */
   async getManaged(
-    request?: operations.GetManagedAssistantRequest | undefined,
-    security?: operations.GetManagedAssistantSecurity | undefined,
+    request?: GetManagedAssistantRequest | undefined,
+    security?: GetManagedAssistantSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Assistant> {
+  ): Promise<Assistant> {
     return unwrapAsync(assistantsGetManaged(
       this,
       request,
@@ -118,10 +151,10 @@ export class Assistants extends ClientSDK {
    * List assistants for the current project.
    */
   async list(
-    request?: operations.ListAssistantsRequest | undefined,
-    security?: operations.ListAssistantsSecurity | undefined,
+    request?: ListAssistantsRequest | undefined,
+    security?: ListAssistantsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ListAssistantsResult> {
+  ): Promise<ListAssistantsResult> {
     return unwrapAsync(assistantsList(
       this,
       request,
@@ -137,10 +170,10 @@ export class Assistants extends ClientSDK {
    * Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.
    */
   async sendMessage(
-    request: operations.SendAssistantMessageRequest,
-    security?: operations.SendAssistantMessageSecurity | undefined,
+    request: SendAssistantMessageRequest,
+    security?: SendAssistantMessageSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.SendMessageResult> {
+  ): Promise<SendMessageResult> {
     return unwrapAsync(assistantsSendMessage(
       this,
       request,
@@ -156,10 +189,10 @@ export class Assistants extends ClientSDK {
    * Update an assistant.
    */
   async update(
-    request: operations.UpdateAssistantRequest,
-    security?: operations.UpdateAssistantSecurity | undefined,
+    request: UpdateAssistantRequest,
+    security?: UpdateAssistantSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.Assistant> {
+  ): Promise<Assistant> {
     return unwrapAsync(assistantsUpdate(
       this,
       request,

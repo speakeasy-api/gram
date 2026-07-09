@@ -9,7 +9,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import { Environment } from "@gram/client/models/components/environment.js";
-import { useCreateEnvironmentMutation } from "@gram/client/react-query/index.js";
+import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnvironment.js";
 import { ArrowRight, Blocks, Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";

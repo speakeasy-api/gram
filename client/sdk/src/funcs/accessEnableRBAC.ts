@@ -20,10 +20,17 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import {
+  ServiceError,
+  ServiceError$inboundSchema,
+} from "../models/errors/serviceerror.js";
+import {
+  EnableRBACRequest,
+  EnableRBACRequest$outboundSchema,
+  EnableRBACSecurity,
+} from "../models/operations/enablerbac.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -35,13 +42,13 @@ import { Result } from "../types/fp.js";
  */
 export function accessEnableRBAC(
   client: GramCore,
-  request?: operations.EnableRBACRequest | undefined,
-  security?: operations.EnableRBACSecurity | undefined,
+  request?: EnableRBACRequest | undefined,
+  security?: EnableRBACSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
     void,
-    | errors.ServiceError
+    | ServiceError
     | GramError
     | ResponseValidationError
     | ConnectionError
@@ -62,14 +69,14 @@ export function accessEnableRBAC(
 
 async function $do(
   client: GramCore,
-  request?: operations.EnableRBACRequest | undefined,
-  security?: operations.EnableRBACSecurity | undefined,
+  request?: EnableRBACRequest | undefined,
+  security?: EnableRBACSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
       void,
-      | errors.ServiceError
+      | ServiceError
       | GramError
       | ResponseValidationError
       | ConnectionError
@@ -84,8 +91,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(z.optional(operations.EnableRBACRequest$outboundSchema), value),
+    (value) => z.parse(z.optional(EnableRBACRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -162,7 +168,7 @@ async function $do(
 
   const [result] = await M.match<
     void,
-    | errors.ServiceError
+    | ServiceError
     | GramError
     | ResponseValidationError
     | ConnectionError
@@ -173,11 +179,8 @@ async function $do(
     | SDKValidationError
   >(
     M.nil(200, z.void()),
-    M.jsonErr(
-      [400, 401, 403, 404, 409, 415, 422],
-      errors.ServiceError$inboundSchema,
-    ),
-    M.jsonErr([500, 502], errors.ServiceError$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

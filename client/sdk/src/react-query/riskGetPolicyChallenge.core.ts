@@ -11,17 +11,20 @@ import { GramCore } from "../core.js";
 import { riskPolicyChallengesGet } from "../funcs/riskPolicyChallengesGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { GetRiskPolicyChallengeResponseBody } from "../models/components/getriskpolicychallengeresponsebody.js";
+import {
+  GetRiskPolicyChallengeRequest,
+  GetRiskPolicyChallengeSecurity,
+} from "../models/operations/getriskpolicychallenge.js";
 import { unwrapAsync } from "../types/fp.js";
 export type RiskGetPolicyChallengeQueryData =
-  components.GetRiskPolicyChallengeResponseBody;
+  GetRiskPolicyChallengeResponseBody;
 
 export function prefetchRiskGetPolicyChallenge(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetRiskPolicyChallengeRequest,
-  security?: operations.GetRiskPolicyChallengeSecurity | undefined,
+  request: GetRiskPolicyChallengeRequest,
+  security?: GetRiskPolicyChallengeSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,8 +39,8 @@ export function prefetchRiskGetPolicyChallenge(
 
 export function buildRiskGetPolicyChallengeQuery(
   client$: GramCore,
-  request: operations.GetRiskPolicyChallengeRequest,
-  security?: operations.GetRiskPolicyChallengeSecurity | undefined,
+  request: GetRiskPolicyChallengeRequest,
+  security?: GetRiskPolicyChallengeSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

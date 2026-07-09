@@ -11,16 +11,19 @@ import { GramCore } from "../core.js";
 import { telemetryListHooksTraces } from "../funcs/telemetryListHooksTraces.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { ListHooksTracesResult } from "../models/components/listhookstracesresult.js";
+import {
+  ListHooksTracesRequest,
+  ListHooksTracesSecurity,
+} from "../models/operations/listhookstraces.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListHooksTracesQueryData = components.ListHooksTracesResult;
+export type ListHooksTracesQueryData = ListHooksTracesResult;
 
 export function prefetchListHooksTraces(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.ListHooksTracesRequest,
-  security?: operations.ListHooksTracesSecurity | undefined,
+  request: ListHooksTracesRequest,
+  security?: ListHooksTracesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -35,8 +38,8 @@ export function prefetchListHooksTraces(
 
 export function buildListHooksTracesQuery(
   client$: GramCore,
-  request: operations.ListHooksTracesRequest,
-  security?: operations.ListHooksTracesSecurity | undefined,
+  request: ListHooksTracesRequest,
+  security?: ListHooksTracesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -100,7 +100,7 @@ typescript:
   templateVersion: v2
   unionStrategy: left-to-right
   usageSDKInitImports: []
-  useIndexModules: true
+  useIndexModules: false
   useOxlint: false
   useTsgo: false
   zodVersion: v4-mini

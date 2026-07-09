@@ -41,6 +41,7 @@ jobs:
       sdk-gen: ${{ steps.gates.outputs.sdk-gen }}
       webhooks-catalog: ${{ steps.gates.outputs.webhooks-catalog }}
       otel-collector: ${{ steps.gates.outputs.otel-collector }}
+      tunnel: ${{ steps.gates.outputs.tunnel }}
       elements-examples: ${{ steps.list-elements-examples.outputs.examples }}
       preview-retag-components: ${{ steps.preview-retag.outputs.components }}
       preview-tag: ${{ steps.preview-retag.outputs.tag }}
@@ -153,6 +154,13 @@ jobs:
             echo "OTel collector jobs will run."
           else
             echo "OTel collector jobs will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.tunnel }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "tunnel=true" >> $GITHUB_OUTPUT
+            echo "Tunnel jobs will run."
+          else
+            echo "Tunnel jobs will be skipped."
           fi
       - id: preview-retag
         name: Compute preview images to retag
@@ -968,6 +976,9 @@ jobs:
         env:
           GRAM_ASSISTANT_RUNTIME_IMAGE_HASH: ${{ steps.assistant-runtime-hash.outputs.hash }}
         run: mise run build:server --readonly
+
+      - name: Build tunnel gateway
+        run: mise run build:tunnel-gateway --readonly
 
       - name: Lint with golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
@@ -1985,6 +1996,7 @@ jobs:
       - atlas-lint
       - atlas-push
       - webhooks-catalog-breaking-changes
+      - tunnel-agent
     steps:
       - name: Check results
         env:
@@ -2005,25 +2017,6 @@ jobs:
           fi
 
           echo "✅ All CI checks passed or were skipped."
-
-  add-preview-label:
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    needs: [changes, docker-build-server, docker-build-client]
-    if: |
-      github.event_name == 'pull_request' &&
-      !cancelled() &&
-      needs.docker-build-server.result == 'success' &&
-      needs.docker-build-client.result == 'success'
-    permissions:
-      pull-requests: write
-    steps:
-      - name: Add preview label
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh pr edit ${{ github.event.pull_request.number }} \
-            --repo ${{ github.repository }} \
-            --add-label preview
 
   svix-sync-webhooks:
     name: Sync webhook event types to Svix
@@ -2069,3 +2062,23 @@ jobs:
             -R speakeasy-api/gram-infra \
             -f environment=dev \
             -f commit_hash=${{ github.sha }}
+
+  tunnel-agent:
+    name: Tunnel agent
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [changes]
+    if: needs.changes.outputs.tunnel == 'true'
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      - name: Build image (no push)
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: tunnel/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          build-args: |
+            VERSION=0.0.0-pr

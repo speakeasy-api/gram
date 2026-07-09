@@ -18,10 +18,13 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  GetRiskPolicyChallengeRequest,
+  GetRiskPolicyChallengeSecurity,
+} from "../models/operations/getriskpolicychallenge.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -42,7 +45,7 @@ export {
 };
 
 export type RiskGetPolicyChallengeQueryError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
@@ -59,8 +62,8 @@ export type RiskGetPolicyChallengeQueryError =
  * Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
  */
 export function useRiskGetPolicyChallenge(
-  request: operations.GetRiskPolicyChallengeRequest,
-  security?: operations.GetRiskPolicyChallengeSecurity | undefined,
+  request: GetRiskPolicyChallengeRequest,
+  security?: GetRiskPolicyChallengeSecurity | undefined,
   options?: QueryHookOptions<
     RiskGetPolicyChallengeQueryData,
     RiskGetPolicyChallengeQueryError
@@ -88,8 +91,8 @@ export function useRiskGetPolicyChallenge(
  * Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
  */
 export function useRiskGetPolicyChallengeSuspense(
-  request: operations.GetRiskPolicyChallengeRequest,
-  security?: operations.GetRiskPolicyChallengeSecurity | undefined,
+  request: GetRiskPolicyChallengeRequest,
+  security?: GetRiskPolicyChallengeSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskGetPolicyChallengeQueryData,
     RiskGetPolicyChallengeQueryError

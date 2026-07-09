@@ -6,8 +6,21 @@ import { riskPolicyChallengesAcknowledge } from "../funcs/riskPolicyChallengesAc
 import { riskPolicyChallengesDecline } from "../funcs/riskPolicyChallengesDecline.js";
 import { riskPolicyChallengesGet } from "../funcs/riskPolicyChallengesGet.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import * as operations from "../models/operations/index.js";
+import { AcknowledgeRiskPolicyChallengeResponseBody } from "../models/components/acknowledgeriskpolicychallengeresponsebody.js";
+import { DeclineRiskPolicyChallengeResponseBody } from "../models/components/declineriskpolicychallengeresponsebody.js";
+import { GetRiskPolicyChallengeResponseBody } from "../models/components/getriskpolicychallengeresponsebody.js";
+import {
+  AcknowledgeRiskPolicyChallengeRequest,
+  AcknowledgeRiskPolicyChallengeSecurity,
+} from "../models/operations/acknowledgeriskpolicychallenge.js";
+import {
+  DeclineRiskPolicyChallengeRequest,
+  DeclineRiskPolicyChallengeSecurity,
+} from "../models/operations/declineriskpolicychallenge.js";
+import {
+  GetRiskPolicyChallengeRequest,
+  GetRiskPolicyChallengeSecurity,
+} from "../models/operations/getriskpolicychallenge.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class PolicyChallenges extends ClientSDK {
@@ -18,10 +31,10 @@ export class PolicyChallenges extends ClientSDK {
    * Acknowledge a risk policy warn/challenge from a warning-link token. Records the acknowledgement so the user's retried action proceeds; self-service (no admin approval).
    */
   async acknowledge(
-    request: operations.AcknowledgeRiskPolicyChallengeRequest,
-    security?: operations.AcknowledgeRiskPolicyChallengeSecurity | undefined,
+    request: AcknowledgeRiskPolicyChallengeRequest,
+    security?: AcknowledgeRiskPolicyChallengeSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.AcknowledgeRiskPolicyChallengeResponseBody> {
+  ): Promise<AcknowledgeRiskPolicyChallengeResponseBody> {
     return unwrapAsync(riskPolicyChallengesAcknowledge(
       this,
       request,
@@ -37,10 +50,10 @@ export class PolicyChallenges extends ClientSDK {
    * Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.
    */
   async decline(
-    request: operations.DeclineRiskPolicyChallengeRequest,
-    security?: operations.DeclineRiskPolicyChallengeSecurity | undefined,
+    request: DeclineRiskPolicyChallengeRequest,
+    security?: DeclineRiskPolicyChallengeSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.DeclineRiskPolicyChallengeResponseBody> {
+  ): Promise<DeclineRiskPolicyChallengeResponseBody> {
     return unwrapAsync(riskPolicyChallengesDecline(
       this,
       request,
@@ -56,10 +69,10 @@ export class PolicyChallenges extends ClientSDK {
    * Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
    */
   async get(
-    request: operations.GetRiskPolicyChallengeRequest,
-    security?: operations.GetRiskPolicyChallengeSecurity | undefined,
+    request: GetRiskPolicyChallengeRequest,
+    security?: GetRiskPolicyChallengeSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GetRiskPolicyChallengeResponseBody> {
+  ): Promise<GetRiskPolicyChallengeResponseBody> {
     return unwrapAsync(riskPolicyChallengesGet(
       this,
       request,

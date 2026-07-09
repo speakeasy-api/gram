@@ -25,6 +25,10 @@ type Client struct {
 	// listRiskPolicies endpoint.
 	ListRiskPoliciesDoer goahttp.Doer
 
+	// ListBuiltinExclusions Doer is the HTTP client used to make requests to the
+	// listBuiltinExclusions endpoint.
+	ListBuiltinExclusionsDoer goahttp.Doer
+
 	// GetRiskPolicy Doer is the HTTP client used to make requests to the
 	// getRiskPolicy endpoint.
 	GetRiskPolicyDoer goahttp.Doer
@@ -203,6 +207,7 @@ func NewClient(
 	return &Client{
 		CreateRiskPolicyDoer:               doer,
 		ListRiskPoliciesDoer:               doer,
+		ListBuiltinExclusionsDoer:          doer,
 		GetRiskPolicyDoer:                  doer,
 		UpdateRiskPolicyDoer:               doer,
 		DeleteRiskPolicyDoer:               doer,
@@ -293,6 +298,30 @@ func (c *Client) ListRiskPolicies() goa.Endpoint {
 		resp, err := c.ListRiskPoliciesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "listRiskPolicies", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListBuiltinExclusions returns an endpoint that makes HTTP requests to the
+// risk service listBuiltinExclusions server.
+func (c *Client) ListBuiltinExclusions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListBuiltinExclusionsRequest(c.encoder)
+		decodeResponse = DecodeListBuiltinExclusionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListBuiltinExclusionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListBuiltinExclusionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listBuiltinExclusions", err)
 		}
 		return decodeResponse(resp)
 	}

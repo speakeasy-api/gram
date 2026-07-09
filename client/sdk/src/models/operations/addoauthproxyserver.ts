@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  AddOAuthProxyServerRequestBody,
+  AddOAuthProxyServerRequestBody$Outbound,
+  AddOAuthProxyServerRequestBody$outboundSchema,
+} from "../components/addoauthproxyserverrequestbody.js";
 
 export type AddOAuthProxyServerSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -38,7 +42,7 @@ export type AddOAuthProxyServerRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  addOAuthProxyServerRequestBody: components.AddOAuthProxyServerRequestBody;
+  addOAuthProxyServerRequestBody: AddOAuthProxyServerRequestBody;
 };
 
 /** @internal */
@@ -150,8 +154,7 @@ export type AddOAuthProxyServerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  AddOAuthProxyServerRequestBody:
-    components.AddOAuthProxyServerRequestBody$Outbound;
+  AddOAuthProxyServerRequestBody: AddOAuthProxyServerRequestBody$Outbound;
 };
 
 /** @internal */
@@ -165,7 +168,7 @@ export const AddOAuthProxyServerRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     addOAuthProxyServerRequestBody:
-      components.AddOAuthProxyServerRequestBody$outboundSchema,
+      AddOAuthProxyServerRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

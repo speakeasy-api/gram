@@ -1,4 +1,4 @@
-h1:M8uRxOxcxi4egRrwZaC94cEEE+m9U+YQYMKTeamih2o=
+h1:p9at7Xx6yBmvvP21xIMvgpkazEPZuFr3J/KinIhbYmA=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -248,3 +248,8 @@ h1:M8uRxOxcxi4egRrwZaC94cEEE+m9U+YQYMKTeamih2o=
 20260707070702_risk-policy-eval-reviews.sql h1:RjhJvs0KrFmEk9tuNDI9slvcm1uGbnyEf44mDlZ8/MI=
 20260707120239_assistant-mcp-servers.sql h1:bDNWbd/16MXwFmJBGKVMmnLcxgdiDCCpizKI/ftevrY=
 20260707141409_risk-policy-challenge-call-fingerprint.sql h1:96m05rwdDNOgNaZfWnnS8z7fVSnwFqbNxMZ1uttxHGQ=
+20260707200235_add-billing-cycle-usage.sql h1:9bfYggMrNnJV2vGTz2n4S6D3nG4ufMjgHxu530SmF28=
+20260707204416_billing-cycle-usage-tum-tokens-check.sql h1:C8Ldf50DiHqrGpTQkH0BJpZy5KYfLnP6jDuANg34NIs=
+20260708203242_chats-add-project-id-index.sql h1:j4F0CT/crIe60LzE7DFDRW8LWGTDNrzYScVz4wVJya4=
+20260708221138_comment-users-admin-platform-admin.sql h1:vfIc8S5YsS8Fydpz8yjNDi2kfg83olm1nWORyPVaU08=
+20260708232901_add-user-session-issuer-classification.sql h1:1wF52H2gDVVA3XMfK+b/zPHPnWtsbElmsx5VfaQfNWU=

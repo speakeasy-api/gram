@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  SubmitRiskBlockFeedbackRequestBody,
+  SubmitRiskBlockFeedbackRequestBody$Outbound,
+  SubmitRiskBlockFeedbackRequestBody$outboundSchema,
+} from "../components/submitriskblockfeedbackrequestbody.js";
 
 export type SubmitRiskBlockFeedbackSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -15,8 +19,7 @@ export type SubmitRiskBlockFeedbackRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  submitRiskBlockFeedbackRequestBody:
-    components.SubmitRiskBlockFeedbackRequestBody;
+  submitRiskBlockFeedbackRequestBody: SubmitRiskBlockFeedbackRequestBody;
 };
 
 /** @internal */
@@ -53,7 +56,7 @@ export function submitRiskBlockFeedbackSecurityToJSON(
 export type SubmitRiskBlockFeedbackRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   SubmitRiskBlockFeedbackRequestBody:
-    components.SubmitRiskBlockFeedbackRequestBody$Outbound;
+    SubmitRiskBlockFeedbackRequestBody$Outbound;
 };
 
 /** @internal */
@@ -64,7 +67,7 @@ export const SubmitRiskBlockFeedbackRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     submitRiskBlockFeedbackRequestBody:
-      components.SubmitRiskBlockFeedbackRequestBody$outboundSchema,
+      SubmitRiskBlockFeedbackRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

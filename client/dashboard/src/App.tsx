@@ -144,6 +144,7 @@ function AppContent() {
         organizationId={cliFlow.organizationId}
         codeChallenge={cliFlow.codeChallenge}
         codeChallengeMethod={cliFlow.codeChallengeMethod}
+        callbackMethod={cliFlow.callbackMethod}
       />
     );
   }
@@ -439,6 +440,7 @@ type LocalAuthFlow = {
   organizationId: string | null;
   codeChallenge: string | null;
   codeChallengeMethod: string | null;
+  callbackMethod: "get" | "post";
 };
 
 function useCliAuthFlow(): LocalAuthFlow | null {
@@ -452,6 +454,7 @@ function useCliAuthFlow(): LocalAuthFlow | null {
   const organizationId = searchParams.get("organization_id");
   const codeChallenge = searchParams.get("code_challenge");
   const codeChallengeMethod = searchParams.get("code_challenge_method");
+  const callbackMethod = searchParams.get("callback_method");
 
   if (location.pathname === "/" && fromCli && cliCallbackUrl) {
     return {
@@ -461,6 +464,7 @@ function useCliAuthFlow(): LocalAuthFlow | null {
       organizationId,
       codeChallenge,
       codeChallengeMethod,
+      callbackMethod: callbackMethod === "post" ? "post" : "get",
     };
   }
 

@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { chatSessionsCreate } from "../funcs/chatSessionsCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { CreateResponseBody } from "../models/components/createresponsebody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,24 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  CreateChatSessionRequest,
+  CreateChatSessionSecurity,
+} from "../models/operations/createchatsession.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type ChatSessionsCreateMutationVariables = {
-  request: operations.CreateChatSessionRequest;
-  security?: operations.CreateChatSessionSecurity | undefined;
+  request: CreateChatSessionRequest;
+  security?: CreateChatSessionSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type ChatSessionsCreateMutationData = components.CreateResponseBody;
+export type ChatSessionsCreateMutationData = CreateResponseBody;
 
 export type ChatSessionsCreateMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

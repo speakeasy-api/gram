@@ -20,6 +20,7 @@ import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
 import { External } from "./external.js";
+import { ExternalCredentials } from "./externalcredentials.js";
 import { Features } from "./features.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
@@ -30,7 +31,9 @@ import { McpEndpoints } from "./mcpendpoints.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
+import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
+import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
 import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
@@ -47,6 +50,7 @@ import { Templates } from "./templates.js";
 import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 import { Triggers } from "./triggers.js";
+import { TunneledMcp } from "./tunneledmcp.js";
 import { Usage } from "./usage.js";
 import { UserSessionClients } from "./usersessionclients.js";
 import { UserSessionConsents } from "./usersessionconsents.js";
@@ -142,6 +146,13 @@ export class Gram extends ClientSDK {
     return (this._external ??= new External(this._options));
   }
 
+  private _externalCredentials?: ExternalCredentials;
+  get externalCredentials(): ExternalCredentials {
+    return (this._externalCredentials ??= new ExternalCredentials(
+      this._options,
+    ));
+  }
+
   private _hooks?: Hooks;
   get hooks(): Hooks {
     return (this._hooks ??= new Hooks(this._options));
@@ -187,10 +198,23 @@ export class Gram extends ClientSDK {
     return (this._mcpServers ??= new McpServers(this._options));
   }
 
+  private _organizationRemoteSessionClients?: OrganizationRemoteSessionClients;
+  get organizationRemoteSessionClients(): OrganizationRemoteSessionClients {
+    return (this._organizationRemoteSessionClients ??=
+      new OrganizationRemoteSessionClients(this._options));
+  }
+
   private _organizationRemoteSessionIssuers?: OrganizationRemoteSessionIssuers;
   get organizationRemoteSessionIssuers(): OrganizationRemoteSessionIssuers {
     return (this._organizationRemoteSessionIssuers ??=
       new OrganizationRemoteSessionIssuers(this._options));
+  }
+
+  private _organizationRemoteSessions?: OrganizationRemoteSessions;
+  get organizationRemoteSessions(): OrganizationRemoteSessions {
+    return (this._organizationRemoteSessions ??= new OrganizationRemoteSessions(
+      this._options,
+    ));
   }
 
   private _organizations?: Organizations;
@@ -280,6 +304,11 @@ export class Gram extends ClientSDK {
   private _triggers?: Triggers;
   get triggers(): Triggers {
     return (this._triggers ??= new Triggers(this._options));
+  }
+
+  private _tunneledMcp?: TunneledMcp;
+  get tunneledMcp(): TunneledMcp {
+    return (this._tunneledMcp ??= new TunneledMcp(this._options));
   }
 
   private _usage?: Usage;

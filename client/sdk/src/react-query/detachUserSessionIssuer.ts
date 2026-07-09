@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { remoteSessionClientsDetachUserSessionIssuer } from "../funcs/remoteSessionClientsDetachUserSessionIssuer.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,25 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  DetachUserSessionIssuerRequest,
+  DetachUserSessionIssuerSecurity,
+} from "../models/operations/detachusersessionissuer.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type DetachUserSessionIssuerMutationVariables = {
-  request: operations.DetachUserSessionIssuerRequest;
-  security?: operations.DetachUserSessionIssuerSecurity | undefined;
+  request: DetachUserSessionIssuerRequest;
+  security?: DetachUserSessionIssuerSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type DetachUserSessionIssuerMutationData =
-  components.RemoteSessionClient;
+export type DetachUserSessionIssuerMutationData = RemoteSessionClient;
 
 export type DetachUserSessionIssuerMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError

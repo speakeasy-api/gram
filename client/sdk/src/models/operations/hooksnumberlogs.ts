@@ -4,7 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
+import {
+  OTELLogsPayload,
+  OTELLogsPayload$Outbound,
+  OTELLogsPayload$outboundSchema,
+} from "../components/otellogspayload.js";
 
 export type HooksNumberLogsSecurity = {
   apikeyHeaderGramKey?: string | undefined;
@@ -20,7 +24,7 @@ export type HooksNumberLogsRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  otelLogsPayload: components.OTELLogsPayload;
+  otelLogsPayload: OTELLogsPayload;
 };
 
 /** @internal */
@@ -58,7 +62,7 @@ export function hooksNumberLogsSecurityToJSON(
 export type HooksNumberLogsRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  OTELLogsPayload: components.OTELLogsPayload$Outbound;
+  OTELLogsPayload: OTELLogsPayload$Outbound;
 };
 
 /** @internal */
@@ -69,7 +73,7 @@ export const HooksNumberLogsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    otelLogsPayload: components.OTELLogsPayload$outboundSchema,
+    otelLogsPayload: OTELLogsPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

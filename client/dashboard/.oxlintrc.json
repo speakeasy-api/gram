@@ -42,7 +42,39 @@
     "react/rules-of-hooks": "error",
     "react/only-export-components": ["error", { "allowConstantExport": true }],
 
-    "import/no-default-export": "off"
+    "import/no-default-export": "off",
+
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@gram/client/models/components",
+            "message": "The SDK barrel/index files are disabled (useIndexModules:false, AGE-2917) to avoid merge conflicts. Import from the specific module file instead, e.g. \"@gram/client/models/components/role.js\"."
+          },
+          {
+            "name": "@gram/client/models/operations",
+            "message": "The SDK barrel/index files are disabled (useIndexModules:false, AGE-2917). Import from the specific module file instead, e.g. \"@gram/client/models/operations/listchats.js\"."
+          },
+          {
+            "name": "@gram/client/models/errors",
+            "message": "The SDK barrel/index files are disabled (useIndexModules:false, AGE-2917). Import from the specific module file instead, e.g. \"@gram/client/models/errors/gramerror.js\"."
+          },
+          {
+            "name": "@gram/client/types",
+            "message": "The SDK barrel/index files are disabled (useIndexModules:false, AGE-2917). Import from the specific module file instead, e.g. \"@gram/client/types/fp.js\"."
+          },
+          {
+            "name": "@gram/client/react-query",
+            "message": "The SDK barrel/index files are disabled (useIndexModules:false, AGE-2917). Import the hook from its own module, e.g. \"@gram/client/react-query/listToolsets.js\" (or \"@gram/client/react-query/_context.js\" for GramProvider/useGramContext)."
+          },
+          {
+            "name": "@gram/client/react-query/index.js",
+            "message": "The SDK barrel/index files are disabled (useIndexModules:false, AGE-2917). Import the hook from its own module, e.g. \"@gram/client/react-query/listToolsets.js\"."
+          }
+        ]
+      }
+    ]
   },
   "overrides": [
     {

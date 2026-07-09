@@ -5,6 +5,46 @@ import process from "node:process";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+
+// Manually grouped vendor chunks. CAUTION: never group a package whose dist
+// contains a top-level `await import(...)` (check before adding). Grouping
+// pulls the package's shared internals into the group chunk, so the awaited
+// sub-module ends up statically importing the very chunk that is suspended
+// awaiting it — a silent module-evaluation deadlock that blank-screens the
+// app. This took prod down for @speakeasy-api/moonshine (its dist top-level
+// awaits ./speakeasy-logo-*.mjs), which is why it is absent from this list;
+// Rolldown's automatic chunking handles it without creating the cycle.
+const manualChunkGroups: [string, string[]][] = [
+  ["lucide-react", ["lucide-react"]],
+  [
+    "three",
+    [
+      "@react-three/drei",
+      "@react-three/fiber",
+      "@react-three/postprocessing",
+      "three",
+    ],
+  ],
+  [
+    "externals",
+    [
+      "posthog-js",
+      "react",
+      "react-dom",
+      "react-error-boundary",
+      "react-router",
+      "sonner",
+      "zod",
+    ],
+  ],
+];
+
+function packagePathRegex(packages: string[]): RegExp {
+  const alternatives = packages.map((pkg) =>
+    pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replaceAll("/", "[\\\\/]"),
+  );
+  return new RegExp(`node_modules[\\\\/](?:${alternatives.join("|")})[\\\\/]`);
+}
 // https://vite.dev/config/
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
@@ -37,6 +77,21 @@ export default defineConfig(({ command }) => {
   if (isDev && !serverUrl) {
     throw new Error("GRAM_SERVER_URL must be set in development");
   }
+  const devProxyServerUrl = process.env["GRAM_SERVER_BACKEND_URL"] || serverUrl;
+
+  const allowedHosts = new Set(["localhost", "127.0.0.1", "devbox"]);
+  for (const hostname of (process.env["VITE_DEV_HOSTNAMES"] || "").split(",")) {
+    const trimmed = hostname.trim();
+    if (trimmed) allowedHosts.add(trimmed);
+  }
+
+  const devProxyTarget = devProxyServerUrl
+    ? {
+        target: devProxyServerUrl,
+        changeOrigin: true,
+        secure: false,
+      }
+    : undefined;
 
   // Two build-time constants, separated so MCP configs / callback URLs /
   // anything operator-facing always report the server's authoritative URL,
@@ -58,63 +113,57 @@ export default defineConfig(({ command }) => {
       __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
     },
     build: {
-      target: "es2022",
       sourcemap: true,
-      rollupOptions: {
+      rolldownOptions: {
         input: {
           main: path.resolve(__dirname, "index.html"),
         },
         output: {
-          manualChunks: {
-            "lucide-react": ["lucide-react"],
-            moonshine: ["@speakeasy-api/moonshine"],
-            three: [
-              "@react-three/drei",
-              "@react-three/fiber",
-              "@react-three/postprocessing",
-              "three",
-            ],
-            externals: [
-              "posthog-js",
-              "react",
-              "react-dom",
-              "react-error-boundary",
-              "react-router",
-              "sonner",
-              "zod",
-            ],
+          codeSplitting: {
+            groups: manualChunkGroups.map(([name, packages]) => ({
+              name,
+              test: packagePathRegex(packages),
+            })),
           },
         },
       },
     },
     worker: {
       format: "es",
-    },
-    esbuild: {
-      target: "es2022",
+      // The worker bundles are pure vendor code (monaco's ts.worker map alone
+      // is ~16MB, ~28MB across all workers) that we never debug in production,
+      // so skip their sourcemaps while keeping maps for app code. This must be
+      // an outputOptions hook: Vite hard-sets `sourcemap` to build.sourcemap
+      // AFTER spreading worker.rolldownOptions.output, so the plain option is
+      // silently ignored, while plugin outputOptions hooks run last.
+      plugins: () => [
+        {
+          name: "drop-worker-sourcemaps",
+          outputOptions(options) {
+            return { ...options, sourcemap: false };
+          },
+        },
+      ],
     },
     optimizeDeps: {
       include: ["monaco-editor"],
-      esbuildOptions: {
-        target: "es2022",
-      },
     },
     server: {
       host: true,
-      allowedHosts: ["localhost", "127.0.0.1", "devbox"],
+      allowedHosts: [...allowedHosts],
       https: key && cert ? { key, cert } : void 0,
       // Setting these up to side-step cors issues experienced during
       // development. Specifically, the Vercel AI SDK does not forward cookies
       // (Eg: gram_session) to the server.
-      proxy: serverUrl
+      proxy: devProxyTarget
         ? {
-            "/rpc": serverUrl,
-            "/chat": serverUrl,
-            "/mcp": serverUrl,
-            "/oauth": serverUrl,
-            "/oauth-external": serverUrl,
-            "/.well-known": serverUrl,
-            "/v1": serverUrl,
+            "/rpc": devProxyTarget,
+            "/chat": devProxyTarget,
+            "/mcp": devProxyTarget,
+            "/oauth": devProxyTarget,
+            "/oauth-external": devProxyTarget,
+            "/.well-known": devProxyTarget,
+            "/v1": devProxyTarget,
           }
         : undefined,
     },

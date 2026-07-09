@@ -19,24 +19,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
-import * as operations from "../models/operations/index.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  RevokeAPIKeyRequest,
+  RevokeAPIKeySecurity,
+} from "../models/operations/revokeapikey.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type RevokeAPIKeyMutationVariables = {
-  request: operations.RevokeAPIKeyRequest;
-  security?: operations.RevokeAPIKeySecurity | undefined;
+  request: RevokeAPIKeyRequest;
+  security?: RevokeAPIKeySecurity | undefined;
   options?: RequestOptions;
 };
 
 export type RevokeAPIKeyMutationData = void;
 
 export type RevokeAPIKeyMutationError =
-  | errors.ServiceError
+  | ServiceError
   | GramError
   | ResponseValidationError
   | ConnectionError
