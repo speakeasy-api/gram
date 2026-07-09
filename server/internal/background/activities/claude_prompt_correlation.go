@@ -182,6 +182,13 @@ func (c *CorrelateClaudePrompts) findClaudeUserPromptMatch(
 	if messagePrompt == "" {
 		return noMatch, false, nil
 	}
+	if len(messagePrompt) > telemetryrepo.MaxClaudePromptCorrelationEditDistanceBytes {
+		c.logger.WarnContext(ctx, "skipping Claude prompt correlation for oversized prompt",
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogChatID(chatID.String()),
+		)
+		return noMatch, false, nil
+	}
 
 	queryCtx, cancel := context.WithTimeout(ctx, c.matchTimeout)
 	defer cancel()

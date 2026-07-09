@@ -875,6 +875,65 @@ func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanal
 	return items, nil
 }
 
+const getActiveRiskPolicyAck = `-- name: GetActiveRiskPolicyAck :one
+SELECT id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+FROM risk_policy_challenges
+WHERE project_id = $1
+  AND user_id = $2
+  AND risk_policy_id = $3
+  AND tool_name IS NOT DISTINCT FROM $4::text
+  AND call_fingerprint IS NOT DISTINCT FROM $5::text
+  AND status = 'acknowledged'
+  AND expires_at IS NOT NULL
+  AND expires_at > clock_timestamp()
+  AND deleted IS FALSE
+`
+
+type GetActiveRiskPolicyAckParams struct {
+	ProjectID       uuid.UUID
+	UserID          string
+	RiskPolicyID    uuid.UUID
+	ToolName        pgtype.Text
+	CallFingerprint pgtype.Text
+}
+
+// Hook-time gate: is there a live acknowledgement for this concrete call
+// (user, policy, tool, call_fingerprint)? The agent retries with NO token, so
+// this table lookup — not the cache token — is what allows the retry through.
+// Scoped by call_fingerprint so only an identical retry clears, not any
+// same-tool call under the policy.
+func (q *Queries) GetActiveRiskPolicyAck(ctx context.Context, arg GetActiveRiskPolicyAckParams) (RiskPolicyChallenge, error) {
+	row := q.db.QueryRow(ctx, getActiveRiskPolicyAck,
+		arg.ProjectID,
+		arg.UserID,
+		arg.RiskPolicyID,
+		arg.ToolName,
+		arg.CallFingerprint,
+	)
+	var i RiskPolicyChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.UserID,
+		&i.ToolName,
+		&i.Status,
+		&i.PolicyName,
+		&i.Entity,
+		&i.RuleID,
+		&i.CallFingerprint,
+		&i.ChallengedAt,
+		&i.AcknowledgedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getBatchChatIdentities = `-- name: GetBatchChatIdentities :many
 SELECT earliest_message_id, chat_id, account_type, email, flagged_rule_ids
 FROM (
@@ -1531,10 +1590,12 @@ SELECT id, project_id, organization_id, enabled, name, policy_type, sources, pre
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
-  AND action = 'block'
+  AND action IN ('block', 'warn')
   AND deleted IS FALSE
 `
 
+// Enforcing actions are block (hard deny) and warn (challenge: deny + ack link,
+// allowed after acknowledgement). flag is non-enforcing and excluded.
 func (q *Queries) ListEnabledEnforcingPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
 	rows, err := q.db.Query(ctx, listEnabledEnforcingPoliciesByProject, projectID)
 	if err != nil {
@@ -3046,6 +3107,187 @@ func (q *Queries) MarkMessagesRiskAnalyzed(ctx context.Context, arg MarkMessages
 	return err
 }
 
+const markRiskPolicyChallengeAcknowledged = `-- name: MarkRiskPolicyChallengeAcknowledged :one
+INSERT INTO risk_policy_challenges (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , user_id
+  , tool_name
+  , call_fingerprint
+  , status
+  , policy_name
+  , challenged_at
+  , acknowledged_at
+  , expires_at
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6::text
+  , $7::text
+  , 'acknowledged'
+  , $8::text
+  , clock_timestamp()
+  , clock_timestamp()
+  , $9
+)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
+WHERE deleted IS FALSE
+DO UPDATE
+SET status = 'acknowledged'
+  , acknowledged_at = clock_timestamp()
+  , expires_at = EXCLUDED.expires_at
+  , policy_name = COALESCE(EXCLUDED.policy_name, risk_policy_challenges.policy_name)
+  , updated_at = clock_timestamp()
+WHERE risk_policy_challenges.status <> 'declined'
+RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type MarkRiskPolicyChallengeAcknowledgedParams struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.UUID
+	UserID          string
+	ToolName        pgtype.Text
+	CallFingerprint pgtype.Text
+	PolicyName      pgtype.Text
+	ExpiresAt       pgtype.Timestamptz
+}
+
+// Self-service redeem: mark the challenge acknowledged with a remember-until
+// expiry. Upserts so a redeem that beats the async challenge insert still works.
+// A decline is final for this challenge: never resurrect a declined row into an
+// acknowledgement (e.g. a leaked/un-evicted token redeemed after decline). A
+// genuine re-challenge (UpsertRiskPolicyChallenge) resets declined -> challenged
+// first, after which acknowledgement can proceed. When this predicate is false
+// the update is a no-op and RETURNING yields no rows (ErrNoRows), which the
+// caller maps to a "declined" client error.
+func (q *Queries) MarkRiskPolicyChallengeAcknowledged(ctx context.Context, arg MarkRiskPolicyChallengeAcknowledgedParams) (RiskPolicyChallenge, error) {
+	row := q.db.QueryRow(ctx, markRiskPolicyChallengeAcknowledged,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.UserID,
+		arg.ToolName,
+		arg.CallFingerprint,
+		arg.PolicyName,
+		arg.ExpiresAt,
+	)
+	var i RiskPolicyChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.UserID,
+		&i.ToolName,
+		&i.Status,
+		&i.PolicyName,
+		&i.Entity,
+		&i.RuleID,
+		&i.CallFingerprint,
+		&i.ChallengedAt,
+		&i.AcknowledgedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const markRiskPolicyChallengeDeclined = `-- name: MarkRiskPolicyChallengeDeclined :one
+INSERT INTO risk_policy_challenges (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , user_id
+  , tool_name
+  , call_fingerprint
+  , status
+  , policy_name
+  , challenged_at
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6::text
+  , $7::text
+  , 'declined'
+  , $8::text
+  , clock_timestamp()
+)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
+WHERE deleted IS FALSE
+DO UPDATE
+SET status = 'declined'
+  , acknowledged_at = NULL
+  , expires_at = NULL
+  , policy_name = COALESCE(EXCLUDED.policy_name, risk_policy_challenges.policy_name)
+  , updated_at = clock_timestamp()
+RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type MarkRiskPolicyChallengeDeclinedParams struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.UUID
+	UserID          string
+	ToolName        pgtype.Text
+	CallFingerprint pgtype.Text
+	PolicyName      pgtype.Text
+}
+
+// Self-service decline: mark the challenge declined and never grant an ack
+// window. Upserts so a decline that beats the async challenge insert still works.
+func (q *Queries) MarkRiskPolicyChallengeDeclined(ctx context.Context, arg MarkRiskPolicyChallengeDeclinedParams) (RiskPolicyChallenge, error) {
+	row := q.db.QueryRow(ctx, markRiskPolicyChallengeDeclined,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.UserID,
+		arg.ToolName,
+		arg.CallFingerprint,
+		arg.PolicyName,
+	)
+	var i RiskPolicyChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.UserID,
+		&i.ToolName,
+		&i.Status,
+		&i.PolicyName,
+		&i.Entity,
+		&i.RuleID,
+		&i.CallFingerprint,
+		&i.ChallengedAt,
+		&i.AcknowledgedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const refreshAccountIdentityFindingMatch = `-- name: RefreshAccountIdentityFindingMatch :execrows
 UPDATE risk_results rr
 SET description = $1, match = $2
@@ -3678,6 +3920,112 @@ func (q *Queries) UpsertRiskPolicyBypassRequest(ctx context.Context, arg UpsertR
 		&i.DecidedBy,
 		&i.GrantedPrincipalUrns,
 		&i.DecidedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertRiskPolicyChallenge = `-- name: UpsertRiskPolicyChallenge :one
+INSERT INTO risk_policy_challenges (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , user_id
+  , tool_name
+  , call_fingerprint
+  , status
+  , policy_name
+  , entity
+  , rule_id
+  , challenged_at
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6::text
+  , $7::text
+  , 'challenged'
+  , $8::text
+  , $9::text
+  , $10::text
+  , clock_timestamp()
+)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
+WHERE deleted IS FALSE
+DO UPDATE
+SET status = CASE
+      WHEN risk_policy_challenges.status = 'acknowledged'
+        AND risk_policy_challenges.expires_at IS NOT NULL
+        AND risk_policy_challenges.expires_at > clock_timestamp()
+      THEN risk_policy_challenges.status
+      ELSE 'challenged'
+    END
+  , policy_name = EXCLUDED.policy_name
+  , entity = EXCLUDED.entity
+  , rule_id = EXCLUDED.rule_id
+  , challenged_at = CASE
+      WHEN risk_policy_challenges.status = 'acknowledged'
+        AND risk_policy_challenges.expires_at IS NOT NULL
+        AND risk_policy_challenges.expires_at > clock_timestamp()
+      THEN risk_policy_challenges.challenged_at
+      ELSE clock_timestamp()
+    END
+  , updated_at = clock_timestamp()
+RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertRiskPolicyChallengeParams struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.UUID
+	UserID          string
+	ToolName        pgtype.Text
+	CallFingerprint pgtype.Text
+	PolicyName      pgtype.Text
+	Entity          pgtype.Text
+	RuleID          pgtype.Text
+}
+
+// Records (or refreshes) a warn/challenge for a (user, policy, tool). Never
+// stores the raw matched value. A live acknowledgement is preserved so a
+// re-scan does not wipe a still-valid ack before the agent retries.
+func (q *Queries) UpsertRiskPolicyChallenge(ctx context.Context, arg UpsertRiskPolicyChallengeParams) (RiskPolicyChallenge, error) {
+	row := q.db.QueryRow(ctx, upsertRiskPolicyChallenge,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.UserID,
+		arg.ToolName,
+		arg.CallFingerprint,
+		arg.PolicyName,
+		arg.Entity,
+		arg.RuleID,
+	)
+	var i RiskPolicyChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.UserID,
+		&i.ToolName,
+		&i.Status,
+		&i.PolicyName,
+		&i.Entity,
+		&i.RuleID,
+		&i.CallFingerprint,
+		&i.ChallengedAt,
+		&i.AcknowledgedAt,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

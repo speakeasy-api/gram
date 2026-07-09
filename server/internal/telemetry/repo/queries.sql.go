@@ -27,6 +27,8 @@ import (
 // Rejects: "1bad", ".leading.dot", "path with spaces", "semi;colon", "@@double", "trailing.", "double..dot"
 var validJSONPath = regexp.MustCompile(`^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$`)
 
+const MaxClaudePromptCorrelationEditDistanceBytes = 65536
+
 func userIdentifierExpr(col string) string {
 	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
 }
@@ -4937,12 +4939,16 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 	if arg.MessagePrompt == "" {
 		return nil, nil
 	}
+	if len(arg.MessagePrompt) > MaxClaudePromptCorrelationEditDistanceBytes {
+		return nil, nil
+	}
 
 	ctx = clickhouse.Context(ctx, clickhouse.WithParameters(clickhouse.Parameters{
 		"gram_project_id":               arg.GramProjectID,
 		"gram_chat_id":                  arg.GramChatID,
 		"session_id":                    arg.SessionID,
 		"message_prompt_b64":            base64.StdEncoding.EncodeToString([]byte(arg.MessagePrompt)),
+		"max_edit_distance_bytes":       strconv.Itoa(MaxClaudePromptCorrelationEditDistanceBytes),
 		"message_time_unix_nano":        strconv.FormatInt(arg.MessageTimeUnixNano, 10),
 		"after_event_sequence":          strconv.FormatInt(arg.AfterEventSequence, 10),
 		"after_event_time_unix_nano":    strconv.FormatInt(arg.AfterEventTimeUnixNano, 10),
@@ -4951,9 +4957,10 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 		"negative_max_time_delta_nanos": strconv.FormatInt(-arg.MaxTimeDeltaNanos, 10),
 	}))
 
+	normalizedPromptExpr := "replaceRegexpAll(trimBoth(toString(attributes.prompt)), '\\\\s+', ' ')"
 	rawEvents := sq.Select(
 		"toString(attributes.prompt.id) AS prompt_id",
-		"replaceRegexpAll(trimBoth(toString(attributes.prompt)), '\\\\s+', ' ') AS prompt",
+		normalizedPromptExpr+" AS prompt",
 		"toInt64OrZero(toString(attributes.event.sequence)) AS event_sequence",
 		"time_unix_nano",
 	).
@@ -4964,6 +4971,7 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 		Where("toString(attributes.event.name) = 'user_prompt'").
 		Where("toString(attributes.prompt.id) != ''").
 		Where("toString(attributes.prompt) != ''").
+		Where("length(" + normalizedPromptExpr + ") <= {max_edit_distance_bytes:UInt64}").
 		Where(squirrel.Or{
 			squirrel.Expr("event_sequence > {after_event_sequence:Int64}"),
 			squirrel.Expr(`(

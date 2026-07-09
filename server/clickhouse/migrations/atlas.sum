@@ -1,4 +1,4 @@
-h1:sW0TAXxzWHTtrrTzZBBjs9bZFq2+mcD8bIKuNuqlmho=
+h1:kh+NRG8gUAQvC2sJGT1nM+hHTGRMyl0QWvq8olqwWY8=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -56,4 +56,5 @@ h1:sW0TAXxzWHTtrrTzZBBjs9bZFq2+mcD8bIKuNuqlmho=
 20260702073000_attribute-metrics-attribution-dimensions.sql h1:5eoL9P6XNPKtIJYjdsK/VaQS3CFDfOKXbm/hkcZFZlc=
 20260706165342_ttl-90d.sql h1:a8ovzANcapKzIJcB1k8cnCtCO6s4kqZqBYEHFa820jQ=
 20260707200141_attribute-metrics-summaries-ttl-730d.sql h1:dtRAbVnZUqgtdeoVcfCGDZn/TYxSMIUG4rno2trubFg=
-20260709191016_chat-token-summaries-hook-source.sql h1:sZTE6MpXnzuZM+eB5XTl7/aPujakcLZKNA32p58eJDs=
+20260709000636_provenance-first-attribute-metrics.sql h1:yus/AZadcAGlhIqYH7eqKG1OP2wrrTV02IuFrvpG7cc=
+20260709191016_chat-token-summaries-hook-source.sql h1:8gHo24tqiWQ+yaD/qCCE9x1QiKbwEMCuzDLc/+meDu4=
