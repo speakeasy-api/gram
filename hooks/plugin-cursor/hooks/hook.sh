@@ -13,7 +13,6 @@ set -u
 server_url="${GRAM_HOOKS_SERVER_URL:-https://app.getgram.ai}"
 project_slug="${GRAM_HOOKS_PROJECT_SLUG:-}"
 gram_hooks_org_hint="${GRAM_HOOKS_ORG_ID:-}"
-gram_hooks_org_key="${GRAM_HOOKS_ORG_KEY:-}"
 gram_hooks_nonblocking=""
 # In observability mode auth-state failures must not block either: prepare_auth
 # exits with this value on an established machine whose credentials broke.
@@ -27,10 +26,6 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/http.sh"
 # shellcheck source=/dev/null
 . "$script_dir/auth.sh"
-if [ -f "$script_dir/identity.sh" ]; then
-  # shellcheck source=/dev/null
-  . "$script_dir/identity.sh"
-fi
 
 
 gram_hooks_stat_uid_mode() {
@@ -139,9 +134,6 @@ gram_hooks_enrich_cursor_mcp_payload() {
 }
 
 provider_payload=$(cat)
-if type gram_enrich_identity_payload >/dev/null 2>&1; then
-  provider_payload="$(gram_enrich_identity_payload "$provider_payload")"
-fi
 if type gram_hooks_enrich_cursor_mcp_payload >/dev/null 2>&1; then
   provider_payload="$(gram_hooks_enrich_cursor_mcp_payload "$provider_payload")"
 fi
@@ -1016,7 +1008,6 @@ gram_hooks_cursor_backfill_prompt_if_missing() {
   prompt_members=$(gram_hooks_join_members \
     "$(gram_hooks_json_string_member "hook_event_name" "beforeSubmitPrompt")" \
     "$(gram_hooks_json_string_member "prompt" "$prompt")" \
-    "$(gram_hooks_json_string_member "user_email" "$(gram_hooks_json_string_value "$payload" "user_email")")" \
     "$(gram_hooks_json_string_member "conversation_id" "$(gram_hooks_json_string_value "$payload" "conversation_id")")" \
     "$(gram_hooks_json_string_member "generation_id" "$(gram_hooks_json_string_value "$payload" "generation_id")")" \
     "$(gram_hooks_json_string_member "session_id" "$session_id")" \
@@ -1078,8 +1069,7 @@ gram_hooks_build_canonical_payload() {
     "$(gram_hooks_json_string_member "adapter" "cursor")" \
     "$(gram_hooks_json_string_member "adapter_version" "$(gram_hooks_first_string "$payload" "cursor_version" "codex_version" "version")")" \
     "$(gram_hooks_json_string_member "raw_event_name" "$native")" \
-    "$(gram_hooks_json_string_member "hostname" "$hostname")" \
-    "$(gram_hooks_json_string_member "user_email" "$(gram_hooks_json_string_value "$payload" "user_email")")")
+    "$(gram_hooks_json_string_member "hostname" "$hostname")")
   session_members=$(gram_hooks_join_members \
     "$(gram_hooks_json_string_member "id" "$session_id")" \
     "$(gram_hooks_json_string_member "turn_id" "$turn_id")" \

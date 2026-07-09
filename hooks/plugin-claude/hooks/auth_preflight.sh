@@ -23,7 +23,5 @@ export GRAM_HOOKS_INTERACTIVE=1
 # warning); once credentials have been established, a broken auth state
 # exits with the configured failure code from inside prepare_auth (2 blocks
 # the session start; observability mode passes 0 so nothing ever blocks).
-# With the baked org-wide key present, auth resolves without a browser and
-# session start never stalls on login.
 gram_hooks_prepare_auth "$server_url" "$project_slug" 2 || true
 exit 0

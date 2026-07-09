@@ -616,13 +616,9 @@ gram_hooks_prepare_auth() {
   api_key=""
   project=""
   email=""
-  GRAM_HOOKS_AUTH_SOURCE=""
   if [ "$force" != "force" ]; then
     api_key="${GRAM_HOOKS_API_KEY:-}"
     project="${GRAM_HOOKS_PROJECT_SLUG:-}"
-    if [ -n "$api_key" ]; then
-      GRAM_HOOKS_AUTH_SOURCE="env"
-    fi
   fi
 
   if [ -z "$api_key" ]; then
@@ -637,19 +633,7 @@ gram_hooks_prepare_auth() {
       GRAM_HOOKS_CACHED_PROJECT=""
       GRAM_HOOKS_CACHED_EMAIL=""
     fi
-    if [ -n "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
-      GRAM_HOOKS_AUTH_SOURCE="cache"
-    elif [ -n "${gram_hooks_org_key:-}" ]; then
-      # No per-user credentials on this machine: fall back to the org-wide
-      # hooks key baked into the published plugin so events keep flowing,
-      # attributed via the payload's self-reported user_email, instead of
-      # degrading to the unauthenticated pass-through. Never cached: a later
-      # browser login upgrades this machine to per-user attribution, and a
-      # republished plugin swaps the key without stale local state.
-      GRAM_HOOKS_AUTH_SOURCE="org"
-      api_key="$gram_hooks_org_key"
-      project="$project_hint"
-    else
+    if [ -z "${GRAM_HOOKS_CACHED_API_KEY:-}" ]; then
       if ! gram_hooks_login "$server_url" "$project_hint"; then
         if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ] && gram_hooks_reauth_needed; then
           GRAM_HTTP_CODE=""
@@ -667,13 +651,10 @@ gram_hooks_prepare_auth() {
         echo "Speakeasy hooks could not read Gram authentication after login." >&2
         exit "$failure_exit"
       fi
-      GRAM_HOOKS_AUTH_SOURCE="login"
     fi
-    if [ "$GRAM_HOOKS_AUTH_SOURCE" != "org" ]; then
-      api_key="${GRAM_HOOKS_CACHED_API_KEY:-}"
-      project="${GRAM_HOOKS_CACHED_PROJECT:-}"
-      email="${GRAM_HOOKS_CACHED_EMAIL:-}"
-    fi
+    api_key="${GRAM_HOOKS_CACHED_API_KEY:-}"
+    project="${GRAM_HOOKS_CACHED_PROJECT:-}"
+    email="${GRAM_HOOKS_CACHED_EMAIL:-}"
   fi
 
   if [ -z "$project" ]; then
@@ -727,21 +708,13 @@ gram_hooks_post_authenticated() {
   # precedence over the cache on every send, so a re-login can never replace
   # them: a rejected configured key must fall through to the caller's non-2xx
   # handling (fail closed) rather than wipe the cache and downgrade to the
-  # never-authenticated pass-through. The baked org-wide key is the same
-  # class: there is no cache to wipe and re-preparing would retry the very
-  # key that was just rejected. When the rejected key DID come from the
-  # cache, the force retry below resolves through the org-wide fallback, so
-  # one broken personal key does not stop events flowing.
+  # never-authenticated pass-through.
   if { [ "$first_status" = "401" ] || [ "$first_status" = "403" ]; } \
     && [ -z "${GRAM_HOOKS_API_KEY:-}" ] \
-    && [ "${GRAM_HOOKS_AUTH_SOURCE:-}" != "org" ] \
     && [ "${GRAM_HOOKS_DISABLE_LOCAL_AUTH:-}" != "1" ]; then
     gram_hooks_forget_auth
     gram_hooks_mark_reauth_needed
-    # Noninteractive senders surface the reconnect nudge only when there is
-    # no org-wide key to retry through; with one baked in, the forced
-    # re-prepare below resolves to it and the event still goes out.
-    if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ] && [ -z "${gram_hooks_org_key:-}" ]; then
+    if [ "${GRAM_HOOKS_INTERACTIVE:-}" != "1" ]; then
       GRAM_HTTP_CODE="$first_status"
       return 79
     fi
