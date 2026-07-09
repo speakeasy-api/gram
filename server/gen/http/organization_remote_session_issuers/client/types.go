@@ -37,6 +37,16 @@ type CreateIssuerRequestBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer.
+	// Discovered from the issuer metadata document; rejected unless an absolute
+	// http(s) URL.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered
+	// from the issuer metadata document; rejected unless an absolute http(s) URL.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Discovered from the
+	// issuer metadata document; rejected unless an absolute http(s) URL.
+	OpTosURI *string `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
 	// Scopes advertised by the issuer.
 	ScopesSupported []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	// Grant types advertised by the issuer.
@@ -77,7 +87,16 @@ type UpdateIssuerRequestBody struct {
 	// Upstream RFC 7591 registration endpoint.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI.
-	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// Set or clear RFC 8414 service_documentation. An empty string clears it to
+	// NULL; any other value must be an absolute http(s) URL.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// Set or clear RFC 8414 op_policy_uri. An empty string clears it to NULL; any
+	// other value must be an absolute http(s) URL.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any
+	// other value must be an absolute http(s) URL.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
 	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
@@ -124,7 +143,15 @@ type CreateIssuerResponseBody struct {
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
-	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer. Null
+	// when not advertised.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
+	// advertised.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
 	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
@@ -173,7 +200,15 @@ type GetIssuerResponseBody struct {
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
-	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer. Null
+	// when not advertised.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
+	// advertised.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
 	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
@@ -224,7 +259,15 @@ type UpdateIssuerResponseBody struct {
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
-	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer. Null
+	// when not advertised.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
+	// advertised.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
 	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
@@ -264,7 +307,15 @@ type MoveIssuerResponseBody struct {
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
-	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer. Null
+	// when not advertised.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
+	// advertised.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
 	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
@@ -1646,7 +1697,15 @@ type RemoteSessionIssuerResponseBody struct {
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
-	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer. Null
+	// when not advertised.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
+	// advertised.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
 	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
@@ -1676,6 +1735,9 @@ func NewCreateIssuerRequestBody(p *organizationremotesessionissuers.CreateIssuer
 		TokenEndpoint:                     p.TokenEndpoint,
 		RegistrationEndpoint:              p.RegistrationEndpoint,
 		JwksURI:                           p.JwksURI,
+		ServiceDocumentation:              p.ServiceDocumentation,
+		OpPolicyURI:                       p.OpPolicyURI,
+		OpTosURI:                          p.OpTosURI,
 		Oidc:                              p.Oidc,
 		Passthrough:                       p.Passthrough,
 		ClientIDMetadataDocumentSupported: p.ClientIDMetadataDocumentSupported,
@@ -1721,6 +1783,9 @@ func NewUpdateIssuerRequestBody(p *organizationremotesessionissuers.UpdateIssuer
 		TokenEndpoint:                     p.TokenEndpoint,
 		RegistrationEndpoint:              p.RegistrationEndpoint,
 		JwksURI:                           p.JwksURI,
+		ServiceDocumentation:              p.ServiceDocumentation,
+		OpPolicyURI:                       p.OpPolicyURI,
+		OpTosURI:                          p.OpTosURI,
 		Oidc:                              p.Oidc,
 		Passthrough:                       p.Passthrough,
 		ClientIDMetadataDocumentSupported: p.ClientIDMetadataDocumentSupported,
@@ -1778,6 +1843,9 @@ func NewCreateIssuerRemoteSessionIssuerOK(body *CreateIssuerResponseBody) *types
 		TokenEndpoint:                     body.TokenEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
 		JwksURI:                           body.JwksURI,
+		ServiceDocumentation:              body.ServiceDocumentation,
+		OpPolicyURI:                       body.OpPolicyURI,
+		OpTosURI:                          body.OpTosURI,
 		Oidc:                              *body.Oidc,
 		Passthrough:                       *body.Passthrough,
 		ClientIDMetadataDocumentSupported: *body.ClientIDMetadataDocumentSupported,
@@ -2147,6 +2215,9 @@ func NewGetIssuerRemoteSessionIssuerOK(body *GetIssuerResponseBody) *types.Remot
 		TokenEndpoint:                     body.TokenEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
 		JwksURI:                           body.JwksURI,
+		ServiceDocumentation:              body.ServiceDocumentation,
+		OpPolicyURI:                       body.OpPolicyURI,
+		OpTosURI:                          body.OpTosURI,
 		Oidc:                              *body.Oidc,
 		Passthrough:                       *body.Passthrough,
 		ClientIDMetadataDocumentSupported: *body.ClientIDMetadataDocumentSupported,
@@ -2521,6 +2592,9 @@ func NewUpdateIssuerRemoteSessionIssuerOK(body *UpdateIssuerResponseBody) *types
 		TokenEndpoint:                     body.TokenEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
 		JwksURI:                           body.JwksURI,
+		ServiceDocumentation:              body.ServiceDocumentation,
+		OpPolicyURI:                       body.OpPolicyURI,
+		OpTosURI:                          body.OpTosURI,
 		Oidc:                              *body.Oidc,
 		Passthrough:                       *body.Passthrough,
 		ClientIDMetadataDocumentSupported: *body.ClientIDMetadataDocumentSupported,
@@ -2871,6 +2945,9 @@ func NewMoveIssuerRemoteSessionIssuerOK(body *MoveIssuerResponseBody) *types.Rem
 		TokenEndpoint:                     body.TokenEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
 		JwksURI:                           body.JwksURI,
+		ServiceDocumentation:              body.ServiceDocumentation,
+		OpPolicyURI:                       body.OpPolicyURI,
+		OpTosURI:                          body.OpTosURI,
 		Oidc:                              *body.Oidc,
 		Passthrough:                       *body.Passthrough,
 		ClientIDMetadataDocumentSupported: *body.ClientIDMetadataDocumentSupported,

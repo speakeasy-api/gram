@@ -172,6 +172,13 @@ export function CreateRemoteIdentityProviderSheet({
           // operator skipped Discover and typed the endpoints by hand.
           clientIdMetadataDocumentSupported:
             discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false,
+          // RFC 8414 documentation URLs are discovery-only — there are no form
+          // inputs for them. Undefined when the operator skipped Discover or the
+          // issuer advertised nothing usable.
+          serviceDocumentation:
+            discoveredSnapshot?.serviceDocumentation || undefined,
+          opPolicyUri: discoveredSnapshot?.opPolicyUri || undefined,
+          opTosUri: discoveredSnapshot?.opTosUri || undefined,
         },
       },
     });
