@@ -130,10 +130,21 @@ func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.Ingest
 	if strings.EqualFold(selfReported, tokenEmail) {
 		return canonicalActor{UserID: authCtx.UserID, Email: tokenEmail}
 	}
-	return canonicalActor{
+	actor := canonicalActor{
 		UserID: s.resolveUserByEmail(ctx, selfReported, authCtx.ActiveOrganizationID),
 		Email:  selfReported,
 	}
+	if actor.UserID == "" && strings.HasPrefix(authCtx.APIKeyName, auth.PluginAPIKeyNamePrefix) {
+		// A self-reported email that matches no Gram user cannot key
+		// user-scoped policies. For shared plugin keys the session metadata
+		// cache may already link this session to a user (OTEL path or device
+		// bridge); that complete identity beats an unresolvable claim, so
+		// policy enforcement and the recorded rows stay on one identity.
+		if cached := s.cachedSessionActor(ctx, payload, authCtx); cached.UserID != "" {
+			return cached
+		}
+	}
+	return actor
 }
 
 // cachedSessionActor recovers attribution for a shared plugin-key event with

@@ -189,6 +189,54 @@ func TestIngest_ShadowMCPPolicyUsesCachedSessionIdentityForSharedKey(t *testing.
 	require.Equal(t, "deny", result.Decision)
 }
 
+// A shared-key event may self-report an email that matches no Gram user (a
+// personal or provider-account address). That claim cannot key user-scoped
+// policies, so enforcement must still recover the session's cached identity
+// rather than running unattributed.
+func TestIngest_ShadowMCPPolicyRecoversCachedIdentityForUnresolvableSharedKeyEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	authCtx.APIKeyName = "plugins-hooks-20260708-abc123"
+
+	cachedUserID := "user_cached_owner"
+	sessionID := "canonical-shadow-mcp-unresolvable-email"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID: sessionID,
+		UserID:    cachedUserID,
+		UserEmail: "cached-dev@example.com",
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}, 0))
+
+	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: cachedUserID}
+
+	toolName := "mcp__local_server__search"
+	serverIdentity := "local-server"
+	toolCallID := "call-unresolvable-email"
+	unresolvable := "personal-address@example.net"
+	payload := canonicalIngestPayload("claude", "tool.requested", sessionID)
+	payload.Source.UserEmail = &unresolvable
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"query": "secret"},
+		},
+		Mcp: &gen.HookMCPData{
+			ServerIdentity: &serverIdentity,
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision)
+}
+
 func TestIngest_ShadowMCPPolicyUsesAuthenticatedTokenOwner(t *testing.T) {
 	t.Parallel()
 

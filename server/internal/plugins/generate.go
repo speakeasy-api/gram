@@ -1274,7 +1274,17 @@ gram_enrich_identity_payload() {
     printf '%s' "$trimmed"
     return
   fi
-  if [ -n "$(gram_hooks_json_top_level_value "$trimmed" "user_email")" ]; then
+  local existing_token
+  existing_token="$(gram_hooks_json_top_level_value "$trimmed" "user_email")"
+  if [ "$existing_token" = '""' ]; then
+    # An empty provider value (Cursor sends user_email:"" when signed out)
+    # must not shadow the device identity. First occurrence only, so a
+    # nested empty pair can only be hit when it precedes the top-level one —
+    # no known provider emits that shape.
+    printf '%s' "$trimmed" | sed -E 's|"user_email"[[:space:]]*:[[:space:]]*""|"user_email":"'"$email"'"|'
+    return
+  fi
+  if [ -n "$existing_token" ]; then
     gram_hooks_identity_debug "payload already carries a top-level user_email; keeping it (no jq to rewrite safely)"
     printf '%s' "$trimmed"
     return

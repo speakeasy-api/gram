@@ -3945,6 +3945,43 @@ printf '{}\n200'
 		"the nested tool argument must survive identity stamping unchanged")
 }
 
+// TestDeviceAgentIdentityStampsEmptyUserEmailWithoutJq drives the jq-less
+// fallback directly: an empty provider user_email (Cursor when signed out)
+// must be replaced with the device identity, not kept as "already present".
+func TestDeviceAgentIdentityStampsEmptyUserEmailWithoutJq(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "helpers.sh"), []byte(renderHookPayloadNormalizationSnippet("claude")), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "fake-agent"), []byte(`#!/usr/bin/env bash
+if [ "$1" = "identity" ]; then
+  printf '{"identity":{"email":"agent@example.com"}}'
+  exit 0
+fi
+exit 1
+`), 0o755))
+	driver := `#!/usr/bin/env bash
+. ./helpers.sh
+. ./identity.sh
+jq() { return 127; }
+gram_enrich_identity_payload '{"hook_event_name":"beforeSubmitPrompt","user_email":""}'
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "driver.sh"), []byte(driver), 0o755))
+
+	cmd := exec.Command("bash", "driver.sh")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GRAM_DEVICE_AGENT_COMMANDS=fake-agent",
+		"GRAM_DEVICE_AGENT_TIMEOUT_TENTHS=600",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	require.Contains(t, string(output), `"user_email":"agent@example.com"`,
+		"an empty provider user_email must not shadow the device identity on jq-less machines")
+}
+
 func TestRenderHookScriptFallsBackWhenDeviceAgentMissing(t *testing.T) {
 	t.Parallel()
 
