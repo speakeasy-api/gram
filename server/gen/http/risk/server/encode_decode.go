@@ -9218,6 +9218,7 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		AutoName:               v.AutoName,
 		UserMessage:            v.UserMessage,
 		Prompt:                 v.Prompt,
+		Score:                  v.Score,
 		Version:                v.Version,
 		CreatedAt:              v.CreatedAt,
 		UpdatedAt:              v.UpdatedAt,

@@ -118,6 +118,10 @@ export type CreateRiskPolicyRequestBody = {
    */
   scopeInclude?: string | undefined;
   /**
+   * CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to apply the default (5).
+   */
+  score?: number | undefined;
+  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -160,6 +164,7 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   prompt_injection_rules?: Array<string> | undefined;
   scope_exempt?: string | undefined;
   scope_include?: string | undefined;
+  score: number;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -188,6 +193,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     promptInjectionRules: z.optional(z.array(z.string())),
     scopeExempt: z.optional(z.string()),
     scopeInclude: z.optional(z.string()),
+    score: z._default(z.number(), 5),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),
