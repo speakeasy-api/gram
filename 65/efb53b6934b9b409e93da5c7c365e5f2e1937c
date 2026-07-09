@@ -1,0 +1,25 @@
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_d1db77e925f400::t_8d71bdb8112b1e 244-246
+  s_d1db77e925f400::t_9251a76029c8f3 247-258
+  s_d1db77e925f400::t_c0a628badf7e8b 15
+  s_d1db77e925f400::t_8503fc427f9e62 274-301,304
+  s_d1db77e925f400::t_aa7e706a3f6faa 270-273
+server/internal/scanners/promptinjection/openrouter/judge_test.go
+  s_d1db77e925f400::t_bc019cde7b662c 198,200-204,206,213,226
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "65efb53b6934b9b409e93da5c7c365e5f2e1937c",
+  "prompts": {},
+  "sessions": {
+    "s_d1db77e925f400": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a5c9969-94ed-4486-a952-4a000a607815",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    }
+  }
+}
