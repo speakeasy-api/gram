@@ -352,6 +352,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS api_keys_organization_id_name_key
 ON api_keys (organization_id, name)
 WHERE deleted IS FALSE;
 
+-- Tracks which users are actively running the Speakeasy device agent. The agent
+-- polls agent.getPlugins every ~60s carrying the enrolled user's email; that
+-- email is the only per-user signal (the org-scoped API key is shared across the
+-- fleet), so we key last-seen on (organization_id, email).
+CREATE TABLE IF NOT EXISTS device_agent_syncs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_agent_syncs_pkey PRIMARY KEY (id),
+  CONSTRAINT device_agent_syncs_org_email_key UNIQUE (organization_id, email),
+  CONSTRAINT device_agent_syncs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
