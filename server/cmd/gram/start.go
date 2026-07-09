@@ -1252,6 +1252,7 @@ func newStartCommand() *cli.Command {
 						TelemetryRepo:                  telemetryrepo.New(chDB),
 						TriggersApp:                    triggerApp,
 						CacheAdapter:                   cache.NewRedisCacheAdapter(redisClient),
+						EmailService:                   emailService,
 						AssistantsCore:                 assistantsCore,
 						TemporalEnv:                    temporalEnv,
 						PIIScanner:                     piiScanner,

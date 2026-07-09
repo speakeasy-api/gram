@@ -49,6 +49,19 @@ func (q *Queries) GetEnabledServerCount(ctx context.Context, organizationID stri
 	return count, err
 }
 
+const getOrganizationName = `-- name: GetOrganizationName :one
+SELECT name
+FROM organization_metadata
+WHERE id = $1
+`
+
+func (q *Queries) GetOrganizationName(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, getOrganizationName, organizationID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
 const listBillingCycleUsage = `-- name: ListBillingCycleUsage :many
 SELECT id, organization_id, cycle_start, cycle_end, tum_tokens, finalized_at, created_at, updated_at
 FROM billing_cycle_usage

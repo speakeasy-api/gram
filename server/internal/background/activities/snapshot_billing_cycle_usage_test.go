@@ -3,6 +3,8 @@ package activities_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,10 +15,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
@@ -24,7 +29,48 @@ import (
 // predict which cycles the activity finalizes.
 const billingCycleFinalizeGrace = 72 * time.Hour
 
+// captureLoopsClient records every transactional email the activity attempts
+// to send so tests can assert on the exact payloads.
+type captureLoopsClient struct {
+	mu   sync.Mutex
+	sent []loops.SendTransactionalInput
+	// failNext makes the next SendTransactional calls fail without recording,
+	// simulating a transport outage.
+	failNext int
+}
+
+func (c *captureLoopsClient) SendTransactional(_ context.Context, input loops.SendTransactionalInput) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.failNext > 0 {
+		c.failNext--
+		return errors.New("loops unavailable")
+	}
+	c.sent = append(c.sent, input)
+	return nil
+}
+
+func (c *captureLoopsClient) Sent() []loops.SendTransactionalInput {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]loops.SendTransactionalInput, len(c.sent))
+	copy(out, c.sent)
+	return out
+}
+
+func (c *captureLoopsClient) FailNext(n int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.failNext = n
+}
+
 func setupSnapshotBillingCycleUsageTest(t *testing.T, dbName string) (act *activities.SnapshotBillingCycleUsage, conn *pgxpool.Pool, telemetryQueries *telemetryrepo.Queries, orgID string, projectID uuid.UUID) {
+	t.Helper()
+	act, conn, telemetryQueries, orgID, projectID, _ = setupSnapshotBillingCycleUsageTestWithEmail(t, dbName)
+	return act, conn, telemetryQueries, orgID, projectID
+}
+
+func setupSnapshotBillingCycleUsageTestWithEmail(t *testing.T, dbName string) (act *activities.SnapshotBillingCycleUsage, conn *pgxpool.Pool, telemetryQueries *telemetryrepo.Queries, orgID string, projectID uuid.UUID, captured *captureLoopsClient) {
 	t.Helper()
 	ctx := t.Context()
 
@@ -32,6 +78,9 @@ func setupSnapshotBillingCycleUsageTest(t *testing.T, dbName string) (act *activ
 	require.NoError(t, err)
 
 	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
 	orgID = "org-" + uuid.NewString()[:8]
@@ -51,9 +100,16 @@ func setupSnapshotBillingCycleUsageTest(t *testing.T, dbName string) (act *activ
 	})
 	require.NoError(t, err)
 
-	act = activities.NewSnapshotBillingCycleUsage(testenv.NewLogger(t), conn, chConn)
+	captured = &captureLoopsClient{sent: nil, failNext: 0}
+	act = activities.NewSnapshotBillingCycleUsage(
+		testenv.NewLogger(t),
+		conn,
+		chConn,
+		cache.NewRedisCacheAdapter(redisClient),
+		email.NewService(testenv.NewLogger(t), captured),
+	)
 
-	return act, conn, telemetryrepo.New(chConn), orgID, project.ID
+	return act, conn, telemetryrepo.New(chConn), orgID, project.ID, captured
 }
 
 // insertTUMTelemetryRow inserts a raw telemetry_logs row. The
@@ -275,7 +331,16 @@ func TestSnapshotBillingCycleUsage_NoProjects(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	act := activities.NewSnapshotBillingCycleUsage(testenv.NewLogger(t), conn, chConn)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	act := activities.NewSnapshotBillingCycleUsage(
+		testenv.NewLogger(t),
+		conn,
+		chConn,
+		cache.NewRedisCacheAdapter(redisClient),
+		email.NewService(testenv.NewLogger(t), &captureLoopsClient{sent: nil, failNext: 0}),
+	)
 	require.NoError(t, act.Do(ctx, []string{orgID}))
 
 	rows, err := usagerepo.New(conn).ListBillingCycleUsage(ctx, orgID)

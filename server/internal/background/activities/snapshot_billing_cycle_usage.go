@@ -14,6 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -41,13 +43,17 @@ type SnapshotBillingCycleUsage struct {
 	logger        *slog.Logger
 	db            *pgxpool.Pool
 	telemetryRepo *telemetryrepo.Queries
+	cache         cache.Cache
+	emails        *email.Service
 }
 
-func NewSnapshotBillingCycleUsage(logger *slog.Logger, db *pgxpool.Pool, chConn clickhouse.Conn) *SnapshotBillingCycleUsage {
+func NewSnapshotBillingCycleUsage(logger *slog.Logger, db *pgxpool.Pool, chConn clickhouse.Conn, cacheAdapter cache.Cache, emails *email.Service) *SnapshotBillingCycleUsage {
 	return &SnapshotBillingCycleUsage{
 		logger:        logger,
 		db:            db,
 		telemetryRepo: telemetryrepo.New(chConn),
+		cache:         cacheAdapter,
+		emails:        emails,
 	}
 }
 
@@ -138,6 +144,12 @@ func (s *SnapshotBillingCycleUsage) snapshotOrganization(ctx context.Context, qu
 			FinalizedAt:    finalizedAt,
 		}); err != nil {
 			return fmt.Errorf("upsert billing cycle usage: %w", err)
+		}
+
+		// Threshold alerts only ever concern the cycle in progress; closed
+		// cycles inside the grace window refresh silently.
+		if !now.Before(cycle.Start) && now.Before(cycle.End) {
+			s.maybeSendUsageAlert(ctx, queries, orgID, meta, cycle, tokens, now)
 		}
 	}
 
