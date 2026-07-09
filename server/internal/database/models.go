@@ -1002,6 +1002,7 @@ type OauthProxyServer struct {
 
 type OpenrouterApiKey struct {
 	OrganizationID string
+	KeyType        string
 	Key            string
 	KeyHash        string
 	MonthlyCredits int64
