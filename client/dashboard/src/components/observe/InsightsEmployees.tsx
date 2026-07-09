@@ -37,6 +37,7 @@ import type { UserSummary } from "@gram/client/models/components/usersummary.js"
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
+import { useSyncedAgentUsers } from "@gram/client/react-query/syncedAgentUsers.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
 import { useQuery } from "@tanstack/react-query";
@@ -45,6 +46,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { dateTimeFormatters } from "@/lib/dates";
 import { slugify } from "@/lib/constants";
 import {
   Badge,
@@ -154,6 +157,45 @@ const statusMeta: Record<
   },
 };
 
+// Device-agent activity is a separate signal from enrollment: it's whether the
+// Speakeasy device agent (org-scoped) has polled recently for this member's
+// email, not whether their AI tools report telemetry. Surfaced here as an
+// optional column so admins can see enrollment + agent health in one table.
+const AGENT_ACTIVE_WINDOW_MS = 5 * 60 * 1000;
+const AGENT_STATUS_TICK_MS = 30 * 1000;
+
+type DeviceAgentState = "active" | "stale" | "none";
+
+// Rank for sorting: active devices first, then stale, then members with no
+// agent at all — so the rows an admin cares about surface at the top.
+const AGENT_SORT_RANK: Record<DeviceAgentState, number> = {
+  active: 0,
+  stale: 1,
+  none: 2,
+};
+
+function deviceAgentState(
+  lastSeen: Date | undefined,
+  now: number,
+): DeviceAgentState {
+  if (!lastSeen) return "none";
+  return now - lastSeen.getTime() < AGENT_ACTIVE_WINDOW_MS ? "active" : "stale";
+}
+
+// useNow returns a wall-clock timestamp that advances every intervalMs so
+// time-derived values (here, device Active/Stale) recompute on their own on a
+// long-open dashboard. Mirrors the hook on the org-level Device Agent page. Pass
+// intervalMs <= 0 to disable ticking (when the derived value isn't shown).
+function useNow(intervalMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (intervalMs <= 0) return;
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
 export function InsightsEmployeesContent(): JSX.Element {
   const client = useGramContext();
   const routes = useRoutes();
@@ -176,6 +218,18 @@ export function InsightsEmployeesContent(): JSX.Element {
     refetch: refetchRoles,
     isFetching: rolesFetching,
   } = useRoles();
+  // Device agent status is a preview, org-level feature. Only fetch + show the
+  // column when the org has it enabled; the endpoint is org-admin gated, which
+  // the Observe pages already require.
+  const isDeviceAgentEnabled =
+    useTelemetry().isFeatureEnabled("gram-device-agent") ?? false;
+  const {
+    data: deviceSyncData,
+    refetch: refetchDeviceSyncs,
+    isFetching: deviceSyncsFetching,
+  } = useSyncedAgentUsers(undefined, undefined, {
+    enabled: isDeviceAgentEnabled,
+  });
 
   const { values, setValue, clearValue, clearAll } =
     useFilterState(EMPLOYEE_FILTERS);
@@ -229,6 +283,14 @@ export function InsightsEmployeesContent(): JSX.Element {
 
   const members = useMemo(() => membersData?.members ?? [], [membersData]);
   const roles = useMemo(() => rolesData?.roles ?? [], [rolesData]);
+  // email -> most recent device-agent sync, used to derive the per-row status.
+  const deviceSyncByEmail = useMemo(() => {
+    const map = new Map<string, Date>();
+    for (const u of deviceSyncData?.users ?? []) {
+      map.set(u.email.toLowerCase(), u.lastSeenAt);
+    }
+    return map;
+  }, [deviceSyncData]);
   const usageQuery = useQuery({
     queryKey: [
       "insights",
@@ -400,9 +462,13 @@ export function InsightsEmployeesContent(): JSX.Element {
                   void refetchMembers();
                   void refetchRoles();
                   void usageQuery.refetch();
+                  if (isDeviceAgentEnabled) void refetchDeviceSyncs();
                 }}
                 isRefreshing={
-                  membersFetching || rolesFetching || usageQuery.isFetching
+                  membersFetching ||
+                  rolesFetching ||
+                  usageQuery.isFetching ||
+                  deviceSyncsFetching
                 }
               />
             </Page.Toolbar>
@@ -478,6 +544,8 @@ export function InsightsEmployeesContent(): JSX.Element {
                 employees={employees}
                 search={search}
                 onSelectUser={openUser}
+                deviceSyncByEmail={deviceSyncByEmail}
+                showDeviceAgent={isDeviceAgentEnabled}
               />
               <EnrollmentLegend />
             </>
@@ -494,13 +562,20 @@ function EmployeeTable({
   employees,
   search,
   onSelectUser,
+  deviceSyncByEmail,
+  showDeviceAgent,
 }: {
   employees: Employee[];
   search: string;
   onSelectUser: (employee: Employee) => void;
+  deviceSyncByEmail: Map<string, Date>;
+  showDeviceAgent: boolean;
 }) {
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<SortDescriptor | null>(null);
+  // Only ticks when the column is shown; disabled (0) otherwise, so the memo
+  // stays stable (deviceAgentState is never called in that case).
+  const now = useNow(showDeviceAgent ? AGENT_STATUS_TICK_MS : 0);
   const filteredEmployees = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return employees;
@@ -561,6 +636,37 @@ function EmployeeTable({
         width: "1fr",
         render: (item) => <StatusPill status={item.status} />,
       },
+      ...(showDeviceAgent
+        ? [
+            {
+              key: "deviceAgent",
+              header: (
+                <span className="flex items-center gap-1">
+                  Device Agent
+                  <SimpleTooltip tooltip="Whether the Speakeasy device agent on this member's machine has checked in recently. Active = synced in the last few minutes; Stale = enrolled but not seen recently; Not Enrolled = no agent activity.">
+                    <Info className="text-muted-foreground size-3 shrink-0" />
+                  </SimpleTooltip>
+                </span>
+              ),
+              sortable: true,
+              sortLabel: "Device Agent",
+              sortValue: (item) =>
+                AGENT_SORT_RANK[
+                  deviceAgentState(
+                    deviceSyncByEmail.get(item.email.toLowerCase()),
+                    now,
+                  )
+                ],
+              width: "1fr",
+              render: (item) => (
+                <DeviceAgentCell
+                  lastSeen={deviceSyncByEmail.get(item.email.toLowerCase())}
+                  now={now}
+                />
+              ),
+            } satisfies Column<Employee>,
+          ]
+        : []),
       {
         key: "accounts",
         header: "Accounts",
@@ -613,7 +719,7 @@ function EmployeeTable({
         ),
       },
     ],
-    [onSelectUser],
+    [onSelectUser, showDeviceAgent, deviceSyncByEmail, now],
   );
   const sortedEmployees = useMemo(() => {
     if (sort?.id === "lastActivity") {
@@ -791,6 +897,41 @@ function StatusPill({ status }: { status: EmployeeStatus }) {
     <Badge variant={meta.variant}>
       <Badge.Text>{meta.label}</Badge.Text>
     </Badge>
+  );
+}
+
+// Traffic-light progression: green "Active" (synced recently), amber "Stale"
+// (enrolled but not seen lately), grey "Not Enrolled" (no agent activity — a
+// distinct, scannable state rather than a blank cell). Grey keeps it visually
+// separate from the Enrollment column's red "Not Enrolled".
+const deviceAgentMeta: Record<
+  DeviceAgentState,
+  { label: string; variant: "success" | "warning" | "neutral" }
+> = {
+  active: { label: "Active", variant: "success" },
+  stale: { label: "Stale", variant: "warning" },
+  none: { label: "Not Enrolled", variant: "neutral" },
+};
+
+// Device-agent status cell: an Active/Stale/Not Enrolled badge. Active and Stale
+// reveal the last sync time on hover; Not Enrolled explains the empty signal.
+function DeviceAgentCell({
+  lastSeen,
+  now,
+}: {
+  lastSeen: Date | undefined;
+  now: number;
+}) {
+  const meta = deviceAgentMeta[deviceAgentState(lastSeen, now)];
+  const tooltip = lastSeen
+    ? `Last synced ${dateTimeFormatters.humanize(lastSeen)}`
+    : "No device agent activity for this member.";
+  return (
+    <SimpleTooltip tooltip={tooltip}>
+      <Badge variant={meta.variant}>
+        <Badge.Text>{meta.label}</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
   );
 }
 
