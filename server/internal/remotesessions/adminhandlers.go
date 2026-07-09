@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 )
 
 // The adminRemoteSessions handlers curate global remote_session_issuer /
@@ -90,6 +91,20 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
 	}
 
+	// Discovery drops malformed documentation URLs, but a caller holding the write
+	// scope can POST them without ever calling discover, and they are persisted
+	// and later rendered as links. An empty value stays legal: the update queries
+	// read it as the explicit "clear to NULL" sentinel.
+	if v := conv.PtrValOr(payload.ServiceDocumentation, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "service_documentation must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.OpPolicyURI, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "op_policy_uri must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.OpTosURI, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -107,6 +122,9 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
 		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:              conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
+		OpPolicyUri:                       conv.PtrToPGTextEmpty(payload.OpPolicyURI),
+		OpTosUri:                          conv.PtrToPGTextEmpty(payload.OpTosURI),
 		ScopesSupported:                   orEmptySlice(payload.ScopesSupported),
 		GrantTypesSupported:               orEmptySlice(payload.GrantTypesSupported),
 		ResponseTypesSupported:            orEmptySlice(payload.ResponseTypesSupported),
@@ -216,6 +234,20 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
 	}
 
+	// Discovery drops malformed documentation URLs, but a caller holding the write
+	// scope can POST them without ever calling discover, and they are persisted
+	// and later rendered as links. An empty value stays legal: the update queries
+	// read it as the explicit "clear to NULL" sentinel.
+	if v := conv.PtrValOr(payload.ServiceDocumentation, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "service_documentation must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.OpPolicyURI, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "op_policy_uri must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.OpTosURI, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -234,6 +266,9 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
 		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:              conv.PtrToPGText(payload.ServiceDocumentation),
+		OpPolicyUri:                       conv.PtrToPGText(payload.OpPolicyURI),
+		OpTosUri:                          conv.PtrToPGText(payload.OpTosURI),
 		ScopesSupported:                   payload.ScopesSupported,
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,

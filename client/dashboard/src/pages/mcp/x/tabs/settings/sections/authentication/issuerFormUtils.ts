@@ -17,6 +17,13 @@ export type DiscoveredEndpoints = {
   // issuer accepts a Client ID Metadata Document URL as client_id. Persisted on
   // create/update so the CIMD client type can be offered for this issuer.
   clientIdMetadataDocumentSupported: boolean;
+  // RFC 8414 documentation URLs parsed from the discovery document. An empty
+  // string means the issuer advertised nothing usable — the update payload sends
+  // it through verbatim, which the server reads as "clear to NULL", so a URL the
+  // issuer stopped advertising does not linger.
+  serviceDocumentation: string;
+  opPolicyUri: string;
+  opTosUri: string;
 };
 
 // Matches the OAuth Proxy wizard's parseScopes helper: split on commas, trim,

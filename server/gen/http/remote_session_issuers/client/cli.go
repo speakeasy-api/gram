@@ -63,7 +63,7 @@ func BuildCreateRemoteSessionIssuerPayload(remoteSessionIssuersCreateRemoteSessi
 	{
 		err = json.Unmarshal([]byte(remoteSessionIssuersCreateRemoteSessionIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if body.LogoAssetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
@@ -99,6 +99,9 @@ func BuildCreateRemoteSessionIssuerPayload(remoteSessionIssuersCreateRemoteSessi
 		TokenEndpoint:                     body.TokenEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
 		JwksURI:                           body.JwksURI,
+		ServiceDocumentation:              body.ServiceDocumentation,
+		OpPolicyURI:                       body.OpPolicyURI,
+		OpTosURI:                          body.OpTosURI,
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
@@ -142,7 +145,7 @@ func BuildUpdateRemoteSessionIssuerPayload(remoteSessionIssuersUpdateRemoteSessi
 	{
 		err = json.Unmarshal([]byte(remoteSessionIssuersUpdateRemoteSessionIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.LogoAssetID != nil {
@@ -180,6 +183,9 @@ func BuildUpdateRemoteSessionIssuerPayload(remoteSessionIssuersUpdateRemoteSessi
 		TokenEndpoint:                     body.TokenEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
 		JwksURI:                           body.JwksURI,
+		ServiceDocumentation:              body.ServiceDocumentation,
+		OpPolicyURI:                       body.OpPolicyURI,
+		OpTosURI:                          body.OpTosURI,
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,

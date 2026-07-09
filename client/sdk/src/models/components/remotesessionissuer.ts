@@ -47,6 +47,14 @@ export type RemoteSessionIssuer = {
    */
   oidc: boolean;
   /**
+   * RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised.
+   */
+  opPolicyUri?: string | undefined;
+  /**
+   * RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
+   */
+  opTosUri?: string | undefined;
+  /**
    * The owning organization id. Empty for legacy rows not yet backfilled.
    */
   organizationId: string;
@@ -64,6 +72,10 @@ export type RemoteSessionIssuer = {
   registrationEndpoint?: string | undefined;
   responseTypesSupported?: Array<string> | undefined;
   scopesSupported?: Array<string> | undefined;
+  /**
+   * RFC 8414 service_documentation; developer documentation for the issuer. Null when not advertised.
+   */
+  serviceDocumentation?: string | undefined;
   /**
    * Project-unique slug.
    */
@@ -95,12 +107,15 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
     logo_asset_id: z.optional(z.string()),
     name: z.optional(z.string()),
     oidc: z.boolean(),
+    op_policy_uri: z.optional(z.string()),
+    op_tos_uri: z.optional(z.string()),
     organization_id: z.string(),
     passthrough: z.boolean(),
     project_id: z.string(),
     registration_endpoint: z.optional(z.string()),
     response_types_supported: z.optional(z.array(z.string())),
     scopes_supported: z.optional(z.array(z.string())),
+    service_documentation: z.optional(z.string()),
     slug: z.string(),
     token_endpoint: z.optional(z.string()),
     token_endpoint_auth_methods_supported: z.optional(z.array(z.string())),
@@ -118,11 +133,14 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       "grant_types_supported": "grantTypesSupported",
       "jwks_uri": "jwksUri",
       "logo_asset_id": "logoAssetId",
+      "op_policy_uri": "opPolicyUri",
+      "op_tos_uri": "opTosUri",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "registration_endpoint": "registrationEndpoint",
       "response_types_supported": "responseTypesSupported",
       "scopes_supported": "scopesSupported",
+      "service_documentation": "serviceDocumentation",
       "token_endpoint": "tokenEndpoint",
       "token_endpoint_auth_methods_supported":
         "tokenEndpointAuthMethodsSupported",
