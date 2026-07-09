@@ -652,9 +652,7 @@ function PromptPolicyEditor({
   const [scopeMode, setScopeMode] = useState<"messageTypes" | "cel">(
     policy?.scopeInclude ? "cel" : "messageTypes",
   );
-  const [action, setAction] = useState<PolicyAction>(
-    policy?.action === "block" ? "block" : "flag",
-  );
+  const [action, setAction] = useState<PolicyAction>(policy?.action ?? "flag");
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
   );
@@ -678,7 +676,7 @@ function PromptPolicyEditor({
       failOpen !== (policy.modelConfig?.failOpen ?? true) ||
       scopeInclude !== (policy.scopeInclude ?? "") ||
       scopeExempt !== (policy.scopeExempt ?? "") ||
-      action !== (policy.action === "block" ? "block" : "flag") ||
+      action !== (policy.action ?? "flag") ||
       userMessage !== (policy.userMessage ?? "") ||
       audienceType !==
         (policy.audienceType === "targeted" ? "targeted" : "everyone") ||
