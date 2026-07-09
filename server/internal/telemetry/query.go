@@ -16,6 +16,7 @@ import (
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -212,6 +213,7 @@ func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryR
 		RiskyChatIDs:  riskyChatIDs,
 		StartUnixNano: timeStart,
 		EndUnixNano:   timeEnd,
+		HookSources:   nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error running risk tokens query").LogError(ctx, s.logger)
@@ -248,6 +250,12 @@ func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryR
 // active-user counts, and attribution slices from the ClickHouse aggregates,
 // plus message-level stats (risk findings, tool-call messages) from Postgres
 // per-message token counts. The three backing queries run concurrently.
+//
+// Every attribute-metrics read is scoped to billing.ModelUsageSources — the
+// surfaces whose completions run through Gram's server, i.e. the population
+// billed as tokens under management. The unscoped aggregate is dominated by
+// agent-fleet telemetry (cache reads included) that is not billed — orders
+// of magnitude beyond the invoiced number.
 func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryTumDetailsPayload) (*telem_gen.TumDetailsResult, error) {
 	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, payload.ProjectID)
 	if err != nil {
@@ -255,11 +263,18 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	}
 	timeStart, timeEnd := scope.timeStart, scope.timeEnd
 
+	usageSources := billing.ModelUsageSources()
+	billedSources := make([]string, len(usageSources))
+	for i, src := range usageSources {
+		billedSources[i] = string(src)
+	}
+
 	chParams := repo.GetRiskTokensParams{
 		ProjectIDs:    scope.projectIDs,
 		RiskyChatIDs:  nil,
 		StartUnixNano: timeStart,
 		EndUnixNano:   timeEnd,
+		HookSources:   billedSources,
 	}
 
 	// Every dimension the chart's breakdown picker offers, so the details
@@ -317,10 +332,12 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 			// The attribute-metrics reads treat TimeEnd as inclusive, unlike
 			// the details/risk reads (<) — step inside the exclusive boundary
 			// so the next cycle's first hour stays out and rows match Totals.
-			TimeEnd:         timeEnd - 1,
-			GroupBy:         dim,
-			SortBy:          "total_tokens",
-			Filters:         nil,
+			TimeEnd: timeEnd - 1,
+			GroupBy: dim,
+			SortBy:  "total_tokens",
+			Filters: []repo.AttributeMetricsFilter{
+				{Dimension: "hook_source", Values: billedSources},
+			},
 			IntervalSeconds: riskTokensIntervalSeconds,
 		}
 		eg.Go(func() error {

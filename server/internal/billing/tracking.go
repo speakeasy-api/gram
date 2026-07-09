@@ -2,6 +2,7 @@ package billing
 
 import (
 	"context"
+	"slices"
 )
 
 type ToolCallType string
@@ -16,13 +17,35 @@ const (
 
 type ModelUsageSource string
 
-const (
-	ModelUsageSourcePlayground ModelUsageSource = "playground"
-	ModelUsageSourceAssistants ModelUsageSource = "assistants"
-	ModelUsageSourceElements   ModelUsageSource = "elements"
-	ModelUsageSourceGram       ModelUsageSource = "gram"
-	ModelUsageSourceSlack      ModelUsageSource = "slack"
+// modelUsageSources accumulates every source registered below, so the full
+// set can be iterated without a second hand-maintained list.
+var modelUsageSources []ModelUsageSource
+
+func registerModelUsageSource(s ModelUsageSource) ModelUsageSource {
+	modelUsageSources = append(modelUsageSources, s)
+	return s
+}
+
+// The surfaces whose LLM completions run through Gram's server — the
+// population billed as tokens under management. Registering a source here is
+// its single point of declaration: it names the identifier AND adds it to
+// ModelUsageSources, which the billing page's telemetry reads iterate to
+// scope analytics to the billed population. Completion telemetry is tagged
+// with these values (gram.hook.source); agent-fleet telemetry observed via
+// OTEL (claude-code, cursor, codex, …) is not billed and is never registered
+// here.
+var (
+	ModelUsageSourcePlayground = registerModelUsageSource("playground")
+	ModelUsageSourceAssistants = registerModelUsageSource("assistants")
+	ModelUsageSourceElements   = registerModelUsageSource("elements")
+	ModelUsageSourceGram       = registerModelUsageSource("gram")
+	ModelUsageSourceSlack      = registerModelUsageSource("slack")
 )
+
+// ModelUsageSources lists every registered completion surface.
+func ModelUsageSources() []ModelUsageSource {
+	return slices.Clone(modelUsageSources)
+}
 
 type ModelUsageEvent struct {
 	OrganizationSlug      string

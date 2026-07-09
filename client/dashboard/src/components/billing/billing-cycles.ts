@@ -89,6 +89,19 @@ export function periodFromCycle(cycle: BillingCycle): BillingPeriod {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+// The UTC calendar day of a daily bucket, as "YYYY-MM-DD" — the key the
+// billed per-day series (BillingCycle.days) aligns on. Bucket timestamps are
+// unix-nano strings that exceed Number precision; divide as BigInt first.
+export function bucketDateKey(nano: string): string {
+  try {
+    return new Date(Number(BigInt(nano) / 1_000_000n))
+      .toISOString()
+      .slice(0, 10);
+  } catch {
+    return "";
+  }
+}
+
 // The Unix epoch sits at a UTC midnight, so this holds exactly for UTC
 // day boundaries.
 function isUTCMidnight(d: Date): boolean {

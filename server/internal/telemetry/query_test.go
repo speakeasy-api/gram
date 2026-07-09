@@ -629,3 +629,83 @@ func TestQuery_TopNRollupIntoOther(t *testing.T) {
 	}
 	require.True(t, hasOther)
 }
+
+func TestQueryTumDetails_CountsOnlyGramManagedCompletions(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	ts := now.Add(-10 * time.Minute)
+
+	// A completion billed as tokens under management (runs through Gram's
+	// server) next to a Claude Code fleet api_request observed via OTEL.
+	// Fleet telemetry is not billed, so it must not appear anywhere in the
+	// billing details — not in totals, points, or any breakdown.
+	insertAttributeAssistantChatCompletionLog(t, ctx, projectID, ts, uuid.NewString(), 0.42, 1000, "anthropic/claude-4.6", "assistant@example.com", "Engineering", nil)
+	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 1.5, 999999, "claude-4.6", "claude-code", "fleet@example.com", "Engineering", nil)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// Wait until BOTH rows have materialized in the analytics aggregate (the
+	// unfiltered query sees the fleet row) so the exclusion assertions below
+	// cannot pass vacuously against a half-ingested view.
+	require.Eventually(t, func() bool {
+		res, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From:    from,
+			To:      to,
+			GroupBy: conv.PtrEmpty("hook_source"),
+			TopN:    10,
+			SortBy:  "total_tokens",
+		})
+		return err == nil && res != nil && len(res.Table) == 2
+	}, 10*time.Second, 200*time.Millisecond)
+
+	result, err := ti.service.QueryTumDetails(ctx, &gen.QueryTumDetailsPayload{
+		SessionToken: nil,
+		From:         from,
+		To:           to,
+		ProjectID:    nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.Totals)
+
+	require.Equal(t, int64(1000), result.Totals.TotalTokens, "totals must only count the billed completion")
+
+	var pointSum int64
+	for _, p := range result.Points {
+		pointSum += p.TotalTokens
+	}
+	require.Equal(t, int64(1000), pointSum, "daily points must only count the billed completion")
+
+	for _, b := range result.Breakdowns {
+		for _, row := range b.Rows {
+			require.LessOrEqual(t, row.TotalTokens, int64(1000),
+				"breakdown %s row %q leaked fleet tokens", b.Key, row.Value)
+			require.NotEqual(t, "fleet@example.com", row.Value,
+				"fleet row leaked into breakdown %s", b.Key)
+		}
+	}
+
+	sourceRows := map[string]int64{}
+	for _, b := range result.Breakdowns {
+		if b.Key != "hook_source" {
+			continue
+		}
+		for _, row := range b.Rows {
+			sourceRows[row.Value] = row.TotalTokens
+		}
+	}
+	require.Equal(t, map[string]int64{"assistants": 1000}, sourceRows,
+		"the source breakdown holds exactly the Gram surface")
+}

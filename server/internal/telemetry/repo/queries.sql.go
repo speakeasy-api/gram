@@ -5215,11 +5215,15 @@ var tumDetailsColumns = []string{
 // tumDetailsBase applies the shared source and slice filters for the billing
 // usage detail queries.
 func tumDetailsBase(sb squirrel.SelectBuilder, arg GetRiskTokensParams) squirrel.SelectBuilder {
-	return sb.
+	sb = sb.
 		From("attribute_metrics_summaries").
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
 		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
 		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano)
+	if len(arg.HookSources) > 0 {
+		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSources})
+	}
+	return sb
 }
 
 // GetTumDetailsByDay computes every billing-details measure per UTC day in a
@@ -5305,6 +5309,11 @@ type GetRiskTokensParams struct {
 	RiskyChatIDs  []string
 	StartUnixNano int64
 	EndUnixNano   int64
+	// HookSources restricts the TUM detail queries (attribute_metrics_summaries)
+	// to rows from these sources. It does not apply to the risk-token queries —
+	// their source, chat_token_summaries, only ever aggregates rows carrying
+	// gen_ai usage attributes, which is the same population this filter selects.
+	HookSources []string
 }
 
 // RiskTokensDayBucket is one UTC day of token usage split into risky vs total.

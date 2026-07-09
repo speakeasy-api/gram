@@ -2795,8 +2795,19 @@ async function seedObservabilityData(init: {
   const GROUP_POOL = ["platform", "growth", "enterprise", "core"];
   // The consuming surface (gram.hook.source) for chat rows — the hook_source
   // dimension on telemetry.query. (The hooks seeding block below has its own
-  // HOOK_SOURCES list for hook events.)
-  const CHAT_HOOK_SOURCES = ["claude-code", "cursor", "cowork", "codex"];
+  // HOOK_SOURCES list for hook events.) Mixes agent-fleet surfaces with
+  // gram-managed ones (playground/assistants) so the billing page — which
+  // scopes to gram-managed completion sources — has data locally. Known seed
+  // gap vs prod: fleet sessions here emit gen_ai.usage rows (billed), while
+  // prod fleet telemetry reports tokens in agent-native namespaces only.
+  const CHAT_HOOK_SOURCES = [
+    "claude-code",
+    "cursor",
+    "playground",
+    "cowork",
+    "assistants",
+    "codex",
+  ];
 
   // AI-account provider per consuming surface, used to stamp the gram.provider
   // attribute (the `provider` dimension) together with a deterministic
@@ -2813,6 +2824,9 @@ async function seedObservabilityData(init: {
     vscode: "openai",
     cursor: "cursor",
     cli: "cursor",
+    // Gram-managed surfaces (billed completions through gram-server).
+    playground: "anthropic",
+    assistants: "anthropic",
   };
   function classifyAccount(
     surface: string,

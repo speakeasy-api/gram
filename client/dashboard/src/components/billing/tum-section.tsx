@@ -29,6 +29,7 @@ import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { BillingCyclePicker } from "./billing-cycle-picker";
 import {
   type BillingPeriod,
+  bucketDateKey,
   cycleKey,
   cyclesFromTum,
   formatCycleName,
@@ -37,26 +38,30 @@ import {
 } from "./billing-cycles";
 import { stackModeFor } from "./breakdown-options";
 import { BreakdownPicker } from "./breakdown-picker";
-import { TokenUsagePanel } from "./token-usage-panel";
+import { type GroupSeries, TokenUsagePanel } from "./token-usage-panel";
 import { TumDetailsTable } from "./tum-details-table";
-import { riskPointsQuery, tumBreakdownQuery } from "./tum-queries";
+import { riskPointsQuery, tumDetailsQuery } from "./tum-queries";
 import { TumUsageCard } from "./tum-usage-card";
 
 // Org-wide token breakdown for one billing cycle: stacked daily tokens by a
 // selectable dimension, by token type, or by risk involvement — one unified
-// picker drives all three. Reads the same analytics aggregates as the costs
-// explorer (telemetry.query), scoped to the cycle. No data-availability
-// pruning of the dimension list: the availability probe
-// (telemetry.listAttributeKeys) is project-scoped and this page is org-level,
-// so it would filter against the wrong project — dimensions without data
-// simply chart as "(unset)".
+// picker drives all three. Everything renders from the billing details
+// request shared with the details table (the server scopes it to the billed
+// completion population), except the headline total, which prefers the
+// billed per-day series the usage endpoint returns — the exact numbers on
+// the usage card. No data-availability pruning of the dimension list:
+// dimensions without data simply chart as "(unset)".
 function TumTokenBreakdown({
   period,
   projectId,
+  billedDaysByDate,
   onSelectRange,
 }: {
   period: BillingPeriod;
   projectId: string | null;
+  // Billed tokens per UTC day ("YYYY-MM-DD" keys) across every known cycle;
+  // null when unavailable. Org-wide — unusable under a project filter.
+  billedDaysByDate: Map<string, number> | null;
   // Bar-click drill-down: narrows the page's period to the clicked bucket.
   onSelectRange: (start: Date, end: Date) => void;
 }): JSX.Element {
@@ -69,21 +74,36 @@ function TumTokenBreakdown({
   const stackBy = stackModeFor(breakdown);
 
   const scope = { client, orgId: organization.id, period, projectId };
-  const { data, isFetching } = useQuery(tumBreakdownQuery(scope, dimension));
-  // Shared with the details table's risk rows (same key — one request).
+  // Shared with the details table (same keys — one request each).
+  const { data, isFetching } = useQuery(tumDetailsQuery(scope));
   const { data: riskData } = useQuery(riskPointsQuery(scope));
 
-  // Attribution cuts hide the "" (not-applicable) group, same as the costs
-  // page — but only in the grouped view. The total / token-type / risk
-  // stackings sum the whole series and must keep the unattributed slice, or
-  // they'd undercount whenever the last-picked dimension was an attribution
-  // cut.
-  const series = useMemo(() => {
-    const ts = data?.timeseries ?? [];
-    return stackBy === "group" && isAttributionDim(dimension)
-      ? ts.filter((s) => s.groupValue !== "")
-      : ts;
-  }, [data, dimension, stackBy]);
+  const points = useMemo(() => data?.points ?? [], [data]);
+
+  // The selected dimension's rows. Attribution cuts hide the ""
+  // (not-applicable) row, same as the details table below.
+  const groups = useMemo<GroupSeries[]>(() => {
+    const rows = data?.breakdowns.find((b) => b.key === dimension)?.rows ?? [];
+    const visible = isAttributionDim(dimension)
+      ? rows.filter((r) => r.value !== "")
+      : rows;
+    return visible.map((r) => ({
+      label: r.value === "" ? "(unset)" : r.value,
+      series: r.series,
+    }));
+  }, [data, dimension]);
+
+  // The billed series aligned to the points grid. All-zero means the billed
+  // days don't cover this window (e.g. a synthesized active cycle without
+  // history) — fall back to the details totals rather than charting zeros
+  // under a non-zero usage card.
+  const billedSeries = useMemo(() => {
+    if (projectId != null || billedDaysByDate == null) return null;
+    const series = points.map(
+      (p) => billedDaysByDate.get(bucketDateKey(p.bucketTimeUnixNano)) ?? 0,
+    );
+    return series.some((v) => v > 0) ? series : null;
+  }, [points, billedDaysByDate, projectId]);
 
   const riskPoints = riskData?.points ?? null;
 
@@ -93,7 +113,7 @@ function TumTokenBreakdown({
       showRisk={riskPoints != null}
       onChange={(value) => {
         setBreakdown(value);
-        // Only actual dimensions feed the query's group_by; the special modes
+        // Only actual dimensions pick a breakdown; the special modes
         // (total / token type / risk) keep the last-picked dimension.
         if (stackModeFor(value) === "group") {
           setDimension(value as Dimension);
@@ -104,7 +124,9 @@ function TumTokenBreakdown({
 
   return (
     <TokenUsagePanel
-      series={series}
+      points={points}
+      groups={groups}
+      billedSeries={billedSeries}
       stackBy={stackBy}
       breakdownPicker={breakdownPicker}
       riskPoints={riskPoints}
@@ -186,6 +208,16 @@ export const TumUsageSection = (): JSX.Element => {
   };
 
   const monthlyLimit = tum?.monthlyTokenLimit ?? null;
+
+  // Billed tokens per UTC day across every known cycle, for the chart's
+  // headline total — the same numbers the usage card sums.
+  const billedDaysByDate = useMemo(() => {
+    const byDate = new Map<string, number>();
+    for (const c of cycles) {
+      for (const d of c.days) byDate.set(d.date, d.tokens);
+    }
+    return byDate.size > 0 ? byDate : null;
+  }, [cycles]);
 
   // The effective period. A custom range that happens to match a cycle's
   // exact boundaries IS that cycle (billed normalization applies).
@@ -325,6 +357,7 @@ export const TumUsageSection = (): JSX.Element => {
                 key={viewNonce}
                 period={period}
                 projectId={projectId}
+                billedDaysByDate={billedDaysByDate}
                 onSelectRange={handleBarSelect}
               />
             </div>

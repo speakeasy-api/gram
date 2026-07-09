@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { isAttributionDim } from "@/pages/costs/taxonomy";
-import { type BillingPeriod } from "./billing-cycles";
+import { type BillingPeriod, bucketDateKey } from "./billing-cycles";
 import {
   breakdownLabel,
   CHART_COLORS,
@@ -87,19 +87,6 @@ const TOOL_MESSAGE_ROW: MeasureRowSpec = {
   color: "#94a3b8",
   field: "toolMessageTokens",
 };
-
-// The UTC calendar day of a daily bucket, as "YYYY-MM-DD" — the key the
-// billed per-day series (BillingCycle.days) aligns on. Bucket timestamps are
-// unix-nano strings that exceed Number precision; divide as BigInt first.
-function bucketDate(nano: string): string {
-  try {
-    return new Date(Number(BigInt(nano) / 1_000_000n))
-      .toISOString()
-      .slice(0, 10);
-  } catch {
-    return "";
-  }
-}
 
 // Row color for a dimension value — same palette walk as the chart's stacks,
 // so a value's dot matches its chart series color.
@@ -457,7 +444,7 @@ export function TumDetailsTable({
     if (cycle.days.length > 0) {
       const billedByDate = new Map(cycle.days.map((d) => [d.date, d.tokens]));
       billed = points.map(
-        (p) => billedByDate.get(bucketDate(p.bucketTimeUnixNano)) ?? 0,
+        (p) => billedByDate.get(bucketDateKey(p.bucketTimeUnixNano)) ?? 0,
       );
     } else if (billedCycle) {
       billed = points.map((p) => p.totalTokens * billedScale);
