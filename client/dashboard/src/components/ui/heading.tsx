@@ -29,16 +29,46 @@ export function Heading({
   let base = null;
 
   const baseClasses = cn("font-normal capitalize", className);
+  // Page and section titles set in the display serif (Tobias Thin), per the
+  // Claude Design product reference; h4-h6 stay in the interface sans.
+  const displayClasses = cn("font-display font-thin capitalize", className);
 
   switch (variant) {
     case "h1":
-      base = <h1 className={cn("text-3xl", baseClasses)}>{children}</h1>;
+      base = (
+        <h1
+          className={cn(
+            "text-[2.5rem] leading-[0.95] tracking-[-0.02em]",
+            displayClasses,
+          )}
+        >
+          {children}
+        </h1>
+      );
       break;
     case "h2":
-      base = <h2 className={cn("text-2xl", baseClasses)}>{children}</h2>;
+      base = (
+        <h2
+          className={cn(
+            "text-3xl leading-[0.98] tracking-[-0.02em]",
+            displayClasses,
+          )}
+        >
+          {children}
+        </h2>
+      );
       break;
     case "h3":
-      base = <h3 className={cn("text-xl", baseClasses)}>{children}</h3>;
+      base = (
+        <h3
+          className={cn(
+            "text-2xl leading-none tracking-[-0.015em]",
+            displayClasses,
+          )}
+        >
+          {children}
+        </h3>
+      );
       break;
     case "h4":
       base = <h4 className={cn("text-lg", baseClasses)}>{children}</h4>;
