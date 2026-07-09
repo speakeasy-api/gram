@@ -27,6 +27,8 @@ type Endpoints struct {
 	GetObservabilityOverview  goa.Endpoint
 	GetProjectOverview        goa.Endpoint
 	Query                     goa.Endpoint
+	QueryRiskTokens           goa.Endpoint
+	QueryTumDetails           goa.Endpoint
 	ListSessions              goa.Endpoint
 	ListFilterOptions         goa.Endpoint
 	ListAttributeKeys         goa.Endpoint
@@ -53,6 +55,8 @@ func NewEndpoints(s Service) *Endpoints {
 		GetObservabilityOverview:  NewGetObservabilityOverviewEndpoint(s, a.APIKeyAuth),
 		GetProjectOverview:        NewGetProjectOverviewEndpoint(s, a.APIKeyAuth),
 		Query:                     NewQueryEndpoint(s, a.APIKeyAuth),
+		QueryRiskTokens:           NewQueryRiskTokensEndpoint(s, a.APIKeyAuth),
+		QueryTumDetails:           NewQueryTumDetailsEndpoint(s, a.APIKeyAuth),
 		ListSessions:              NewListSessionsEndpoint(s, a.APIKeyAuth),
 		ListFilterOptions:         NewListFilterOptionsEndpoint(s, a.APIKeyAuth),
 		ListAttributeKeys:         NewListAttributeKeysEndpoint(s, a.APIKeyAuth),
@@ -77,6 +81,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetObservabilityOverview = m(e.GetObservabilityOverview)
 	e.GetProjectOverview = m(e.GetProjectOverview)
 	e.Query = m(e.Query)
+	e.QueryRiskTokens = m(e.QueryRiskTokens)
+	e.QueryTumDetails = m(e.QueryTumDetails)
 	e.ListSessions = m(e.ListSessions)
 	e.ListFilterOptions = m(e.ListFilterOptions)
 	e.ListAttributeKeys = m(e.ListAttributeKeys)
@@ -709,6 +715,52 @@ func NewQueryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpo
 			return nil, err
 		}
 		return s.Query(ctx, p)
+	}
+}
+
+// NewQueryRiskTokensEndpoint returns an endpoint function that calls the
+// method "queryRiskTokens" of service "telemetry".
+func NewQueryRiskTokensEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*QueryRiskTokensPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.QueryRiskTokens(ctx, p)
+	}
+}
+
+// NewQueryTumDetailsEndpoint returns an endpoint function that calls the
+// method "queryTumDetails" of service "telemetry".
+func NewQueryTumDetailsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*QueryTumDetailsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.QueryTumDetails(ctx, p)
 	}
 }
 

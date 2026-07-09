@@ -91,4 +91,5 @@ __pycache__/
 *.py[cod]
 *$py.class
 .uv-cache
-DNO384_HANDOFF.md
+
+.playwright-mcp

@@ -5,6 +5,46 @@ import process from "node:process";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+
+// Manually grouped vendor chunks. CAUTION: never group a package whose dist
+// contains a top-level `await import(...)` (check before adding). Grouping
+// pulls the package's shared internals into the group chunk, so the awaited
+// sub-module ends up statically importing the very chunk that is suspended
+// awaiting it — a silent module-evaluation deadlock that blank-screens the
+// app. This took prod down for @speakeasy-api/moonshine (its dist top-level
+// awaits ./speakeasy-logo-*.mjs), which is why it is absent from this list;
+// Rolldown's automatic chunking handles it without creating the cycle.
+const manualChunkGroups: [string, string[]][] = [
+  ["lucide-react", ["lucide-react"]],
+  [
+    "three",
+    [
+      "@react-three/drei",
+      "@react-three/fiber",
+      "@react-three/postprocessing",
+      "three",
+    ],
+  ],
+  [
+    "externals",
+    [
+      "posthog-js",
+      "react",
+      "react-dom",
+      "react-error-boundary",
+      "react-router",
+      "sonner",
+      "zod",
+    ],
+  ],
+];
+
+function packagePathRegex(packages: string[]): RegExp {
+  const alternatives = packages.map((pkg) =>
+    pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replaceAll("/", "[\\\\/]"),
+  );
+  return new RegExp(`node_modules[\\\\/](?:${alternatives.join("|")})[\\\\/]`);
+}
 // https://vite.dev/config/
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
@@ -73,46 +113,40 @@ export default defineConfig(({ command }) => {
       __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
     },
     build: {
-      target: "es2022",
       sourcemap: true,
-      rollupOptions: {
+      rolldownOptions: {
         input: {
           main: path.resolve(__dirname, "index.html"),
         },
         output: {
-          manualChunks: {
-            "lucide-react": ["lucide-react"],
-            moonshine: ["@speakeasy-api/moonshine"],
-            three: [
-              "@react-three/drei",
-              "@react-three/fiber",
-              "@react-three/postprocessing",
-              "three",
-            ],
-            externals: [
-              "posthog-js",
-              "react",
-              "react-dom",
-              "react-error-boundary",
-              "react-router",
-              "sonner",
-              "zod",
-            ],
+          codeSplitting: {
+            groups: manualChunkGroups.map(([name, packages]) => ({
+              name,
+              test: packagePathRegex(packages),
+            })),
           },
         },
       },
     },
     worker: {
       format: "es",
-    },
-    esbuild: {
-      target: "es2022",
+      // The worker bundles are pure vendor code (monaco's ts.worker map alone
+      // is ~16MB, ~28MB across all workers) that we never debug in production,
+      // so skip their sourcemaps while keeping maps for app code. This must be
+      // an outputOptions hook: Vite hard-sets `sourcemap` to build.sourcemap
+      // AFTER spreading worker.rolldownOptions.output, so the plain option is
+      // silently ignored, while plugin outputOptions hooks run last.
+      plugins: () => [
+        {
+          name: "drop-worker-sourcemaps",
+          outputOptions(options) {
+            return { ...options, sourcemap: false };
+          },
+        },
+      ],
     },
     optimizeDeps: {
       include: ["monaco-editor"],
-      esbuildOptions: {
-        target: "es2022",
-      },
     },
     server: {
       host: true,

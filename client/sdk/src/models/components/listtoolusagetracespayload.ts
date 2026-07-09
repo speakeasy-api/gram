@@ -31,6 +31,20 @@ export type ListToolUsageTracesPayloadSort = ClosedEnum<
 >;
 
 /**
+ * Tool usage trace outcome
+ */
+export const Statuses = {
+  Error: "error",
+  Success: "success",
+  Blocked: "blocked",
+  Pending: "pending",
+} as const;
+/**
+ * Tool usage trace outcome
+ */
+export type Statuses = ClosedEnum<typeof Statuses>;
+
+/**
  * Tool usage target type
  */
 export const ListToolUsageTracesPayloadTargetTypes = {
@@ -92,6 +106,10 @@ export type ListToolUsageTracesPayload = {
    */
   sort?: ListToolUsageTracesPayloadSort | undefined;
   /**
+   * Trace outcomes to include (error, success, blocked, pending). Empty means all.
+   */
+  statuses?: Array<Statuses> | undefined;
+  /**
    * Target types to include. Empty means all target types.
    */
   targetTypes?: Array<ListToolUsageTracesPayloadTargetTypes> | undefined;
@@ -111,6 +129,11 @@ export const ListToolUsageTracesPayloadSort$outboundSchema: z.ZodMiniEnum<
 > = z.enum(ListToolUsageTracesPayloadSort);
 
 /** @internal */
+export const Statuses$outboundSchema: z.ZodMiniEnum<typeof Statuses> = z.enum(
+  Statuses,
+);
+
+/** @internal */
 export const ListToolUsageTracesPayloadTargetTypes$outboundSchema:
   z.ZodMiniEnum<typeof ListToolUsageTracesPayloadTargetTypes> = z.enum(
     ListToolUsageTracesPayloadTargetTypes,
@@ -128,6 +151,7 @@ export type ListToolUsageTracesPayload$Outbound = {
   query?: string | undefined;
   shadow_server_names?: Array<string> | undefined;
   sort: string;
+  statuses?: Array<string> | undefined;
   target_types?: Array<string> | undefined;
   to: string;
   user_filters?: Array<ToolUsageUserFilter$Outbound> | undefined;
@@ -149,6 +173,7 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
     query: z.optional(z.string()),
     shadowServerNames: z.optional(z.array(z.string())),
     sort: z._default(ListToolUsageTracesPayloadSort$outboundSchema, "desc"),
+    statuses: z.optional(z.array(Statuses$outboundSchema)),
     targetTypes: z.optional(
       z.array(ListToolUsageTracesPayloadTargetTypes$outboundSchema),
     ),

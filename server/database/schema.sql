@@ -108,6 +108,40 @@ ON billing_metadata (organization_id);
 
 COMMENT ON COLUMN billing_metadata.tunneled_mcp_server_limit IS 'Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.';
 
+-- Durable per-billing-cycle "tokens under management" (TUM) snapshots for an
+-- organization. ClickHouse telemetry expires (telemetry_logs after 90 days,
+-- chat_token_summaries after 730 days), so rows here are the permanent record
+-- of each cycle's usage for billing, overage math, and admin reporting.
+CREATE TABLE IF NOT EXISTS billing_cycle_usage (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  -- [cycle_start, cycle_end) boundaries computed from
+  -- billing_metadata.billing_cycle_anchor_day at snapshot time.
+  cycle_start timestamptz NOT NULL,
+  cycle_end timestamptz NOT NULL,
+
+  -- Total tokens under management observed for the cycle.
+  tum_tokens BIGINT NOT NULL DEFAULT 0,
+
+  -- Set once the cycle has closed plus an ingest grace period, after which the
+  -- row is treated as immutable. NULL while the cycle is still being refreshed.
+  finalized_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT billing_cycle_usage_pkey PRIMARY KEY (id),
+  CONSTRAINT billing_cycle_usage_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT billing_cycle_usage_cycle_bounds_check CHECK (cycle_end > cycle_start),
+  -- Token counts originate from client-supplied OTEL attributes; a negative
+  -- sum must never become part of the permanent billing record.
+  CONSTRAINT billing_cycle_usage_tum_tokens_check CHECK (tum_tokens >= 0)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS billing_cycle_usage_organization_id_cycle_start_key
+ON billing_cycle_usage (organization_id, cycle_start);
+
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_slug_key
 ON organization_metadata (slug);
 
@@ -317,6 +351,26 @@ CREATE TABLE IF NOT EXISTS api_keys (
 CREATE UNIQUE INDEX IF NOT EXISTS api_keys_organization_id_name_key
 ON api_keys (organization_id, name)
 WHERE deleted IS FALSE;
+
+-- Tracks which users are actively running the Speakeasy device agent. The agent
+-- polls agent.getPlugins every ~60s carrying the enrolled user's email; that
+-- email is the only per-user signal (the org-scoped API key is shared across the
+-- fleet), so we key last-seen on (organization_id, email).
+CREATE TABLE IF NOT EXISTS device_agent_syncs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_agent_syncs_pkey PRIMARY KEY (id),
+  CONSTRAINT device_agent_syncs_org_email_key UNIQUE (organization_id, email),
+  CONSTRAINT device_agent_syncs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -763,6 +817,7 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
   session_duration INTERVAL NOT NULL,
+  classification TEXT NOT NULL DEFAULT 'custom' CHECK (classification IN ('custom', 'project_default_idp')), -- 'project_default_idp' is the auto-provisioned implicit Gram issuer for private servers; 'custom' is user-configured
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -776,6 +831,11 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_slug_key
 ON user_session_issuers (project_id, slug)
 WHERE deleted IS FALSE;
+
+-- At most one auto-provisioned project-default issuer per project.
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_default_key
+ON user_session_issuers (project_id)
+WHERE classification = 'project_default_idp' AND deleted IS FALSE;
 
 -- User Session Clients are MCP Clients that have registered themselves with Gram
 -- See: https://datatracker.ietf.org/doc/html/rfc6749#section-1.1
@@ -885,6 +945,9 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   token_endpoint TEXT,
   registration_endpoint TEXT,
   jwks_uri TEXT,
+  service_documentation TEXT,
+  op_policy_uri TEXT,
+  op_tos_uri TEXT,
 
   scopes_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
@@ -901,6 +964,10 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
 
   name TEXT CHECK (name IS NULL OR name <> ''),
   logo_asset_id uuid,
+
+  -- Manually set (not RFC 8414) link to instructions for setting up an OAuth
+  -- client with this issuer's provider, surfaced to customers.
+  client_setup_documentation_url TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1238,6 +1305,15 @@ CREATE TABLE IF NOT EXISTS chats (
 CREATE UNIQUE INDEX IF NOT EXISTS chats_org_external_chat_id_key
 ON chats (organization_id, external_chat_id)
 WHERE external_chat_id IS NOT NULL;
+
+-- Every chat listing (chat.list) drives off project_id + the not-deleted
+-- predicate; without this the planner seq-scans the whole (cross-project) chats
+-- table, which pushes large orgs' listings past statement_timeout. Kept
+-- non-partial so it also backs the ON DELETE CASCADE from projects, whose
+-- internal lookup spans all rows (including soft-deleted) and a
+-- deleted-IS-FALSE partial index could not serve.
+CREATE INDEX IF NOT EXISTS chats_project_id_idx
+ON chats (project_id);
 
 CREATE TABLE IF NOT EXISTS assistants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1876,6 +1952,8 @@ ON device_owners (organization_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_workos_id_key
 ON users (workos_id);
+
+COMMENT ON COLUMN users.admin IS 'Maps to the application''s platform_admin concept: TRUE marks a Gram/Speakeasy platform admin. Distinct from the org-level admin role.';
 
 CREATE TABLE IF NOT EXISTS directory_groups (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -3600,6 +3678,11 @@ CREATE TABLE IF NOT EXISTS risk_policy_challenges (
   entity TEXT,
   rule_id TEXT,
 
+  -- SHA-256 (hex) of the exact scanned call input. Scopes an acknowledgement to
+  -- one concrete call, so an ack clears only an identical retry — not every call
+  -- of the same tool under the same policy. NULL for non-call-scoped rows.
+  call_fingerprint TEXT,
+
   challenged_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   acknowledged_at timestamptz,
   -- When an acknowledgement stops suppressing re-challenge (the "remember" window).
@@ -3620,7 +3703,7 @@ CREATE TABLE IF NOT EXISTS risk_policy_challenges (
 COMMENT ON TABLE risk_policy_challenges IS 'Interactive warn/challenge lifecycle for warn-action policies: a warn match records a challenged row; the user self-service acknowledges to proceed on retry. Never stores the raw matched value.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_challenges_current_key
-ON risk_policy_challenges (project_id, user_id, risk_policy_id, tool_name) NULLS NOT DISTINCT
+ON risk_policy_challenges (project_id, user_id, risk_policy_id, tool_name, call_fingerprint) NULLS NOT DISTINCT
 WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS risk_policy_challenges_project_status_updated_idx
@@ -3628,7 +3711,7 @@ ON risk_policy_challenges (project_id, status, updated_at DESC)
 WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS risk_policy_challenges_active_ack_idx
-ON risk_policy_challenges (project_id, user_id, risk_policy_id, tool_name, expires_at)
+ON risk_policy_challenges (project_id, user_id, risk_policy_id, tool_name, call_fingerprint, expires_at)
 WHERE deleted IS FALSE AND status = 'acknowledged';
 
 -- Non-partial indexes backing the ON DELETE CASCADE foreign keys. The RI

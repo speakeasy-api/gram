@@ -28,7 +28,7 @@ const (
 	// "trigger every interval unless one is already running" behaviour without a
 	// separate triggering workflow: a run that outlasts the interval just defers
 	// the next tick.
-	pluginGeneratorRolloutInterval         = 1 * time.Minute
+	pluginGeneratorRolloutInterval         = 5 * time.Minute
 	pluginGeneratorRolloutDefaultBatchSize = int32(100)
 	pluginGeneratorRolloutConcurrency      = 5
 )

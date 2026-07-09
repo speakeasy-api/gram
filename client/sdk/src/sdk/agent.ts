@@ -3,12 +3,18 @@
  */
 
 import { agentGetPlugins } from "../funcs/agentGetPlugins.js";
+import { agentListSyncedUsers } from "../funcs/agentListSyncedUsers.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { GetPluginsResult } from "../models/components/getpluginsresult.js";
+import { ListSyncedUsersResult } from "../models/components/listsyncedusersresult.js";
 import {
   GetAgentPluginsRequest,
   GetAgentPluginsSecurity,
 } from "../models/operations/getagentplugins.js";
+import {
+  ListSyncedAgentUsersRequest,
+  ListSyncedAgentUsersSecurity,
+} from "../models/operations/listsyncedagentusers.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Agent extends ClientSDK {
@@ -24,6 +30,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetPluginsResult> {
     return unwrapAsync(agentGetPlugins(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listSyncedUsers agent
+   *
+   * @remarks
+   * List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.
+   */
+  async listSyncedUsers(
+    request?: ListSyncedAgentUsersRequest | undefined,
+    security?: ListSyncedAgentUsersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListSyncedUsersResult> {
+    return unwrapAsync(agentListSyncedUsers(
       this,
       request,
       security,

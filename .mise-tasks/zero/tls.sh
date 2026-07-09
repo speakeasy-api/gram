@@ -102,6 +102,83 @@ trust_local_ca() {
 
 
 
+run_privileged() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+  else
+    return 1
+  fi
+}
+
+install_certutil() {
+  # Best-effort install of certutil (NSS tools) using the available package manager.
+  if command -v apt-get >/dev/null 2>&1; then
+    run_privileged apt-get update -qq || true
+    run_privileged apt-get install -y -qq libnss3-tools
+  elif command -v dnf >/dev/null 2>&1; then
+    run_privileged dnf install -y nss-tools
+  elif command -v yum >/dev/null 2>&1; then
+    run_privileged yum install -y nss-tools
+  elif command -v pacman >/dev/null 2>&1; then
+    run_privileged pacman -S --noconfirm nss
+  elif command -v zypper >/dev/null 2>&1; then
+    run_privileged zypper install -y mozilla-nss-tools
+  elif command -v apk >/dev/null 2>&1; then
+    run_privileged apk add --no-cache nss-tools
+  else
+    return 1
+  fi
+}
+
+browser_trusts_local_ca() {
+  # True when the mkcert root CA is already registered in the browser NSS store.
+  # mkcert installs it under the nickname "mkcert development CA <serial>".
+  command -v certutil >/dev/null 2>&1 || return 1
+  local nssdb="$HOME/.pki/nssdb"
+  { [ -e "$nssdb/cert9.db" ] || [ -e "$nssdb/cert8.db" ]; } || return 1
+  certutil -L -d "sql:$nssdb" 2>/dev/null | grep -q "mkcert development CA"
+}
+
+configure_linux_browser_trust() {
+  # Chromium/Chrome and Firefox on Linux validate certificates against the NSS
+  # database (~/.pki/nssdb), not the system trust store. `mkcert -install`
+  # silently skips this store when `certutil` is missing, leaving browsers to
+  # distrust the local cert. Ensure certutil and the NSS db exist so the
+  # subsequent `mkcert -install` can register the root CA for browsers.
+  [ "$(uname -s)" = "Linux" ] || return 0
+
+  # Only run the browser-trust setup if the CA isn't already trusted.
+  if browser_trusts_local_ca; then
+    echo "Local CA already trusted by browsers (NSS store): skipping browser trust setup." >&2
+    return 0
+  fi
+
+  if ! command -v certutil >/dev/null 2>&1; then
+    echo "certutil (NSS tools) not found: attempting to install for browser trust..." >&2
+    if ! install_certutil >/dev/null 2>&1 || ! command -v certutil >/dev/null 2>&1; then
+      echo "WARN: could not install certutil automatically." >&2
+      echo "      Browsers (Chrome/Chromium/Firefox) may still distrust the local cert." >&2
+      echo "      Install it manually, then re-run './zero' or 'mise run zero:tls':" >&2
+      echo "        Debian/Ubuntu: sudo apt-get install libnss3-tools" >&2
+      echo "        Fedora/RHEL:   sudo dnf install nss-tools" >&2
+      echo "        Arch:          sudo pacman -S nss" >&2
+      echo "        Alpine:        sudo apk add nss-tools" >&2
+      return 0
+    fi
+  fi
+
+  # mkcert only installs into NSS databases that already exist; create the
+  # shared user db if it's missing so the CA gets registered for browsers.
+  nssdb="$HOME/.pki/nssdb"
+  if [ ! -e "$nssdb/cert9.db" ] && [ ! -e "$nssdb/cert8.db" ]; then
+    ensure_dir "$nssdb"
+    certutil -d "sql:$nssdb" -N --empty-password >/dev/null 2>&1 \
+      || echo "WARN: failed to initialize NSS database at $nssdb" >&2
+  fi
+}
+
 found_keypair() {
   [ -f "$CERT_PATH" ] && [ -f "$KEY_PATH" ]
 }
@@ -117,7 +194,6 @@ cert_names() {
     "localhost" \
     "127.0.0.1" \
     "::1" \
-    "gram.local" \
     | awk 'NF && !seen[$0]++'
 }
 
@@ -150,6 +226,7 @@ main() {
 
   check_command mkcert
   turn_on_tls
+  configure_linux_browser_trust
   trust_local_ca
   gen_keypair
 }

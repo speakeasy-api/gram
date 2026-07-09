@@ -116,12 +116,14 @@ interactive_only mise run zero:openrouter
 interactive_only mise run zero:idp
 interactive_only mise run zero:melange
 interactive_only mise run zero:fly
-interactive_only mise run zero:local-proxy
 mise run zero:encryption
 mise run zero:tls
 
 echo -e "\n⏳ Building internal SDK"
 mise run build:internal-sdk
+
+echo -e "\n⏳ Building elements"
+mise run build:elements
 
 echo -e "\n⏳ Updating VS Code and Cursor editor settings"
 mise run install:vscode

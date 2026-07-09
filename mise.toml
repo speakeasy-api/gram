@@ -18,7 +18,7 @@ gum = "0.17.0"
 jq = "1.8.2"
 melange = "0.55.0"
 nodejs = "24.16.0"
-"github:pnpm/pnpm" = "11.9.0"
+"github:pnpm/pnpm" = "11.10.0"
 watchexec = "2.5.1"
 uv = "0.11.25"
 yq = "4.53.3"
@@ -108,13 +108,6 @@ GRAM_HOST = "localhost" # Only needed for local development. In production, you 
 GRAM_SITE_PORT = "5173"
 GRAM_SITE_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SITE_PORT}}"
 GRAM_SERVER_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SERVER_PORT}}"
-## Local proxy uses one gram.local origin while forwarding to the real dev ports.
-GRAM_LOCAL_PROXY_HOST = "gram.local"
-GRAM_LOCAL_PROXY_BIND_ADDRESS = "127.0.0.1"
-GRAM_LOCAL_PROXY_PORT = "8443"
-GRAM_LOCAL_PROXY_URL = "https://{{env.GRAM_LOCAL_PROXY_HOST}}:{{env.GRAM_LOCAL_PROXY_PORT}}"
-GRAM_SERVER_BACKEND_URL = "https://localhost:{{env.GRAM_SERVER_PORT}}"
-GRAM_SITE_BACKEND_URL = "https://localhost:{{env.GRAM_SITE_PORT}}"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
 ## The following variable is used to encrypt env vars stored in the database.
@@ -196,7 +189,7 @@ GRAM_LOG_PRETTY = 1
 ## This config is used by the Elements SDK and CLI to point to the correct Gram
 ## API server
 GRAM_API_URL = "{{env.GRAM_SERVER_URL}}"
-VITE_DEV_HOSTNAMES = "localhost,gram.local"
+VITE_DEV_HOSTNAMES = "localhost"
 TEMPORAL_WEB_PORT = "8233"
 ## If you want to enable/disable certain feature flags during local development,
 ## copy the following line to mise.local.toml and point to a CSV file containing

@@ -39,6 +39,7 @@ import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
+import RiskPolicyChallengeAcknowledge from "./pages/risk-policy-challenge/Acknowledge";
 import { BlockPage } from "./pages/blocks/BlockDetail";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
@@ -143,6 +144,7 @@ function AppContent() {
         organizationId={cliFlow.organizationId}
         codeChallenge={cliFlow.codeChallenge}
         codeChallengeMethod={cliFlow.codeChallengeMethod}
+        callbackMethod={cliFlow.callbackMethod}
       />
     );
   }
@@ -310,6 +312,10 @@ const RouteProvider = () => {
           path="/risk-policy-bypass/request"
           element={<ShadowMCPRequestAccess />}
         />
+        <Route
+          path="/risk-policy-challenge/acknowledge"
+          element={<RiskPolicyChallengeAcknowledge />}
+        />
         <Route path="/blocks/:id" element={<BlockPage />} />
         <Route path="/" element={<LoginCheck />}>
           <Route path=":orgSlug/projects/:projectSlug">
@@ -434,6 +440,7 @@ type LocalAuthFlow = {
   organizationId: string | null;
   codeChallenge: string | null;
   codeChallengeMethod: string | null;
+  callbackMethod: "get" | "post";
 };
 
 function useCliAuthFlow(): LocalAuthFlow | null {
@@ -447,6 +454,7 @@ function useCliAuthFlow(): LocalAuthFlow | null {
   const organizationId = searchParams.get("organization_id");
   const codeChallenge = searchParams.get("code_challenge");
   const codeChallengeMethod = searchParams.get("code_challenge_method");
+  const callbackMethod = searchParams.get("callback_method");
 
   if (location.pathname === "/" && fromCli && cliCallbackUrl) {
     return {
@@ -456,6 +464,7 @@ function useCliAuthFlow(): LocalAuthFlow | null {
       organizationId,
       codeChallenge,
       codeChallengeMethod,
+      callbackMethod: callbackMethod === "post" ? "post" : "get",
     };
   }
 

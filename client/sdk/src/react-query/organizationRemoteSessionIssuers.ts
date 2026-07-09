@@ -254,7 +254,7 @@ export function invalidateOrganizationRemoteSessionIssuers(
     queryKey: [
       "@gram/client",
       "organizationRemoteSessionIssuers",
-      "listIssuers",
+      "list",
       ...queryKeyBase,
     ],
   });
@@ -266,10 +266,6 @@ export function invalidateAllOrganizationRemoteSessionIssuers(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/client",
-      "organizationRemoteSessionIssuers",
-      "listIssuers",
-    ],
+    queryKey: ["@gram/client", "organizationRemoteSessionIssuers", "list"],
   });
 }

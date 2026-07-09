@@ -56,7 +56,7 @@ export type OrganizationRemoteSessionClientDeletePreflightQueryError =
   | SDKValidationError;
 
 /**
- * getClientDeletePreflight organizationRemoteSessionIssuers
+ * getClientDeletePreflight organizationRemoteSessionClients
  *
  * @remarks
  * Authoritative impact summary for deleting a remote_session_client: associated session count and affected MCP server names. Requires org:read.
@@ -87,7 +87,7 @@ export function useOrganizationRemoteSessionClientDeletePreflight(
 }
 
 /**
- * getClientDeletePreflight organizationRemoteSessionIssuers
+ * getClientDeletePreflight organizationRemoteSessionClients
  *
  * @remarks
  * Authoritative impact summary for deleting a remote_session_client: associated session count and affected MCP server names. Requires org:read.
@@ -152,8 +152,8 @@ export function invalidateOrganizationRemoteSessionClientDeletePreflight(
     ...filters,
     queryKey: [
       "@gram/client",
-      "organizationRemoteSessionIssuers",
-      "getClientDeletePreflight",
+      "organizationRemoteSessionClients",
+      "getDeletePreflight",
       ...queryKeyBase,
     ],
   });
@@ -167,8 +167,8 @@ export function invalidateAllOrganizationRemoteSessionClientDeletePreflight(
     ...filters,
     queryKey: [
       "@gram/client",
-      "organizationRemoteSessionIssuers",
-      "getClientDeletePreflight",
+      "organizationRemoteSessionClients",
+      "getDeletePreflight",
     ],
   });
 }

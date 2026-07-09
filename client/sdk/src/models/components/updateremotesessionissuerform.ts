@@ -39,6 +39,14 @@ export type UpdateRemoteSessionIssuerForm = {
    */
   name?: string | undefined;
   oidc?: boolean | undefined;
+  /**
+   * Set or clear RFC 8414 op_policy_uri. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
+   */
+  opPolicyUri?: string | undefined;
+  /**
+   * Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
+   */
+  opTosUri?: string | undefined;
   passthrough?: boolean | undefined;
   /**
    * Upstream RFC 7591 registration endpoint.
@@ -46,6 +54,10 @@ export type UpdateRemoteSessionIssuerForm = {
   registrationEndpoint?: string | undefined;
   responseTypesSupported?: Array<string> | undefined;
   scopesSupported?: Array<string> | undefined;
+  /**
+   * Set or clear RFC 8414 service_documentation. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
+   */
+  serviceDocumentation?: string | undefined;
   /**
    * Rename the slug.
    */
@@ -68,10 +80,13 @@ export type UpdateRemoteSessionIssuerForm$Outbound = {
   logo_asset_id?: string | undefined;
   name?: string | undefined;
   oidc?: boolean | undefined;
+  op_policy_uri?: string | undefined;
+  op_tos_uri?: string | undefined;
   passthrough?: boolean | undefined;
   registration_endpoint?: string | undefined;
   response_types_supported?: Array<string> | undefined;
   scopes_supported?: Array<string> | undefined;
+  service_documentation?: string | undefined;
   slug?: string | undefined;
   token_endpoint?: string | undefined;
   token_endpoint_auth_methods_supported?: Array<string> | undefined;
@@ -92,10 +107,13 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
     logoAssetId: z.optional(z.string()),
     name: z.optional(z.string()),
     oidc: z.optional(z.boolean()),
+    opPolicyUri: z.optional(z.string()),
+    opTosUri: z.optional(z.string()),
     passthrough: z.optional(z.boolean()),
     registrationEndpoint: z.optional(z.string()),
     responseTypesSupported: z.optional(z.array(z.string())),
     scopesSupported: z.optional(z.array(z.string())),
+    serviceDocumentation: z.optional(z.string()),
     slug: z.optional(z.string()),
     tokenEndpoint: z.optional(z.string()),
     tokenEndpointAuthMethodsSupported: z.optional(z.array(z.string())),
@@ -108,9 +126,12 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
       grantTypesSupported: "grant_types_supported",
       jwksUri: "jwks_uri",
       logoAssetId: "logo_asset_id",
+      opPolicyUri: "op_policy_uri",
+      opTosUri: "op_tos_uri",
       registrationEndpoint: "registration_endpoint",
       responseTypesSupported: "response_types_supported",
       scopesSupported: "scopes_supported",
+      serviceDocumentation: "service_documentation",
       tokenEndpoint: "token_endpoint",
       tokenEndpointAuthMethodsSupported:
         "token_endpoint_auth_methods_supported",

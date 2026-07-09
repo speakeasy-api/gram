@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
@@ -115,28 +116,28 @@ func messageTypeForRole(role string, toolCalls []byte) (message.Type, bool) {
 	}
 }
 
-func batchJudgeMessage(msg batchMessage) JudgeMessage {
+func batchJudgeMessage(msg batchMessage) judgemessage.Message {
 	if msg.Type != message.ToolRequest {
-		return NewJudgeMessage(msg.Type, "", msg.Content)
+		return judgemessage.New(msg.Type, "", msg.Content)
 	}
 
 	switch len(msg.ToolCalls) {
 	case 0:
-		return NewJudgeMessage(msg.Type, "", string(msg.RawToolCalls))
+		return judgemessage.New(msg.Type, "", string(msg.RawToolCalls))
 	case 1:
-		return NewJudgeMessage(msg.Type, msg.ToolCalls[0].Function.Name, msg.ToolCalls[0].Function.Arguments)
+		return judgemessage.New(msg.Type, msg.ToolCalls[0].Function.Name, msg.ToolCalls[0].Function.Arguments)
 	default:
-		judgeCalls := make([]JudgeToolCall, 0, len(msg.ToolCalls))
+		judgeCalls := make([]judgemessage.ToolCall, 0, len(msg.ToolCalls))
 		for _, c := range msg.ToolCalls {
 			if c.Function.Name == "" && strings.TrimSpace(c.Function.Arguments) == "" {
 				continue
 			}
-			judgeCalls = append(judgeCalls, NewJudgeToolCall(c.Function.Name, c.Function.Arguments))
+			judgeCalls = append(judgeCalls, judgemessage.NewToolCall(c.Function.Name, c.Function.Arguments))
 		}
 		if len(judgeCalls) == 0 {
-			return NewJudgeMessage(msg.Type, "", string(msg.RawToolCalls))
+			return judgemessage.New(msg.Type, "", string(msg.RawToolCalls))
 		}
-		return NewJudgeMessageForToolCalls(judgeCalls)
+		return judgemessage.NewForToolCalls(judgeCalls)
 	}
 }
 

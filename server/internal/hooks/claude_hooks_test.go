@@ -36,6 +36,13 @@ func (stubBlockingShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context,
 	return true, nil
 }
 
+func (stubBlockingShadowMCPScanner) HasAcknowledgedChallenge(_ context.Context, _ uuid.UUID, _, _, _, _ string) bool {
+	return false
+}
+
+func (stubBlockingShadowMCPScanner) RecordPolicyChallenge(_ context.Context, _ string, _ uuid.UUID, _, _, _, _, _, _, _ string) {
+}
+
 type userScopedShadowMCPScanner struct {
 	userID string
 }
@@ -53,6 +60,13 @@ func (s userScopedShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Cont
 
 func (s userScopedShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {
 	return true, nil
+}
+
+func (s userScopedShadowMCPScanner) HasAcknowledgedChallenge(_ context.Context, _ uuid.UUID, _, _, _, _ string) bool {
+	return false
+}
+
+func (s userScopedShadowMCPScanner) RecordPolicyChallenge(_ context.Context, _ string, _ uuid.UUID, _, _, _, _, _, _, _ string) {
 }
 
 func TestNormalizeClaudeHookEvent_PrefersAuthContextProjectOverCachedMetadata(t *testing.T) {

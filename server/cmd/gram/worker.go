@@ -43,7 +43,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/pijudge"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -55,6 +54,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -325,8 +326,6 @@ func newWorkerCommand() *cli.Command {
 				attr.SlogServiceVersion(shortGitSHA()),
 				attr.SlogServiceEnv(serviceEnv),
 			)
-			tracerProvider := otel.GetTracerProvider()
-			meterProvider := otel.GetMeterProvider()
 			slog.SetDefault(logger)
 
 			if serviceEnv == "local" {
@@ -336,7 +335,22 @@ func newWorkerCommand() *cli.Command {
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
 
-			temporalEnv, shutdown, err := newTemporalClient(logger, temporalClientOptions{
+			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
+				ServiceName:    serviceName,
+				ServiceVersion: shortGitSHA(),
+				GitSHA:         GitSHA,
+				EnableTracing:  c.Bool("with-otel-tracing"),
+				EnableMetrics:  c.Bool("with-otel-metrics"),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to setup opentelemetry sdk: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			tracerProvider := otel.GetTracerProvider()
+			meterProvider := otel.GetMeterProvider()
+
+			temporalEnv, shutdown, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
 				address:      c.String("temporal-address"),
 				namespace:    c.String("temporal-namespace"),
 				taskQueue:    c.String("temporal-task-queue"),
@@ -348,18 +362,6 @@ func newWorkerCommand() *cli.Command {
 			}
 			if temporalEnv == nil {
 				return errors.New("insufficient options to create temporal client")
-			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
-
-			shutdown, err = o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
-				ServiceName:    serviceName,
-				ServiceVersion: shortGitSHA(),
-				GitSHA:         GitSHA,
-				EnableTracing:  c.Bool("with-otel-tracing"),
-				EnableMetrics:  c.Bool("with-otel-metrics"),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to setup opentelemetry sdk: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
@@ -728,7 +730,7 @@ func newWorkerCommand() *cli.Command {
 				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
 			}
 
-			piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
+			piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
 			customRuleScanner, err := customruleanalyzer.NewScanner(db)
 			if err != nil {
