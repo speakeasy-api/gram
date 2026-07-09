@@ -80,6 +80,19 @@ These live under `components/ui/` alongside the rest of the catalog. If one you 
 
 If a chart need doesn't fit these, check `ChartCard`, `MetricCard`, and `chartUtils.ts` in the same directory before building a one-off chart wrapper.
 
+### Page layouts (`components/layouts/`)
+
+Every page is one of four shapes. Pick the one that matches the page's job and compose its slots — don't hand-roll a page header, a KPI band, or a settings group.
+
+| Layout                | Use it when the page…                                 | Slots                                                        |
+| --------------------- | ----------------------------------------------------- | ------------------------------------------------------------ |
+| `ListLayout`          | helps the user find one of many (servers, keys, logs) | `.Header` `.Toolbar` `.List` `.Footer`                       |
+| `DetailLayout`        | is about a single entity                              | `.Header` `.Tabs` `.Content` (`.Main` + `.Aside`) `.Section` |
+| `ObservabilityLayout` | answers "what is happening" (insights, costs, risk)   | `.Header` `.Stats` `.Strip` `.Grid` `.Section`               |
+| `SettingsLayout`      | configures something                                  | `.Header` `.Body` `.Group` `.DangerZone`                     |
+
+All four share the `Layout` scaffold's header contract: `eyebrow` (mono caption), `title` (display serif), `subtitle` (quiet sans), `actions` (right-aligned controls), closed by a hairline rule. See `Layouts/Page Layouts` in Storybook.
+
 ## Visual rules ("Claude Design")
 
 - **Tokens over hardcoded colors.** Use design-token utility classes (`bg-background`, `text-foreground`, `text-muted-foreground`, `border-border`, `bg-lang-*`, etc.) — never a hardcoded hex value or a raw Tailwind palette color (`bg-neutral-100`, `border-gray-200`, `text-gray-500`, `#3b82f6`, …).
@@ -102,6 +115,8 @@ Workflow for any new or modified shared component:
 ## Prohibitions
 
 - **No hand-rolled duplicates of catalog components.** If a pattern above exists, use it — don't recreate a button, badge, dialog, table, tabs, select, etc. from scratch.
+- **No hand-rolled page scaffolding.** Compose one of the four layouts above rather than building a bespoke header/stat-band/settings-group.
+- **No `Object.assign` compound components.** Attach members by property mutation (`Root.Item = Item; export { Root as Thing }`) — the `react/only-export-components` lint rule doesn't recognize the `Object.assign` form, and disabling it is not an option.
 - **No `window.confirm`.** Use `ConfirmDialog` or the `useConfirm` hook instead.
 - **No raw `animate-pulse` divs.** Use `Skeleton` (or `SkeletonTable` for tabular loading states) from `@/components/ui/skeleton`.
 - **No new `rounded-*` corners.** The only exception is `rounded-full` for dots/avatars.
