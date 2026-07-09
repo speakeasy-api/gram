@@ -1223,15 +1223,17 @@ type PluginAssignment struct {
 }
 
 type PluginGithubConnection struct {
-	ID                   uuid.UUID
-	ProjectID            uuid.UUID
-	InstallationID       int64
-	RepoOwner            string
-	RepoName             string
-	MarketplaceToken     pgtype.Text
-	PublishedFingerprint pgtype.Text
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	ID                       uuid.UUID
+	ProjectID                uuid.UUID
+	InstallationID           int64
+	RepoOwner                string
+	RepoName                 string
+	MarketplaceToken         pgtype.Text
+	PublishedFingerprint     pgtype.Text
+	PublishedMcpFingerprints []byte
+	PublishedHooksVersion    pgtype.Text
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
 }
 
 type PluginServer struct {
