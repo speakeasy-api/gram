@@ -1065,13 +1065,13 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	// policy_id + rule_id are honored. When set, the count is scoped to that
 	// policy (and includes disabled policies for historical findings) to match
 	// the list query's semantics.
-	var policyID uuid.NullUUID
+	var policyIDInput *string
 	if payload.PolicyID != nil && *payload.PolicyID != "" {
-		parsed, err := uuid.Parse(*payload.PolicyID)
-		if err != nil {
-			return nil, oops.C(oops.CodeInvalid)
-		}
-		policyID = uuid.NullUUID{UUID: parsed, Valid: true}
+		policyIDInput = payload.PolicyID
+	}
+	policyID, err := conv.PtrToNullUUID(policyIDInput)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy ID")
 	}
 
 	category := ""
