@@ -6,6 +6,7 @@ import ShadowMCP from "./ShadowMCP";
 const mocks = vi.hoisted(() => ({
   useProject: vi.fn(),
   useRBAC: vi.fn(),
+  useMembers: vi.fn(),
   useRiskListPolicies: vi.fn(),
   useRoles: vi.fn(),
 }));
@@ -72,6 +73,10 @@ vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
   useRiskListPolicies: mocks.useRiskListPolicies,
 }));
 
+vi.mock("@gram/client/react-query/members.js", () => ({
+  useMembers: mocks.useMembers,
+}));
+
 vi.mock("@gram/client/react-query/roles.js", () => ({
   useRoles: mocks.useRoles,
 }));
@@ -82,11 +87,13 @@ vi.mock("@/components/ui/skeleton", () => ({
 
 vi.mock("@/components/shadow-mcp/ShadowMCPInventoryTable", () => ({
   ShadowMCPInventoryTable: ({
+    members,
     roles,
     shadowMCPPolicies,
     policyState,
     projectID,
   }: {
+    members: Array<{ name: string }>;
     roles: Array<{ name: string }>;
     shadowMCPPolicies: Array<{ id: string }>;
     policyState: string;
@@ -99,6 +106,9 @@ vi.mock("@/components/shadow-mcp/ShadowMCPInventoryTable", () => ({
         {shadowMCPPolicies.map((policy) => policy.id).join(",") || "none"}
       </span>
       <span>Roles: {roles.map((role) => role.name).join(",") || "none"}</span>
+      <span>
+        Members: {members.map((member) => member.name).join(",") || "none"}
+      </span>
     </div>
   ),
 }));
@@ -146,6 +156,9 @@ describe("ShadowMCP", () => {
       data: { policies: [] },
       isError: false,
       isLoading: false,
+    });
+    mocks.useMembers.mockReturnValue({
+      data: { members: [{ name: "Admin User" }] },
     });
     mocks.useRoles.mockReturnValue({
       data: { roles: [{ name: "Admin" }] },
@@ -218,6 +231,7 @@ describe("ShadowMCP", () => {
       screen.getByText("Shadow MCP policies: flag-policy,block-policy-1"),
     ).toBeTruthy();
     expect(screen.getByText("Roles: Admin")).toBeTruthy();
+    expect(screen.getByText("Members: Admin User")).toBeTruthy();
   });
 
   it("renders flagging policy status when no blocking policy is enabled", () => {

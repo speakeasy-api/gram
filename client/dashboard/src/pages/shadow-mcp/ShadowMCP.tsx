@@ -5,6 +5,7 @@ import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicySt
 import { shadowMCPPolicyState } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { useProject } from "@/contexts/Auth";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 
@@ -24,9 +25,11 @@ export default function ShadowMCP(): JSX.Element {
   const pageTitle = "Shadow MCP";
   const project = useProject();
   const policiesQuery = useRiskListPolicies();
+  const membersQuery = useMembers();
   const rolesQuery = useRoles();
   const policyDataReady =
     (policiesQuery.isError || !!policiesQuery.data) &&
+    (membersQuery.isError || !!membersQuery.data) &&
     (rolesQuery.isError || !!rolesQuery.data);
   const policyState = policiesQuery.isError
     ? "unavailable"
@@ -56,6 +59,7 @@ export default function ShadowMCP(): JSX.Element {
                 <div className="flex flex-col gap-4 pb-8">
                   <ShadowMCPPolicyStatus policyState={policyState} />
                   <ShadowMCPInventoryTable
+                    members={membersQuery.data?.members ?? []}
                     policyState={policyState}
                     projectID={project.id}
                     roles={rolesQuery.data?.roles ?? []}

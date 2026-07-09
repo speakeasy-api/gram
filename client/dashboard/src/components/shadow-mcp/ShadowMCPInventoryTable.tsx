@@ -1,5 +1,6 @@
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
@@ -163,12 +164,30 @@ function humanizePrincipalURN(principalURN: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function policyAudienceLabel(policy: ShadowMCPPolicy, roles: Role[]) {
+function memberDisplayName(member: AccessMember) {
+  if (member.name && member.name !== member.email) {
+    return `${member.name} (${member.email})`;
+  }
+  return member.email;
+}
+
+function policyAudienceLabel(
+  policy: ShadowMCPPolicy,
+  roles: Role[],
+  members: AccessMember[],
+) {
   if (policy.audienceType === "everyone") {
     return "Everyone";
   }
 
   const principalLabels = policy.audiencePrincipalUrns.map((principalURN) => {
+    if (principalURN.startsWith("user:")) {
+      const member = members.find((item) => item.principalUrn === principalURN);
+      return member
+        ? memberDisplayName(member)
+        : humanizePrincipalURN(principalURN);
+    }
+
     const role = roles.find((item) => item.principalUrn === principalURN);
     return role?.name ?? humanizePrincipalURN(principalURN);
   });
@@ -312,12 +331,14 @@ function InventoryActionMenu({
 
 function PolicySelection({
   disabled,
+  members,
   onSelectionChange,
   policies,
   roles,
   selectedPolicyIDs,
 }: {
   disabled: boolean;
+  members: AccessMember[];
   onSelectionChange: (policyIDs: string[]) => void;
   policies: ShadowMCPPolicy[];
   roles: Role[];
@@ -358,7 +379,8 @@ function PolicySelection({
                   {policy.name}
                 </Type>
                 <Type muted small>
-                  Policy applies to {policyAudienceLabel(policy, roles)}
+                  Policy applies to{" "}
+                  {policyAudienceLabel(policy, roles, members)}
                 </Type>
               </span>
             </label>
@@ -371,6 +393,7 @@ function PolicySelection({
 
 function ShadowMCPInventoryActionSheet({
   action,
+  members,
   shadowMCPPolicies,
   isSubmitting,
   onOpenChange,
@@ -379,6 +402,7 @@ function ShadowMCPInventoryActionSheet({
   roles,
 }: {
   action: ActiveInventoryAction | null;
+  members: AccessMember[];
   shadowMCPPolicies: ShadowMCPPolicy[];
   isSubmitting: boolean;
   onOpenChange: (open: boolean) => void;
@@ -500,6 +524,7 @@ function ShadowMCPInventoryActionSheet({
           {needsPolicySelection && (
             <PolicySelection
               disabled={isSubmitting}
+              members={members}
               onSelectionChange={setSelectedPolicyIDs}
               policies={shadowMCPPolicies}
               roles={roles}
@@ -544,6 +569,7 @@ export function ShadowMCPInventoryTable({
   shadowMCPPolicies,
   className,
   enabled = true,
+  members,
   policyState,
   projectID,
   roles,
@@ -551,6 +577,7 @@ export function ShadowMCPInventoryTable({
   shadowMCPPolicies: ShadowMCPPolicy[];
   className?: string;
   enabled?: boolean;
+  members: AccessMember[];
   policyState: ShadowMCPPolicyState;
   projectID: string;
   roles: Role[];
@@ -836,6 +863,7 @@ export function ShadowMCPInventoryTable({
     <div className={cn("min-h-0 shrink overflow-hidden", className)}>
       <ShadowMCPInventoryActionSheet
         action={activeAction}
+        members={members}
         shadowMCPPolicies={shadowMCPPolicies}
         isSubmitting={isSubmitting}
         onOpenChange={(open) => {

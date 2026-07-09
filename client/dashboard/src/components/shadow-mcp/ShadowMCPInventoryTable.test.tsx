@@ -14,6 +14,7 @@ import {
   type ReactNode,
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
@@ -404,17 +405,31 @@ function role(overrides: Partial<Role> = {}): Role {
   };
 }
 
+function member(overrides: Partial<AccessMember> = {}): AccessMember {
+  return {
+    email: "admin@example.com",
+    id: "user-1",
+    joinedAt: new Date("2026-01-01T00:00:00Z"),
+    name: "Admin User",
+    principalUrn: "user:user-1",
+    roleIds: [],
+    ...overrides,
+  };
+}
+
 function renderInventoryTable(
   projectID = "project-id-1",
   policyState: "blocking" | "flagging" | "none" | "unavailable" = "blocking",
   shadowMCPPolicies = [blockingPolicy()],
   roles: Role[] = [],
+  members: AccessMember[] = [],
 ) {
   const queryClient = new QueryClient();
 
   return render(
     <QueryClientProvider client={queryClient}>
       <ShadowMCPInventoryTable
+        members={members}
         policyState={policyState}
         projectID={projectID}
         roles={roles}
@@ -765,6 +780,7 @@ describe("ShadowMCPInventoryTable", () => {
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
+          members={[]}
           policyState="blocking"
           projectID="project-id-1"
           roles={[]}
@@ -780,6 +796,7 @@ describe("ShadowMCPInventoryTable", () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
+          members={[]}
           policyState="blocking"
           projectID="project-id-2"
           roles={[]}
@@ -809,6 +826,7 @@ describe("ShadowMCPInventoryTable", () => {
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
           enabled
+          members={[]}
           policyState="blocking"
           projectID="project-id-1"
           roles={[]}
@@ -825,6 +843,7 @@ describe("ShadowMCPInventoryTable", () => {
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
           enabled={false}
+          members={[]}
           policyState="blocking"
           projectID="project-id-1"
           roles={[]}
@@ -975,6 +994,47 @@ describe("ShadowMCPInventoryTable", () => {
     expect(screen.getByText("Shadow MCP Scanner")).toBeTruthy();
     expect(screen.getByText("Policy applies to Admin")).toBeTruthy();
     expect(screen.queryByText("Policy applies to 1 selected")).toBeNull();
+  });
+
+  it("shows policy audience member names in the action sheet", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "none",
+          canonicalServerUrl: "https://pending.example.com/mcp",
+          serverName: "Pending MCP",
+        }),
+      ],
+    });
+
+    renderInventoryTable(
+      "project-id-1",
+      "blocking",
+      [
+        blockingPolicy({
+          audiencePrincipalUrns: ["user:user-1"],
+          audienceType: "targeted",
+          name: "Shadow MCP Scanner",
+        }),
+      ],
+      [],
+      [member()],
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Pending MCP")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Allow Rule" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Add Allow Rule" }),
+      ).toBeTruthy();
+    });
+    expect(
+      screen.getByText("Policy applies to Admin User (admin@example.com)"),
+    ).toBeTruthy();
   });
 
   it("uses a non-modal action menu button", async () => {
