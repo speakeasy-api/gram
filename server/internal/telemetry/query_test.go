@@ -130,7 +130,9 @@ func insertAttributeClaudeAPIRequestLog(t *testing.T, ctx context.Context, proje
 	require.NoError(t, err)
 }
 
-func insertAttributeAssistantChatCompletionLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string, cost float64, totalTokens int, model, email, department string, roles []string) {
+// insertAttributeGramCompletionLog inserts a gram-server LLM completion row
+// tagged with the given usage source (e.g. "playground", "assistants").
+func insertAttributeGramCompletionLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string, cost float64, totalTokens int, model, hookSource, email, department string, roles []string) {
 	t.Helper()
 
 	conn, err := infra.NewClickhouseClient(t)
@@ -139,6 +141,10 @@ func insertAttributeAssistantChatCompletionLog(t *testing.T, ctx context.Context
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
+	urn := "chat:completion"
+	if hookSource == "assistants" {
+		urn = "assistants:chat:completion"
+	}
 	attributes := map[string]any{
 		"gen_ai.conversation.id":          chatID,
 		"gen_ai.operation.name":           "chat",
@@ -146,8 +152,8 @@ func insertAttributeAssistantChatCompletionLog(t *testing.T, ctx context.Context
 		"gen_ai.usage.total_tokens":       totalTokens,
 		"gen_ai.usage.cost":               cost,
 		"gen_ai.response.model":           model,
-		"gram.hook.source":                "assistants",
-		"gram.resource.urn":               "assistants:chat:completion",
+		"gram.hook.source":                hookSource,
+		"gram.resource.urn":               urn,
 		"user.email":                      email,
 		"user.attributes.department_name": department,
 	}
@@ -164,9 +170,9 @@ func insertAttributeAssistantChatCompletionLog(t *testing.T, ctx context.Context
 			trace_id, span_id, attributes, resource_attributes,
 			gram_project_id, gram_urn, service_name
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "assistant chat completion",
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "gram chat completion",
 		nil, nil, string(attrsJSON), "{}",
-		projectID, "assistants:chat:completion", "gram-server")
+		projectID, urn, "gram-server")
 	require.NoError(t, err)
 }
 
@@ -478,7 +484,7 @@ func TestQuery_IncludesCostBearingAssistantChatCompletions(t *testing.T) {
 
 	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
-	insertAttributeAssistantChatCompletionLog(t, ctx, projectID, ts, uuid.NewString(), 0.42, 25, "openai/gpt-5.4", "assistant@example.com", "Engineering", []string{"dev"})
+	insertAttributeGramCompletionLog(t, ctx, projectID, ts, uuid.NewString(), 0.42, 25, "openai/gpt-5.4", "assistants", "assistant@example.com", "Engineering", []string{"dev"})
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
@@ -647,19 +653,21 @@ func TestQueryTumDetails_CountsOnlyGramManagedCompletions(t *testing.T) {
 	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
-	// A completion billed as tokens under management (runs through Gram's
-	// server) next to a Claude Code fleet api_request observed via OTEL.
-	// Fleet telemetry is not billed, so it must not appear anywhere in the
-	// billing details — not in totals, points, or any breakdown.
-	insertAttributeAssistantChatCompletionLog(t, ctx, projectID, ts, uuid.NewString(), 0.42, 1000, "anthropic/claude-4.6", "assistant@example.com", "Engineering", nil)
+	// A billed completion (playground, a registered usage source) next to two
+	// populations that must not appear anywhere in the billing details — not
+	// in totals, points, or any breakdown: a Claude Code fleet api_request
+	// observed via OTEL, and an assistants completion (Speakeasy covers
+	// assistants inference until BYOK, so it is deliberately unregistered).
+	insertAttributeGramCompletionLog(t, ctx, projectID, ts, uuid.NewString(), 0.42, 1000, "anthropic/claude-4.6", "playground", "user@example.com", "Engineering", nil)
+	insertAttributeGramCompletionLog(t, ctx, projectID, ts, uuid.NewString(), 0.13, 555, "openai/gpt-5.4", "assistants", "assistant@example.com", "Engineering", nil)
 	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 1.5, 999999, "claude-4.6", "claude-code", "fleet@example.com", "Engineering", nil)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	// Wait until BOTH rows have materialized in the analytics aggregate (the
-	// unfiltered query sees the fleet row) so the exclusion assertions below
-	// cannot pass vacuously against a half-ingested view.
+	// Wait until ALL rows have materialized in the analytics aggregate (the
+	// unfiltered query sees every hook source) so the exclusion assertions
+	// below cannot pass vacuously against a half-ingested view.
 	require.Eventually(t, func() bool {
 		res, err := ti.service.Query(ctx, &gen.QueryPayload{
 			From:    from,
@@ -668,7 +676,7 @@ func TestQueryTumDetails_CountsOnlyGramManagedCompletions(t *testing.T) {
 			TopN:    10,
 			SortBy:  "total_tokens",
 		})
-		return err == nil && res != nil && len(res.Table) == 2
+		return err == nil && res != nil && len(res.Table) == 3
 	}, 10*time.Second, 200*time.Millisecond)
 
 	result, err := ti.service.QueryTumDetails(ctx, &gen.QueryTumDetailsPayload{
@@ -691,9 +699,11 @@ func TestQueryTumDetails_CountsOnlyGramManagedCompletions(t *testing.T) {
 	for _, b := range result.Breakdowns {
 		for _, row := range b.Rows {
 			require.LessOrEqual(t, row.TotalTokens, int64(1000),
-				"breakdown %s row %q leaked fleet tokens", b.Key, row.Value)
+				"breakdown %s row %q leaked unbilled tokens", b.Key, row.Value)
 			require.NotEqual(t, "fleet@example.com", row.Value,
 				"fleet row leaked into breakdown %s", b.Key)
+			require.NotEqual(t, "assistant@example.com", row.Value,
+				"assistants row leaked into breakdown %s", b.Key)
 		}
 	}
 
@@ -706,6 +716,6 @@ func TestQueryTumDetails_CountsOnlyGramManagedCompletions(t *testing.T) {
 			sourceRows[row.Value] = row.TotalTokens
 		}
 	}
-	require.Equal(t, map[string]int64{"assistants": 1000}, sourceRows,
-		"the source breakdown holds exactly the Gram surface")
+	require.Equal(t, map[string]int64{"playground": 1000}, sourceRows,
+		"the source breakdown holds exactly the billed surface")
 }

@@ -36,12 +36,19 @@ func registerModelUsageSource(s ModelUsageSource) ModelUsageSource {
 // here.
 var (
 	ModelUsageSourcePlayground = registerModelUsageSource("playground")
-	// Bring this back when customers are allowed to BYOK
-	// ModelUsageSourceAssistants = registerModelUsageSource("assistants")
-	ModelUsageSourceElements = registerModelUsageSource("elements")
-	ModelUsageSourceGram     = registerModelUsageSource("gram")
-	ModelUsageSourceSlack    = registerModelUsageSource("slack")
+	ModelUsageSourceElements   = registerModelUsageSource("elements")
+	ModelUsageSourceGram       = registerModelUsageSource("gram")
+	ModelUsageSourceSlack      = registerModelUsageSource("slack")
 )
+
+// ModelUsageSourceAssistants tags assistants completions in telemetry but is
+// deliberately NOT registered above: Speakeasy covers assistants inference
+// today, so it must not count toward the billed population. Keeping the tag
+// (instead of dropping the constant) is what keeps those completions OUT —
+// an untagged completion normalizes to "gram" and would re-enter the billed
+// scope. Move it into the registered block when customers can BYOK
+// (see the "BYOK for Assistants" Linear project).
+const ModelUsageSourceAssistants ModelUsageSource = "assistants"
 
 // ModelUsageSources lists every registered completion surface.
 func ModelUsageSources() []ModelUsageSource {

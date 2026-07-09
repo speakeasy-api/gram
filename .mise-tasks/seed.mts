@@ -2796,16 +2796,19 @@ async function seedObservabilityData(init: {
   // The consuming surface (gram.hook.source) for chat rows — the hook_source
   // dimension on telemetry.query. (The hooks seeding block below has its own
   // HOOK_SOURCES list for hook events.) Mixes agent-fleet surfaces with
-  // gram-managed ones (playground/assistants) so the billing page — which
-  // scopes to gram-managed completion sources — has data locally. Known seed
-  // gap vs prod: fleet sessions here emit gen_ai.usage rows (billed), while
-  // prod fleet telemetry reports tokens in agent-native namespaces only.
+  // billed gram surfaces (playground/gram) so the billing page — which
+  // scopes to registered billing.ModelUsageSources — has data locally.
+  // "assistants" is deliberately absent from the billed slots: it is
+  // unregistered (Speakeasy covers assistants inference until BYOK). Known
+  // seed gap vs prod: fleet sessions here emit gen_ai.usage rows (billed),
+  // while prod fleet telemetry reports tokens in agent-native namespaces
+  // only.
   const CHAT_HOOK_SOURCES = [
     "claude-code",
     "cursor",
     "playground",
     "cowork",
-    "assistants",
+    "gram",
     "codex",
   ];
 
@@ -2826,7 +2829,7 @@ async function seedObservabilityData(init: {
     cli: "cursor",
     // Gram-managed surfaces (billed completions through gram-server).
     playground: "anthropic",
-    assistants: "anthropic",
+    gram: "anthropic",
   };
   function classifyAccount(
     surface: string,

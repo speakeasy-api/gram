@@ -101,7 +101,7 @@ export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
     heading: "Surfaces & tools",
     options: [
       // hook_source: for billed completions this is the Gram surface the
-      // request ran through (playground, assistants, MCP chat, …).
+      // request ran through (playground, MCP chat, …).
       { value: Dimension.HookSource, label: "Source", icon: Bot },
       { value: Dimension.SkillName, label: "Skill", icon: Sparkles },
       { value: Dimension.McpServerName, label: "MCP server", icon: Server },
