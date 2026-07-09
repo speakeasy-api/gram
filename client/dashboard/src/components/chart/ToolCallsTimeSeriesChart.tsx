@@ -4,6 +4,7 @@ import {
   smoothData,
   unixNanoToDate,
 } from "@/components/chart/chartUtils";
+import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { formatCompact } from "@/lib/format";
 import type { TimeSeriesBucket } from "@gram/client/models/components/timeseriesbucket.js";
 import {
@@ -170,9 +171,10 @@ export function ToolCallsTimeSeriesChart({
       hasData={hasData}
     >
       {!hasData ? (
-        <div className="text-muted-foreground flex h-[260px] items-center justify-center text-sm">
-          No tool calls for the selected time range
-        </div>
+        <WidgetEmptyState
+          message="No tool calls for the selected time range"
+          className="h-[260px]"
+        />
       ) : (
         <div style={{ height }}>
           {/* `<Chart>` (not `<Bar>`) because this mixes a stacked bar series

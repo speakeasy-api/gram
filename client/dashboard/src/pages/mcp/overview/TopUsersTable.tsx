@@ -1,3 +1,4 @@
+import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { Heading } from "@/components/ui/heading";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
@@ -103,11 +104,7 @@ export function TopUsersTable({
         columns={columns}
         data={users}
         rowKey={(row) => row.userKey}
-        noResultsMessage={
-          <Type muted className="block px-4 py-6">
-            No usage yet.
-          </Type>
-        }
+        noResultsMessage={<WidgetEmptyState message="No usage yet." />}
       />
     );
   }

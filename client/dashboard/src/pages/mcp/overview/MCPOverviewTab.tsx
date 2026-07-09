@@ -1,11 +1,13 @@
 import { MetricCard } from "@/components/chart/MetricCard";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
+import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
-import { getPresetRange } from "@gram-ai/elements";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
 import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
@@ -16,10 +18,6 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { PluginStatusBanner } from "./PluginStatusBanner";
 import { TopUsersTable } from "./TopUsersTable";
-
-// Fixed window — this tab is a glanceable summary, not a deep-dive analytics
-// view with an interactive range picker (that page was folded into this one).
-const OVERVIEW_RANGE = "7d" as const;
 
 // Both toolset-backed and remote-MCP-backed servers render through this same
 // dashboard — the telemetry/plugin-membership backends already key off
@@ -49,14 +47,17 @@ export function MCPOverviewTab({
   const client = useGramContext();
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
-  const { from, to, timeRangeMs } = useMemo(() => {
-    const range = getPresetRange(OVERVIEW_RANGE);
-    return {
-      from: range.from,
-      to: range.to,
-      timeRangeMs: range.to.getTime() - range.from.getTime(),
-    };
-  }, []);
+  const {
+    dateRange,
+    customRange,
+    customRangeLabel,
+    from,
+    to,
+    setDateRangeParam,
+    setCustomRangeParam,
+    clearCustomRange,
+  } = useDateRangeFilter();
+  const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
 
   const { data, isLoading, isLogsDisabled } = useLogsEnabledErrorCheck(
     useQuery<GetObservabilityOverviewResult>({
@@ -112,6 +113,17 @@ export function MCPOverviewTab({
   return (
     <Stack gap={6} className="mb-4">
       <PluginStatusBanner server={server} />
+
+      <div className="flex justify-end">
+        <TimeRangePicker
+          preset={customRange ? null : dateRange}
+          customRange={customRange}
+          customRangeLabel={customRangeLabel}
+          onPresetChange={setDateRangeParam}
+          onCustomRangeChange={setCustomRangeParam}
+          onClearCustomRange={clearCustomRange}
+        />
+      </div>
 
       {isLogsDisabled ? (
         <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
@@ -184,9 +196,7 @@ export function MCPOverviewTab({
               {topByCount.length > 0 ? (
                 <RankedBarList items={topByCount} />
               ) : (
-                <Type muted small>
-                  No tool calls in the selected range.
-                </Type>
+                <WidgetEmptyState message="No tool calls in the selected range." />
               )}
             </div>
             <div className="rounded-lg border p-5">
@@ -196,9 +206,7 @@ export function MCPOverviewTab({
               {topByFailureRate.length > 0 ? (
                 <RankedBarList items={topByFailureRate} />
               ) : (
-                <Type muted small>
-                  No failed tool calls in the selected range.
-                </Type>
+                <WidgetEmptyState message="No failed tool calls in the selected range." />
               )}
             </div>
           </div>

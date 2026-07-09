@@ -83,7 +83,12 @@ export function PluginStatusBanner({
 }): React.JSX.Element | null {
   const routes = useRoutes();
   const queryClient = useQueryClient();
-  const { data } = usePlugins();
+  // throwOnError: false — this query calls EnsureDefaultPlugin server-side,
+  // which self-heals most conflicts but can still fail; a banner on the MCP
+  // detail page shouldn't crash the whole page via the error boundary when
+  // it does. The existing `if (!data) return null` below already degrades
+  // gracefully on a failed fetch.
+  const { data } = usePlugins(undefined, undefined, { throwOnError: false });
   const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false);
   // Polled so the banner picks up the Temporal generator-rollout schedule's
   // auto-sync without a manual refresh.
