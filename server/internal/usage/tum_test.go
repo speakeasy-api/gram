@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -188,9 +189,10 @@ func TestGetTokensUnderManagementQuery_FiltersUnstoredSessions(t *testing.T) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:    []string{projectID.String()},
-			StartUnixNano: windowStart.UnixNano(),
-			EndUnixNano:   windowEnd.UnixNano(),
+			ProjectIDs:        []string{projectID.String()},
+			StartUnixNano:     windowStart.UnixNano(),
+			EndUnixNano:       windowEnd.UnixNano(),
+			BilledHookSources: nil,
 		})
 		if !assert.NoError(c, err) {
 			return
@@ -231,9 +233,10 @@ func TestGetTokensUnderManagementQuery_DailyBreakdown(t *testing.T) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:    []string{projectID.String()},
-			StartUnixNano: windowStart.UnixNano(),
-			EndUnixNano:   windowEnd.UnixNano(),
+			ProjectIDs:        []string{projectID.String()},
+			StartUnixNano:     windowStart.UnixNano(),
+			EndUnixNano:       windowEnd.UnixNano(),
+			BilledHookSources: nil,
 		})
 		if !assert.NoError(c, err) {
 			return
@@ -272,9 +275,10 @@ func TestGetTokensUnderManagementQuery_EvidenceOutsideWindowDoesNotCount(t *test
 	widerStart := dayStart.Add(-7 * 24 * time.Hour)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:    []string{projectID.String()},
-			StartUnixNano: widerStart.UnixNano(),
-			EndUnixNano:   windowEnd.UnixNano(),
+			ProjectIDs:        []string{projectID.String()},
+			StartUnixNano:     widerStart.UnixNano(),
+			EndUnixNano:       windowEnd.UnixNano(),
+			BilledHookSources: nil,
 		})
 		if !assert.NoError(c, err) {
 			return
@@ -283,9 +287,10 @@ func TestGetTokensUnderManagementQuery_EvidenceOutsideWindowDoesNotCount(t *test
 	}, 10*time.Second, 200*time.Millisecond)
 
 	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-		ProjectIDs:    []string{projectID.String()},
-		StartUnixNano: windowStart.UnixNano(),
-		EndUnixNano:   windowEnd.UnixNano(),
+		ProjectIDs:        []string{projectID.String()},
+		StartUnixNano:     windowStart.UnixNano(),
+		EndUnixNano:       windowEnd.UnixNano(),
+		BilledHookSources: nil,
 	})
 	require.NoError(t, err)
 	require.Empty(t, buckets)
@@ -297,9 +302,10 @@ func TestGetTokensUnderManagementQuery_NoProjects(t *testing.T) {
 	_, _, chConn, _ := newTUMTestService(t, "org-tum-no-projects")
 
 	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-		ProjectIDs:    nil,
-		StartUnixNano: time.Now().Add(-1 * time.Hour).UnixNano(),
-		EndUnixNano:   time.Now().UnixNano(),
+		ProjectIDs:        nil,
+		StartUnixNano:     time.Now().Add(-1 * time.Hour).UnixNano(),
+		EndUnixNano:       time.Now().UnixNano(),
+		BilledHookSources: nil,
 	})
 	require.NoError(t, err)
 	require.Empty(t, buckets)
@@ -504,4 +510,75 @@ func TestGetTokensUnderManagement_AlertEmailAdminOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result.AlertEmail)
 	require.Equal(t, email, *result.AlertEmail)
+}
+
+// insertSourcedCompletionRow inserts a gram-server completion token row tagged
+// with a consuming surface (gram.hook.source), the shape emitted by
+// completionTelemetryIdentity.
+func insertSourcedCompletionRow(t *testing.T, conn driver.Conn, projectID string, timestamp time.Time, chatID string, totalTokens int, hookSource string) {
+	t.Helper()
+
+	insertTelemetryRow(t, conn, projectID, timestamp, "chat:completion", map[string]any{
+		"gen_ai.conversation.id":     chatID,
+		"gen_ai.usage.input_tokens":  totalTokens / 2,
+		"gen_ai.usage.output_tokens": totalTokens - totalTokens/2,
+		"gen_ai.usage.total_tokens":  totalTokens,
+		"gram.resource.urn":          "chat:completion",
+		"gram.hook.source":           hookSource,
+	})
+}
+
+func TestGetTokensUnderManagementQuery_ExcludesUnregisteredSources(t *testing.T) {
+	t.Parallel()
+
+	_, _, chConn, projectID := newTUMTestService(t, "org-tum-billed-sources")
+
+	now := time.Now().UTC()
+	dayStart := now.Truncate(24 * time.Hour)
+	windowStart := dayStart.Add(-2 * 24 * time.Hour)
+	windowEnd := dayStart.Add(24 * time.Hour)
+
+	playgroundChat := uuid.New().String()
+	assistantsChat := uuid.New().String()
+	untaggedChat := uuid.New().String()
+
+	// A registered billed surface: counted.
+	insertSourcedCompletionRow(t, chConn, projectID.String(), now, playgroundChat, 100, "playground")
+	insertToolCallRow(t, chConn, projectID.String(), now, playgroundChat)
+
+	// An unregistered surface (Speakeasy covers assistants inference until
+	// BYOK): excluded from the billed sum even though the chat qualifies.
+	insertSourcedCompletionRow(t, chConn, projectID.String(), now, assistantsChat, 5000, "assistants")
+	insertToolCallRow(t, chConn, projectID.String(), now, assistantsChat)
+
+	// Rows without a hook source ('' — the shape of aggregates from before
+	// the dimension existed): grandfathered as billed.
+	insertTokenUsageRow(t, chConn, projectID.String(), now, untaggedChat, 40)
+	insertToolCallRow(t, chConn, projectID.String(), now, untaggedChat)
+
+	// Confirm all three chats materialized (unscoped read sees 5140), THEN
+	// assert the scoped read excludes exactly the assistants tokens — the
+	// exclusion cannot pass vacuously against a half-ingested view.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+			ProjectIDs:        []string{projectID.String()},
+			StartUnixNano:     windowStart.UnixNano(),
+			EndUnixNano:       windowEnd.UnixNano(),
+			BilledHookSources: nil,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Equal(c, int64(5140), sumTumBuckets(res))
+	}, 10*time.Second, 200*time.Millisecond)
+
+	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+		ProjectIDs:        []string{projectID.String()},
+		StartUnixNano:     windowStart.UnixNano(),
+		EndUnixNano:       windowEnd.UnixNano(),
+		BilledHookSources: billing.ModelUsageSourceStrings(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(140), sumTumBuckets(buckets),
+		"billed sum counts registered sources plus grandfathered '' rows, never assistants")
 }

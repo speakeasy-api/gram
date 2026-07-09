@@ -5096,6 +5096,24 @@ type GetTokensUnderManagementParams struct {
 	ProjectIDs    []string
 	StartUnixNano int64
 	EndUnixNano   int64
+	// BilledHookSources restricts the token sums to chats consumed through
+	// these surfaces (billing.ModelUsageSources). Rows aggregated before the
+	// hook_source dimension existed carry '' and are grandfathered as billed
+	// — sealed cycles beyond the migration's rewrite window keep their
+	// invoiced totals. Empty means no source scoping.
+	BilledHookSources []string
+}
+
+// billedHookSourceFilter scopes a chat_token_summaries read to the billed
+// completion surfaces, grandfathering pre-dimension rows (”).
+func billedHookSourceFilter(sb squirrel.SelectBuilder, sources []string) squirrel.SelectBuilder {
+	if len(sources) == 0 {
+		return sb
+	}
+	return sb.Where(squirrel.Or{
+		squirrel.Eq{"hook_source": sources},
+		squirrel.Eq{"hook_source": ""},
+	})
 }
 
 // TumDayBucket is one UTC day's worth of tokens under management.
@@ -5148,6 +5166,9 @@ func (q *Queries) GetTokensUnderManagementByDay(ctx context.Context, arg GetToke
 		Where(squirrel.Expr("chat_id IN ("+storedChatsSQL+")", storedChatsArgs...)).
 		GroupBy("time_bucket").
 		OrderBy("time_bucket")
+	// The token sum is source-scoped; the stored-chats qualification above is
+	// not — stored evidence is chat-level, whatever surface recorded it.
+	sb = billedHookSourceFilter(sb, arg.BilledHookSources)
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5309,10 +5330,13 @@ type GetRiskTokensParams struct {
 	RiskyChatIDs  []string
 	StartUnixNano int64
 	EndUnixNano   int64
-	// HookSources restricts the TUM detail queries (attribute_metrics_summaries)
-	// to rows from these sources. It does not apply to the risk-token queries —
-	// their source, chat_token_summaries, only ever aggregates rows carrying
-	// gen_ai usage attributes, which is the same population this filter selects.
+	// HookSources restricts the reads to rows from these sources
+	// (billing.ModelUsageSources). The TUM detail queries
+	// (attribute_metrics_summaries) apply it verbatim; the risk-token query
+	// (chat_token_summaries) additionally grandfathers '' rows aggregated
+	// before that table's hook_source dimension existed, matching
+	// GetTokensUnderManagementByDay so the risk split and the billed totals
+	// describe the same population. Empty means no source scoping.
 	HookSources []string
 }
 
@@ -5349,6 +5373,7 @@ func (q *Queries) GetRiskTokensByDay(ctx context.Context, arg GetRiskTokensParam
 		Where("chat_id != ''").
 		GroupBy("time_bucket").
 		OrderBy("time_bucket")
+	sb = billedHookSourceFilter(sb, arg.HookSources)
 
 	// clickhouse-go expands a Go slice bound to a single placeholder into a
 	// comma-joined value list, which only parses inside IN (...) — so the risky

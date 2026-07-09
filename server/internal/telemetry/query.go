@@ -208,12 +208,14 @@ func (s *Service) QueryRiskTokens(ctx context.Context, payload *telem_gen.QueryR
 		riskyChatIDs = append(riskyChatIDs, id.String())
 	}
 
+	// Scoped to the billed completion surfaces so the risk split describes
+	// the same population as the billed totals it renders against.
 	buckets, err := s.chRepo.GetRiskTokensByDay(ctx, repo.GetRiskTokensParams{
 		ProjectIDs:    scope.projectIDs,
 		RiskyChatIDs:  riskyChatIDs,
 		StartUnixNano: timeStart,
 		EndUnixNano:   timeEnd,
-		HookSources:   nil,
+		HookSources:   billing.ModelUsageSourceStrings(),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error running risk tokens query").LogError(ctx, s.logger)
@@ -263,11 +265,7 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	}
 	timeStart, timeEnd := scope.timeStart, scope.timeEnd
 
-	usageSources := billing.ModelUsageSources()
-	billedSources := make([]string, len(usageSources))
-	for i, src := range usageSources {
-		billedSources[i] = string(src)
-	}
+	billedSources := billing.ModelUsageSourceStrings()
 
 	chParams := repo.GetRiskTokensParams{
 		ProjectIDs:    scope.projectIDs,

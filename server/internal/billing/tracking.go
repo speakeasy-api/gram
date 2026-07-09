@@ -55,6 +55,16 @@ func ModelUsageSources() []ModelUsageSource {
 	return slices.Clone(modelUsageSources)
 }
 
+// ModelUsageSourceStrings lists every registered completion surface as plain
+// strings, the shape the telemetry hook_source filters take.
+func ModelUsageSourceStrings() []string {
+	out := make([]string, len(modelUsageSources))
+	for i, s := range modelUsageSources {
+		out[i] = string(s)
+	}
+	return out
+}
+
 type ModelUsageEvent struct {
 	OrganizationSlug      string
 	OrganizationID        string
