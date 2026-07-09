@@ -97,6 +97,31 @@
       "rules": {
         "react/only-export-components": "off"
       }
+    },
+    {
+      "files": ["src/sdk/**/*.{ts,tsx}"],
+      // Many lint rules don't apply to the generated SDK
+      "rules": {
+        "no-constant-condition": "off",
+        "no-useless-escape": "off",
+        "no-unused-private-class-members": "off",
+        "@typescript-eslint/no-unused-vars": "off",
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-empty-object-type": "off",
+        "@typescript-eslint/no-namespace": "off",
+        "@typescript-eslint/no-useless-empty-export": "off",
+        "unicorn/no-thenable": "off",
+        "unicorn/no-empty-file": "off",
+        "typescript/no-duplicate-type-constituents": "off",
+        "typescript/no-redundant-type-constituents": "off",
+        "typescript/restrict-template-expressions": "off",
+        "typescript/switch-exhaustiveness-check": "off",
+        "typescript/no-base-to-string": "off",
+        "typescript/strict-void-return": "off",
+        "typescript/unbound-method": "off",
+        "typescript/explicit-module-boundary-types": "off",
+        "react/only-export-components": "off"
+      }
     }
   ]
 }

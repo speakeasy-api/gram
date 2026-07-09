@@ -54,7 +54,7 @@ typescript:
   baseErrorName: GramError
   clientServerStatusCodesAsErrors: true
   compileCommand:
-    - ./scripts/compile.sh
+    - "true"
   constFieldsAlwaysOptional: false
   defaultErrorName: APIError
   enableCustomCodeRegions: false

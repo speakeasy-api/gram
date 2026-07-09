@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@gram/client": path.resolve(__dirname, "./src/sdk/src"),
     },
     conditions: ["source"],
   },
