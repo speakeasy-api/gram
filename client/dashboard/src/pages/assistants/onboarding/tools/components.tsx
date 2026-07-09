@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,15 +6,18 @@ import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { Icon } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import {
   AlertTriangle,
+  Bot,
   Check,
   Copy,
   ExternalLink,
+  KeyRound,
   Loader2,
   Shuffle,
   Sparkles,
+  Webhook,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAssistantDraft } from "../useAssistantDraft";
@@ -51,9 +53,9 @@ function ToolCard({
   return (
     <div
       className={cn(
-        "border-border bg-card my-3 max-w-2xl rounded-lg border shadow-sm",
-        tone === "success" && "border-emerald-300/40 bg-emerald-50/30",
-        tone === "info" && "border-sky-300/40 bg-sky-50/30",
+        "border-border bg-card my-3 max-w-2xl border",
+        tone === "success" && "border-success-softest bg-success-softest",
+        tone === "info" && "border-information-softest bg-information-softest",
       )}
     >
       <div className="border-border flex items-center gap-2 border-b px-5 py-3">
@@ -159,7 +161,7 @@ export function RequestEnvironmentSecretsComponent({
   if (settled) {
     return (
       <ToolCard title="Environment secrets — error">
-        <Type small className="text-red-600">
+        <Type small destructive>
           {r?.error ?? "Form was closed without saving."}
         </Type>
       </ToolCard>
@@ -196,7 +198,7 @@ export function RequestEnvironmentSecretsComponent({
   return (
     <ToolCard
       title={envSlug ? `Add secrets to ${envSlug}` : "Add secrets"}
-      icon={<Icon name="key-round" className="text-muted-foreground h-4 w-4" />}
+      icon={<KeyRound className="text-muted-foreground h-4 w-4" />}
     >
       {reason && (
         <Type small muted className="mb-3">
@@ -225,22 +227,24 @@ export function RequestEnvironmentSecretsComponent({
         ))}
       </div>
       {error && (
-        <Type small className="mt-2 text-red-600">
+        <Type small destructive className="mt-2">
           {error}
         </Type>
       )}
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={cancel} disabled={submitting}>
+        <Button variant="tertiary" onClick={cancel} disabled={submitting}>
           Skip
         </Button>
         <Button
           onClick={() => void submit()}
           disabled={!anyFilled || submitting}
         >
-          {submitting ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : null}
-          Save secrets
+          {submitting && (
+            <Button.LeftIcon>
+              <Loader2 className="animate-spin" />
+            </Button.LeftIcon>
+          )}
+          <Button.Text>Save secrets</Button.Text>
         </Button>
       </div>
     </ToolCard>
@@ -271,7 +275,7 @@ export function ShowWebhookUrlComponent({
     <ToolCard
       title={a.trigger_name ? `Webhook for ${a.trigger_name}` : "Webhook URL"}
       tone="info"
-      icon={<Icon name="webhook" className="text-muted-foreground h-4 w-4" />}
+      icon={<Webhook className="text-muted-foreground h-4 w-4" />}
     >
       {a.instructions && (
         <Type small muted className="mb-3 whitespace-pre-line">
@@ -280,12 +284,19 @@ export function ShowWebhookUrlComponent({
       )}
       <div className="border-border bg-muted/30 flex items-center gap-2 rounded-md border px-3 py-2">
         <code className="flex-1 truncate font-mono text-xs">{url}</code>
-        <Button size="sm" variant="ghost" onClick={() => void copy()}>
-          {copied ? (
-            <Check className="h-3.5 w-3.5" />
-          ) : (
-            <Copy className="h-3.5 w-3.5" />
-          )}
+        <Button
+          size="sm"
+          variant="tertiary"
+          aria-label="Copy webhook URL"
+          onClick={() => void copy()}
+        >
+          <Button.LeftIcon>
+            {copied ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+          </Button.LeftIcon>
         </Button>
       </div>
     </ToolCard>
@@ -404,7 +415,7 @@ export function ShowSlackAppGuideComponent({
     <ToolCard
       title="Install your Slack connection"
       tone="info"
-      icon={<Icon name="bot" className="text-muted-foreground h-4 w-4" />}
+      icon={<Bot className="text-muted-foreground h-4 w-4" />}
     >
       <ol className="space-y-3 text-sm leading-relaxed">
         {steps.map((step, i) => (
@@ -425,7 +436,7 @@ export function ShowSlackAppGuideComponent({
           </a>
         </Button>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={skip}>
+          <Button variant="tertiary" onClick={skip}>
             Skip
           </Button>
           <Button onClick={markInstalled}>I'm done</Button>
@@ -578,7 +589,7 @@ export function ProposeNameComponent({
       </div>
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={cancel}>
+        <Button variant="tertiary" onClick={cancel}>
           Skip
         </Button>
         <Button onClick={submit} disabled={!canSubmit}>
@@ -865,7 +876,7 @@ export function ProposePersonalityComponent({
       </div>
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={cancel}>
+        <Button variant="tertiary" onClick={cancel}>
           Skip
         </Button>
         <Button onClick={submit} disabled={!canSubmit}>
@@ -961,7 +972,7 @@ export function ProposeSlackSetupComponent({
   if (settled) {
     return (
       <ToolCard title="Slack setup — error">
-        <Type small className="text-red-600">
+        <Type small destructive>
           {r?.error ?? "Setup did not complete."}
         </Type>
       </ToolCard>
@@ -1002,7 +1013,7 @@ export function ProposeSlackSetupComponent({
   return (
     <ToolCard
       title="Set up Slack"
-      icon={<Icon name="bot" className="text-muted-foreground h-4 w-4" />}
+      icon={<Bot className="text-muted-foreground h-4 w-4" />}
     >
       <Type small muted className="mb-3">
         Pick what {assistantName} can do in Slack and what wakes it up. You can
@@ -1103,7 +1114,7 @@ export function ProposeSlackSetupComponent({
       </div>
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={() => void cancel()}>
+        <Button variant="tertiary" onClick={() => void cancel()}>
           Skip
         </Button>
         <Button onClick={() => void submit()} disabled={!anySelected}>

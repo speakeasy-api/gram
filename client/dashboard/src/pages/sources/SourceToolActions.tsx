@@ -1,5 +1,4 @@
 import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
-import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +9,8 @@ import { Type } from "@/components/ui/type";
 import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool } from "@/lib/toolTypes";
-import { Icon, Stack } from "@/components/ui/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
+import { Layers2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 type EditMode = "name" | "description" | "annotations" | "tags";
@@ -248,11 +248,7 @@ export function SourceToolActions({
                 {tool.variation?.name &&
                   tool.variation?.name !== tool.canonical?.name && (
                     <Stack direction="horizontal" gap={2} align="center">
-                      <Icon
-                        name="layers-2"
-                        size="small"
-                        className="text-muted-foreground/70"
-                      />
+                      <Layers2 className="text-muted-foreground/70 size-4" />
                       <Type small muted>
                         Original name:
                       </Type>
@@ -276,11 +272,7 @@ export function SourceToolActions({
                     tool.canonical?.description && (
                     <Stack className="border-border/70 rounded-md border p-2">
                       <Type small muted className="inline font-medium">
-                        <Icon
-                          name="layers-2"
-                          size="small"
-                          className="text-muted-foreground/70 inline align-text-bottom"
-                        />{" "}
+                        <Layers2 className="text-muted-foreground/70 inline size-4 align-text-bottom" />{" "}
                         Original Description
                       </Type>
                       <Type small muted>
@@ -294,7 +286,7 @@ export function SourceToolActions({
           </div>
           <Dialog.Footer>
             <Button
-              variant="ghost"
+              variant="tertiary"
               onClick={() => setEditDialogOpen(false)}
               disabled={isUpdating}
             >

@@ -8,7 +8,7 @@ import { useRoutes } from "@/routes";
 import { type DateRangePreset } from "@gram-ai/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
-import { Icon } from "@/components/ui/moonshine";
+import { ChevronRight, Inbox, LoaderCircle } from "lucide-react";
 import { useMemo } from "react";
 import { Link, useLocation } from "react-router";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
@@ -92,13 +92,13 @@ function RiskOverviewCategoriesIndexContent() {
       <Page.Section.Body>
         {overviewQuery.isLoading ? (
           <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-            <Icon name="loader-circle" className="size-5 animate-spin" />
+            <LoaderCircle className="size-5 animate-spin" />
             <span>Loading categories...</span>
           </div>
         ) : categories.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-12 text-center">
             <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-              <Icon name="inbox" className="text-muted-foreground size-6" />
+              <Inbox className="text-muted-foreground size-6" />
             </div>
             <span className="text-foreground font-medium">
               No categories with findings in this time range
@@ -148,10 +148,7 @@ function RiskOverviewCategoriesIndexContent() {
                     )}
                   </div>
                   {href && (
-                    <Icon
-                      name="chevron-right"
-                      className="text-muted-foreground size-4 shrink-0"
-                    />
+                    <ChevronRight className="text-muted-foreground size-4 shrink-0" />
                   )}
                 </div>
               );

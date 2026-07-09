@@ -44,6 +44,8 @@ vi.mock("@/components/ui/type", () => ({
 vi.mock("lucide-react", () => ({
   ThumbsUp: () => null,
   ThumbsDown: () => null,
+  LoaderCircle: () => null,
+  Shield: () => null,
 }));
 
 // moonshine pulls lucide dynamicIconImports which can't resolve in the test env;
@@ -67,7 +69,6 @@ vi.mock("@/components/ui/moonshine", () => {
   Button.Text = ({ children }: { children: ReactNode }) => <>{children}</>;
   return {
     Button,
-    Icon: () => null,
     Stack: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   };
 });

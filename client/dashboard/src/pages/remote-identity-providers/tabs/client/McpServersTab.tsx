@@ -17,10 +17,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
 } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Network } from "lucide-react";
 import { toast } from "sonner";
 
 // mcpServerHref builds a cross-project link to a remote-MCP server's detail page
@@ -90,9 +89,7 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
         return (
           <DotRow
             key={server.id}
-            icon={
-              <Icon name="network" className="text-muted-foreground h-5 w-5" />
-            }
+            icon={<Network className="text-muted-foreground h-5 w-5" />}
             href={href ?? undefined}
             ariaLabel={href ? `View MCP server ${label}` : undefined}
           >

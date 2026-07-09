@@ -12,7 +12,9 @@ import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.j
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { RequireScope } from "@/components/require-scope";
-import { Badge, Button, Dialog, Stack } from "@/components/ui/moonshine";
+import { Dialog } from "@/components/ui/dialog";
+import { Badge, Button, Stack } from "@/components/ui/moonshine";
+
 import { ChevronRight, Globe, Lock, Power, Server, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
@@ -363,7 +365,7 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
   return (
     <routes.mcp.details.Link
       params={[toolset.slug]}
-      className="group bg-card hover:bg-surface-secondary hover:border-primary/30 block cursor-pointer rounded-xl border transition-all duration-200 hover:no-underline hover:shadow-lg"
+      className="group bg-card hover:bg-surface-secondary hover:border-primary/30 block cursor-pointer border transition-colors duration-200 hover:no-underline"
     >
       <div className="p-5">
         {/* Header with icon */}

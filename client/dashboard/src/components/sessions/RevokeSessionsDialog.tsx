@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { useRevokeUserSessionMutation } from "@gram/client/react-query/revokeUserSession.js";
 
@@ -77,11 +77,11 @@ export function RevokeSessionsDialog({
           </p>
         )}
         <Dialog.Footer>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="tertiary" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant="destructive-primary"
             disabled={isPending || count === 0}
             onClick={handleRevoke}
           >

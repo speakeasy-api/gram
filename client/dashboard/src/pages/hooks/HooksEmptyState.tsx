@@ -1,6 +1,5 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/ui/moonshine";
 import { Workflow } from "lucide-react";
 import { useState } from "react";
 import { HooksSetupDialog } from "./HooksSetupDialog";
@@ -84,10 +83,12 @@ export function HooksEmptyState({
           {/* Icon and Title */}
           <div className="flex flex-col items-center gap-4">
             <div className="bg-muted flex size-16 items-center justify-center rounded-full">
-              <Icon name="workflow" className="text-muted-foreground size-8" />
+              <Workflow className="text-muted-foreground size-8" />
             </div>
             <div>
-              <h2 className="mb-2 text-xl font-semibold">{title}</h2>
+              <h2 className="font-display mb-2 text-2xl font-thin tracking-[-0.015em]">
+                {title}
+              </h2>
               <p className="text-muted-foreground mx-auto max-w-md text-sm">
                 {subtitle}
               </p>

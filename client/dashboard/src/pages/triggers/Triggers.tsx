@@ -1,5 +1,4 @@
 import { Page } from "@/components/page-layout";
-import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
@@ -31,13 +30,23 @@ import { TriggerDefinition } from "@gram/client/models/components/triggerdefinit
 import { CreateTriggerInstanceFormTargetKind as TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";
 import { useRoutes } from "@/routes";
 import {
+  Badge,
   Button,
   type Column,
-  Icon,
   Stack,
   Table,
 } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  Check,
+  ChevronRight,
+  Copy,
+  FileText,
+  LoaderCircle,
+  Plus,
+  Trash2,
+  Zap,
+} from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
 
@@ -89,22 +98,42 @@ function isTriggerTargetKind(value: string): value is TriggerTargetKindValue {
 function StatusBadge({ status }: { status: string }) {
   switch (status) {
     case "active":
-      return <Badge variant="default">Active</Badge>;
+      return <Badge>Active</Badge>;
     case "fired":
-      return <Badge variant="secondary">Fired</Badge>;
+      return (
+        <Badge variant="neutral" background={false}>
+          Fired
+        </Badge>
+      );
     case "cancelled":
-      return <Badge variant="secondary">Cancelled</Badge>;
+      return (
+        <Badge variant="neutral" background={false}>
+          Cancelled
+        </Badge>
+      );
     case "paused":
     default:
-      return <Badge variant="secondary">Paused</Badge>;
+      return (
+        <Badge variant="neutral" background={false}>
+          Paused
+        </Badge>
+      );
   }
 }
 
 function KindBadge({ kind }: { kind: string }) {
   if (kind === "webhook") {
-    return <Badge variant="outline">Webhook</Badge>;
+    return (
+      <Badge variant="neutral" background={false}>
+        Webhook
+      </Badge>
+    );
   }
-  return <Badge variant="outline">Schedule</Badge>;
+  return (
+    <Badge variant="neutral" background={false}>
+      Schedule
+    </Badge>
+  );
 }
 
 function WebhookUrlPill({ url }: { url: string }) {
@@ -128,10 +157,11 @@ function WebhookUrlPill({ url }: { url: string }) {
       </span>
       <span aria-hidden="true" className="bg-border h-3 w-px shrink-0" />
       <span className="text-muted-foreground truncate font-mono">{url}</span>
-      <Icon
-        name={copied ? "check" : "copy"}
-        className="text-muted-foreground group-hover:text-foreground h-3 w-3 shrink-0"
-      />
+      {copied ? (
+        <Check className="text-muted-foreground group-hover:text-foreground h-3 w-3 shrink-0" />
+      ) : (
+        <Copy className="text-muted-foreground group-hover:text-foreground h-3 w-3 shrink-0" />
+      )}
     </button>
   );
 }
@@ -140,7 +170,7 @@ function TriggersEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Icon name="zap" className="text-muted-foreground h-6 w-6" />
+        <Zap className="text-muted-foreground h-6 w-6" />
       </div>
       <Type variant="subheading" className="mb-1">
         No triggers yet
@@ -151,7 +181,7 @@ function TriggersEmptyState({ onCreate }: { onCreate: () => void }) {
       </Type>
       <Button onClick={onCreate}>
         <Button.LeftIcon>
-          <Icon name="plus" className="h-4 w-4" />
+          <Plus className="h-4 w-4" />
         </Button.LeftIcon>
         <Button.Text>Create Trigger</Button.Text>
       </Button>
@@ -235,7 +265,7 @@ function TriggersTable({
             queryParams={{ af: triggerLogsFilterParam(trigger.id) }}
             className="text-muted-foreground hover:text-foreground no-underline hover:no-underline"
           >
-            <Icon name="file-text" className="h-4 w-4" />
+            <FileText className="h-4 w-4" />
           </routes.logs.Link>
         </div>
       ),
@@ -382,10 +412,7 @@ function TriggerConfigFields({
       {optionalEntries.length > 0 && (
         <Collapsible>
           <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
-            <Icon
-              name="chevron-right"
-              className="h-4 w-4 transition-transform"
-            />
+            <ChevronRight className="h-4 w-4 transition-transform" />
             Advanced
           </CollapsibleTrigger>
           <CollapsibleContent>
@@ -767,7 +794,7 @@ function TriggerDialog({
                   onClick={() => setConfirmDelete(true)}
                 >
                   <Button.LeftIcon>
-                    <Icon name="trash-2" className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4" />
                   </Button.LeftIcon>
                   <Button.Text>Delete</Button.Text>
                 </Button>
@@ -843,7 +870,7 @@ export function TriggersPanel(): JSX.Element {
           {triggers.length > 0 && (
             <Button onClick={openCreate}>
               <Button.LeftIcon>
-                <Icon name="plus" className="h-4 w-4" />
+                <Plus className="h-4 w-4" />
               </Button.LeftIcon>
               <Button.Text>Create Trigger</Button.Text>
             </Button>
@@ -852,10 +879,7 @@ export function TriggersPanel(): JSX.Element {
         <Page.Section.Body>
           {isLoading ? (
             <Stack align="center" justify="center" className="py-16">
-              <Icon
-                name="loader-circle"
-                className="text-muted-foreground h-6 w-6 animate-spin"
-              />
+              <LoaderCircle className="text-muted-foreground h-6 w-6 animate-spin" />
             </Stack>
           ) : triggers.length === 0 ? (
             <TriggersEmptyState onCreate={openCreate} />

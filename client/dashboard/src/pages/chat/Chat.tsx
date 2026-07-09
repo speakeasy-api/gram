@@ -49,6 +49,7 @@ import {
 } from "@/lib/insights-suggestions";
 import { cn } from "@/lib/utils";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { Heading } from "@/components/ui/heading";
 import { useRoutes } from "@/routes";
 
 // Shared pill-style icon button used by the page chrome (back affordances).
@@ -250,9 +251,9 @@ export function ChatLanding({
     <div className="flex w-full flex-col gap-6">
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h1 className="text-foreground text-3xl font-semibold tracking-tight">
+          <Heading variant="h1" className="text-3xl normal-case">
             {greeting}
-          </h1>
+          </Heading>
           <ReleaseStageBadge stage="beta" />
         </div>
         <form
@@ -260,7 +261,7 @@ export function ChatLanding({
             e.preventDefault();
             submit();
           }}
-          className="border-border bg-card focus-within:border-foreground/30 relative rounded-2xl border px-4 py-3 shadow-sm transition-colors"
+          className="border-border bg-card focus-within:border-foreground/30 relative border px-4 py-3 transition-colors"
         >
           <input
             value={value}
@@ -346,7 +347,7 @@ function SlashCommandMenu({
       id="ask-slash-menu"
       role="listbox"
       aria-label="Suggested prompts"
-      className="border-border bg-card absolute inset-x-0 top-full z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border p-1 shadow-lg"
+      className="border-border bg-card absolute inset-x-0 top-full z-20 mt-2 max-h-80 overflow-y-auto border p-1"
     >
       {commands.map((command, index) => {
         const Icon = INSIGHTS_SUGGESTION_ICONS[command.icon ?? "sparkles"];
@@ -513,7 +514,9 @@ function ChatHomePinned(): ReactElement | null {
   }
   return (
     <section className="flex flex-col gap-2">
-      <h2 className="text-muted-foreground px-3 text-sm font-medium">Pinned</h2>
+      <h2 className="text-muted-foreground px-3 font-mono text-xs tracking-[0.08em] uppercase">
+        Pinned
+      </h2>
       <div className="flex flex-col">
         {chats.map((chat) => (
           <RecentRow key={chat.id} chat={chat} pinned />
@@ -531,7 +534,7 @@ function ChatHomeRecents(): ReactElement {
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between px-3">
-        <h2 className="text-muted-foreground text-sm font-medium">
+        <h2 className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase">
           Recent Chats
         </h2>
         {chats.length > RECENTS_COLLAPSED_COUNT && (
@@ -601,7 +604,7 @@ function RecentsBody({
 function RecentEntryView({ entry }: { entry: RecentEntry }): ReactElement {
   if (entry.type === "header") {
     return (
-      <h3 className="text-muted-foreground px-3 pt-4 pb-1 text-sm font-medium">
+      <h3 className="text-muted-foreground px-3 pt-4 pb-1 font-mono text-xs tracking-[0.08em] uppercase">
         {entry.label}
       </h3>
     );
@@ -750,7 +753,7 @@ function ChatHomeSuggestions({
 }): ReactElement {
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-muted-foreground px-3 text-sm font-medium">
+      <h2 className="text-muted-foreground px-3 font-mono text-xs tracking-[0.08em] uppercase">
         Suggestions
       </h2>
       <div className="flex flex-wrap gap-x-2 gap-y-2.5 px-3">

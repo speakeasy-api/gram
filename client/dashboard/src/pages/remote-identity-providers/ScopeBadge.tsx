@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/moonshine";
 
 // ScopeBadge labels a remote identity provider or session client as
 // organization-wide or scoped to a single project, based on whether it carries
@@ -10,8 +10,8 @@ export function ScopeBadge({
   projectScoped: boolean;
 }): JSX.Element {
   return projectScoped ? (
-    <Badge variant="outline">Project-Specific</Badge>
+    <Badge background={false}>Project-Specific</Badge>
   ) : (
-    <Badge variant="secondary">Organizational</Badge>
+    <Badge background={false}>Organizational</Badge>
   );
 }

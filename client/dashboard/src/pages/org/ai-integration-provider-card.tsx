@@ -1,5 +1,4 @@
 import { RequireScope } from "@/components/require-scope";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -13,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useAiIntegrationConfig } from "@gram/client/react-query/aiIntegrationConfig";
-import { Badge, Stack } from "@/components/ui/moonshine";
+import { Badge, Button, Stack } from "@/components/ui/moonshine";
 import {
   AlertCircle,
   CheckCircle2,
@@ -134,13 +133,15 @@ export function AIIntegrationProviderCard({
       <Stack direction="horizontal" justify="space-between" align="center">
         <RequireScope scope="org:admin" level="component">
           <Button
-            variant="destructive"
+            variant="destructive-primary"
             size="sm"
             onClick={handleDelete}
             disabled={!form.isConfigured || form.isMutating}
           >
-            <Trash2 className="mr-1 h-3.5 w-3.5" />
-            Delete
+            <Button.LeftIcon>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button.LeftIcon>
+            <Button.Text>Delete</Button.Text>
           </Button>
         </RequireScope>
         <RequireScope scope="org:admin" level="component">

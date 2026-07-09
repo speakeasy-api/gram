@@ -19,10 +19,10 @@ import {
   useListChats,
 } from "@gram/client/react-query/listChats.js";
 import { formatPlatform } from "@/lib/formatPlatform";
-import { Badge } from "@/components/ui/badge";
-import { Alert, Button, Icon } from "@/components/ui/moonshine";
+import { Alert, Badge, Button } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { Bot, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
@@ -645,7 +645,9 @@ function AgentSessionsPageContent({
     return (
       <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-xl font-semibold">Agent Sessions</h1>
+          <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
+            Agent Sessions
+          </h1>
           <p className="text-muted-foreground text-sm">
             View and debug individual agent sessions captured for organization
             members in this project
@@ -669,7 +671,9 @@ function AgentSessionsPageContent({
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <div className="shrink-0 space-y-4 px-8 py-4">
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Agent Sessions</h1>
+            <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
+              Agent Sessions
+            </h1>
             <p className="text-muted-foreground text-sm">
               View and debug individual agent sessions captured for organization
               members in this project
@@ -677,23 +681,26 @@ function AgentSessionsPageContent({
           </div>
           {hasAssistantFilter && (
             <Badge
-              variant="secondary"
+              variant="neutral"
+              background={false}
               className="w-fit gap-1.5 px-2.5 py-1 text-xs"
             >
-              <Icon name="bot" className="size-3" />
-              <span>
+              <Badge.LeftIcon>
+                <Bot className="size-3" />
+              </Badge.LeftIcon>
+              <Badge.Text>
                 Assistant:{" "}
                 <span className="font-medium">
                   {assistantName ?? "Loading…"}
                 </span>
-              </span>
+              </Badge.Text>
               <button
                 type="button"
                 onClick={clearAssistantFilter}
                 aria-label="Clear assistant filter"
                 className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center rounded"
               >
-                <Icon name="x" className="size-3" />
+                <X className="size-3" />
               </button>
             </Badge>
           )}

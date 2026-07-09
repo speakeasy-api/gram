@@ -1,12 +1,10 @@
 import { Tool } from "@/lib/toolTypes";
+import { Badge, Stack } from "@/components/ui/moonshine";
 import {
-  Badge,
-  Stack,
   Tooltip,
   TooltipContent,
-  TooltipPortal,
   TooltipTrigger,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/tooltip";
 
 export function SubtoolsBadge({
   tool,
@@ -76,9 +74,7 @@ export function SubtoolsBadge({
           </Badge.Text>
         </Badge>
       </TooltipTrigger>
-      <TooltipPortal>
-        <TooltipContent>{tooltipContent}</TooltipContent>
-      </TooltipPortal>
+      <TooltipContent>{tooltipContent}</TooltipContent>
     </Tooltip>
   );
 }

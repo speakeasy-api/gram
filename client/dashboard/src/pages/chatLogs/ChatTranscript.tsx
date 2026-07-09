@@ -17,10 +17,12 @@ import {
   ArrowUp,
   Bot,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Ellipsis,
   GitBranch,
   Loader2,
+  Settings,
   ShieldOff,
   SlidersHorizontal,
 } from "lucide-react";
@@ -30,7 +32,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
 } from "@/components/ui/moonshine";
 import { MessageContent, type SectionMatch, ToolUI } from "@gram-ai/elements";
 import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
@@ -561,11 +562,8 @@ function SystemMessageRow({
     <div className={cn("px-4 py-2", dimClass(ctx.dimNonRisk))}>
       <details className="border-muted bg-muted/20 group overflow-hidden rounded-md border">
         <summary className="text-muted-foreground hover:bg-muted/40 flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs select-none">
-          <Icon
-            name="chevron-right"
-            className="size-3 transition-transform group-open:rotate-90"
-          />
-          <Icon name="settings" className="size-3" />
+          <ChevronRight className="size-3 transition-transform group-open:rotate-90" />
+          <Settings className="size-3" />
           <span>System prompt</span>
         </summary>
         <div className="border-muted border-t p-3 font-mono text-xs whitespace-pre-wrap">

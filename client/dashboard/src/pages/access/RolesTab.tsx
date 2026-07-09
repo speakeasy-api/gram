@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -13,12 +12,12 @@ import {
 import { useDeleteRoleMutation } from "@gram/client/react-query/deleteRole.js";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import {
+  Badge,
   Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
 } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -26,7 +25,7 @@ import { useSearchParams } from "react-router";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { MemberFacepile } from "@/components/member-facepile";
-import { Ellipsis } from "lucide-react";
+import { Ellipsis, Plus } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
@@ -142,7 +141,7 @@ function RoleRow({
           {role.name}
         </Type>
         {role.isSystem && (
-          <Badge variant="outline" size="sm">
+          <Badge variant="neutral" background={false} size="sm">
             System
           </Badge>
         )}
@@ -222,7 +221,7 @@ export function RolesTab(): JSX.Element {
         <RequireScope scope="org:admin" level="component">
           <Button onClick={() => setIsCreateOpen(true)}>
             <Button.LeftIcon>
-              <Icon name="plus" className="h-4 w-4" />
+              <Plus className="h-4 w-4" />
             </Button.LeftIcon>
             <Button.Text>Add Role</Button.Text>
           </Button>
@@ -272,7 +271,8 @@ export function RolesTab(): JSX.Element {
         </Type>
         <div className="flex items-start gap-3 text-sm">
           <Badge
-            variant="outline"
+            variant="neutral"
+            background={false}
             size="sm"
             className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
           >
@@ -286,7 +286,8 @@ export function RolesTab(): JSX.Element {
         </div>
         <div className="mt-2 flex items-start gap-3 text-sm">
           <Badge
-            variant="outline"
+            variant="neutral"
+            background={false}
             size="sm"
             className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
           >

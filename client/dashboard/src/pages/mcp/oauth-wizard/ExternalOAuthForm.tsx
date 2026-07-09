@@ -1,10 +1,8 @@
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Link } from "@/components/ui/link";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Alert, Button, Link, Stack } from "@/components/ui/moonshine";
 
 import { WizardContext } from "./machine";
 
@@ -30,14 +28,18 @@ export function ExternalOAuthForm({
     <>
       <div className="max-h-[60vh] space-y-4 overflow-auto">
         {hasMultipleOAuth2AuthCode && (
-          <Alert variant="warning">
-            <AlertTitle>Multiple OAuth2 security schemes detected</AlertTitle>
-            <AlertDescription>
-              This MCP server has {oauth2SecurityCount} OAuth2 security schemes.
-              The applicable scheme can't be determined automatically.
-              Double-check that the configuration below matches the scheme you
-              intend to use before continuing.
-            </AlertDescription>
+          <Alert variant="warning" dismissible={false}>
+            <div>
+              <div className="font-medium">
+                Multiple OAuth2 security schemes detected
+              </div>
+              <div className="text-sm">
+                This MCP server has {oauth2SecurityCount} OAuth2 security
+                schemes. The applicable scheme can't be determined
+                automatically. Double-check that the configuration below matches
+                the scheme you intend to use before continuing.
+              </div>
+            </div>
           </Alert>
         )}
         {discovered && !external.prefilled && (
@@ -82,8 +84,8 @@ export function ExternalOAuthForm({
             Configure your MCP server to use an external authorization server if
             your API fits the very specific MCP OAuth requirements.{" "}
             <Link
-              external
-              to="https://docs.getgram.ai/host-mcp/adding-oauth#authorization-code"
+              href="https://docs.getgram.ai/host-mcp/adding-oauth#authorization-code"
+              rel="noopener noreferrer"
             >
               Docs
             </Link>

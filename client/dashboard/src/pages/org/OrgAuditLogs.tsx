@@ -6,7 +6,6 @@ import { InsightsConfig, InsightsProvider } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
-import { Button } from "@/components/ui/button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { Switch } from "@/components/ui/switch";
@@ -21,7 +20,14 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogFacets } from "@gram/client/react-query/auditLogFacets.js";
 import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
-import { Icon, Input } from "@/components/ui/moonshine";
+import { Button, Input } from "@/components/ui/moonshine";
+import {
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  LoaderCircle,
+  Search,
+} from "lucide-react";
 import React, {
   useCallback,
   useDeferredValue,
@@ -263,7 +269,7 @@ function AuditLogRow({
           aria-label={`Open ${getSubjectLabel(log)}`}
           className="text-muted-foreground hover:text-foreground focus-visible:text-foreground shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
         >
-          <Icon name="arrow-right" className="size-4" />
+          <ArrowRight className="size-4" />
         </Link>
       )}
     </div>
@@ -829,7 +835,7 @@ function OrgAuditLogsInner() {
             Filters
           </Type>
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             disabled={!hasActiveFilters}
             onClick={() => {
@@ -927,10 +933,7 @@ function OrgAuditLogsInner() {
               )}
             </div>
             <div className="relative ml-auto">
-              <Icon
-                name="search"
-                className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2"
-              />
+              <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2" />
               <Input
                 data-audit-search-input
                 type="text"
@@ -956,14 +959,14 @@ function OrgAuditLogsInner() {
                         className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
                         title="Previous (Shift+N)"
                       >
-                        <Icon name="chevron-up" className="size-2.5" />
+                        <ChevronUp className="size-2.5" />
                       </button>
                       <button
                         onClick={() => navigateToResult("next")}
                         className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
                         title="Next (N)"
                       >
-                        <Icon name="chevron-down" className="size-2.5" />
+                        <ChevronDown className="size-2.5" />
                       </button>
                     </div>
                   </div>
@@ -991,7 +994,7 @@ function OrgAuditLogsInner() {
         <div ref={logsContainerRef} tabIndex={0} className="focus:outline-none">
           {isLoading ? (
             <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-              <Icon name="loader-circle" className="size-4 animate-spin" />
+              <LoaderCircle className="size-4 animate-spin" />
               <span>Loading audit logs...</span>
             </div>
           ) : error ? (

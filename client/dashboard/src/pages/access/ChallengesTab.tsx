@@ -15,10 +15,10 @@ import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.j
 import { useChallenges } from "@gram/client/react-query/challenges.js";
 import {
   Badge as MoonshineBadge,
+  Button,
   type Column,
   Table,
 } from "@/components/ui/moonshine";
-import { Button } from "@/components/ui/button";
 import { Check, Loader2 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -514,18 +514,20 @@ export function ChallengesTab(): JSX.Element {
               </Type>
               {hasMore ? (
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={() => setPageCount((p) => p + 1)}
                   disabled={isLoadingMore}
                 >
                   {isLoadingMore ? (
                     <>
-                      <Loader2 className="size-4 animate-spin" />
-                      Loading...
+                      <Button.LeftIcon>
+                        <Loader2 className="animate-spin" />
+                      </Button.LeftIcon>
+                      <Button.Text>Loading...</Button.Text>
                     </>
                   ) : (
-                    "Load more"
+                    <Button.Text>Load more</Button.Text>
                   )}
                 </Button>
               ) : (

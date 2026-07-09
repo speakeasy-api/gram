@@ -1,6 +1,6 @@
 import { CopyButton } from "@/components/ui/copy-button";
-import { DotCard } from "@/components/ui/dot-card";
-import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
@@ -21,7 +21,7 @@ import {
   useExternalMcpOAuthConfigStatus,
 } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
-import { Badge } from "@/components/ui/moonshine";
+import { Badge, Button } from "@/components/ui/moonshine";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
   const routes = useRoutes();
@@ -69,7 +69,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
   );
 
   return (
-    <DotCard
+    <Card
       className="cursor-pointer"
       onClick={handleClick}
       overlay={
@@ -116,16 +116,17 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
             />
           )}
           {installSourceTooltip && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              tooltip={installSourceTooltip}
-              aria-label={installSourceTooltip}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Package className="text-muted-foreground group-hover:text-foreground h-4 w-4" />
-            </Button>
+            <SimpleTooltip tooltip={installSourceTooltip}>
+              <Button
+                type="button"
+                variant="tertiary"
+                size="sm"
+                aria-label={installSourceTooltip}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Package className="text-muted-foreground group-hover:text-foreground h-4 w-4" />
+              </Button>
+            </SimpleTooltip>
           )}
           <ToolCollectionBadge
             toolNames={visibleToolNames}
@@ -152,13 +153,13 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
           </div>
         )}
       </div>
-    </DotCard>
+    </Card>
   );
 }
 
 export function MCPCardSkeleton(): JSX.Element {
   return (
-    <DotCard>
+    <Card>
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="bg-muted h-5 w-2/3 animate-pulse rounded" />
         <div className="bg-muted h-5 w-10 animate-pulse rounded-full" />
@@ -170,6 +171,6 @@ export function MCPCardSkeleton(): JSX.Element {
         </div>
         <div className="bg-muted h-3.5 w-10 animate-pulse rounded" />
       </div>
-    </DotCard>
+    </Card>
   );
 }

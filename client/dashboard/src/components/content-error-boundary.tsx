@@ -1,7 +1,7 @@
-import { Button } from "@/components/ui/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
 import { Card } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
-import { Icon, Stack } from "@/components/ui/moonshine";
+import { CircleAlert, RotateCcw } from "lucide-react";
 import { ReactNode, Suspense } from "react";
 import { ErrorBoundary as ReactErrorBoundary } from "react-error-boundary";
 import { handleError, toError } from "@/lib/errors";
@@ -29,7 +29,7 @@ function ContentErrorFallback({ error: rawError }: ContentErrorFallbackProps) {
       <Card.Header>
         <Card.Title>
           <Stack direction="horizontal" gap={2} align="center">
-            <Icon name="circle-alert" className="text-destructive h-5 w-5" />
+            <CircleAlert className="text-destructive h-5 w-5" />
             Error loading Page
           </Stack>
         </Card.Title>
@@ -52,7 +52,7 @@ function ContentErrorFallback({ error: rawError }: ContentErrorFallbackProps) {
       <Card.Footer className="justify-start">
         <Button variant="secondary" onClick={() => window.location.reload()}>
           <Button.LeftIcon>
-            <Icon name="rotate-ccw" className="h-4 w-4" />
+            <RotateCcw className="h-4 w-4" />
           </Button.LeftIcon>
           <Button.Text>Reload page</Button.Text>
         </Button>

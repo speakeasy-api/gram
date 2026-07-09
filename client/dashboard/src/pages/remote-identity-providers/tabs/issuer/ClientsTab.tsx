@@ -12,9 +12,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
 } from "@/components/ui/moonshine";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { Key, MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
 import { remoteSessionClientDisplayName } from "../../clientDisplay";
 import { CreateRemoteSessionClientSheet } from "../../CreateRemoteSessionClientSheet";
@@ -61,7 +60,7 @@ export function ClientsTab({
         {items.map((item) => (
           <DotRow
             key={item.client.id}
-            icon={<Icon name="key" className="text-muted-foreground h-5 w-5" />}
+            icon={<Key className="text-muted-foreground h-5 w-5" />}
             href={orgRoutes.remoteIdentityProviders.clientDetail.href(
               issuer.id,
               item.client.id,

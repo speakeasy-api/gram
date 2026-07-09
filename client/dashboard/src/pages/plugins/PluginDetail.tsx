@@ -2,12 +2,11 @@ import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
-import { Badge } from "@/components/ui/badge";
-import { Button as UiButton } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
-import { DotCard } from "@/components/ui/dot-card";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
@@ -29,17 +28,25 @@ import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import {
+  Badge,
   Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
   Stack,
 } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Network, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  Download,
+  Network,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -409,7 +416,7 @@ export default function PluginDetail(): JSX.Element | null {
               onClick={() => setIsAddServerOpen(true)}
             >
               <Button.LeftIcon>
-                <Icon name="plus" className="h-4 w-4" />
+                <Plus className="h-4 w-4" />
               </Button.LeftIcon>
               <Button.Text>Add Server</Button.Text>
             </Button>
@@ -449,11 +456,11 @@ export default function PluginDetail(): JSX.Element | null {
             <DropdownMenuTrigger asChild>
               <Button variant="secondary" size="sm">
                 <Button.LeftIcon>
-                  <Icon name="download" className="h-4 w-4" />
+                  <Download className="h-4 w-4" />
                 </Button.LeftIcon>
                 <Button.Text>Download Plugin</Button.Text>
                 <Button.RightIcon>
-                  <Icon name="chevron-down" className="h-4 w-4" />
+                  <ChevronDown className="h-4 w-4" />
                 </Button.RightIcon>
               </Button>
             </DropdownMenuTrigger>
@@ -622,7 +629,7 @@ function PublishStatusControl({
     return (
       <Button variant="secondary" onClick={onOpenDialog} disabled={isPending}>
         <Button.LeftIcon>
-          <Icon name="upload" className="h-4 w-4" />
+          <Upload className="h-4 w-4" />
         </Button.LeftIcon>
         <Button.Text>
           {isPending ? "Publishing..." : "Publish Private Marketplace"}
@@ -642,7 +649,7 @@ function PublishStatusControl({
       disabled={isPending}
     >
       <Button.LeftIcon>
-        <Icon name="refresh-cw" className="h-4 w-4" />
+        <RefreshCw className="h-4 w-4" />
       </Button.LeftIcon>
       <Button.Text>
         {isPending
@@ -690,7 +697,9 @@ function PublishFreshnessIndicator({
       {hasUnpublishedChanges ? (
         <Badge variant="warning">Unpublished changes</Badge>
       ) : isUpToDate ? (
-        <Badge variant="secondary">Up to date</Badge>
+        <Badge variant="neutral" background={false}>
+          Up to date
+        </Badge>
       ) : null}
       {lastPublished}
     </Stack>
@@ -729,7 +738,7 @@ function PluginServerCard({
   };
 
   return (
-    <DotCard
+    <Card
       className={cn(isClickable && "cursor-pointer")}
       onClick={isClickable ? handleClick : undefined}
       icon={<Network className="text-muted-foreground h-8 w-8" />}
@@ -747,7 +756,7 @@ function PluginServerCard({
           {isRemote ? (
             // Remote MCP servers have no Gram-side tool catalog, so the
             // tool-collection badge is omitted.
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="neutral" background={false} className="text-xs">
               Remote MCP
             </Badge>
           ) : toolset ? (
@@ -775,21 +784,22 @@ function PluginServerCard({
         ) : (
           <span />
         )}
-        <UiButton
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          tooltip="Remove server"
-          aria-label="Remove server"
-          className="hover:text-destructive"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-        </UiButton>
+        <SimpleTooltip tooltip="Remove server">
+          <Button
+            type="button"
+            variant="tertiary"
+            size="sm"
+            aria-label="Remove server"
+            className="hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </SimpleTooltip>
       </div>
-    </DotCard>
+    </Card>
   );
 }

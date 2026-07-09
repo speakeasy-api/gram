@@ -4,7 +4,6 @@ import { MemberFacepile } from "@/components/member-facepile";
 import { ProjectAvatar } from "@/components/project-menu";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
 import { SearchBar } from "@/components/ui/search-bar";
 import {
@@ -35,6 +34,7 @@ import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import {
+  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -271,8 +271,10 @@ function OrgHomeInner() {
                       setCreateDialogOpen(true);
                     }}
                   >
-                    <Plus className="size-4" />
-                    Create &ldquo;{search}&rdquo;
+                    <Button.LeftIcon>
+                      <Plus className="size-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Create &ldquo;{search}&rdquo;</Button.Text>
                   </Button>
                 </RequireScope>
               </div>
@@ -338,8 +340,10 @@ function OrgHomeInner() {
                           size="sm"
                           onClick={() => setCreateDialogOpen(true)}
                         >
-                          <Plus className="size-4" />
-                          Create your first project
+                          <Button.LeftIcon>
+                            <Plus className="size-4" />
+                          </Button.LeftIcon>
+                          <Button.Text>Create your first project</Button.Text>
                         </Button>
                       </RequireScope>
                     </div>
@@ -395,9 +399,13 @@ function AddNewMenu({
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button className="h-[42px] shrink-0 px-4">
-          <Plus className="size-4" />
-          Add New
-          <ChevronDown className="size-3.5 opacity-70" />
+          <Button.LeftIcon>
+            <Plus className="size-4" />
+          </Button.LeftIcon>
+          <Button.Text>Add New</Button.Text>
+          <Button.RightIcon>
+            <ChevronDown className="size-3.5 opacity-70" />
+          </Button.RightIcon>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
@@ -578,7 +586,7 @@ function ProjectCard({
   const { orgSlug } = useSlugs();
 
   return (
-    <div className="group border-border bg-card hover:border-foreground/20 relative flex h-full flex-col gap-4 rounded-lg border p-4 transition-all hover:shadow-sm">
+    <div className="group border-border bg-card hover:border-foreground/20 relative flex h-full flex-col gap-4 border p-4 transition-colors">
       <div className="pointer-events-none flex items-start gap-3">
         <ProjectAvatar
           project={project}

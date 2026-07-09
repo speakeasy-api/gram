@@ -1,8 +1,7 @@
 import { CodeBlock } from "@/components/code";
 import { Dialog } from "@/components/ui/dialog";
-import { Link } from "@/components/ui/link";
 import { Type } from "@/components/ui/type";
-import { Button } from "@/components/ui/moonshine";
+import { Button, Link } from "@/components/ui/moonshine";
 import { AlertTriangle } from "lucide-react";
 
 export function AutoRegisterFailedStep({
@@ -30,8 +29,8 @@ export function AutoRegisterFailedStep({
           Please reach out to
           <Link
             className="inline-block px-1"
-            external
-            to="mailto:support@speakeasy.com"
+            href="mailto:support@speakeasy.com"
+            rel="noopener noreferrer"
           >
             customer support
           </Link>

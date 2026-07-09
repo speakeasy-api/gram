@@ -123,6 +123,10 @@ vi.mock("@/components/ui/moonshine", () => ({
   ),
   Stack: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  Alert: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  Link: ({ children, href }: { children: ReactNode; href?: string }) => (
+    <a href={href}>{children}</a>
+  ),
 }));
 
 // ---------------------------------------------------------------------------

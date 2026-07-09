@@ -1,5 +1,4 @@
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge, Button } from "@/components/ui/moonshine";
 import { Type } from "@/components/ui/type";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
@@ -32,20 +31,21 @@ function StatusIcon({ isSuccess }: { isSuccess: boolean }) {
   );
 }
 
-function getSeverityVariant(
-  severity?: string | null,
-): "default" | "secondary" | "destructive" | "outline" {
+function getSeverityBadgeProps(severity?: string | null): {
+  variant: "neutral" | "destructive";
+  background?: boolean;
+} {
   switch (severity?.toUpperCase()) {
     case "INFO":
-      return "default";
+      return { variant: "neutral" };
     case "WARN":
-      return "outline";
+      return { variant: "neutral", background: false };
     case "ERROR":
     case "FATAL":
-      return "destructive";
+      return { variant: "destructive" };
     case undefined:
     default:
-      return "secondary";
+      return { variant: "neutral", background: false };
   }
 }
 
@@ -139,7 +139,8 @@ export function PlaygroundLogsPanel({
         <div className="flex items-center gap-1">
           <Button
             size="sm"
-            variant="ghost"
+            variant="tertiary"
+            aria-label="Refresh logs"
             onClick={() => {
               void fetchLogs();
             }}
@@ -152,7 +153,8 @@ export function PlaygroundLogsPanel({
           </Button>
           <Button
             size="sm"
-            variant="ghost"
+            variant="tertiary"
+            aria-label="Close logs panel"
             onClick={onClose}
             className="h-7 w-7 p-0"
           >
@@ -196,7 +198,7 @@ export function PlaygroundLogsPanel({
                       )}
                       {log.severityText && (
                         <Badge
-                          variant={getSeverityVariant(log.severityText)}
+                          {...getSeverityBadgeProps(log.severityText)}
                           className="h-4 px-1 py-0 text-[10px] font-semibold"
                         >
                           {log.severityText}
@@ -235,7 +237,8 @@ export function PlaygroundLogsPanel({
             </span>
             <Button
               size="sm"
-              variant="ghost"
+              variant="tertiary"
+              aria-label="Close log details"
               onClick={() => setSelectedLog(null)}
               className="h-6 w-6 p-0"
             >

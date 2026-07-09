@@ -3,7 +3,8 @@ import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
 import { useRiskCreatePolicyBypassRequestMutation } from "@gram/client/react-query/riskCreatePolicyBypassRequest.js";
-import { Button, Icon, Stack } from "@/components/ui/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
+import { Check, CircleX, LoaderCircle, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const REQUEST_TOKEN_STORAGE_KEY = "riskPolicyBypassRequestToken";
@@ -161,7 +162,7 @@ function RequestAccessMessage({
     return (
       <Stack gap={3} align="center">
         <div className="bg-primary/10 flex h-11 w-11 items-center justify-center rounded-full">
-          <Icon name="check" className="text-primary h-5 w-5" />
+          <Check className="text-primary h-5 w-5" />
         </div>
         <Stack gap={1} align="center">
           <Type variant="subheading" className="text-center">
@@ -178,10 +179,7 @@ function RequestAccessMessage({
   if (state === "authenticating") {
     return (
       <Stack gap={3} align="center">
-        <Icon
-          name="loader-circle"
-          className="text-muted-foreground h-6 w-6 animate-spin"
-        />
+        <LoaderCircle className="text-muted-foreground h-6 w-6 animate-spin" />
         <Type muted small className="text-center">
           Redirecting to sign in...
         </Type>
@@ -193,7 +191,7 @@ function RequestAccessMessage({
     return (
       <Stack gap={3} align="center">
         <div className="bg-destructive/10 flex h-11 w-11 items-center justify-center rounded-full">
-          <Icon name="circle-x" className="text-destructive h-5 w-5" />
+          <CircleX className="text-destructive h-5 w-5" />
         </div>
         <Stack gap={1} align="center">
           <Type variant="subheading" className="text-center">
@@ -212,7 +210,7 @@ function RequestAccessMessage({
     return (
       <Stack gap={3} align="center">
         <div className="bg-destructive/10 flex h-11 w-11 items-center justify-center rounded-full">
-          <Icon name="circle-x" className="text-destructive h-5 w-5" />
+          <CircleX className="text-destructive h-5 w-5" />
         </div>
         <Stack gap={1} align="center">
           <Type variant="subheading" className="text-center">
@@ -224,7 +222,7 @@ function RequestAccessMessage({
         </Stack>
         <Button variant="secondary" onClick={onRetry}>
           <Button.LeftIcon>
-            <Icon name="refresh-cw" className="h-4 w-4" />
+            <RefreshCw className="h-4 w-4" />
           </Button.LeftIcon>
           <Button.Text>Try again</Button.Text>
         </Button>
@@ -234,10 +232,7 @@ function RequestAccessMessage({
 
   return (
     <Stack gap={3} align="center">
-      <Icon
-        name="loader-circle"
-        className="text-muted-foreground h-6 w-6 animate-spin"
-      />
+      <LoaderCircle className="text-muted-foreground h-6 w-6 animate-spin" />
       <Type muted small className="text-center">
         {isPending ? "Submitting request..." : "Preparing request..."}
       </Type>

@@ -1,5 +1,5 @@
 import { QuerySamplesPopover } from "@/components/QuerySamplesPopover";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/moonshine";
 import {
   CommandEmpty,
   CommandGroup,
@@ -643,7 +643,7 @@ function EditableFilterChip({
         <div className="flex items-center justify-between">
           <Button
             type="button"
-            variant="destructiveGhost"
+            variant="destructive-secondary"
             size="sm"
             onClick={() => {
               onRemove(filter.id);
@@ -655,7 +655,7 @@ function EditableFilterChip({
           <div className="flex gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
               onClick={() => setOpen(false)}
             >

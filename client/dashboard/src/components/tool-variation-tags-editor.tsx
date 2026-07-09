@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/moonshine";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useMemo } from "react";
@@ -46,7 +46,7 @@ export function TagsVariationEditor({
             Tags
           </Label>
           {overridden && (
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="neutral" background={false} className="text-xs">
               Overridden
             </Badge>
           )}
@@ -89,7 +89,11 @@ export function TagsVariationEditor({
                 aria-label={`Add tag "${tag}" from source`}
                 className="disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Badge variant="secondary" className="text-xs capitalize">
+                <Badge
+                  variant="neutral"
+                  background={false}
+                  className="text-xs capitalize"
+                >
                   {tag}
                 </Badge>
               </button>

@@ -1,7 +1,7 @@
 import { HumanizeDateTime } from "@/lib/dates";
 
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/ui/moonshine";
+import { BadgeAlert } from "lucide-react";
 import { isAfter } from "date-fns";
 import { Type } from "./ui/type";
 
@@ -35,7 +35,7 @@ export function UpdatedAt({
         className,
       )}
     >
-      {isRecent && <Icon name="badge-alert" size="small" />}
+      {isRecent && <BadgeAlert className="size-4" />}
       Updated <HumanizeDateTime date={date} includeTime={false} />
     </Type>
   );

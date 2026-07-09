@@ -6,8 +6,8 @@ import {
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import { Icon, Modal, ModalProvider } from "@/components/ui/moonshine";
-import { ShieldAlert } from "lucide-react";
+import { Button } from "@/components/ui/moonshine";
+import { RefreshCw, ShieldAlert } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
@@ -49,9 +49,7 @@ export const AppLayout = (): JSX.Element => {
         } as React.CSSProperties
       }
     >
-      <ModalProvider>
-        <AppLayoutContent isImpersonating={isImpersonating} />
-      </ModalProvider>
+      <AppLayoutContent isImpersonating={isImpersonating} />
     </SidebarProvider>
   );
 };
@@ -70,7 +68,7 @@ const ImpersonationBanner = () => {
   const client = useSdkClient();
 
   return (
-    <div className="flex items-center justify-center gap-3 bg-red-600 px-4 py-2 text-sm text-white">
+    <div className="bg-destructive flex items-center justify-center gap-3 px-4 py-2 text-sm text-white">
       <ShieldAlert className="h-4 w-4 shrink-0" />
       <span className="font-mono font-bold">
         Impersonating {organization.slug}
@@ -107,11 +105,6 @@ const AppLayoutContent = ({
             <MembershipSyncGuard>
               <Outlet />
             </MembershipSyncGuard>
-            <Modal
-              closable
-              className="h-full max-h-[450px] min-h-auto w-9/12 max-w-[1100px] min-w-auto rounded-sm p-0 2xl:w-2/3 2xl:max-w-[1000px]"
-              layout="custom"
-            />
           </GlobalInsightsWrapper>
         </SidebarInset>
       </div>
@@ -158,16 +151,17 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
     <div className="flex h-full min-h-[400px] w-full items-center justify-center">
       <div className="flex max-w-md flex-col items-center gap-4 text-center">
         <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
-          <Icon name="refresh-cw" className="text-muted-foreground h-5 w-5" />
+          <RefreshCw className="text-muted-foreground h-5 w-5" />
         </div>
-        <h2 className="text-lg font-medium">Organization sync required</h2>
+        <h2 className="font-display text-2xl font-thin tracking-[-0.015em]">
+          Organization sync required
+        </h2>
         <p className="text-muted-foreground text-sm">
           Your organization membership needs to be re-synchronized. Please log
           out and log back in to refresh your session.
         </p>
-        <button
-          type="button"
-          className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2 rounded-md px-4 py-2 text-sm font-medium"
+        <Button
+          className="mt-2"
           onClick={() => {
             void (async () => {
               await client.auth.logout();
@@ -176,7 +170,7 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
           }}
         >
           Log out
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -197,19 +191,17 @@ export const OrgLayout = (): JSX.Element => {
         } as React.CSSProperties
       }
     >
-      <ModalProvider>
-        <div className="flex h-screen w-full flex-col">
-          {isImpersonating && <ImpersonationBanner />}
-          <div className="flex w-full flex-1 overflow-hidden">
-            <OrgSidebar variant="inset" />
-            <SidebarInset>
-              <MembershipSyncGuard>
-                <Outlet />
-              </MembershipSyncGuard>
-            </SidebarInset>
-          </div>
+      <div className="flex h-screen w-full flex-col">
+        {isImpersonating && <ImpersonationBanner />}
+        <div className="flex w-full flex-1 overflow-hidden">
+          <OrgSidebar variant="inset" />
+          <SidebarInset>
+            <MembershipSyncGuard>
+              <Outlet />
+            </MembershipSyncGuard>
+          </SidebarInset>
         </div>
-      </ModalProvider>
+      </div>
     </SidebarProvider>
   );
 };

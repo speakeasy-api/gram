@@ -1,9 +1,7 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsConfig } from "@/components/insights-dock";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
-import { ErrorAlert } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import {
   FilterChip,
@@ -42,7 +40,7 @@ import type { ToolUsageUserSummary } from "@gram/client/models/components/toolus
 import type { ToolUsageUserTimeSeriesPoint } from "@gram/client/models/components/toolusageusertimeseriespoint.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Badge, Icon } from "@/components/ui/moonshine";
+import { Alert, Badge, Button } from "@/components/ui/moonshine";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
@@ -66,7 +64,7 @@ import {
 } from "chart.js";
 import ZoomPlugin from "chartjs-plugin-zoom";
 import { Bar, Line } from "react-chartjs-2";
-import { Settings } from "lucide-react";
+import { ChartNoAxesColumn, ChevronDown, Inbox, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo } from "react";
 import { Link } from "react-router";
 import { useObserveFilters } from "@/components/observe/useObserveFilters";
@@ -375,7 +373,7 @@ export function InsightsToolsContent(): JSX.Element {
       {isLogsDisabled ? (
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">
+            <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
               MCP Servers & Tool Insights
             </h1>
             <p className="text-muted-foreground text-sm">
@@ -524,7 +522,7 @@ function HooksInnerContent({
       <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
         <div className="flex shrink-0 items-start justify-between gap-4">
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">
+            <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
               MCP Servers & Tool Insights
             </h1>
             <p className="text-muted-foreground text-sm">
@@ -534,7 +532,7 @@ function HooksInnerContent({
           </div>
           <div className="flex items-center gap-2">
             <HooksSetupButton />
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="secondary" size="sm" asChild>
               <Link to={orgRoutes.logs.href()}>
                 <Settings className="h-4 w-4" />
                 Configure settings
@@ -575,11 +573,14 @@ function HooksInnerContent({
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <div className="min-h-0 flex-1 overflow-y-auto pb-4">
             {error ? (
-              <ErrorAlert
-                error={error}
-                title="Error loading tool usage"
+              <Alert
+                variant="error"
+                dismissible={false}
                 className="mx-auto w-full"
-              />
+              >
+                <span className="font-medium">Error loading tool usage</span>
+                <div>{error.message}</div>
+              </Alert>
             ) : isLoading ? (
               <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
                 <Spinner className="mr-0 size-5" />
@@ -596,10 +597,7 @@ function HooksInnerContent({
               <div className="py-12 text-center">
                 <div className="flex flex-col items-center gap-3">
                   <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-                    <Icon
-                      name="inbox"
-                      className="text-muted-foreground size-6"
-                    />
+                    <Inbox className="text-muted-foreground size-6" />
                   </div>
                   <span className="text-foreground font-medium">
                     No matching tool usage
@@ -784,14 +782,11 @@ function StackedBarChart({
       </div>
       {hiddenCount > 0 && onShowAll && (
         <div className="mt-2 flex w-full">
-          <Button
-            variant="ghost"
-            size="sm"
-            icon="chevron-down"
-            iconAfter={true}
-            onClick={onShowAll}
-          >
-            Show {hiddenCount} more
+          <Button variant="tertiary" size="sm" onClick={onShowAll}>
+            <Button.Text>Show {hiddenCount} more</Button.Text>
+            <Button.RightIcon>
+              <ChevronDown />
+            </Button.RightIcon>
           </Button>
         </div>
       )}
@@ -1101,7 +1096,7 @@ function ChartNoData({
     <div className="flex h-24 items-center justify-center">
       <Badge variant="neutral">
         <Badge.LeftIcon>
-          <Icon name="chart-no-axes-column" size="small" />
+          <ChartNoAxesColumn className="size-3" />
         </Badge.LeftIcon>
         <Badge.Text>{message}</Badge.Text>
       </Badge>
@@ -1733,10 +1728,10 @@ function HooksAnalytics({
       >
         {summaryIsError && !summaryData ? (
           <div className="col-span-full">
-            <ErrorAlert
-              error={new Error("Failed to load analytics summary")}
-              title="Error loading analytics"
-            />
+            <Alert variant="error" dismissible={false}>
+              <span className="font-medium">Error loading analytics</span>
+              <div>Failed to load analytics summary</div>
+            </Alert>
           </div>
         ) : summaryPending || !summaryData ? (
           <>

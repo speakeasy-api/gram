@@ -14,8 +14,8 @@ import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
-import { Badge, Button, Icon } from "@/components/ui/moonshine";
-import { Plus } from "lucide-react";
+import { Badge, Button } from "@/components/ui/moonshine";
+import { Plus, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -201,7 +201,7 @@ function MCPOverview() {
     <SimpleTooltip tooltip="We couldn't reach the server to refresh this list. Showing the most recently loaded data.">
       <Badge variant="warning">
         <Badge.LeftIcon>
-          <Icon name="triangle-alert" className="inline-block" />
+          <TriangleAlert className="inline-block size-4" />
         </Badge.LeftIcon>
         <Badge.Text>Couldn&apos;t refresh</Badge.Text>
       </Badge>

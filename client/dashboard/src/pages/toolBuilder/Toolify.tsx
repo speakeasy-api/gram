@@ -6,8 +6,9 @@ import { TextArea } from "@/components/ui/textarea";
 import { useToolset } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import { Button, Icon, Stack } from "@/components/ui/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
 import { generateObject } from "ai";
+import { WandSparkles } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import { useMiniModel } from "../playground/Openrouter";
@@ -135,7 +136,7 @@ export const ToolifyDialog = ({
         <Dialog.Header>
           <Dialog.Title>
             <Stack direction="horizontal" gap={2} align="center">
-              <Icon name="wand-sparkles" className="text-muted-foreground" />
+              <WandSparkles className="text-muted-foreground" />
               Toolify
             </Stack>
           </Dialog.Title>

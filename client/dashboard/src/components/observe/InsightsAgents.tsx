@@ -12,7 +12,6 @@ import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Dialog } from "@/components/ui/dialog";
-import { ErrorAlert } from "@/components/ui/alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -56,13 +55,14 @@ import {
 } from "chart.js";
 import ZoomPlugin from "chartjs-plugin-zoom";
 import {
+  Alert,
   Button,
   type Column,
-  Icon,
   type SortDescriptor,
   Table,
   sortTableData,
 } from "@/components/ui/moonshine";
+import { ArrowRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, Chart } from "react-chartjs-2";
 import { Link } from "react-router";
@@ -490,7 +490,9 @@ export function InsightsAgentsContent(): JSX.Element {
           <div className="flex flex-col gap-4">
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold">AI Agent Costs</h1>
+                <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
+                  AI Agent Costs
+                </h1>
                 <ReleaseStageBadge stage="preview" />
               </div>
               <p className="text-muted-foreground text-sm">
@@ -538,7 +540,12 @@ export function InsightsAgentsContent(): JSX.Element {
           </div>
 
           {error ? (
-            <ErrorAlert title="Unable to load agent usage data" error={error} />
+            <Alert variant="error" dismissible={false}>
+              <span className="font-medium">
+                Unable to load agent usage data
+              </span>
+              <div>{error.message}</div>
+            </Alert>
           ) : isLoading ? (
             <AgentsLoadingState isInsightsOpen={isInsightsOpen} />
           ) : (
@@ -1261,7 +1268,7 @@ function EmployeeCostTable({
             aria-label={`View ${user.displayName}`}
           >
             View
-            <Icon name="arrow-right" />
+            <ArrowRight />
           </Link>
         ),
       },

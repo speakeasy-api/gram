@@ -6,9 +6,20 @@ import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
-import { Button, Icon } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { format } from "date-fns";
 import { useCallback, useState } from "react";
+import {
+  Check,
+  ChevronRight,
+  Copy,
+  DollarSign,
+  Inbox,
+  MessageSquare,
+  Timer,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react";
 
 // Label for a session's owner. Personal-account sessions show the account's own
 // email (the session's user fields carry the attributed employee's WORK email,
@@ -127,13 +138,11 @@ function CopyButton({
       )}
       title={`Copy ${label}`}
     >
-      <Icon
-        name={copied ? "check" : "copy"}
-        className={cn(
-          "size-3.5",
-          copied ? "text-emerald-500" : "text-muted-foreground",
-        )}
-      />
+      {copied ? (
+        <Check className={cn("size-3.5", "text-emerald-500")} />
+      ) : (
+        <Copy className={cn("size-3.5", "text-muted-foreground")} />
+      )}
     </span>
   );
 }
@@ -166,7 +175,7 @@ export function ChatLogsTable({
       <div className="flex h-64 items-center justify-center">
         <div className="flex flex-col items-center gap-3 px-4 text-center">
           <div className="flex size-10 items-center justify-center rounded-full bg-rose-500/10">
-            <Icon name="triangle-alert" className="size-5 text-rose-500" />
+            <TriangleAlert className="size-5 text-rose-500" />
           </div>
           <div>
             <p className="text-foreground text-sm font-medium">
@@ -186,7 +195,7 @@ export function ChatLogsTable({
       <div className="flex h-64 items-center justify-center">
         <div className="flex flex-col items-center gap-3 px-4 text-center">
           <div className="bg-muted flex size-10 items-center justify-center rounded-full">
-            <Icon name="inbox" className="text-muted-foreground size-5" />
+            <Inbox className="text-muted-foreground size-5" />
           </div>
           <div>
             <p className="text-foreground text-sm font-medium">
@@ -267,22 +276,16 @@ export function ChatLogsTable({
                       </span>
                     )}
                     <span className="flex items-center gap-1.5">
-                      <Icon name="timer" className="size-4 opacity-60" />
+                      <Timer className="size-4 opacity-60" />
                       {formatDuration(chat)}
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <Icon
-                        name="message-square"
-                        className="size-4 opacity-60"
-                      />
+                      <MessageSquare className="size-4 opacity-60" />
                       {chat.numMessages} messages
                     </span>
                     {chat.totalCost !== undefined && chat.totalCost > 0 && (
                       <span className="flex items-center gap-0">
-                        <Icon
-                          name="dollar-sign"
-                          className="size-4 opacity-60"
-                        />
+                        <DollarSign className="size-4 opacity-60" />
                         {chat.totalCost.toFixed(4)}
                       </span>
                     )}
@@ -307,10 +310,9 @@ export function ChatLogsTable({
                     className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 opacity-0 transition-all group-hover:opacity-100"
                     aria-label="Delete chat"
                   >
-                    <Icon name="trash-2" className="size-4" />
+                    <Trash2 className="size-4" />
                   </span>
-                  <Icon
-                    name="chevron-right"
+                  <ChevronRight
                     className={cn(
                       "size-4 transition-colors",
                       isSelected

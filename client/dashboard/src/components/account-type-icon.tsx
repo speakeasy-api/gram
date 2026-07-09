@@ -1,4 +1,4 @@
-import { Icon } from "@/components/ui/moonshine";
+import { User, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -26,7 +26,7 @@ type AccountTypeIconProps = {
 };
 
 type AccountTypeGlyph = {
-  iconName: "user" | "users";
+  GlyphIcon: typeof User;
   label: string;
   tooltip: string | null;
   // Personal usage is the thing an admin scans for, so it's tinted with the
@@ -41,14 +41,14 @@ function glyphForAccountType(
   switch (accountType) {
     case "personal":
       return {
-        iconName: "user",
+        GlyphIcon: User,
         label: "Personal account",
         tooltip: PERSONAL_TOOLTIP,
         iconClassName: "text-warning",
       };
     case "team":
       return {
-        iconName: "users",
+        GlyphIcon: Users,
         label: "Team account",
         tooltip: TEAM_TOOLTIP,
         iconClassName: "opacity-60",
@@ -57,7 +57,7 @@ function glyphForAccountType(
     case undefined:
     default:
       return {
-        iconName: "user",
+        GlyphIcon: User,
         label: "Account owner",
         tooltip: null,
         iconClassName: "opacity-60",
@@ -70,15 +70,12 @@ export function AccountTypeIcon({
   noTooltip = false,
   className,
 }: AccountTypeIconProps): JSX.Element {
-  const { iconName, label, tooltip, iconClassName } =
+  const { GlyphIcon, label, tooltip, iconClassName } =
     glyphForAccountType(accountType);
 
   const icon = (
     <span className="inline-flex items-center" aria-label={label}>
-      <Icon
-        name={iconName}
-        className={cn("size-4", iconClassName, className)}
-      />
+      <GlyphIcon className={cn("size-4", iconClassName, className)} />
     </span>
   );
 

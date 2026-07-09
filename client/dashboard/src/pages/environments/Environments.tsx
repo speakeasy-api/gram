@@ -2,7 +2,7 @@ import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
-import { DotCard } from "@/components/ui/dot-card";
+import { Card } from "@/components/ui/card";
 import { Action, MoreActions } from "@/components/ui/more-actions";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -190,7 +190,7 @@ function EnvironmentCard({
         params={[environment.slug]}
         className="block h-full hover:no-underline"
       >
-        <DotCard icon={<Blocks className="text-muted-foreground h-8 w-8" />}>
+        <Card icon={<Blocks className="text-muted-foreground h-8 w-8" />}>
           <div className="mb-2 flex items-start justify-between gap-2">
             <Type
               variant="subheading"
@@ -219,7 +219,7 @@ function EnvironmentCard({
               <ArrowRight className="h-3.5 w-3.5" />
             </div>
           </div>
-        </DotCard>
+        </Card>
       </routes.environments.environment.Link>
     </CardContextMenu>
   );

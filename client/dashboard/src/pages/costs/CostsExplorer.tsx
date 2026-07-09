@@ -944,7 +944,9 @@ export function CostsExplorer(): JSX.Element {
         <InsightsConfig hideTrigger />
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Costs</h1>
+            <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
+              Costs
+            </h1>
             <p className="text-muted-foreground text-sm">
               Break down this project's AI spend by division, department, user,
               agent, and model.

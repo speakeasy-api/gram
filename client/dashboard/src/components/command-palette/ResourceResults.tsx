@@ -65,6 +65,7 @@ function ResultItem({
       className="flex items-center justify-between"
     >
       <div className="flex min-w-0 items-center gap-2">
+        {/* TODO(design-system): DynamicIcon — icon name threaded through as a prop from ~9 static call sites */}
         {icon && <Icon name={icon} className="size-4 shrink-0" />}
         <span className="truncate">{label}</span>
       </div>

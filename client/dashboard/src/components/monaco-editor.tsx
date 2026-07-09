@@ -74,7 +74,7 @@ export function MonacoEditor({
       renderWhitespace: "selection",
       fontSize: 12,
       fontFamily:
-        'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+        '"Diatype Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
       lineNumbers: "on",
       folding: true,
       automaticLayout: true,

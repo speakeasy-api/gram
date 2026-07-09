@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import {
@@ -8,6 +7,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useFetcher } from "@/contexts/Fetcher";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/moonshine";
 import { BookOpen, Download, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { HookSourceIcon } from "../hooks/HookSourceIcon";
@@ -225,7 +225,7 @@ function ClaudeCodeInstallContent({
             </p>
           </div>
 
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="secondary" size="sm" asChild>
             <a
               href={CLAUDE_CODE_SETTINGS_DOCS_URL}
               target="_blank"
@@ -330,7 +330,7 @@ function ClaudeCoworkInstallContent({
             </p>
           </div>
 
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="secondary" size="sm" asChild>
             <a
               href={COWORK_DOCS_URL}
               target="_blank"
@@ -427,7 +427,7 @@ function CursorInstallContent({
             </p>
           </div>
 
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="secondary" size="sm" asChild>
             <a
               href={CURSOR_DASHBOARD_URL}
               target="_blank"
@@ -502,14 +502,17 @@ function CodexInstallContent({
           required. Suitable for MDM deployment.
         </p>
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           disabled={isDownloading}
           onClick={() => void handleDownloadInstallScript()}
-          className="inline-flex items-center gap-2"
         >
-          <Download className="size-4" />
-          {isDownloading ? "Downloading…" : "Download Install Script"}
+          <Button.LeftIcon>
+            <Download className="size-4" />
+          </Button.LeftIcon>
+          <Button.Text>
+            {isDownloading ? "Downloading…" : "Download Install Script"}
+          </Button.Text>
         </Button>
         <p className="text-muted-foreground mt-2 text-xs">
           Then run:{" "}
@@ -587,7 +590,7 @@ function CodexInstallContent({
         </div>
 
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="secondary" size="sm" asChild>
             <a
               href="https://developers.openai.com/codex/hooks"
               target="_blank"
@@ -598,7 +601,7 @@ function CodexInstallContent({
               Hooks Docs
             </a>
           </Button>
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="secondary" size="sm" asChild>
             <a
               href="https://developers.openai.com/codex/plugins/build"
               target="_blank"
@@ -717,9 +720,11 @@ export function InstallInstructionsButton(props: ContentProps): JSX.Element {
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <BookOpen className="h-4 w-4" />
-        Install instructions
+      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
+        <Button.LeftIcon>
+          <BookOpen className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>Install instructions</Button.Text>
       </Button>
       <InstallInstructionsDialog
         open={open}

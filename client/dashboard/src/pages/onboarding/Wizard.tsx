@@ -6,8 +6,6 @@ import { InputField } from "@/components/moon/input-field";
 import { OpenApiSourceInput } from "@/components/OpenApiSourceInput";
 import { ProjectSelector } from "@/components/project-menu";
 import { ToolBadge } from "@/components/tool-badge";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -27,7 +25,7 @@ import { Toolset } from "@gram/client/models/components/toolset.js";
 import { invalidateAllLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Alert, Badge, Button, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -899,11 +897,14 @@ const ToolsetStep = ({
         required
       />
       {createError && (
-        <ErrorAlert
-          error={createError}
-          title="Failed to create MCP server"
+        <Alert
+          variant="error"
+          dismissible
           onDismiss={() => setCreateError(null)}
-        />
+        >
+          <div className="font-medium">Failed to create MCP server</div>
+          <div>{createError}</div>
+        </Alert>
       )}
       {toolsLoading ? (
         <Spinner />
@@ -924,7 +925,8 @@ const ToolsetStep = ({
           ))}
           {additionalTools.length > 0 && (
             <Badge
-              variant={"secondary"}
+              variant="neutral"
+              background={false}
               className="text-muted-foreground"
               tooltip={
                 <Stack>
@@ -934,7 +936,7 @@ const ToolsetStep = ({
                 </Stack>
               }
             >
-              + {additionalTools.length} more
+              {`+ ${additionalTools.length} more`}
             </Badge>
           )}
         </Stack>
@@ -1025,11 +1027,14 @@ const McpStep = ({
         )}
       />
       {updateError && (
-        <ErrorAlert
-          error={updateError}
-          title="Failed to setup MCP server"
+        <Alert
+          variant="error"
+          dismissible
           onDismiss={() => setUpdateError(null)}
-        />
+        >
+          <div className="font-medium">Failed to setup MCP server</div>
+          <div>{updateError}</div>
+        </Alert>
       )}
       <ContinueButton disabled={!!slugError} onClick={onContinue} />
     </>

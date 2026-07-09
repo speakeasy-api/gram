@@ -31,11 +31,10 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
   Stack,
 } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { Fingerprint, MoreHorizontal, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
 import { toast } from "sonner";
@@ -221,12 +220,7 @@ function IssuerTable({
       {items.map((item) => (
         <DotRow
           key={item.issuer.id}
-          icon={
-            <Icon
-              name="fingerprint"
-              className="text-muted-foreground h-5 w-5"
-            />
-          }
+          icon={<Fingerprint className="text-muted-foreground h-5 w-5" />}
           href={orgRoutes.remoteIdentityProviders.issuerDetail.href(
             item.issuer.id,
           )}

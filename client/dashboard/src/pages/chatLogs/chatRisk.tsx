@@ -1,7 +1,7 @@
-import { ArrowRight, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, ShieldAlert } from "lucide-react";
 import { type ReactElement, type ReactNode, useMemo } from "react";
 import { Link } from "react-router";
-import { Badge, Icon } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/moonshine";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   Popover,
@@ -312,8 +312,7 @@ export function RiskBadge({
               variant="destructive"
               className={compact ? "px-1.5 py-0 text-[10px]" : "text-xs"}
             >
-              <Icon
-                name="shield-alert"
+              <ShieldAlert
                 className={`mr-1 ${compact ? "size-2.5" : "size-3"}`}
               />
               {findings.length} {findings.length === 1 ? "Risk" : "Risks"}

@@ -1,14 +1,13 @@
 import { Page } from "@/components/page-layout";
 import { Textarea } from "@/components/moon/textarea";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import { Button, Input, Stack } from "@/components/ui/moonshine";
+import { Badge, Button, Input, Stack } from "@/components/ui/moonshine";
 import { useQueries } from "@tanstack/react-query";
 import {
   Globe,
@@ -376,17 +375,19 @@ function CreateCollectionForm() {
                             </span>
                             {server.kind === "mcpServer" && (
                               <Badge
-                                variant="secondary"
+                                variant="neutral"
+                                background={false}
                                 className="shrink-0 text-xs"
                               >
-                                Remote MCP
+                                <Badge.Text>Remote MCP</Badge.Text>
                               </Badge>
                             )}
                             <Badge
-                              variant="secondary"
+                              variant="neutral"
+                              background={false}
                               className="shrink-0 text-xs"
                             >
-                              {server.projectName}
+                              <Badge.Text>{server.projectName}</Badge.Text>
                             </Badge>
                           </div>
                           {server.description && (

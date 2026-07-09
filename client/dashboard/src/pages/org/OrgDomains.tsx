@@ -1,6 +1,5 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Page } from "@/components/page-layout";
-import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -27,7 +26,7 @@ import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
 import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Badge, Button, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -382,7 +381,7 @@ function OrgDomainsInner() {
                   </Type>
                 ) : (
                   domain.ipAllowlist.map((ip) => (
-                    <Badge key={ip} variant="secondary" className="font-mono">
+                    <Badge key={ip} background={false} className="font-mono">
                       {ip}
                     </Badge>
                   ))
@@ -419,6 +418,7 @@ function OrgDomainsInner() {
                   onClick={() => setIsDeleteDomainDialogOpen(true)}
                   className="hover:text-destructive"
                   disabled={deleteDomainMutation.isPending}
+                  aria-label="Remove domain"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -599,6 +599,7 @@ function OrgDomainsInner() {
                   size="sm"
                   onClick={() => void handleCopyCname()}
                   className="shrink-0"
+                  aria-label="Copy CNAME value"
                 >
                   {isCnameCopied ? (
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -627,6 +628,7 @@ function OrgDomainsInner() {
                   size="sm"
                   onClick={() => void handleCopyTxt()}
                   className="shrink-0"
+                  aria-label="Copy TXT value"
                 >
                   {isTxtCopied ? (
                     <CheckCircle2 className="h-4 w-4 text-green-500" />

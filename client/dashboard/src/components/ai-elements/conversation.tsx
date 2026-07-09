@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/moonshine";
 import { cn } from "@/lib/utils";
 import { ArrowDownIcon } from "lucide-react";
 import type { ComponentProps } from "react";
@@ -53,9 +53,10 @@ export const ConversationScrollButton = ({
         className,
       )}
       onClick={handleScrollToBottom}
-      size="icon"
+      size="md"
       type="button"
-      variant="outline"
+      variant="secondary"
+      aria-label="Scroll to bottom"
       {...props}
     >
       <ArrowDownIcon className="size-4" />

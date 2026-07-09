@@ -19,9 +19,10 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
-import { Button, Card, Icon } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/moonshine";
+import { Card } from "@/components/ui/card";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { Wand2 } from "lucide-react";
+import { ArrowRight, Wand2 } from "lucide-react";
 import {
   INSIGHTS_AI_RAINBOW_CLASS,
   type InsightsConfigOptions,
@@ -693,7 +694,7 @@ function ViewAllLink({ to }: { to: string }) {
       className="text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs no-underline"
     >
       View all
-      <Icon name="arrow-right" />
+      <ArrowRight className="size-4" />
     </Link>
   );
 }
@@ -724,7 +725,9 @@ function LoggingDisabledBanner({ settingsHref }: { settingsHref: string }) {
     <Card>
       <Card.Content className="flex flex-col items-start gap-6">
         <div className="space-y-1">
-          <h3 className="text-lg font-medium">Logging is disabled</h3>
+          <h3 className="font-display text-2xl font-thin tracking-[-0.015em]">
+            Logging is disabled
+          </h3>
           <p className="text-muted-foreground text-sm">
             Enable logging to see an overview of your project metrics, top
             activity, and session data.
@@ -734,7 +737,7 @@ function LoggingDisabledBanner({ settingsHref }: { settingsHref: string }) {
           <Button variant="secondary" size="sm">
             <Button.Text>Enable in settings</Button.Text>
             <Button.RightIcon>
-              <Icon name="arrow-right" />
+              <ArrowRight />
             </Button.RightIcon>
           </Button>
         </Link>

@@ -1,8 +1,8 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
-import { Icon } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/moonshine";
+import { Terminal } from "lucide-react";
 
 export default function CLIs(): JSX.Element {
   return (
@@ -21,10 +21,7 @@ export default function CLIs(): JSX.Element {
             <Page.Section.Body>
               <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
                 <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-                  <Icon
-                    name="terminal"
-                    className="text-muted-foreground h-6 w-6"
-                  />
+                  <Terminal className="text-muted-foreground h-6 w-6" />
                 </div>
                 <Type variant="subheading" className="mb-1">
                   No skills yet
@@ -33,8 +30,8 @@ export default function CLIs(): JSX.Element {
                   Build and distribute skills to your team. Track usage, enable
                   discovery and improve performance.
                 </Type>
-                <Badge variant="secondary" className="mt-3">
-                  Coming Soon
+                <Badge variant="neutral" background={false} className="mt-3">
+                  <Badge.Text>Coming Soon</Badge.Text>
                 </Badge>
               </div>
             </Page.Section.Body>

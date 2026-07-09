@@ -4,8 +4,8 @@ import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
 import { useRiskGetBlock } from "@gram/client/react-query/riskGetBlock.js";
 import { useRiskSubmitBlockFeedbackMutation } from "@gram/client/react-query/riskSubmitBlockFeedback.js";
-import { Button, Icon, Stack } from "@/components/ui/moonshine";
-import { ThumbsDown, ThumbsUp } from "lucide-react";
+import { Button, Stack } from "@/components/ui/moonshine";
+import { LoaderCircle, Shield, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useEffect } from "react";
 import { useParams } from "react-router";
 
@@ -37,7 +37,7 @@ export function BlockPage(): JSX.Element {
           <BlockBody id={id} />
         ) : (
           <Stack direction="horizontal" gap={2} align="center">
-            <Icon name="loader-circle" className="size-4 animate-spin" />
+            <LoaderCircle className="size-4 animate-spin" />
             <Type muted small>
               Redirecting to sign in…
             </Type>
@@ -69,7 +69,7 @@ function BlockBody({ id }: { id: string | undefined }) {
   if (isLoading) {
     return (
       <Stack direction="horizontal" gap={2} align="center">
-        <Icon name="loader-circle" className="size-4 animate-spin" />
+        <LoaderCircle className="size-4 animate-spin" />
         <Type muted small>
           Loading block…
         </Type>
@@ -96,7 +96,7 @@ function BlockBody({ id }: { id: string | undefined }) {
     <Stack gap={6} align="center" className="w-full">
       <Stack gap={3} align="center">
         <div className="bg-destructive/10 flex size-11 items-center justify-center rounded-full">
-          <Icon name="shield" className="text-destructive size-5" />
+          <Shield className="text-destructive size-5" />
         </div>
         <Stack gap={1} align="center">
           <Type variant="subheading" className="text-center">

@@ -16,18 +16,18 @@ import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.j
 import { useTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import {
   Button,
-  Dialog,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
 } from "@/components/ui/moonshine";
+import { Dialog } from "@/components/ui/dialog";
 import {
   ChevronDown,
   CircleAlert,
   Code,
   FileCode,
+  History,
   Network,
   Plus,
   Server,
@@ -631,7 +631,7 @@ function DeploymentsButton({ deploymentId }: { deploymentId?: string }) {
     <a href={routes.deployments.href()}>
       <Button variant="secondary">
         <Button.LeftIcon>
-          <Icon name="history" />
+          <History className="h-4 w-4" />
         </Button.LeftIcon>
         <Button.Text>Deployments</Button.Text>
       </Button>

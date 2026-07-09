@@ -1,6 +1,7 @@
 import { GramLogo } from "@/components/gram-logo/index";
 import { toError } from "@/lib/errors";
-import { Button, Icon, Stack } from "@/components/ui/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
+import { CircleAlert, RotateCcw } from "lucide-react";
 
 interface FullPageErrorProps {
   error: unknown;
@@ -17,8 +18,10 @@ export function FullPageError({
 
         <Stack gap={3} align="center">
           <Stack direction="horizontal" gap={2} align="center">
-            <Icon name="circle-alert" className="text-destructive h-5 w-5" />
-            <h2 className="text-lg font-medium">Something went wrong</h2>
+            <CircleAlert className="text-destructive h-5 w-5" />
+            <h2 className="font-display text-2xl font-thin tracking-[-0.015em]">
+              Something went wrong
+            </h2>
           </Stack>
 
           <p className="text-muted-foreground text-sm">
@@ -43,7 +46,7 @@ export function FullPageError({
         <Stack direction="horizontal" gap={2}>
           <Button variant="brand" onClick={() => window.location.reload()}>
             <Button.LeftIcon>
-              <Icon name="rotate-ccw" className="h-4 w-4" />
+              <RotateCcw className="h-4 w-4" />
             </Button.LeftIcon>
             <Button.Text>Reload page</Button.Text>
           </Button>

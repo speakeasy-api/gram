@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/moonshine";
 import {
   Sheet,
   SheetContent,
@@ -136,7 +136,7 @@ export function FilterSheet({
         </div>
 
         <SheetFooter>
-          <Button variant="outline" onClick={onClearAll}>
+          <Button variant="secondary" onClick={onClearAll}>
             Reset to default
           </Button>
           <Button onClick={() => onOpenChange(false)}>Done</Button>

@@ -1,11 +1,12 @@
 import { RequireScope } from "@/components/require-scope";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog } from "@/components/ui/dialog";
 import type { FailedSource } from "@/components/sources/useFailedDeploymentSources";
 import { cn } from "@/lib/utils";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { Deployment } from "@gram/client/models/components/deployment.js";
 import type { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
-import { Alert, Badge, Button, Dialog } from "@/components/ui/moonshine";
+import { Alert, Badge, Button } from "@/components/ui/moonshine";
 import {
   ChevronDown,
   ChevronRight,

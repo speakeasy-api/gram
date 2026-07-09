@@ -2,8 +2,8 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
 import { SessionRow } from "@/components/sessions/SessionRow";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/moonshine";
 import { SettingsSection } from "../../SettingsSection";
 
 /**
@@ -43,7 +43,7 @@ export function UserSessionsList({
           <p className="text-destructive text-sm">
             Couldn&apos;t load sessions.
           </p>
-          <Button variant="ghost" size="sm" onClick={() => void refetch()}>
+          <Button variant="tertiary" size="sm" onClick={() => void refetch()}>
             Retry
           </Button>
         </div>
@@ -63,7 +63,7 @@ export function UserSessionsList({
       {hasNextPage && (
         <div className="flex justify-center pt-2">
           <Button
-            variant="ghost"
+            variant="tertiary"
             size="sm"
             disabled={isFetchingNextPage}
             onClick={() => void fetchNextPage()}

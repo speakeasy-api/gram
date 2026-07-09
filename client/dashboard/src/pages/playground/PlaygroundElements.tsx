@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
@@ -23,7 +22,7 @@ import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSess
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { useMintUserSessionMutation } from "@gram/client/react-query/mintUserSession.js";
-import { useTheme } from "@/components/ui/moonshine";
+import { Button, useTheme } from "@/components/ui/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, HistoryIcon, ShieldAlert } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -291,9 +290,11 @@ export function PlaygroundElements({
           <div className="border-b-border flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
             <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
               <PopoverTrigger asChild>
-                <Button size="sm" variant="ghost">
-                  <HistoryIcon className="mr-2 size-4" />
-                  Chat History
+                <Button size="sm" variant="tertiary">
+                  <Button.LeftIcon>
+                    <HistoryIcon className="size-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Chat History</Button.Text>
                 </Button>
               </PopoverTrigger>
               <PopoverContent

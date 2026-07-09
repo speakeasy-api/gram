@@ -4,7 +4,6 @@ import {
 } from "@/components/ai-elements/code-block";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -42,7 +41,7 @@ import {
   Search,
   Server,
 } from "lucide-react";
-import { useTheme } from "@/components/ui/moonshine";
+import { Button, useTheme } from "@/components/ui/moonshine";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -443,13 +442,15 @@ function ChatElementsInner() {
                             </Select>
                           )}
                           <Button
-                            variant="outline"
+                            variant="secondary"
                             size="sm"
                             className="w-full"
                             onClick={() => routes.mcp.goTo()}
                           >
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add New MCP Server
+                            <Button.LeftIcon>
+                              <Plus />
+                            </Button.LeftIcon>
+                            <Button.Text>Add New MCP Server</Button.Text>
                           </Button>
                         </div>
                       </ConfigField>
@@ -734,8 +735,10 @@ function ChatElementsInner() {
                       className="w-full"
                       onClick={() => setShowInstallGuide(true)}
                     >
-                      <ArrowRight className="mr-2 h-4 w-4" />
-                      Setup
+                      <Button.LeftIcon>
+                        <ArrowRight />
+                      </Button.LeftIcon>
+                      <Button.Text>Setup</Button.Text>
                     </Button>
                   </div>
 
@@ -743,7 +746,7 @@ function ChatElementsInner() {
                   <div className="flex h-[700px] w-2/3 flex-col">
                     <div className="bg-muted/30 relative flex-1 overflow-hidden rounded-lg border">
                       <Button
-                        variant="ghost"
+                        variant="tertiary"
                         size="sm"
                         onClick={refreshPreview}
                         className={cn(
@@ -751,8 +754,10 @@ function ChatElementsInner() {
                           config.variant === "sidecar" && "right-auto left-6",
                         )}
                       >
-                        <RefreshCw className="mr-1 h-4 w-4" />
-                        Reset Preview
+                        <Button.LeftIcon>
+                          <RefreshCw />
+                        </Button.LeftIcon>
+                        <Button.Text>Reset Preview</Button.Text>
                       </Button>
                       <ElementsPreview
                         key={previewKey}
@@ -775,7 +780,9 @@ function ChatElementsInner() {
                   <div className="bg-muted mb-4 flex h-16 w-16 items-center justify-center rounded-full">
                     <Server className="text-muted-foreground h-8 w-8" />
                   </div>
-                  <h3 className="mb-2 text-lg font-semibold">Coming Soon</h3>
+                  <h3 className="font-display mb-2 text-2xl font-thin tracking-[-0.015em]">
+                    Coming Soon
+                  </h3>
                   <p className="text-muted-foreground max-w-md">
                     Hosted Elements will allow you to deploy chat experiences
                     without any code changes. Stay tuned!

@@ -1,12 +1,11 @@
-import { DotCard } from "@/components/ui/dot-card";
+import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
-import { Badge } from "@/components/ui/badge";
 import { useOrganization } from "@/contexts/Auth";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { toolStats } from "@/pages/catalog/hooks/serverMetadata";
 import { buildCollectionMcpJson } from "@/lib/mcp-json";
 import { useOrgRoutes } from "@/routes";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Badge, Button, Stack } from "@/components/ui/moonshine";
 import {
   ArrowRight,
   Download,
@@ -82,7 +81,7 @@ export function CollectionCard({
   };
 
   return (
-    <DotCard
+    <Card
       className="cursor-pointer"
       onClick={() => {
         void navigate(detailHref);
@@ -94,11 +93,14 @@ export function CollectionCard({
         collection.visibility === "private" ? (
           <div className="absolute top-3.5 left-3.5 z-10">
             <Badge
-              variant="outline"
+              variant="neutral"
+              background={false}
               className="border-muted-foreground/30 bg-background/80 text-muted-foreground backdrop-blur-sm"
             >
-              <Lock className="mr-1 h-3 w-3" />
-              Private
+              <Badge.LeftIcon>
+                <Lock className="h-3 w-3" />
+              </Badge.LeftIcon>
+              <Badge.Text>Private</Badge.Text>
             </Badge>
           </div>
         ) : undefined
@@ -115,9 +117,13 @@ export function CollectionCard({
             {collection.name}
           </Type>
         </div>
-        <Badge variant="secondary">
-          <Server className="mr-1 h-3 w-3" />
-          {serverCount} {serverCount === 1 ? "server" : "servers"}
+        <Badge variant="neutral" background={false}>
+          <Badge.LeftIcon>
+            <Server className="h-3 w-3" />
+          </Badge.LeftIcon>
+          <Badge.Text>
+            {serverCount} {serverCount === 1 ? "server" : "servers"}
+          </Badge.Text>
         </Badge>
       </div>
 
@@ -175,6 +181,6 @@ export function CollectionCard({
           projects={projects}
         />
       </div>
-    </DotCard>
+    </Card>
   );
 }

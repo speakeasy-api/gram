@@ -1,7 +1,5 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -15,7 +13,7 @@ import {
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import { Icon, type IconName } from "@/components/ui/moonshine";
+import { Badge, Button, Icon, type IconName } from "@/components/ui/moonshine";
 import {
   ArrowLeft,
   Check,
@@ -156,8 +154,10 @@ function DetectionRulesContent() {
         </Page.Section.Description>
         <Page.Section.CTA>
           <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Custom Detection Rule
+            <Button.LeftIcon>
+              <Plus className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Custom Detection Rule</Button.Text>
           </Button>
         </Page.Section.CTA>
         <Page.Section.Body>
@@ -352,6 +352,7 @@ function CategoryHeader({
           expanded && "rotate-90",
         )}
       />
+      {/* TODO(design-system): DynamicIcon */}
       <Icon name={icon} className="text-muted-foreground size-4 shrink-0" />
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium">{label}</div>
@@ -359,7 +360,7 @@ function CategoryHeader({
           {description}
         </div>
       </div>
-      <Badge variant="secondary" className="shrink-0">
+      <Badge variant="neutral" background={false} className="shrink-0">
         {count}
       </Badge>
     </button>
@@ -447,6 +448,7 @@ function BuiltinRuleDetail({ rule }: { rule: BuiltinRule }) {
       <div className="flex-1 space-y-6 px-6 py-4">
         <DetailField label="Category">
           <div className="flex items-center gap-2">
+            {/* TODO(design-system): DynamicIcon */}
             <Icon
               name={meta.icon as IconName}
               className="text-muted-foreground size-4"
@@ -594,13 +596,15 @@ function CustomRuleDetail({
       </div>
       <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
         <Button
-          variant="ghost"
+          variant="tertiary"
           size="sm"
           onClick={onDelete}
           className="text-destructive hover:text-destructive"
         >
-          <Trash2 className="mr-2 h-4 w-4" />
-          Delete rule
+          <Button.LeftIcon>
+            <Trash2 className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Delete rule</Button.Text>
         </Button>
         <div className="flex items-center gap-3">
           {saveState === "error" && (
@@ -616,11 +620,15 @@ function CustomRuleDetail({
             }
             onClick={() => void handleSave()}
           >
-            {saveState === "saving" && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            {(saveState === "saving" || saveState === "saved") && (
+              <Button.LeftIcon>
+                {saveState === "saving" && (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                )}
+                {saveState === "saved" && <Check className="h-4 w-4" />}
+              </Button.LeftIcon>
             )}
-            {saveState === "saved" && <Check className="mr-2 h-4 w-4" />}
-            {saveLabel}
+            <Button.Text>{saveLabel}</Button.Text>
           </Button>
         </div>
       </SheetFooter>
@@ -727,10 +735,12 @@ function SamplePlayground({
           disabled={sample.trim().length === 0 || mutation.isPending}
           onClick={handleRun}
         >
-          {mutation.isPending ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : null}
-          Run rule
+          {mutation.isPending && (
+            <Button.LeftIcon>
+              <Loader2 className="h-4 w-4 animate-spin" />
+            </Button.LeftIcon>
+          )}
+          <Button.Text>Run rule</Button.Text>
         </Button>
       </div>
       {matches !== null && <MatchList matches={matches} reason={reason} />}
@@ -987,8 +997,12 @@ function ChatPlayground({
           disabled={!selectedChat || running}
           onClick={() => void handleRun()}
         >
-          {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Run on chat
+          {running && (
+            <Button.LeftIcon>
+              <Loader2 className="h-4 w-4 animate-spin" />
+            </Button.LeftIcon>
+          )}
+          <Button.Text>Run on chat</Button.Text>
         </Button>
         {overflowWarning && (
           <span className="text-muted-foreground text-xs">
@@ -1088,7 +1102,9 @@ function ChatMessageRow({ item }: { item: ChatMessageResult }) {
             (matchCount > 0 ? (
               <Badge>{matchCount}</Badge>
             ) : (
-              <Badge variant="secondary">0</Badge>
+              <Badge variant="neutral" background={false}>
+                0
+              </Badge>
             ))}
         </span>
       </button>
@@ -1352,7 +1368,7 @@ function CreateCustomRuleSheet({
               </div>
             </div>
             <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
-              <Button variant="ghost" size="sm" onClick={handleManual}>
+              <Button variant="tertiary" size="sm" onClick={handleManual}>
                 Skip, fill manually
               </Button>
               <Button
@@ -1361,12 +1377,14 @@ function CreateCustomRuleSheet({
                 }
                 onClick={handleSuggest}
               >
-                {suggestMutation.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="mr-2 h-4 w-4" />
-                )}
-                Suggest with AI
+                <Button.LeftIcon>
+                  {suggestMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                </Button.LeftIcon>
+                <Button.Text>Suggest with AI</Button.Text>
               </Button>
             </SheetFooter>
           </>
@@ -1428,12 +1446,14 @@ function CreateCustomRuleSheet({
             </div>
             <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
               <Button
-                variant="ghost"
+                variant="tertiary"
                 size="sm"
                 onClick={() => setStep("prompt")}
               >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
+                <Button.LeftIcon>
+                  <ArrowLeft className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Back</Button.Text>
               </Button>
               <Button disabled={!canSubmit} onClick={handleSubmit}>
                 Create rule

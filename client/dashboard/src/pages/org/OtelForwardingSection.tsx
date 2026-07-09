@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +11,7 @@ import {
 import { useUpsertOtelForwardingConfigMutation } from "@gram/client/react-query/upsertOtelForwardingConfig";
 import { useDeleteOtelForwardingConfigMutation } from "@gram/client/react-query/deleteOtelForwardingConfig";
 import type { OtelForwardingHeader } from "@gram/client/models/components/otelforwardingheader.js";
-import { Stack } from "@/components/ui/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Send, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -189,13 +188,15 @@ export function OtelForwardingSection(): JSX.Element {
             <Label>Headers</Label>
             <RequireScope scope="org:admin" level="component">
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => setHeaders((prev) => [...prev, blankRow()])}
                 disabled={isLoading || isMutating}
               >
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                Add header
+                <Button.LeftIcon>
+                  <Plus className="h-3.5 w-3.5" />
+                </Button.LeftIcon>
+                <Button.Text>Add header</Button.Text>
               </Button>
             </RequireScope>
           </Stack>
@@ -234,13 +235,15 @@ export function OtelForwardingSection(): JSX.Element {
         <Stack direction="horizontal" justify="space-between" align="center">
           <RequireScope scope="org:admin" level="component">
             <Button
-              variant="destructive"
+              variant="destructive-primary"
               size="sm"
               onClick={handleDelete}
               disabled={!isConfigured || isMutating}
             >
-              <Trash2 className="mr-1 h-3.5 w-3.5" />
-              Delete
+              <Button.LeftIcon>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button.LeftIcon>
+              <Button.Text>Delete</Button.Text>
             </Button>
           </RequireScope>
           <RequireScope scope="org:admin" level="component">
@@ -283,7 +286,7 @@ function HeaderRow({
         className="flex-1"
       />
       <Button
-        variant="ghost"
+        variant="tertiary"
         size="sm"
         onClick={onRemove}
         disabled={disabled}

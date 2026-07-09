@@ -3,7 +3,6 @@ import { DeleteButton } from "@/components/delete-button";
 import { EditableText } from "@/components/editable-text";
 import { Page } from "@/components/page-layout";
 import { ToolBadge } from "@/components/tool-badge";
-import { Badge } from "@/components/ui/badge";
 import {
   Command,
   CommandEmpty,
@@ -40,8 +39,14 @@ import {
 } from "@gram/client/react-query/template.js";
 import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
 import { useUpdateTemplateMutation } from "@gram/client/react-query/updateTemplate.js";
-import { Button, Icon, ResizablePanel, Stack } from "@/components/ui/moonshine";
+import {
+  Badge,
+  Button,
+  ResizablePanel,
+  Stack,
+} from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { ArrowDown, ArrowUp, FileText, Play, Plus, Save } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
@@ -336,7 +341,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
           disabled={steps.length >= 10}
         >
           <Button.LeftIcon>
-            <Icon name="plus" className="h-4 w-4" />
+            <Plus className="h-4 w-4" />
           </Button.LeftIcon>
           <Button.Text>Add Step</Button.Text>
         </Button>
@@ -476,7 +481,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
       }}
     >
       <Button.LeftIcon>
-        <Icon name="save" className="h-4 w-4" />
+        <Save className="h-4 w-4" />
       </Button.LeftIcon>
       <Button.Text>Save</Button.Text>
     </Button>
@@ -771,7 +776,7 @@ const StepCard = ({
                 aria-label="Move up"
               >
                 <Button.LeftIcon>
-                  <Icon name="arrow-up" className="h-3 w-3" />
+                  <ArrowUp className="h-3 w-3" />
                 </Button.LeftIcon>
               </Button>
             )}
@@ -784,7 +789,7 @@ const StepCard = ({
                 aria-label="Move down"
               >
                 <Button.LeftIcon>
-                  <Icon name="arrow-down" className="h-3 w-3" />
+                  <ArrowDown className="h-3 w-3" />
                 </Button.LeftIcon>
               </Button>
             )}
@@ -851,7 +856,7 @@ const ToolSelectPopover = ({
                   className="min-w-fit cursor-pointer text-sm"
                   onSelect={() => onSelect("none")}
                 >
-                  <Icon name="file-text" size="small" />
+                  <FileText className="size-4" />
                   Instruction
                 </CommandItem>
               </SimpleTooltip>
@@ -1007,7 +1012,7 @@ function ChatPanel(props: {
       }}
     >
       <Button.LeftIcon>
-        <Icon name="play" className="h-4 w-4" />
+        <Play className="h-4 w-4" />
       </Button.LeftIcon>
       <Button.Text>Try Now</Button.Text>
     </Button>

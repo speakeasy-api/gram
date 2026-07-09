@@ -738,6 +738,9 @@ export const useRoutes = (overrides?: {
     const newRoute: AppRoute = {
       ...route,
       active,
+      // TODO(design-system): DynamicIcon — route.icon is data-driven (set per
+      // route entry below), so this can't be statically swapped to a direct
+      // lucide-react import.
       Icon: route.customIcon
         ? route.customIcon
         : (props: Omit<IconProps, "name">) =>
@@ -1036,6 +1039,9 @@ export const useOrgRoutes = (): OrgRoutesWithGoTo => {
     const newRoute: AppRoute = {
       ...route,
       active,
+      // TODO(design-system): DynamicIcon — route.icon is data-driven (set per
+      // route entry below), so this can't be statically swapped to a direct
+      // lucide-react import.
       Icon: route.customIcon
         ? route.customIcon
         : (props: Omit<IconProps, "name">) =>

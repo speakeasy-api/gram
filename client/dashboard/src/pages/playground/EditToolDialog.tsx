@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +10,7 @@ import {
   getToolTypeLabel,
   toolSupportsAnnotations,
 } from "@/lib/toolTypes";
-import { Button } from "@/components/ui/moonshine";
+import { Badge, Button } from "@/components/ui/moonshine";
 import { FileCode, PencilRuler, SquareFunction } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -227,7 +226,7 @@ export function EditToolDialog({
           <Dialog.Title className="flex items-center gap-2">
             <ToolIcon className="text-muted-foreground size-4" />
             <span>{source}</span>
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="neutral" background={false}>
               {typeLabel}
             </Badge>
           </Dialog.Title>

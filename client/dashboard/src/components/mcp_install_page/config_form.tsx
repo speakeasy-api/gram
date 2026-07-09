@@ -2,9 +2,9 @@ import { CodeBlock } from "@/components/code";
 import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/dialog";
 import { Label as Heading } from "@/components/ui/label";
-import { Link } from "@/components/ui/link";
 import { Type } from "@/components/ui/type";
-import { Button, cn, Icon, Input, Stack } from "@/components/ui/moonshine";
+import { Button, cn, Input, Stack } from "@/components/ui/moonshine";
+import { ExternalLink, Palette } from "lucide-react";
 import { useState } from "react";
 import { CompactUpload } from "../upload";
 import type { UseMcpMetadataMetadataFormResult } from "./useMcpMetadataForm";
@@ -53,7 +53,7 @@ export function InstallPageConfigForm({
           <Dialog.Trigger asChild>
             <Button variant="secondary">
               <Button.LeftIcon>
-                <Icon name="palette" />
+                <Palette />
               </Button.LeftIcon>
               <Button.Text>Edit Branding</Button.Text>
             </Button>
@@ -160,14 +160,14 @@ export function InstallPageConfigForm({
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
-      <Link external to={installPageUrl} noIcon>
-        <Button variant="primary" className="px-4">
+      <Button variant="primary" className="px-4" asChild>
+        <a href={installPageUrl} target="_blank" rel="noopener noreferrer">
           <Button.LeftIcon>
-            <Icon name="external-link" className="h-4 w-4" />
+            <ExternalLink className="h-4 w-4" />
           </Button.LeftIcon>
           <Button.Text>View</Button.Text>
-        </Button>
-      </Link>
+        </a>
+      </Button>
     </div>
   );
 }

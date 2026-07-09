@@ -2,6 +2,7 @@ import { Icon, type IconName } from "@/components/ui/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { formatCompact } from "@/lib/format";
 import { getValueColor, ThresholdConfig } from "./chartUtils";
+import { ArrowRight, Info, TrendingDown, TrendingUp } from "lucide-react";
 import { Link } from "react-router";
 
 type AccentColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
@@ -87,13 +88,14 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
                 aria-label={`About ${title}`}
                 className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
               >
-                <Icon name="info" className="size-3.5" />
+                <Info className="size-3.5" />
               </button>
             </SimpleTooltip>
           )}
         </div>
         {icon && (
           <div className="bg-muted/50 rounded-lg p-2">
+            {/* TODO(design-system): DynamicIcon */}
             <Icon name={icon} className="text-muted-foreground size-4" />
           </div>
         )}
@@ -113,10 +115,11 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
                     isGood ? "text-emerald-600" : "text-red-500"
                   }`}
                 >
-                  <Icon
-                    name={isPositive ? "trending-up" : "trending-down"}
-                    className="size-3"
-                  />
+                  {isPositive ? (
+                    <TrendingUp className="size-3" />
+                  ) : (
+                    <TrendingDown className="size-3" />
+                  )}
                   <span>{delta.toFixed(1)}%</span>
                 </div>
                 {comparisonLabel && (
@@ -142,7 +145,7 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
               className="text-primary/70 hover:text-primary flex items-center gap-1 text-xs no-underline"
             >
               {linkText}
-              <Icon name="arrow-right" />
+              <ArrowRight className="size-4" />
             </Link>
           </div>
         )}

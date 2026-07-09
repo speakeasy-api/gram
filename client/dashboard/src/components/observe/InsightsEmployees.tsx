@@ -9,11 +9,9 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { ErrorAlert } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
 import { Page } from "@/components/page-layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -40,16 +38,23 @@ import { useRoles } from "@gram/client/react-query/roles.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Info } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
 import { slugify } from "@/lib/constants";
 import {
+  Alert,
   Badge,
+  Button,
   type Column,
-  Icon,
   type SortDescriptor,
   Table,
   sortTableData,
@@ -363,7 +368,9 @@ export function InsightsEmployeesContent(): JSX.Element {
           <div className="flex flex-col gap-4">
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold">Employee Enrollment</h1>
+                <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
+                  Employee Enrollment
+                </h1>
                 <ReleaseStageBadge stage="preview" />
               </div>
               <p className="text-muted-foreground text-sm">
@@ -409,10 +416,12 @@ export function InsightsEmployeesContent(): JSX.Element {
           </div>
 
           {error ? (
-            <ErrorAlert
-              title="Unable to load employee enrollment data"
-              error={error}
-            />
+            <Alert variant="error" dismissible={false}>
+              <span className="font-medium">
+                Unable to load employee enrollment data
+              </span>
+              <div>{error.message}</div>
+            </Alert>
           ) : isLoading ? (
             <EmployeesLoadingState isInsightsOpen={isInsightsOpen} />
           ) : (
@@ -607,7 +616,7 @@ function EmployeeTable({
               }}
             >
               View
-              <Icon name="arrow-right" />
+              <ArrowRight />
             </button>
           </div>
         ),
@@ -681,20 +690,26 @@ function EmployeeTable({
           </p>
           <div className="flex items-center gap-1">
             <Button
-              variant="ghost"
+              variant="tertiary"
               size="sm"
               onClick={() => setPage((p) => p - 1)}
               disabled={safePage === 0}
+              aria-label="Previous page"
             >
-              <ChevronLeft className="size-4" />
+              <Button.LeftIcon>
+                <ChevronLeft className="size-4" />
+              </Button.LeftIcon>
             </Button>
             <Button
-              variant="ghost"
+              variant="tertiary"
               size="sm"
               onClick={() => setPage((p) => p + 1)}
               disabled={safePage >= totalPages - 1}
+              aria-label="Next page"
             >
-              <ChevronRight className="size-4" />
+              <Button.LeftIcon>
+                <ChevronRight className="size-4" />
+              </Button.LeftIcon>
             </Button>
           </div>
         </div>
@@ -820,10 +835,7 @@ function AccountsPopover({
           <span className={cn("text-muted-foreground", labelClassName)}>
             {label}
           </span>
-          <Icon
-            name="chevron-down"
-            className="text-muted-foreground/60 size-3"
-          />
+          <ChevronDown className="text-muted-foreground/60 size-3" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 p-0">

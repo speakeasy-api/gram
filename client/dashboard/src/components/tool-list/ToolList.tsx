@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -13,11 +12,12 @@ import { Tool, Toolset, isHttpTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Icon, Stack } from "@/components/ui/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
 import {
   ChevronDown,
   FileCode,
   Layers,
+  Layers2,
   PencilRuler,
   SquareFunction,
 } from "lucide-react";
@@ -606,11 +606,7 @@ function ToolRow({
                 {tool.variation?.name &&
                   tool.variation?.name !== tool.canonical?.name && (
                     <Stack direction="horizontal" gap={2} align="center">
-                      <Icon
-                        name="layers-2"
-                        size="small"
-                        className="text-muted-foreground/70"
-                      />
+                      <Layers2 className="text-muted-foreground/70 size-4" />
                       <Type small muted>
                         Original name:
                       </Type>
@@ -633,11 +629,7 @@ function ToolRow({
                     tool.canonical?.description && (
                     <Stack className="border-border/70 rounded-md border p-2">
                       <Type small muted className="inline font-medium">
-                        <Icon
-                          name="layers-2"
-                          size="small"
-                          className="text-muted-foreground/70 inline align-text-bottom"
-                        />{" "}
+                        <Layers2 className="text-muted-foreground/70 inline size-4 align-text-bottom" />{" "}
                         Original Description
                       </Type>
                       <Type small muted>
@@ -651,14 +643,14 @@ function ToolRow({
           </div>
           <Dialog.Footer>
             <Button
-              variant="ghost"
+              variant="tertiary"
               onClick={() => setEditDialogOpen(false)}
               disabled={isUpdating}
             >
-              Cancel
+              <Button.Text>Cancel</Button.Text>
             </Button>
             <Button onClick={() => void handleSave()} disabled={isUpdating}>
-              Save
+              <Button.Text>Save</Button.Text>
             </Button>
           </Dialog.Footer>
         </Dialog.Content>
@@ -1144,7 +1136,7 @@ export function ToolList({
 
       {hasChanges && !selectionMode && (
         <div className="sticky right-0 bottom-0 left-0 mt-4 flex justify-center">
-          <div className="border-neutral-softest bg-background flex items-center gap-4 rounded-lg border px-4 py-3 shadow-lg">
+          <div className="border-neutral-softest bg-background flex items-center gap-4 rounded-lg border px-4 py-3">
             <p className="text-foreground text-sm">
               {selectedForRemoval.size} tool(s) selected
             </p>
@@ -1154,8 +1146,8 @@ export function ToolList({
               </kbd>
               <span className="text-muted-foreground text-sm">for actions</span>
             </div>
-            <Button variant="outline" onClick={handleCancel}>
-              Cancel
+            <Button variant="secondary" onClick={handleCancel}>
+              <Button.Text>Cancel</Button.Text>
             </Button>
           </div>
         </div>

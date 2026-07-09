@@ -49,6 +49,10 @@
       {
         "paths": [
           {
+            "name": "@speakeasy-api/moonshine",
+            "message": "@speakeasy-api/moonshine is vendored at @/components/ui/moonshine (compatibility barrel), not an npm dependency. Import from \"@/components/ui/moonshine\" instead."
+          },
+          {
             "name": "@gram/client/models/components",
             "message": "The SDK barrel/index files are disabled (useIndexModules:false, AGE-2917) to avoid merge conflicts. Import from the specific module file instead, e.g. \"@gram/client/models/components/role.js\"."
           },
@@ -73,6 +77,22 @@
             "message": "The SDK barrel/index files are disabled (useIndexModules:false, AGE-2917). Import the hook from its own module, e.g. \"@gram/client/react-query/listToolsets.js\"."
           }
         ]
+      }
+    ],
+
+    "no-restricted-globals": [
+      "error",
+      {
+        "name": "confirm",
+        "message": "Use ConfirmDialog or the useConfirm hook from @/components/ui instead of the browser confirm() dialog."
+      }
+    ],
+    "no-restricted-properties": [
+      "error",
+      {
+        "object": "window",
+        "property": "confirm",
+        "message": "Use ConfirmDialog or the useConfirm hook from @/components/ui instead of window.confirm()."
       }
     ]
   },

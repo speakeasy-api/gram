@@ -13,7 +13,7 @@ import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { useRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 import { getRuleTitleFallback } from "./risk-utils";
-import { Icon } from "@/components/ui/moonshine";
+import { ChevronRight, Inbox, LoaderCircle, MessageSquare } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { useParams, useSearchParams } from "react-router";
 
@@ -202,7 +202,7 @@ function ChatList({
   if (isLoading) {
     return (
       <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-        <Icon name="loader-circle" className="size-5 animate-spin" />
+        <LoaderCircle className="size-5 animate-spin" />
         <span>Loading chats...</span>
       </div>
     );
@@ -212,7 +212,7 @@ function ChatList({
     return (
       <div className="flex flex-col items-center gap-3 py-12 text-center">
         <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-          <Icon name="inbox" className="text-muted-foreground size-6" />
+          <Inbox className="text-muted-foreground size-6" />
         </div>
         <span className="text-foreground font-medium">
           No chats in this time range
@@ -230,10 +230,7 @@ function ChatList({
             onClick={() => onSelectChat(chat.id)}
             className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
           >
-            <Icon
-              name="message-square"
-              className="text-muted-foreground size-4 shrink-0"
-            />
+            <MessageSquare className="text-muted-foreground size-4 shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium">
                 {chat.title || "Untitled chat"}
@@ -248,10 +245,7 @@ function ChatList({
                   : ""}
               </div>
             </div>
-            <Icon
-              name="chevron-right"
-              className="text-muted-foreground size-4 shrink-0"
-            />
+            <ChevronRight className="text-muted-foreground size-4 shrink-0" />
           </button>
         </li>
       ))}

@@ -1,0 +1,108 @@
+// Pure series math + trend detection for the chart system's Sparkline. Lifted
+// from src/pages/costs/sparkline-math.ts (kept out of the component module so
+// that file can satisfy the react-refresh "only export components" rule) and
+// adapted to reference the app's feedback-color tokens instead of literal
+// hex, so trend colors stay theme-correct.
+export type TrendDirection = "up" | "down" | "flat";
+
+// SVG `stroke`/`fill` attributes resolve CSS custom properties natively (this
+// isn't a canvas context), so these can stay as `var(...)` references instead
+// of being resolved in JS.
+export const TREND_COLOR: Record<TrendDirection, string> = {
+  up: "var(--color-feedback-red-500)", // rising → bad by default (cost, latency, …)
+  down: "var(--color-feedback-green-500)", // falling → good by default
+  flat: "var(--color-neutral-500)", // no clear trend
+};
+
+// Moving-average window applied before drawing / trend detection.
+export const SMOOTH_WINDOW = 11;
+// Number of averaged control points the curve is drawn through (fewer = softer).
+export const DRAW_POINTS = 9;
+
+function mean(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  return xs.reduce((a, b) => a + b, 0) / xs.length;
+}
+
+// Net change end-to-start (smoothed last-third mean − first-third mean).
+export function trendOf(values: number[]): number {
+  const s = movingAverage(values, SMOOTH_WINDOW);
+  const n = s.length;
+  if (n < 2) return 0;
+  const seg = Math.max(1, Math.round(n / 3));
+  return mean(s.slice(n - seg)) - mean(s.slice(0, seg));
+}
+
+// A trend reads as "up" only when the line both ended clearly above where it
+// started AND isn't falling away in its final portion (a plateau at the top
+// still counts; a clear end-decline does not). "down" is the mirror. Anything
+// mixed — rose-then-fell, recovered, choppy, or barely moved — is "flat". All
+// thresholds are relative to the line's own range. Computed on the smoothed
+// series.
+export function trendDirection(values: number[]): TrendDirection {
+  const s = movingAverage(values, SMOOTH_WINDOW);
+  const n = s.length;
+  if (n < 3) return "flat";
+  const seg = Math.max(1, Math.round(n / 3));
+  const firstMean = mean(s.slice(0, seg));
+  const lastMean = mean(s.slice(n - seg));
+  const middle = s.slice(seg, n - seg);
+  const midMean = middle.length ? mean(middle) : firstMean;
+
+  const overall = lastMean - firstMean; // end vs start
+  const recent = lastMean - midMean; // final-portion direction
+  const dead = 0.12 * (Math.max(...s) - Math.min(...s) || 1);
+
+  if (overall > dead && recent > -dead) return "up";
+  if (overall < -dead && recent < dead) return "down";
+  return "flat";
+}
+
+// Centered moving average to tame daily spikes before drawing.
+export function movingAverage(values: number[], window: number): number[] {
+  if (values.length <= 2) return values;
+  const half = Math.floor(window / 2);
+  return values.map((_, i) => {
+    let sum = 0;
+    let count = 0;
+    for (let j = i - half; j <= i + half; j++) {
+      if (j >= 0 && j < values.length) {
+        sum += values[j] ?? 0;
+        count += 1;
+      }
+    }
+    return count ? sum / count : 0;
+  });
+}
+
+// Collapse a series into k evenly-spaced averaged buckets.
+export function resample(values: number[], k: number): number[] {
+  if (values.length <= k) return values;
+  const out: number[] = [];
+  for (let i = 0; i < k; i++) {
+    const start = Math.floor((i * values.length) / k);
+    const end = Math.max(start + 1, Math.floor(((i + 1) * values.length) / k));
+    out.push(mean(values.slice(start, end)));
+  }
+  return out;
+}
+
+// A smooth curve through the points via Catmull-Rom → cubic-bezier conversion.
+export function smoothPath(pts: { x: number; y: number }[]): string {
+  if (pts.length < 2) return "";
+  const d = [`M ${pts[0]!.x.toFixed(1)},${pts[0]!.y.toFixed(1)}`];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i]!;
+    const p1 = pts[i]!;
+    const p2 = pts[i + 1]!;
+    const p3 = pts[i + 2] ?? p2;
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    d.push(
+      `C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`,
+    );
+  }
+  return d.join(" ");
+}

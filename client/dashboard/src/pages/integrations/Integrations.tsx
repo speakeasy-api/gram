@@ -17,8 +17,8 @@ import { IntegrationEntry } from "@gram/client/models/components/integrationentr
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListIntegrations } from "@gram/client/react-query/listIntegrations.js";
 import { useListPackagesSuspense } from "@gram/client/react-query/listPackages.js";
-import { Button, Icon, Stack } from "@/components/ui/moonshine";
-import { CheckIcon } from "lucide-react";
+import { Button, Stack } from "@/components/ui/moonshine";
+import { CheckIcon, CopyPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -300,7 +300,7 @@ function IntegrationCard({
         {firstParty ? (
           <Button variant="secondary" onClick={newVersionCallback}>
             <Button.LeftIcon>
-              <Icon name="copy-plus" className="h-4 w-4" />
+              <CopyPlus className="h-4 w-4" />
             </Button.LeftIcon>
             <Button.Text>New Version</Button.Text>
           </Button>

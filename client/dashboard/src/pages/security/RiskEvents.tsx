@@ -12,10 +12,16 @@ import { getPresetRange } from "@gram-ai/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
-import { Button, Icon } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { History, Share2 } from "lucide-react";
+import {
+  CircleAlert,
+  History,
+  Inbox,
+  LoaderCircle,
+  Share2,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -355,7 +361,7 @@ function RiskEventsRows({
     return (
       <div className="flex flex-col items-center gap-3 py-12">
         <div className="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
-          <Icon name="circle-alert" className="text-destructive size-6" />
+          <CircleAlert className="text-destructive size-6" />
         </div>
         <span className="text-foreground font-medium">
           Error loading risk events
@@ -370,7 +376,7 @@ function RiskEventsRows({
   if (isLoading) {
     return (
       <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-        <Icon name="loader-circle" className="size-5 animate-spin" />
+        <LoaderCircle className="size-5 animate-spin" />
         <span>Loading risk events...</span>
       </div>
     );
@@ -380,7 +386,7 @@ function RiskEventsRows({
     return (
       <div className="flex flex-col items-center gap-3 py-12 text-center">
         <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-          <Icon name="inbox" className="text-muted-foreground size-6" />
+          <Inbox className="text-muted-foreground size-6" />
         </div>
         <span className="text-foreground font-medium">
           No risk events found

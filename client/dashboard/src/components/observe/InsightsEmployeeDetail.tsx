@@ -1,8 +1,9 @@
-import { Badge, Icon, type IconName } from "@/components/ui/moonshine";
+import { Alert, Badge, Icon, type IconName } from "@/components/ui/moonshine";
 import {
   ArrowRight,
   Boxes,
   Globe,
+  KeyRound,
   type LucideIcon,
   Laptop,
   Maximize2,
@@ -14,7 +15,6 @@ import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
-import { ErrorAlert } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -467,7 +467,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0">
-                <h1 className="truncate text-xl font-semibold">
+                <h1 className="font-display truncate text-2xl font-thin tracking-[-0.015em]">
                   {displayName}
                 </h1>
                 <p className="text-muted-foreground truncate text-sm">
@@ -501,10 +501,12 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
           </div>
 
           {error ? (
-            <ErrorAlert
-              title="Unable to load employee usage data"
-              error={error}
-            />
+            <Alert variant="error" dismissible={false}>
+              <span className="font-medium">
+                Unable to load employee usage data
+              </span>
+              <div>{error.message}</div>
+            </Alert>
           ) : isLoading ? (
             <DetailLoadingState isInsightsOpen={isInsightsOpen} />
           ) : (
@@ -602,10 +604,12 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
               {member?.id && <EmployeeSessions userId={member.id} />}
 
               {dataFlowQuery.error ? (
-                <ErrorAlert
-                  title="Unable to load employee data flow"
-                  error={dataFlowQuery.error}
-                />
+                <Alert variant="error" dismissible={false}>
+                  <span className="font-medium">
+                    Unable to load employee data flow
+                  </span>
+                  <div>{dataFlowQuery.error.message}</div>
+                </Alert>
               ) : dataFlowQuery.isLoading ? (
                 <Skeleton className="h-[360px] rounded-lg" />
               ) : (
@@ -617,10 +621,12 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
               )}
 
               {metricsQuery.error ? (
-                <ErrorAlert
-                  title="Unable to load model metrics"
-                  error={metricsQuery.error}
-                />
+                <Alert variant="error" dismissible={false}>
+                  <span className="font-medium">
+                    Unable to load model metrics
+                  </span>
+                  <div>{metricsQuery.error.message}</div>
+                </Alert>
               ) : metricsQuery.isLoading ? (
                 <Skeleton className="h-40 rounded-lg" />
               ) : (
@@ -639,10 +645,12 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
               )}
 
               {overviewQuery.error ? (
-                <ErrorAlert
-                  title="Unable to load time series"
-                  error={overviewQuery.error}
-                />
+                <Alert variant="error" dismissible={false}>
+                  <span className="font-medium">
+                    Unable to load time series
+                  </span>
+                  <div>{overviewQuery.error.message}</div>
+                </Alert>
               ) : overviewQuery.isLoading ? (
                 <Skeleton className="h-72 rounded-lg" />
               ) : (
@@ -688,7 +696,7 @@ function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
           )}
         </div>
         <div className="bg-muted/50 rounded-lg p-2">
-          <Icon name="key-round" className="text-muted-foreground size-4" />
+          <KeyRound className="text-muted-foreground size-4" />
         </div>
       </div>
       {isPending ? (
@@ -955,7 +963,7 @@ function DataFlowNodeCard({ data }: NodeProps<DataFlowGraphNode>) {
   return (
     <div
       className={cn(
-        "bg-card/95 border-border rounded-lg border shadow-sm backdrop-blur",
+        "bg-card/95 border-border rounded-lg border backdrop-blur",
         isSummary ? "max-w-64 min-w-56 p-4" : "max-w-56 min-w-48 p-3",
       )}
     >
@@ -1062,6 +1070,7 @@ function DataFlowNodeVisual({
         tone,
       )}
     >
+      {/* TODO(design-system): DynamicIcon */}
       <Icon name={icon} className="size-3.5" />
     </span>
   );

@@ -41,7 +41,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
   Input,
   Stack,
   Table,
@@ -53,6 +52,7 @@ import {
   Ellipsis,
   FolderSync,
   RefreshCw,
+  Search,
   Shield,
   UserPlus,
   Users,
@@ -826,10 +826,7 @@ function TeamInner() {
           )}
 
           <div className="relative">
-            <Icon
-              name="search"
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-            />
+            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
             <Input
               type="text"
               placeholder="Search members..."

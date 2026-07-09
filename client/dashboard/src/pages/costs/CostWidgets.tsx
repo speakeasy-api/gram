@@ -180,7 +180,7 @@ function TrendCard({
   return (
     <Card title={title} range={range}>
       <div className="mt-1 flex items-baseline gap-2">
-        <span className="text-2xl font-semibold tabular-nums">
+        <span className="font-display text-2xl font-thin tracking-[-0.015em] tabular-nums">
           {formatCost(total)}
         </span>
         {delta !== null && (
@@ -453,7 +453,7 @@ function StatCard({
         <Skeleton className="mt-2 h-8 w-24" />
       ) : (
         <>
-          <div className="mt-1 text-2xl font-semibold tabular-nums">
+          <div className="font-display mt-1 text-2xl font-thin tracking-[-0.015em] tabular-nums">
             {value}
           </div>
           {caption && (

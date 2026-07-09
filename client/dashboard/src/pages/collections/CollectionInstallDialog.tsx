@@ -1,5 +1,4 @@
 import { ProjectAvatar } from "@/components/project-menu";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
@@ -8,14 +7,16 @@ import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
-import { Button, Icon, Input } from "@/components/ui/moonshine";
+import { Badge, Button, Input } from "@/components/ui/moonshine";
 import {
   ArrowRight,
+  Check,
   Circle,
   FolderOpen,
   Loader2,
   Search,
   Server,
+  X,
 } from "lucide-react";
 import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -428,17 +429,21 @@ function ResultStat({
 function InstallResultBadge({ status }: { status: InstallResult["status"] }) {
   if (status === "succeeded") {
     return (
-      <Badge variant="secondary" className="text-emerald-600">
-        <StatusCircleIcon tone="success" size="sm" />
-        Succeeded
+      <Badge variant="neutral" background={false} className="text-emerald-600">
+        <Badge.LeftIcon>
+          <StatusCircleIcon tone="success" size="sm" />
+        </Badge.LeftIcon>
+        <Badge.Text>Succeeded</Badge.Text>
       </Badge>
     );
   }
 
   return (
-    <Badge variant="outline" className="text-destructive">
-      <StatusCircleIcon tone="danger" size="sm" />
-      Failed
+    <Badge variant="neutral" background={false} className="text-destructive">
+      <Badge.LeftIcon>
+        <StatusCircleIcon tone="danger" size="sm" />
+      </Badge.LeftIcon>
+      <Badge.Text>Failed</Badge.Text>
     </Badge>
   );
 }
@@ -446,18 +451,26 @@ function InstallResultBadge({ status }: { status: InstallResult["status"] }) {
 function ProjectStatusIndicator({ status }: { status: ProjectInstallStatus }) {
   if (status === "pending") {
     return (
-      <Badge variant="outline" className="text-muted-foreground">
-        <Circle className="mr-1 h-3 w-3" />
-        Pending
+      <Badge
+        variant="neutral"
+        background={false}
+        className="text-muted-foreground"
+      >
+        <Badge.LeftIcon>
+          <Circle className="h-3 w-3" />
+        </Badge.LeftIcon>
+        <Badge.Text>Pending</Badge.Text>
       </Badge>
     );
   }
 
   if (status === "installing") {
     return (
-      <Badge variant="secondary" className="text-primary">
-        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-        Installing
+      <Badge variant="neutral" background={false} className="text-primary">
+        <Badge.LeftIcon>
+          <Loader2 className="h-3 w-3 animate-spin" />
+        </Badge.LeftIcon>
+        <Badge.Text>Installing</Badge.Text>
       </Badge>
     );
   }
@@ -482,7 +495,11 @@ function StatusCircleIcon({
         size === "sm" ? "mr-1 h-4 w-4" : "h-5 w-5",
       )}
     >
-      <Icon name={tone === "success" ? "check" : "x"} className="h-3 w-3" />
+      {tone === "success" ? (
+        <Check className="h-3 w-3" />
+      ) : (
+        <X className="h-3 w-3" />
+      )}
     </span>
   );
 }

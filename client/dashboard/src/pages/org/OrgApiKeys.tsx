@@ -16,9 +16,9 @@ import {
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
-import { Button, Column, Icon, Stack, Table } from "@/components/ui/moonshine";
+import { Button, Column, Stack, Table } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Copy } from "lucide-react";
+import { CheckCircle2, Copy, KeyRound, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 
@@ -176,7 +176,7 @@ function OrgApiKeysInner() {
           className="hover:text-destructive"
         >
           <Button.LeftIcon>
-            <Icon name="trash-2" className="h-4 w-4" />
+            <Trash2 className="h-4 w-4" />
           </Button.LeftIcon>
           <Button.Text className="sr-only">Revoke API key</Button.Text>
         </Button>
@@ -235,7 +235,7 @@ function OrgApiKeysInner() {
                   onClick={() => setIsCreateDialogOpen(true)}
                 >
                   <Button.LeftIcon>
-                    <Icon name="key-round" className="h-4 w-4" />
+                    <KeyRound className="h-4 w-4" />
                   </Button.LeftIcon>
                   <Button.Text>Create Key</Button.Text>
                 </Button>

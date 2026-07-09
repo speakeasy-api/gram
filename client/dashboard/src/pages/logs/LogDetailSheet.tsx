@@ -9,9 +9,8 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
 } from "@/components/ui/moonshine";
-import { ChevronDown, Copy } from "lucide-react";
+import { ChevronDown, CircleAlert, Copy, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { formatNanoTimestamp, getSeverityColorClass } from "./utils";
 
@@ -167,7 +166,7 @@ function LogDetailContent({
         <div className="flex items-center gap-3">
           {blockReason ? (
             <div className="inline-flex items-center gap-1.5 rounded bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-700 uppercase dark:text-amber-300">
-              <Icon name="shield-alert" className="size-3" />
+              <ShieldAlert className="size-3" />
               Blocked
             </div>
           ) : (
@@ -184,10 +183,7 @@ function LogDetailContent({
 
         {blockReason && (
           <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-            <Icon
-              name="shield-alert"
-              className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
-            />
+            <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <div className="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-300">
                 Block Reason
@@ -251,10 +247,7 @@ function LogDetailContent({
           {/* Tool Error — destructive styling so failures pop visually */}
           {toolError && (
             <div className="border-destructive/40 bg-destructive/10 flex items-start gap-3 rounded-lg border p-3">
-              <Icon
-                name="circle-alert"
-                className="text-destructive-default mt-0.5 size-4 shrink-0"
-              />
+              <CircleAlert className="text-destructive-default mt-0.5 size-4 shrink-0" />
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <div className="text-destructive-default text-xs font-semibold tracking-wide uppercase">
                   Tool Error

@@ -1,6 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { slugify } from "@/lib/constants";
-import { Dialog, Alert, Button } from "@/components/ui/moonshine";
+import { Alert, Button } from "@/components/ui/moonshine";
+import { Dialog } from "@/components/ui/dialog";
 import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
 import { NamedAsset } from "./SourceCard";

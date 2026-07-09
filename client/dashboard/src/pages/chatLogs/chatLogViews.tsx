@@ -1,5 +1,6 @@
 import type { JSX } from "react";
-import { Badge, Icon } from "@/components/ui/moonshine";
+import { Badge } from "@/components/ui/moonshine";
+import { Zap } from "lucide-react";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import { cn } from "@/lib/utils";
 import { formatLogTimestamp } from "./chatLogFilters";
@@ -53,8 +54,7 @@ export function ToolCallsView({
                   isError ? "bg-destructive/10" : "bg-primary/10",
                 )}
               >
-                <Icon
-                  name="zap"
+                <Zap
                   className={cn(
                     "size-4",
                     isError ? "text-destructive" : "text-primary",

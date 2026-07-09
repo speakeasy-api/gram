@@ -30,10 +30,16 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
   Stack,
 } from "@/components/ui/moonshine";
-import { Activity } from "lucide-react";
+import {
+  Activity,
+  ChevronDown,
+  Download,
+  RefreshCw,
+  Settings,
+  Upload,
+} from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
@@ -266,7 +272,7 @@ export default function Plugins(): JSX.Element {
                 title="Marketplace settings"
               >
                 <Button.LeftIcon>
-                  <Icon name="settings" className="h-4 w-4" />
+                  <Settings className="h-4 w-4" />
                 </Button.LeftIcon>
               </Button>
               {publishStatus?.configured && (
@@ -276,10 +282,11 @@ export default function Plugins(): JSX.Element {
                   disabled={publishMutation.isPending}
                 >
                   <Button.LeftIcon>
-                    <Icon
-                      name={publishStatus.connected ? "refresh-cw" : "upload"}
-                      className="h-4 w-4"
-                    />
+                    {publishStatus.connected ? (
+                      <RefreshCw className="h-4 w-4" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
                   </Button.LeftIcon>
                   <Button.Text>
                     {publishMutation.isPending
@@ -374,7 +381,7 @@ export default function Plugins(): JSX.Element {
                     disabled={isDownloadingObservability !== null}
                   >
                     <Button.LeftIcon>
-                      <Icon name="download" className="h-4 w-4" />
+                      <Download className="h-4 w-4" />
                     </Button.LeftIcon>
                     <Button.Text>
                       {isDownloadingObservability
@@ -382,7 +389,7 @@ export default function Plugins(): JSX.Element {
                         : "Download Observability Plugin"}
                     </Button.Text>
                     <Button.RightIcon>
-                      <Icon name="chevron-down" className="h-4 w-4" />
+                      <ChevronDown className="h-4 w-4" />
                     </Button.RightIcon>
                   </Button>
                 </DropdownMenuTrigger>

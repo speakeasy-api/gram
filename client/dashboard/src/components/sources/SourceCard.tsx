@@ -4,7 +4,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { CardContextMenu } from "@/components/card-context-menu";
-import { DotCard } from "@/components/ui/dot-card";
+import { Card } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -182,7 +182,7 @@ export function SourceCard({
         params={[sourceKind, asset.slug]}
         className="block h-full hover:no-underline"
       >
-        <DotCard icon={iconContent}>
+        <Card icon={iconContent}>
           {/* Header row with name and actions */}
           <div className="mb-2 flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
@@ -224,7 +224,7 @@ export function SourceCard({
               <ArrowRight className="h-3.5 w-3.5" />
             </div>
           </div>
-        </DotCard>
+        </Card>
       </routes.sources.source.Link>
     </CardContextMenu>
   );

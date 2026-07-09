@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/moonshine";
 import {
   Select,
   SelectContent,
@@ -18,7 +18,7 @@ import {
 } from "@/lib/audit-log-feed";
 import { formatAuditAction } from "@/lib/audit-log-format";
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/ui/moonshine";
+import { LoaderCircle } from "lucide-react";
 import React from "react";
 
 export function DateGroupHeader({
@@ -144,15 +144,17 @@ export function AuditFeedFooter({
 
       {hasNextPage ? (
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           onClick={onLoadMore}
           disabled={isFetchingNextPage}
         >
           {isFetchingNextPage ? (
             <>
-              <Icon name="loader-circle" className="size-4 animate-spin" />
-              Loading...
+              <Button.LeftIcon>
+                <LoaderCircle className="size-4 animate-spin" />
+              </Button.LeftIcon>
+              <Button.Text>Loading...</Button.Text>
             </>
           ) : (
             "Load more"

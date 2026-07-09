@@ -2,7 +2,7 @@ import {
   PoweredBySpeakeasyBadge,
   ToolCollectionBadge,
 } from "@/components/tool-collection-badge";
-import { DotCard } from "@/components/ui/dot-card";
+import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components/deploymentexternalmcp.js";
@@ -73,7 +73,7 @@ export function ServerCard({
         }
       }}
     >
-      <DotCard
+      <Card
         className={cn(
           "cursor-pointer",
           isAdded && "border-success/50 ring-success/20 ring-1",
@@ -114,7 +114,7 @@ export function ServerCard({
               v{server.version}
             </Type>
           </div>
-          <div className="flex items-baseline gap-1">
+          <div className="flex min-w-0 shrink flex-wrap items-baseline justify-end gap-1">
             {isSpeakeasyServer && <PoweredBySpeakeasyBadge />}
             <ManualSetupBadge server={server} className="mr-1" />
             <ToolCollectionBadge
@@ -133,8 +133,11 @@ export function ServerCard({
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           {/* Selection indicator */}
           {isSelected ? (
-            <div className="flex size-6 items-center justify-center rounded-full bg-[#1DA1F2]">
-              <Check className="size-3.5 text-white" strokeWidth={5} />
+            <div className="bg-primary flex size-6 items-center justify-center rounded-full">
+              <Check
+                className="text-primary-foreground size-3.5"
+                strokeWidth={5}
+              />
             </div>
           ) : (
             <div className="border-muted-foreground/30 size-6 rounded-full border-2" />
@@ -154,7 +157,7 @@ export function ServerCard({
             </Button>
           </Link>
         </div>
-      </DotCard>
+      </Card>
     </div>
   );
 }

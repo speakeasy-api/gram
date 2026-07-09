@@ -1,5 +1,5 @@
 import { ArrowRight, ExternalLink, LifeBuoy } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/moonshine";
 import { GramLogo } from "@/components/gram-logo";
 
 interface OnboardingHeaderProps {
@@ -26,9 +26,9 @@ export function OnboardingHeader({
         <div className="flex items-center gap-2">
           <Button
             asChild
-            variant="ghost"
+            variant="tertiary"
             size="sm"
-            className="text-muted-foreground hover:text-foreground gap-1.5"
+            className="text-muted-foreground hover:text-foreground"
           >
             <a
               href="https://www.speakeasy.com/docs/mcp"
@@ -40,22 +40,26 @@ export function OnboardingHeader({
             </a>
           </Button>
           <Button
-            variant="ghost"
+            variant="tertiary"
             size="sm"
             onClick={handleGetSupport}
-            className="text-muted-foreground hover:text-foreground gap-1.5"
+            className="text-muted-foreground hover:text-foreground"
           >
-            <LifeBuoy className="h-4 w-4" />
-            Get support
+            <Button.LeftIcon>
+              <LifeBuoy className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Get support</Button.Text>
           </Button>
           <Button
-            variant="ghost"
+            variant="tertiary"
             size="sm"
             onClick={onLeave}
-            className="text-muted-foreground hover:text-foreground gap-1.5"
+            className="text-muted-foreground hover:text-foreground"
           >
-            Go to dashboard
-            <ArrowRight className="h-4 w-4" />
+            <Button.Text>Go to dashboard</Button.Text>
+            <Button.RightIcon>
+              <ArrowRight className="h-4 w-4" />
+            </Button.RightIcon>
           </Button>
         </div>
       </div>

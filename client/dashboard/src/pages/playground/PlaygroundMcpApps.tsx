@@ -417,7 +417,7 @@ function McpAppFrame({
 
   return (
     <div className="border-border border-t px-4 pb-4">
-      <div className="border-border bg-background overflow-hidden rounded-2xl border shadow-sm">
+      <div className="border-border bg-background overflow-hidden border">
         <iframe
           ref={iframeRef}
           allow={buildAllowAttribute(uiMeta)}

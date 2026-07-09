@@ -11,12 +11,12 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button, Icon } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { type DateRangePreset } from "@gram-ai/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { keepPreviousData } from "@tanstack/react-query";
-import { Shield } from "lucide-react";
+import { ArrowRight, CircleAlert, Shield } from "lucide-react";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Link, Outlet, useLocation } from "react-router";
 import { useRoutes } from "@/routes";
@@ -144,7 +144,7 @@ function NoPoliciesEmptyState() {
           <Link to={routes.policyCenter.href()}>
             <Button.Text>Manage Policies</Button.Text>
             <Button.RightIcon>
-              <Icon name="arrow-right" />
+              <ArrowRight />
             </Button.RightIcon>
           </Link>
         </Button>
@@ -289,10 +289,7 @@ function SecurityOverviewContent() {
       <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
         <div className="bg-muted/20 flex flex-col items-center justify-center rounded-lg border border-dashed px-8 py-16 text-center">
           <div className="bg-muted/50 mb-4 flex size-12 items-center justify-center rounded-full">
-            <Icon
-              name="circle-alert"
-              className="text-muted-foreground size-6"
-            />
+            <CircleAlert className="text-muted-foreground size-6" />
           </div>
           <p className="text-foreground text-sm font-medium">
             Error loading risk overview
@@ -353,10 +350,7 @@ function SecurityOverviewContent() {
       <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
         {policiesDisabledWithHistory && (
           <div className="bg-muted/30 flex items-start gap-3 rounded-lg border border-dashed px-4 py-3">
-            <Icon
-              name="circle-alert"
-              className="text-muted-foreground mt-0.5 size-4 shrink-0"
-            />
+            <CircleAlert className="text-muted-foreground mt-0.5 size-4 shrink-0" />
             <div className="min-w-0 flex-1">
               <Type small className="font-medium">
                 All risk policies are disabled
@@ -370,7 +364,7 @@ function SecurityOverviewContent() {
               <Link to={routes.policyCenter.href()}>
                 <Button.Text>Manage Policies</Button.Text>
                 <Button.RightIcon>
-                  <Icon name="arrow-right" />
+                  <ArrowRight />
                 </Button.RightIcon>
               </Link>
             </Button>
@@ -523,7 +517,7 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
             <Link to={agentsHref}>
               <Button.Text>View Sessions with Risk</Button.Text>
               <Button.RightIcon>
-                <Icon name="arrow-right" />
+                <ArrowRight />
               </Button.RightIcon>
             </Link>
           </Button>
@@ -531,7 +525,7 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
             <Link to={riskEventsHref}>
               <Button.Text>View All Events</Button.Text>
               <Button.RightIcon>
-                <Icon name="arrow-right" />
+                <ArrowRight />
               </Button.RightIcon>
             </Link>
           </Button>
@@ -587,7 +581,7 @@ function ViewAllLink({ href, label }: { href: string; label: string }) {
       aria-label={label}
     >
       <span>{label}</span>
-      <Icon name="arrow-right" className="size-3.5" />
+      <ArrowRight className="size-3.5" />
     </Link>
   );
 }

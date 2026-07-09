@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Icon } from "@/components/ui/moonshine";
+import { Search, X } from "lucide-react";
 import {
   allLabelFor,
   flattenOptions,
@@ -227,7 +227,7 @@ function DebouncedTextInput({
 
   return (
     <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
-      <Icon name="search" className="text-muted-foreground size-4 shrink-0" />
+      <Search className="text-muted-foreground size-4 shrink-0" />
       <input
         id={inputId}
         type="text"
@@ -261,7 +261,7 @@ function DebouncedTextInput({
           className="text-muted-foreground hover:text-foreground"
           aria-label="Clear filter"
         >
-          <Icon name="x" className="size-3.5" />
+          <X className="size-3.5" />
         </button>
       )}
     </div>
@@ -337,7 +337,7 @@ function DebouncedNumberInput({
           className="text-muted-foreground hover:text-foreground"
           aria-label="Clear filter"
         >
-          <Icon name="x" className="size-3.5" />
+          <X className="size-3.5" />
         </button>
       )}
     </div>

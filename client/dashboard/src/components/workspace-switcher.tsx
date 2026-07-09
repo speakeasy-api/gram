@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { InputDialog } from "./input-dialog";
 import { ProjectAvatar } from "./project-menu";
-import { Button } from "./ui/button";
+import { Button } from "./ui/moonshine";
 import {
   Command,
   CommandEmpty,
@@ -109,7 +109,7 @@ export function WorkspaceSwitcher(): JSX.Element {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
-            variant="ghost"
+            variant="tertiary"
             className="h-auto w-full justify-start gap-2 rounded-md border px-2 py-1.5 group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1"
           >
             <ProjectAvatar

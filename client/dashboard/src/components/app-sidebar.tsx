@@ -29,8 +29,16 @@ import { useProductTier } from "@/hooks/useProductTier";
 import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { cn, Icon, Stack } from "@/components/ui/moonshine";
-import { MinusIcon, Settings, TestTube2Icon } from "lucide-react";
+import { cn, Stack } from "@/components/ui/moonshine";
+import {
+  Eye,
+  Hammer,
+  MinusIcon,
+  Plug,
+  Settings,
+  Shield,
+  TestTube2Icon,
+} from "lucide-react";
 import * as React from "react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
@@ -203,7 +211,7 @@ export function AppSidebar({
                   restricted" notice via RequireScope (org:admin). */}
               <CollapsibleNavGroup
                 label="Observe"
-                Icon={(p) => <Icon {...p} name="eye" />}
+                Icon={Eye}
                 defaultHref={routes.costs.href()}
               >
                 <ScopeGatedNavItem
@@ -231,7 +239,7 @@ export function AppSidebar({
               {/* Secure group */}
               <CollapsibleNavGroup
                 label="Secure"
-                Icon={(p) => <Icon {...p} name="shield" />}
+                Icon={Shield}
                 defaultHref={routes.riskOverview.href()}
                 stage="beta"
               >
@@ -260,7 +268,7 @@ export function AppSidebar({
               {/* Connect group */}
               <CollapsibleNavGroup
                 label="Connect"
-                Icon={(p) => <Icon {...p} name="plug" />}
+                Icon={Plug}
                 defaultHref={routes.sources.href()}
               >
                 <ScopeGatedNavItem
@@ -286,7 +294,7 @@ export function AppSidebar({
               {/* Distribute group */}
               <CollapsibleNavGroup
                 label="Distribute"
-                Icon={(p) => <Icon {...p} name="hammer" />}
+                Icon={Hammer}
                 defaultHref={routes.mcp.href()}
               >
                 <ScopeGatedNavItem

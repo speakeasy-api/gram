@@ -1,13 +1,13 @@
 import { CodeBlock } from "@/components/code";
 import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
-import { Link } from "@/components/ui/link";
 import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn, getServerURL } from "@/lib/utils";
-import { Badge, Button, Icon, Stack } from "@/components/ui/moonshine";
+import { Badge, Button, Stack } from "@/components/ui/moonshine";
+import { ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -179,14 +179,18 @@ function BuiltInOverviewTab({ mcpUrl }: { mcpUrl: string }) {
           >
             {`${mcpUrl}/install`}
           </CodeBlock>
-          <Link external to={`${mcpUrl}/install`} noIcon>
-            <Button variant="primary" className="px-4">
+          <Button asChild variant="primary" className="px-4">
+            <a
+              href={`${mcpUrl}/install`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Button.LeftIcon>
-                <Icon name="external-link" className="h-4 w-4" />
+                <ExternalLink className="h-4 w-4" />
               </Button.LeftIcon>
               <Button.Text>View</Button.Text>
-            </Button>
-          </Link>
+            </a>
+          </Button>
         </div>
       </PageSection>
     </Stack>

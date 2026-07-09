@@ -1,12 +1,11 @@
 import { CardContextMenu } from "@/components/card-context-menu";
-import { Badge } from "@/components/ui/badge";
-import { DotCard } from "@/components/ui/dot-card";
+import { Card } from "@/components/ui/card";
 import { Action, MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import { Plugin } from "@gram/client/models/components/plugin.js";
-import { Button, Stack } from "@/components/ui/moonshine";
+import { Badge, Button, Stack } from "@/components/ui/moonshine";
 import { ArrowRight, Puzzle, Server } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 
@@ -33,7 +32,7 @@ export function PluginCard({
 
   return (
     <CardContextMenu actions={actions}>
-      <DotCard
+      <Card
         className="cursor-pointer"
         onClick={() => {
           void navigate(detailHref);
@@ -60,9 +59,13 @@ export function PluginCard({
             </Type>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <Badge variant="secondary">
-              <Server className="mr-1 h-3 w-3" />
-              {serverCount} {serverCount === 1 ? "server" : "servers"}
+            <Badge variant="neutral" background={false}>
+              <Badge.LeftIcon>
+                <Server className="h-3 w-3" />
+              </Badge.LeftIcon>
+              <Badge.Text>
+                {`${serverCount} ${serverCount === 1 ? "server" : "servers"}`}
+              </Badge.Text>
             </Badge>
             <div onClick={(e) => e.stopPropagation()}>
               <MoreActions actions={actions} />
@@ -97,7 +100,7 @@ export function PluginCard({
             </Button>
           </Link>
         </div>
-      </DotCard>
+      </Card>
     </CardContextMenu>
   );
 }

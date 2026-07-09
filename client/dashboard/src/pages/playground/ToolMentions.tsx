@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/ui/moonshine";
+import { Globe, MessageSquare, X } from "lucide-react";
 import { Type } from "@/components/ui/type";
 import { type Tool, parseMentionedTools } from "./tool-mention-utils";
 
@@ -191,10 +191,11 @@ export function ToolMentionAutocomplete({
             }}
             onMouseEnter={() => setSelectedIndex(index)}
           >
-            <Icon
-              name={tool.type === "http" ? "globe" : "message-square"}
-              className="mt-0.5 h-3 w-3 flex-shrink-0 opacity-50"
-            />
+            {tool.type === "http" ? (
+              <Globe className="mt-0.5 h-3 w-3 flex-shrink-0 opacity-50" />
+            ) : (
+              <MessageSquare className="mt-0.5 h-3 w-3 flex-shrink-0 opacity-50" />
+            )}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1">
                 <Type variant="small" className="font-medium">
@@ -249,17 +250,18 @@ export function MentionedToolsBadges({
             "bg-primary/10 text-primary text-xs",
           )}
         >
-          <Icon
-            name={tool.type === "http" ? "globe" : "message-square"}
-            className="h-3 w-3"
-          />
+          {tool.type === "http" ? (
+            <Globe className="h-3 w-3" />
+          ) : (
+            <MessageSquare className="h-3 w-3" />
+          )}
           <span>{tool.name}</span>
           {onRemove && (
             <button
               onClick={() => onRemove(tool.id)}
               className="ml-1 hover:opacity-70"
             >
-              <Icon name="x" className="h-3 w-3" />
+              <X className="h-3 w-3" />
             </button>
           )}
         </div>

@@ -1,7 +1,6 @@
-import { Stack } from "@/components/ui/moonshine";
+import { Button, Stack } from "@/components/ui/moonshine";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -133,7 +132,7 @@ export function InputDialog({
         </Stack>
         <Dialog.Footer>
           <Button
-            variant="ghost"
+            variant="tertiary"
             onClick={() => onOpenChange(false)}
             disabled={pending}
           >

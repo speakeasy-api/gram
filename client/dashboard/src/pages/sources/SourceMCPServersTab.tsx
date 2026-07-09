@@ -1,4 +1,4 @@
-import { DotCard } from "@/components/ui/dot-card";
+import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
@@ -13,7 +13,7 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
       params={[toolset.slug]}
       className="hover:no-underline"
     >
-      <DotCard icon={<Network className="text-muted-foreground h-10 w-10" />}>
+      <Card icon={<Network className="text-muted-foreground h-10 w-10" />}>
         <div className="mb-1 flex items-start justify-between gap-2">
           <Type
             variant="subheading"
@@ -57,7 +57,7 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
             <ArrowRight className="h-3.5 w-3.5" />
           </div>
         </div>
-      </DotCard>
+      </Card>
     </routes.mcp.details.Link>
   );
 }

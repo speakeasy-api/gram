@@ -12,7 +12,6 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
 import { RevokeSessionsDialog } from "@/components/sessions/RevokeSessionsDialog";
 import { SessionTableRow } from "@/components/sessions/SessionTableRow";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DotTable } from "@/components/ui/dot-table";
 import {
@@ -24,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/moonshine";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { sessionStatus, subjectLabel } from "@/lib/user-session-status";
@@ -205,7 +205,7 @@ function UserSessionsInner(): JSX.Element {
     listBody = (
       <div className="flex items-center justify-between gap-3">
         <p className="text-destructive text-sm">Couldn&apos;t load sessions.</p>
-        <Button variant="ghost" size="sm" onClick={() => void refetch()}>
+        <Button variant="tertiary" size="sm" onClick={() => void refetch()}>
           Retry
         </Button>
       </div>
@@ -316,14 +316,14 @@ function UserSessionsInner(): JSX.Element {
               <Type small>{selectedIds.length} selected</Type>
               <div className="flex items-center gap-2">
                 <Button
-                  variant="ghost"
+                  variant="tertiary"
                   size="sm"
                   onClick={() => setSelected(new Set())}
                 >
                   Clear
                 </Button>
                 <Button
-                  variant="destructive"
+                  variant="destructive-primary"
                   size="sm"
                   onClick={() => setBulkConfirmOpen(true)}
                 >
@@ -338,7 +338,7 @@ function UserSessionsInner(): JSX.Element {
           {hasNextPage && (
             <div className="flex justify-center">
               <Button
-                variant="ghost"
+                variant="tertiary"
                 size="sm"
                 disabled={isFetchingNextPage}
                 onClick={() => void fetchNextPage()}

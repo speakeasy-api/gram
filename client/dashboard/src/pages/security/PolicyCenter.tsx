@@ -131,6 +131,7 @@ export function DetectorCard({
         selected ? "border-foreground bg-muted/40" : "border-border",
       )}
     >
+      {/* TODO(design-system): DynamicIcon */}
       <Icon
         name={meta.icon as IconName}
         className="text-muted-foreground mt-0.5 size-5 shrink-0"
@@ -1521,7 +1522,7 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
             {/* Status + Version row */}
             <div className="grid grid-cols-2 gap-3">
               <div className="border-border rounded-lg border p-3">
-                <p className="text-muted-foreground mb-1 text-xs font-medium">
+                <p className="text-muted-foreground mb-1 font-mono text-xs tracking-[0.08em] uppercase">
                   Status
                 </p>
                 <div className="flex items-center gap-2">
@@ -1543,7 +1544,7 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
                 </div>
               </div>
               <div className="border-border rounded-lg border p-3">
-                <p className="text-muted-foreground mb-1 text-xs font-medium">
+                <p className="text-muted-foreground mb-1 font-mono text-xs tracking-[0.08em] uppercase">
                   Version
                 </p>
                 <p className="text-sm font-medium">v{status.policyVersion}</p>
@@ -1594,10 +1595,10 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
 
             {/* Findings */}
             <div className="border-border rounded-lg border p-4">
-              <p className="text-muted-foreground mb-1 text-xs font-medium">
+              <p className="text-muted-foreground mb-1 font-mono text-xs tracking-[0.08em] uppercase">
                 Findings
               </p>
-              <p className="text-3xl font-bold tracking-tight">
+              <p className="font-display text-3xl font-thin tracking-[-0.02em] tabular-nums">
                 {status.findingsCount.toLocaleString()}
               </p>
               <p className="text-muted-foreground mt-1 text-xs">

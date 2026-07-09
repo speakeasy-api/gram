@@ -8,7 +8,8 @@ import { cn, getServerURL } from "@/lib/utils";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
-import { Button, Dialog, Input, Stack } from "@/components/ui/moonshine";
+import { Dialog } from "@/components/ui/dialog";
+import { Button, Input, Stack } from "@/components/ui/moonshine";
 import {
   AlertCircle,
   ArrowRight,

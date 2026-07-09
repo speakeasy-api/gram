@@ -16,7 +16,7 @@ function Stat({
       <span className="text-muted-foreground text-xs">{label}</span>
       <span
         className={cn(
-          "text-xl font-semibold tabular-nums",
+          "font-display text-2xl font-thin tracking-[-0.015em] tabular-nums",
           // The success text tokens wash out here: near-white in dark mode,
           // muted olive in light. Pin the palette steps that read as green in
           // each mode.

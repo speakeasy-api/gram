@@ -85,7 +85,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
   Stack,
 } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -98,7 +97,9 @@ import {
   LockIcon,
   Pencil,
   Play,
+  Plus,
   Trash2,
+  WandSparkles,
   XCircleIcon,
 } from "lucide-react";
 import { generateText } from "ai";
@@ -1099,7 +1100,7 @@ Respond with ONLY the server instructions as plain text. Do not wrap in JSON or 
       disabled={generating || tools.length === 0}
     >
       <Button.LeftIcon>
-        <Icon name="wand-sparkles" className="h-4 w-4" />
+        <WandSparkles className="h-4 w-4" />
       </Button.LeftIcon>
       <Button.Text>
         {generating ? "Generating..." : "Generate with AI"}
@@ -1290,7 +1291,7 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
             {canWrite && (
               <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
                 <Button.LeftIcon>
-                  <Icon name="plus" className="h-4 w-4" />
+                  <Plus className="h-4 w-4" />
                 </Button.LeftIcon>
                 <Button.Text>Add Tools</Button.Text>
               </Button>

@@ -1,4 +1,5 @@
-import { cn, Icon } from "@/components/ui/moonshine";
+import { cn } from "@/components/ui/moonshine";
+import { Maximize2, Minimize2, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { ChartButton } from "./ChartButton";
 
@@ -39,7 +40,7 @@ export function ChartCard({
         <div className="flex items-center gap-2">
           {isZoomed && onResetZoom && (
             <ChartButton onClick={onResetZoom} ariaLabel="Reset zoom">
-              <Icon name="rotate-ccw" />
+              <RotateCcw className="size-4" />
               Reset zoom
             </ChartButton>
           )}
@@ -49,9 +50,9 @@ export function ChartCard({
               ariaLabel={isExpanded ? "Minimize chart" : "Expand chart"}
             >
               {isExpanded ? (
-                <Icon name="minimize-2" />
+                <Minimize2 className="size-4" />
               ) : (
-                <Icon name="maximize-2" />
+                <Maximize2 className="size-4" />
               )}
             </ChartButton>
           )}

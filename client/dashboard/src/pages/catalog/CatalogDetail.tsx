@@ -238,7 +238,9 @@ export default function CatalogDetail(): JSX.Element {
                   align="center"
                   className="mb-2"
                 >
-                  <h1 className="text-2xl font-bold">{displayName}</h1>
+                  <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
+                    {displayName}
+                  </h1>
                   {isOfficial && <Badge>Official</Badge>}
                   {versionMeta?.isLatest && (
                     <Badge variant="neutral">Latest</Badge>

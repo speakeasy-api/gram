@@ -11,7 +11,14 @@ import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useDeploymentSuspense } from "@gram/client/react-query/deployment.js";
 import { useDeploymentLogsSuspense } from "@gram/client/react-query/deploymentLogs.js";
-import { Icon, Input } from "@/components/ui/moonshine";
+import { Input } from "@/components/ui/moonshine";
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  FileText,
+  Search,
+} from "lucide-react";
 import React, {
   useCallback,
   useDeferredValue,
@@ -692,10 +699,7 @@ export const LogsTabContent = ({
           </div>
           <div className="ml-auto">
             <div className="relative">
-              <Icon
-                name="search"
-                className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2"
-              />
+              <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2" />
               <Input
                 data-search-input
                 type="text"
@@ -721,14 +725,14 @@ export const LogsTabContent = ({
                         className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
                         title="Previous (Shift+N)"
                       >
-                        <Icon name="chevron-up" className="size-2.5" />
+                        <ChevronUp className="size-2.5" />
                       </button>
                       <button
                         onClick={() => navigateToResult("next")}
                         className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
                         title="Next (N)"
                       >
-                        <Icon name="chevron-down" className="size-2.5" />
+                        <ChevronDown className="size-2.5" />
                       </button>
                     </div>
                   </div>
@@ -760,7 +764,7 @@ export const LogsTabContent = ({
         >
           {parsedLogs.length === 0 ? (
             <div className="text-muted-foreground flex flex-col items-center justify-center py-12">
-              <Icon name="file-text" className="mb-3 size-8 opacity-30" />
+              <FileText className="mb-3 size-8 opacity-30" />
               <p className="font-sans text-sm">No logs to display</p>
             </div>
           ) : groupBySource && groupedLogs ? (
@@ -768,10 +772,7 @@ export const LogsTabContent = ({
             groupedLogs.map(([source, group]) => (
               <details key={source} className="group" open>
                 <summary className="hover:bg-muted/30 border-border flex cursor-pointer items-center gap-2 border-b px-3 py-3">
-                  <Icon
-                    name="chevron-right"
-                    className="size-3 transition-transform group-open:rotate-90"
-                  />
+                  <ChevronRight className="size-3 transition-transform group-open:rotate-90" />
                   <span className="font-sans font-medium">{source}</span>
                   <span className="text-muted-foreground font-sans text-xs">
                     ({group.logs.length})

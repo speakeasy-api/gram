@@ -10,6 +10,7 @@ import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useSlugs } from "@/contexts/Sdk";
 import { Icon, IconName, Badge } from "@/components/ui/moonshine";
+import { Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { requestAskAi } from "./askAiBridge";
@@ -125,7 +126,7 @@ export function CommandPalette(): JSX.Element {
         onSelect={handleAskAi}
         className="flex items-center gap-2"
       >
-        <Icon name="sparkles" className="text-primary size-4 shrink-0" />
+        <Sparkles className="text-primary size-4 shrink-0" />
         <span className="truncate">{askAiLabel}</span>
       </CommandItem>
     </CommandGroup>
@@ -184,6 +185,7 @@ export function CommandPalette(): JSX.Element {
                 className="flex items-center gap-2"
               >
                 {recent.icon && (
+                  // TODO(design-system): DynamicIcon
                   <Icon name={recent.icon as IconName} className="size-4" />
                 )}
                 <span className="truncate">{recent.label}</span>
@@ -205,6 +207,7 @@ export function CommandPalette(): JSX.Element {
               >
                 <div className="flex items-center gap-2">
                   {action.icon && (
+                    // TODO(design-system): DynamicIcon
                     <Icon name={action.icon as IconName} className="size-4" />
                   )}
                   <span>{action.label}</span>

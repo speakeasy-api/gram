@@ -1704,7 +1704,7 @@ function ReviewScorecard({
       ) : (
         <Stack gap={4}>
           <div>
-            <Type className="text-2xl font-semibold">
+            <Type className="font-display text-2xl font-thin tracking-[-0.015em] tabular-nums">
               {correct}/{judged}
             </Type>
             <Type small muted>

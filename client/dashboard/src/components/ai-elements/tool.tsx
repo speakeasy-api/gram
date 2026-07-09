@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/moonshine";
 import {
   Collapsible,
   CollapsibleContent,
@@ -67,8 +67,12 @@ const getStatusBadge = (status: ToolUIPart["state"]) => {
   };
 
   return (
-    <Badge className="gap-1.5 rounded-full text-xs" variant="secondary">
-      {icons[status]}
+    <Badge
+      className="gap-1.5 rounded-full text-xs"
+      variant="neutral"
+      background={false}
+    >
+      <Badge.LeftIcon>{icons[status]}</Badge.LeftIcon>
       {labels[status]}
     </Badge>
   );
@@ -96,17 +100,25 @@ export const ToolHeader = ({
       </span>
       {getStatusBadge(state)}
       {annotations?.readOnlyHint && (
-        <Badge className="gap-1 rounded-full text-xs" variant="outline">
+        <Badge
+          className="gap-1 rounded-full text-xs"
+          variant="neutral"
+          background={false}
+        >
           Read-only
         </Badge>
       )}
       {annotations?.destructiveHint && !annotations?.readOnlyHint && (
-        <Badge className="gap-1 rounded-full border-amber-200 bg-amber-500/10 text-xs text-amber-600">
+        <Badge className="gap-1 rounded-full text-xs" variant="warning">
           Destructive
         </Badge>
       )}
       {annotations?.idempotentHint && !annotations?.readOnlyHint && (
-        <Badge className="gap-1 rounded-full text-xs" variant="outline">
+        <Badge
+          className="gap-1 rounded-full text-xs"
+          variant="neutral"
+          background={false}
+        >
           Idempotent
         </Badge>
       )}

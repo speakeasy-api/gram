@@ -8,7 +8,8 @@ import {
   invalidateAllListChats,
   useListChats,
 } from "@gram/client/react-query/listChats.js";
-import { Icon, Stack } from "@/components/ui/moonshine";
+import { Stack } from "@/components/ui/moonshine";
+import { ChevronRight } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Loader2 } from "lucide-react";
@@ -122,7 +123,7 @@ export function AssistantSessionsList({
             className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start rounded-md px-1 py-1 text-xs no-underline transition-colors hover:no-underline"
           >
             View all sessions
-            <Icon name="chevron-right" className="h-3 w-3" />
+            <ChevronRight className="h-3 w-3" />
           </routes.agentSessions.Link>
         )}
       </Stack>

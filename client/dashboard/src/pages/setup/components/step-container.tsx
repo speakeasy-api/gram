@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ArrowRight, ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/moonshine";
 
 interface StepContainerProps {
   icon: ReactNode;
@@ -36,7 +36,7 @@ export function StepContainer({
       {/* Header */}
       <div className="flex items-center gap-0">
         <div className="flex-shrink-0">{icon}</div>
-        <h1 className="text-foreground text-2xl font-semibold tracking-tight">
+        <h1 className="text-foreground font-display text-2xl font-thin tracking-[-0.015em]">
           {title}
         </h1>
       </div>
@@ -53,32 +53,36 @@ export function StepContainer({
         <div>
           {showBack && (
             <Button
-              variant="ghost"
+              variant="tertiary"
               onClick={onBack}
-              className="text-muted-foreground hover:text-foreground gap-1.5"
+              className="text-muted-foreground hover:text-foreground"
             >
-              <ArrowLeft className="h-4 w-4" />
-              Back
+              <Button.LeftIcon>
+                <ArrowLeft className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Back</Button.Text>
             </Button>
           )}
         </div>
         <div className="flex items-center gap-3">
           {onSkip && (
             <Button
-              variant="ghost"
+              variant="tertiary"
               onClick={onSkip}
               className="text-muted-foreground hover:text-foreground"
             >
               {skipLabel}
             </Button>
           )}
-          <Button
-            onClick={onContinue}
-            disabled={!canContinue || isLoading}
-            className="bg-accent hover:bg-accent/90 text-accent-foreground gap-1.5"
-          >
-            {isLoading ? "Loading..." : continueLabel}
-            {!isLoading && <ArrowRight className="h-4 w-4" />}
+          <Button onClick={onContinue} disabled={!canContinue || isLoading}>
+            <Button.Text>
+              {isLoading ? "Loading..." : continueLabel}
+            </Button.Text>
+            {!isLoading && (
+              <Button.RightIcon>
+                <ArrowRight className="h-4 w-4" />
+              </Button.RightIcon>
+            )}
           </Button>
         </div>
       </div>

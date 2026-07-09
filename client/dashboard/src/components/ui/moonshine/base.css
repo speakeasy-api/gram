@@ -31,6 +31,9 @@
 
   --color-base-white: hsl(0 0% 100%);
   --color-base-black: hsl(0 0% 0%);
+  /* Deepest dark-mode surface: a warmer, deeper step below neutral-900
+   * (ink). True black is reserved for logo/rule work per the brandbook. */
+  --color-ink-black: hsl(23, 30%, 2%);
 
   /*
    * Neutrals — warm, ink-tinted ramp (Claude Design brandbook).
@@ -721,7 +724,7 @@
   --border-neutral-default: var(--color-neutral-600);
   --border-neutral-disabled: var(--color-neutral-600-40);
   --border-neutral-softest: var(--color-neutral-800-56);
-  --border-neutral-inset: var(--color-base-black);
+  --border-neutral-inset: var(--color-ink-black);
   --border-neutral-alpha: hsla(
     255,
     255%,
@@ -847,7 +850,7 @@
   /* ============================================
    * BACKGROUNDS
    * ============================================ */
-  --bg-surface-primary-default: var(--color-base-black);
+  --bg-surface-primary-default: var(--color-ink-black);
   --bg-surface-secondary-default: var(--color-neutral-900);
   --bg-surface-tertiary-default: var(--color-neutral-800);
   --bg-surface-primary-inverse: var(--color-base-white);
@@ -859,7 +862,7 @@
   --bg-active: var(--color-neutral-800);
   --bg-default: var(--color-neutral-900);
   --bg-muted: var(--color-neutral-900-56);
-  --bg-inset: var(--color-base-black);
+  --bg-inset: var(--color-ink-black);
 
   /* Light background in dark mode */
 
@@ -923,12 +926,12 @@
    * 4. DEPRECATED TOKENS - SHADCN (Dark Mode)
    * ============================================ */
 
-  --background-pure: var(--color-base-black);
-  --background: var(--color-base-black);
+  --background-pure: var(--color-ink-black);
+  --background: var(--color-ink-black);
   --foreground: var(--color-neutral-300);
   --card: var(--color-neutral-900);
   --card-foreground: var(--color-neutral-300);
-  --popover: var(--color-base-black);
+  --popover: var(--color-ink-black);
   --popover-foreground: var(--color-neutral-100);
   --primary: var(--color-base-white);
   --primary-foreground: var(--color-base-black);

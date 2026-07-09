@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { subjectLabel } from "@/lib/user-session-status";
 import { useRevokeUserSessionMutation } from "@gram/client/react-query/revokeUserSession.js";
@@ -28,11 +28,11 @@ export function RevokeSessionDialog({
           </Dialog.Description>
         </Dialog.Header>
         <Dialog.Footer>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="tertiary" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant="destructive-primary"
             disabled={revoke.isPending}
             onClick={() =>
               revoke.mutate(

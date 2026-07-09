@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/moonshine";
 import {
   Select,
   SelectContent,
@@ -217,7 +217,9 @@ function HeaderStat({
 }): JSX.Element {
   const inner = (
     <>
-      <span className="text-2xl font-semibold tabular-nums">{value}</span>
+      <span className="font-display text-2xl font-thin tracking-[-0.015em] tabular-nums">
+        {value}
+      </span>
       <span className="text-muted-foreground text-xs">{label}</span>
     </>
   );
@@ -448,10 +450,14 @@ export function EntityProfile({
                   </div>
                 )}
                 <div className="flex items-center gap-2">
-                  <h1 className="truncate text-2xl font-semibold tracking-tight">
+                  <h1 className="font-display truncate text-2xl font-thin tracking-[-0.015em]">
                     {title}
                   </h1>
-                  <Badge variant="secondary" className="shrink-0">
+                  <Badge
+                    variant="neutral"
+                    background={false}
+                    className="shrink-0"
+                  >
                     {typeLabel}
                   </Badge>
                 </div>

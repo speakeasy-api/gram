@@ -46,10 +46,10 @@ export function DemoBookingFlow(): JSX.Element {
   return (
     <div className="flex w-full flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold text-gray-900">
+        <h2 className="text-foreground font-display text-2xl font-thin tracking-[-0.015em]">
           Looks like your company is new to Speakeasy
         </h2>
-        <p className="text-sm text-gray-600">
+        <p className="text-muted-foreground text-sm">
           Book time with our team to activate your account and get started.
         </p>
       </div>

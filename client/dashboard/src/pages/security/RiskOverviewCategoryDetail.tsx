@@ -12,7 +12,7 @@ import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { useRiskRuleBreakdown } from "@gram/client/react-query/riskRuleBreakdown.js";
-import { Icon } from "@/components/ui/moonshine";
+import { ChevronRight, Inbox, LoaderCircle, Search, X } from "lucide-react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   useCallback,
@@ -260,7 +260,7 @@ function ResultsTable({
   if (isLoading) {
     return (
       <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-        <Icon name="loader-circle" className="size-5 animate-spin" />
+        <LoaderCircle className="size-5 animate-spin" />
         <span>Loading findings...</span>
       </div>
     );
@@ -270,7 +270,7 @@ function ResultsTable({
     return (
       <div className="flex flex-col items-center gap-3 py-12 text-center">
         <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-          <Icon name="inbox" className="text-muted-foreground size-6" />
+          <Inbox className="text-muted-foreground size-6" />
         </div>
         <span className="text-foreground font-medium">
           No findings in this category for this time range
@@ -354,10 +354,7 @@ function ResultsTable({
               </td>
               <td className="px-4 py-3 text-right">
                 {result.chatId && (
-                  <Icon
-                    name="chevron-right"
-                    className="text-muted-foreground size-4"
-                  />
+                  <ChevronRight className="text-muted-foreground size-4" />
                 )}
               </td>
             </tr>
@@ -477,7 +474,7 @@ function RuleIdFilter({
 
   return (
     <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
-      <Icon name="search" className="text-muted-foreground size-4 shrink-0" />
+      <Search className="text-muted-foreground size-4 shrink-0" />
       <input
         type="text"
         value={local}
@@ -502,7 +499,7 @@ function RuleIdFilter({
           className="text-muted-foreground hover:text-foreground"
           aria-label="Clear rule filter"
         >
-          <Icon name="x" className="size-3.5" />
+          <X className="size-3.5" />
         </button>
       )}
     </div>

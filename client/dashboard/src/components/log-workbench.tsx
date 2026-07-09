@@ -52,7 +52,9 @@ export function LogWorkbench({
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold">{title}</h1>
+                <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
+                  {title}
+                </h1>
                 {stage ? <ReleaseStageBadge stage={stage} /> : null}
               </div>
               {description ? (

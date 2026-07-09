@@ -1,6 +1,5 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -28,7 +27,7 @@ import {
 import { invalidateTemplate } from "@gram/client/react-query/template.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
-import { ResizablePanel } from "@/components/ui/moonshine";
+import { Button, ResizablePanel } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, Plus, ScrollTextIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -61,8 +60,10 @@ function PlaygroundEmptyState({ onCreate }: { onCreate: () => void }) {
       <RequireScope scope="mcp:write" level="component">
         {({ disabled }) => (
           <Button onClick={onCreate} disabled={disabled}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create MCP Server
+            <Button.LeftIcon>
+              <Plus className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Create MCP Server</Button.Text>
           </Button>
         )}
       </RequireScope>
@@ -150,9 +151,11 @@ function PlaygroundInner() {
   }
 
   const logsButton = (
-    <Button size="sm" variant="ghost" onClick={() => setShowLogs(!showLogs)}>
-      <ScrollTextIcon className="mr-2 size-4" />
-      {showLogs ? "Hide" : "Show"} Logs
+    <Button size="sm" variant="tertiary" onClick={() => setShowLogs(!showLogs)}>
+      <Button.LeftIcon>
+        <ScrollTextIcon className="size-4" />
+      </Button.LeftIcon>
+      <Button.Text>{showLogs ? "Hide" : "Show"} Logs</Button.Text>
     </Button>
   );
 

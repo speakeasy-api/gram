@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
-import { Icon } from "@/components/ui/moonshine";
+import { LoaderCircle } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { useQueryState } from "nuqs";
 
@@ -215,7 +215,7 @@ export function AssistantsAuditLog(): React.JSX.Element {
       <div className="bg-background overflow-hidden rounded-lg border">
         {isLoading ? (
           <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-            <Icon name="loader-circle" className="size-4 animate-spin" />
+            <LoaderCircle className="size-4 animate-spin" />
             <span>Loading assistant activity...</span>
           </div>
         ) : error ? (

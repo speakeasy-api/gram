@@ -1,7 +1,7 @@
-import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
 import { Switch } from "@/components/ui/switch";
 import {
+  Badge,
   Button,
   type Column,
   DropdownMenu,
@@ -89,7 +89,9 @@ export function ExclusionsTab({
       header: "Type",
       width: "0.8fr",
       render: (exclusion) => (
-        <Badge variant="secondary">{exclusion.matchType}</Badge>
+        <Badge variant="neutral" background={false}>
+          {exclusion.matchType}
+        </Badge>
       ),
     },
     {
@@ -99,7 +101,11 @@ export function ExclusionsTab({
       render: (exclusion) => {
         const name = policyName(exclusion.riskPolicyId);
         if (!name) return <Badge variant="warning">Global</Badge>;
-        return <Badge variant="secondary">{name}</Badge>;
+        return (
+          <Badge variant="neutral" background={false}>
+            {name}
+          </Badge>
+        );
       },
     },
     {

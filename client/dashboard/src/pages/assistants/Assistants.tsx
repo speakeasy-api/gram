@@ -6,8 +6,7 @@ import { AssistantActivitySparkline } from "@/components/assistants/activity-spa
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { CardContextMenu } from "@/components/card-context-menu";
-import { Badge } from "@/components/ui/badge";
-import { DotCard } from "@/components/ui/dot-card";
+import { Card } from "@/components/ui/card";
 import { Action, MoreActions } from "@/components/ui/more-actions";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,9 +28,9 @@ import {
   useAssistantsList,
 } from "@gram/client/react-query/assistantsList.js";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { Button, Icon, Stack } from "@/components/ui/moonshine";
+import { Badge, Button, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Bot, Boxes, Cpu, Info, Plus } from "lucide-react";
+import { Bot, Boxes, Cpu, Info, LoaderCircle, Plus } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { MouseEvent, useMemo, useState } from "react";
 import { Outlet } from "react-router";
@@ -61,7 +60,7 @@ function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Icon name="bot" className="text-muted-foreground h-6 w-6" />
+        <Bot className="text-muted-foreground h-6 w-6" />
       </div>
       <Type variant="subheading" className="mb-1">
         No assistants yet
@@ -216,10 +215,7 @@ function AssistantsBody({
   if (isLoading) {
     return (
       <Stack align="center" justify="center" className="py-16">
-        <Icon
-          name="loader-circle"
-          className="text-muted-foreground h-6 w-6 animate-spin"
-        />
+        <LoaderCircle className="text-muted-foreground h-6 w-6 animate-spin" />
       </Stack>
     );
   }
@@ -327,14 +323,21 @@ function AssistantToolsets({ assistant }: { assistant: Assistant }) {
         {visible.map((toolset) => (
           <Badge
             key={toolset.toolsetSlug}
-            variant="outline"
+            variant="neutral"
+            background={false}
             className="max-w-[10rem]"
             title={toolset.toolsetSlug}
           >
-            <span className="min-w-0 truncate">{toolset.toolsetSlug}</span>
+            <Badge.Text>
+              <span className="min-w-0 truncate">{toolset.toolsetSlug}</span>
+            </Badge.Text>
           </Badge>
         ))}
-        {overflow > 0 && <Badge variant="outline">+{overflow}</Badge>}
+        {overflow > 0 && (
+          <Badge variant="neutral" background={false}>
+            +{overflow}
+          </Badge>
+        )}
       </div>
     </div>
   );
@@ -369,7 +372,7 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
         params={[assistant.id]}
         className="focus-visible:ring-ring block h-full rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
-        <DotCard icon={<AssistantIcon assistant={assistant} />}>
+        <Card icon={<AssistantIcon assistant={assistant} />}>
           {/* Header row: name + actions */}
           <div className="mb-3 flex items-start justify-between gap-2">
             <Type
@@ -408,7 +411,7 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
               <UpdatedAt date={new Date(assistant.updatedAt)} />
             </div>
           </div>
-        </DotCard>
+        </Card>
       </routes.assistants.detail.Link>
     </CardContextMenu>
   );

@@ -1,5 +1,4 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import {
   Command,
   CommandEmpty,
@@ -17,7 +16,7 @@ import {
   useRoles,
 } from "@gram/client/react-query/roles.js";
 import { useUpdateMemberRolesMutation } from "@gram/client/react-query/updateMemberRoles.js";
-import { Button } from "@/components/ui/moonshine";
+import { Badge, Button } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -174,16 +173,23 @@ export function ChangeRoleDialog({
                   const role = roleById.get(id);
                   if (!role) return null;
                   return (
-                    <Badge key={id} variant="secondary" className="gap-1 pr-1">
-                      {role.name}
-                      <button
-                        type="button"
-                        onClick={() => removeRole(id)}
-                        disabled={selectedRoleIds.length <= 1}
-                        className="hover:bg-muted-foreground/20 ml-0.5 rounded-sm p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-30"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
+                    <Badge
+                      key={id}
+                      variant="neutral"
+                      background={false}
+                      className="gap-1 pr-1"
+                    >
+                      <Badge.Text>{role.name}</Badge.Text>
+                      <Badge.RightIcon>
+                        <button
+                          type="button"
+                          onClick={() => removeRole(id)}
+                          disabled={selectedRoleIds.length <= 1}
+                          className="hover:bg-muted-foreground/20 ml-0.5 rounded-sm p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge.RightIcon>
                     </Badge>
                   );
                 })

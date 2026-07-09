@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import { Button, Icon } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { Combobox } from "@/components/ui/combobox";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { TextArea } from "@/components/ui/textarea";
@@ -7,6 +7,7 @@ import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { capitalize } from "@/lib/utils";
 import { CodeSnippet, Stack } from "@/components/ui/moonshine";
+import { WandSparkles } from "lucide-react";
 import { AgentifyProvider } from "../playground/Agentify";
 import { useAgentify } from "../playground/useAgentify";
 import {
@@ -146,7 +147,7 @@ const SdkContent = ({
               disabled={inProgress}
             >
               <Button.LeftIcon>
-                <Icon name="wand-sparkles" className="h-4 w-4" />
+                <WandSparkles className="h-4 w-4" />
               </Button.LeftIcon>
               <Button.Text>Regenerate</Button.Text>
             </Button>

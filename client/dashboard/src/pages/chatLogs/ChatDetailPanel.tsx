@@ -3,7 +3,9 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
+  CircleAlert,
   Info,
+  RotateCcw,
   Search,
   Sparkles,
   SlidersHorizontal,
@@ -28,7 +30,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
 } from "@/components/ui/moonshine";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
@@ -163,14 +164,14 @@ function ChatDetailErrorFallback({
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-      <Icon name="circle-alert" className="text-destructive h-6 w-6" />
+      <CircleAlert className="text-destructive h-6 w-6" />
       <div>
         <p className="font-medium">Something went wrong loading this chat.</p>
         <p className="text-muted-foreground mt-1 text-sm">{error.message}</p>
       </div>
       <Button variant="secondary" size="sm" onClick={resetErrorBoundary}>
         <Button.LeftIcon>
-          <Icon name="rotate-ccw" className="h-4 w-4" />
+          <RotateCcw className="h-4 w-4" />
         </Button.LeftIcon>
         <Button.Text>Retry</Button.Text>
       </Button>
@@ -720,7 +721,7 @@ function ChatDetailHeader({
             className="hover:bg-muted rounded-md p-1 transition-colors"
             aria-label="Close panel"
           >
-            <Icon name="x" className="size-5" />
+            <X className="size-5" />
           </button>
         </div>
       </div>

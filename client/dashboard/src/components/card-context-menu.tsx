@@ -48,6 +48,7 @@ export function CardContextMenu({
           >
             {action.label}
             {action.icon && (
+              // TODO(design-system): DynamicIcon
               <Icon name={action.icon} className="size-3 shrink-0" />
             )}
           </ContextMenuItem>

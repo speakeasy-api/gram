@@ -1,4 +1,4 @@
-import { DotCard } from "@/components/ui/dot-card";
+import { Card } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
 import { Badge } from "@/components/ui/moonshine";
@@ -22,7 +22,7 @@ export function BuiltInMCPCard({
   const routes = useRoutes();
 
   return (
-    <DotCard
+    <Card
       className="cursor-pointer"
       onClick={() => routes.mcp.builtIn.goTo(slug)}
       icon={
@@ -50,6 +50,6 @@ export function BuiltInMCPCard({
       <Type variant="small" muted className="line-clamp-2">
         {description}
       </Type>
-    </DotCard>
+    </Card>
   );
 }

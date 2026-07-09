@@ -2,8 +2,6 @@ import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantSessionsList } from "@/components/assistants/sessions-list";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { EditInstructionsDialog } from "@/components/assistants/edit-instructions-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   PageTabsTrigger,
   Tabs,
@@ -15,9 +13,9 @@ import { useRoutes } from "@/routes";
 import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useTriggers } from "@gram/client/react-query/triggers.js";
-import { Icon, Stack } from "@/components/ui/moonshine";
+import { Badge, Button, Stack } from "@/components/ui/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Bot, ChevronRight, Loader2, Pencil, Trash } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
 import { useAssistantDraft } from "./useAssistantDraft";
@@ -71,7 +69,7 @@ export function AssistantDraftPanel(): JSX.Element {
         <div className="flex flex-1 items-center justify-center px-4 py-8 text-center">
           <Stack gap={3} align="center" className="max-w-xs">
             <div className="bg-muted/40 flex h-10 w-10 items-center justify-center rounded-full">
-              <Icon name="bot" className="text-muted-foreground h-5 w-5" />
+              <Bot className="text-muted-foreground h-5 w-5" />
             </div>
             <Type small muted>
               Once you describe your assistant in the chat, the live spec will
@@ -92,7 +90,7 @@ export function AssistantDraftPanel(): JSX.Element {
           {a?.name ?? "Loading…"}
         </Type>
         <Button
-          variant="ghost"
+          variant="tertiary"
           size="sm"
           className="shrink-0"
           aria-label="Delete assistant"
@@ -104,11 +102,13 @@ export function AssistantDraftPanel(): JSX.Element {
           }}
           disabled={del.isPending}
         >
-          {del.isPending ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <Icon name="trash" className="h-3 w-3" />
-          )}
+          <Button.LeftIcon>
+            {del.isPending ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <Trash className="size-3" />
+            )}
+          </Button.LeftIcon>
         </Button>
       </div>
 
@@ -163,13 +163,17 @@ export function AssistantDraftPanel(): JSX.Element {
                 title="System instructions"
                 action={
                   <Button
-                    variant="ghost"
+                    variant="tertiary"
                     size="sm"
                     className="h-auto gap-1 px-1.5 py-0.5 text-xs"
                     onClick={() => setEditingInstructions(true)}
                   >
-                    <Icon name="pencil" className="h-3 w-3" />
-                    {a.instructions ? "Expand & edit" : "Add"}
+                    <Button.LeftIcon>
+                      <Pencil className="size-3" />
+                    </Button.LeftIcon>
+                    <Button.Text>
+                      {a.instructions ? "Expand & edit" : "Add"}
+                    </Button.Text>
                   </Button>
                 }
               >
@@ -216,10 +220,7 @@ export function AssistantDraftPanel(): JSX.Element {
                           </Type>
                         )}
                       </Stack>
-                      <Icon
-                        name="chevron-right"
-                        className="text-muted-foreground h-4 w-4 shrink-0"
-                      />
+                      <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
                     </routes.mcp.details.Link>
                   ))}
                   {(a.mcpServers ?? []).map((m) => (
@@ -238,10 +239,7 @@ export function AssistantDraftPanel(): JSX.Element {
                           </Type>
                         )}
                       </Stack>
-                      <Icon
-                        name="chevron-right"
-                        className="text-muted-foreground h-4 w-4 shrink-0"
-                      />
+                      <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
                     </routes.mcp.x.Link>
                   ))}
                 </Stack>
@@ -276,7 +274,11 @@ export function AssistantDraftPanel(): JSX.Element {
                         <Type small className="font-medium">
                           {t.name}
                         </Type>
-                        <Badge variant="outline" className="text-[10px]">
+                        <Badge
+                          variant="neutral"
+                          background={false}
+                          className="text-[10px]"
+                        >
                           {t.definitionSlug}
                         </Badge>
                       </Stack>
@@ -287,11 +289,13 @@ export function AssistantDraftPanel(): JSX.Element {
                       )}
                     </Stack>
                     {t.status === "active" ? (
-                      <Badge variant="default" className="text-[10px]">
-                        Active
-                      </Badge>
+                      <Badge className="text-[10px]">Active</Badge>
                     ) : (
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge
+                        variant="neutral"
+                        background={false}
+                        className="text-[10px]"
+                      >
                         Paused
                       </Badge>
                     )}

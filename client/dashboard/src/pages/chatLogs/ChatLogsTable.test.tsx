@@ -12,7 +12,6 @@ vi.mock("@/components/ui/moonshine", () => ({
     children: ReactNode;
     onClick?: () => void;
   }) => <button onClick={onClick}>{children}</button>,
-  Icon: ({ name }: { name: string }) => <span>{name}</span>,
 }));
 
 vi.mock("@/components/ui/tooltip", () => ({

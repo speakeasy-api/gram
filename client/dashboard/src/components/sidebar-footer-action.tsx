@@ -67,7 +67,7 @@ export function SidebarFooterAction({
   return (
     <div
       className={cn(
-        "hover:bg-accent border-border/60 text-foreground flex items-center gap-2 rounded-lg border bg-white px-2.5 py-1.5 text-sm shadow-sm transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 dark:bg-zinc-900",
+        "hover:bg-accent border-border/60 text-foreground bg-card flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0",
         className,
       )}
     >

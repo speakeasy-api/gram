@@ -191,7 +191,7 @@ Instead: add nullable columns, deprecate by making nullable, use expand-contract
 
 ### Styling
 
-- ALWAYS use Moonshine design system utilities from `@speakeasy-api/moonshine`.
+- ALWAYS use the internal design system at `@/components/ui` (see the `gram-design-system` skill for the component catalog).
 - NEVER use hardcoded Tailwind colors like `bg-neutral-100`, `border-gray-200`, `text-gray-500`.
 
 ### RBAC in the Dashboard

@@ -10,10 +10,17 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
   Table,
   TableProps,
 } from "@/components/ui/moonshine";
+import {
+  Check,
+  CircleDashed,
+  Ellipsis,
+  Radio,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import { Suspense, useState } from "react";
 import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
@@ -102,7 +109,7 @@ function DeploymentActionsDropdown({
         <DropdownMenuTrigger asChild>
           <Button variant="tertiary" size="sm" className="h-8 w-8 p-0">
             <Button.LeftIcon>
-              <Icon name="ellipsis" className="size-4" />
+              <Ellipsis className="size-4" />
             </Button.LeftIcon>
             <Button.Text className="sr-only">Open menu</Button.Text>
           </Button>
@@ -113,7 +120,7 @@ function DeploymentActionsDropdown({
             disabled={redeployMutation.isPending}
             className="cursor-pointer"
           >
-            <Icon name="refresh-cw" className="mr-2 size-4" />
+            <RefreshCw className="mr-2 size-4" />
             {buttonText}
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -145,22 +152,19 @@ function DeploymentsTable({
           case "completed":
             return (
               <div className="bg-success flex items-center justify-center rounded-full p-1">
-                <Icon name="check" className="text-success-foreground" />
+                <Check className="size-4 text-success-foreground" />
               </div>
             );
           case "failed":
             return (
               <div className="bg-destructive/20 flex items-center justify-center rounded-full p-1">
-                <Icon name="x" className="text-destructive-foreground" />
+                <X className="size-4 text-destructive-foreground" />
               </div>
             );
           default:
             return (
               <div className="bg-warning flex items-center justify-center rounded-full p-1">
-                <Icon
-                  name="circle-dashed"
-                  className="text-warning-foreground"
-                />
+                <CircleDashed className="size-4 text-warning-foreground" />
               </div>
             );
         }
@@ -232,7 +236,7 @@ function DeploymentsTable({
               >
                 <Button variant="secondary" size="sm">
                   <Button.LeftIcon>
-                    <Icon name="radio" className="size-4" />
+                    <Radio className="size-4" />
                   </Button.LeftIcon>
                   <Button.Text>View Active Deployment</Button.Text>
                 </Button>

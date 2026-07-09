@@ -108,22 +108,6 @@ vi.mock("@/components/ui/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
-  Dialog: Object.assign(
-    ({
-      children,
-      open,
-    }: {
-      children: ReactNode;
-      open?: boolean;
-      onOpenChange?: (open: boolean) => void;
-    }) => (open ? <div role="dialog">{children}</div> : null),
-    {
-      Content: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-      Header: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-      Title: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
-      Footer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-    },
-  ),
   Table: ({
     columns,
     data,
@@ -155,6 +139,25 @@ vi.mock("@/components/ui/moonshine", () => ({
         ))}
       </tbody>
     </table>
+  ),
+}));
+
+vi.mock("@/components/ui/dialog", () => ({
+  Dialog: Object.assign(
+    ({
+      children,
+      open,
+    }: {
+      children: ReactNode;
+      open?: boolean;
+      onOpenChange?: (open: boolean) => void;
+    }) => (open ? <div role="dialog">{children}</div> : null),
+    {
+      Content: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+      Header: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+      Title: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+      Footer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    },
   ),
 }));
 

@@ -1,9 +1,9 @@
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useMembers } from "@gram/client/react-query/members.js";
-import { Button, Icon } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import { useOrgRoutes } from "@/routes";
-import { Users } from "lucide-react";
+import { ArrowRight, Users } from "lucide-react";
 
 export function MembersTab(): JSX.Element {
   const orgRoutes = useOrgRoutes();
@@ -32,7 +32,7 @@ export function MembersTab(): JSX.Element {
         <Button size="sm" onClick={() => orgRoutes.team.goTo()}>
           <Button.Text>Go to Team</Button.Text>
           <Button.RightIcon>
-            <Icon name="arrow-right" className="h-4 w-4" />
+            <ArrowRight className="h-4 w-4" />
           </Button.RightIcon>
         </Button>
       </div>

@@ -32,13 +32,8 @@ import { useRiskApprovePolicyBypassRequestMutation } from "@gram/client/react-qu
 import { useRiskDenyPolicyBypassRequestMutation } from "@gram/client/react-query/riskDenyPolicyBypassRequest.js";
 import { useRiskRevokePolicyBypassRequestMutation } from "@gram/client/react-query/riskRevokePolicyBypassRequest.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import {
-  Badge,
-  Button,
-  Column,
-  Dialog,
-  Table,
-} from "@/components/ui/moonshine";
+import { Badge, Button, Column, Table } from "@/components/ui/moonshine";
+import { Dialog } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { Inbox, Loader2, ShieldCheck } from "lucide-react";
 import type React from "react";
@@ -555,7 +550,7 @@ function ReviewRequestSheet({
               <label
                 className={cn(
                   "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
-                  action === "approve" && "border-border bg-card shadow-xs",
+                  action === "approve" && "border-border bg-card",
                 )}
               >
                 <RadioGroupItem value="approve" className="mt-1.5" />
@@ -571,7 +566,7 @@ function ReviewRequestSheet({
               <label
                 className={cn(
                   "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
-                  action === "deny" && "border-border bg-card shadow-xs",
+                  action === "deny" && "border-border bg-card",
                 )}
               >
                 <RadioGroupItem value="deny" className="mt-1.5" />
@@ -602,8 +597,7 @@ function ReviewRequestSheet({
                 <label
                   className={cn(
                     "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
-                    approvalAudience === "everyone" &&
-                      "border-border bg-card shadow-xs",
+                    approvalAudience === "everyone" && "border-border bg-card",
                   )}
                 >
                   <RadioGroupItem value="everyone" className="mt-1" />
@@ -620,8 +614,7 @@ function ReviewRequestSheet({
                 <label
                   className={cn(
                     "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
-                    approvalAudience === "role" &&
-                      "border-border bg-card shadow-xs",
+                    approvalAudience === "role" && "border-border bg-card",
                   )}
                 >
                   <RadioGroupItem value="role" className="mt-1" />
@@ -666,8 +659,7 @@ function ReviewRequestSheet({
                 <label
                   className={cn(
                     "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
-                    approvalAudience === "user" &&
-                      "border-border bg-card shadow-xs",
+                    approvalAudience === "user" && "border-border bg-card",
                   )}
                 >
                   <RadioGroupItem value="user" className="mt-1" />

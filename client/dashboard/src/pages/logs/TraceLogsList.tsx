@@ -7,7 +7,7 @@ import { Operator as Op } from "@gram/client/models/components/logfilter";
 import type { SearchLogsPayload } from "@gram/client/models/components/searchlogspayload";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Icon } from "@/components/ui/moonshine";
+import { LoaderCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { formatNanoTimestamp, formatLogBody } from "./utils";
 
@@ -142,7 +142,7 @@ export function TraceLogsList({
         <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
         <div className="flex w-5 shrink-0 justify-center">
-          <Icon name="loader-circle" className="size-4 animate-spin" />
+          <LoaderCircle className="size-4 animate-spin" />
         </div>
         <span className="text-xs">Loading spans...</span>
       </div>

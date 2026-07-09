@@ -4,8 +4,6 @@ import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
@@ -60,14 +58,23 @@ import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusa
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useListAttributeKeys } from "@gram/client/react-query/listAttributeKeys.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Badge, Icon } from "@/components/ui/moonshine";
+import { Alert, Badge, Button } from "@/components/ui/moonshine";
 import type { BadgeProps } from "@/components/ui/moonshine";
 import {
   useInfiniteQuery,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Settings } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Inbox,
+  Info,
+  LoaderCircle,
+  Pencil,
+  Settings,
+  ShieldAlert,
+} from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
@@ -115,7 +122,7 @@ function SlowSearchNotice() {
     <SimpleTooltip tooltip="Free-text search and custom attribute filters scan raw logs instead of the pre-aggregated summaries, so results may take longer to load. Server, user, agent, type, and date filters stay fast.">
       <Badge variant="warning">
         <Badge.LeftIcon>
-          <Icon name="info" size="small" />
+          <Info className="size-3" />
         </Badge.LeftIcon>
         <Badge.Text>Custom search — may be slower</Badge.Text>
       </Badge>
@@ -486,7 +493,9 @@ export function LogsTools(): JSX.Element {
       {isLogsDisabled ? (
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Tool Logs</h1>
+            <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
+              Tool Logs
+            </h1>
             <p className="text-muted-foreground text-sm">
               Dive into tool traces across all tools, skills, and MCP servers
               used by organization members in this project
@@ -677,7 +686,9 @@ function LogsToolsContent({
         <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
           <div className="flex shrink-0 items-start justify-between gap-4">
             <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">Tool Logs</h1>
+              <h1 className="font-display text-2xl font-thin tracking-[-0.015em]">
+                Tool Logs
+              </h1>
               <p className="text-muted-foreground text-sm">
                 Dive into tool traces across all tools, skills, and MCP servers
                 used by organization members in this project
@@ -685,7 +696,7 @@ function LogsToolsContent({
             </div>
             <div className="flex items-center gap-2">
               <HooksSetupButton />
-              <Button variant="outline" size="sm" asChild>
+              <Button variant="secondary" size="sm" asChild>
                 <Link to={orgRoutes.logs.href()}>
                   <Settings className="h-4 w-4" />
                   Configure settings
@@ -844,11 +855,10 @@ function LogsToolsTableContent({
 }) {
   if (error) {
     return (
-      <ErrorAlert
-        error={error}
-        title="Error loading tool logs"
-        className="m-4"
-      />
+      <Alert variant="error" dismissible={false} className="m-4">
+        <span className="font-medium">Error loading tool logs</span>
+        <div>{error.message}</div>
+      </Alert>
     );
   }
 
@@ -870,7 +880,7 @@ function LogsToolsTableContent({
       <div className="py-12 text-center">
         <div className="flex flex-col items-center gap-3">
           <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-            <Icon name="inbox" className="text-muted-foreground size-6" />
+            <Inbox className="text-muted-foreground size-6" />
           </div>
           <span className="text-foreground font-medium">
             No matching tool logs
@@ -900,7 +910,7 @@ function LogsToolsTableContent({
 
       {isFetchingNextPage && (
         <div className="text-muted-foreground flex items-center justify-center gap-2 border-t py-4">
-          <Icon name="loader-circle" className="size-4 animate-spin" />
+          <LoaderCircle className="size-4 animate-spin" />
           <span className="text-sm">Loading more logs...</span>
         </div>
       )}
@@ -991,10 +1001,11 @@ function LogsToolsTraceRow({
         </div>
 
         <div className="flex w-5 shrink-0 items-center justify-center">
-          <Icon
-            name={isExpanded ? "chevron-down" : "chevron-right"}
-            className="text-muted-foreground size-4"
-          />
+          {isExpanded ? (
+            <ChevronDown className="text-muted-foreground size-4" />
+          ) : (
+            <ChevronRight className="text-muted-foreground size-4" />
+          )}
         </div>
 
         <div className="flex min-w-0 flex-2 items-center gap-2">
@@ -1014,10 +1025,10 @@ function LogsToolsTraceRow({
                   e.stopPropagation();
                   setEditDialogOpen(true);
                 }}
-                className="text-muted-foreground hover:text-foreground bg-card hover:bg-muted border-border invisible absolute -right-6 size-6 rounded border p-1 shadow-sm transition-colors group-hover/server:visible"
+                className="text-muted-foreground hover:text-foreground bg-card hover:bg-muted border-border invisible absolute -right-6 size-6 rounded border p-1 transition-colors group-hover/server:visible"
                 aria-label="Edit display name"
               >
-                <Icon name="pencil" className="size-3" />
+                <Pencil className="size-3" />
               </button>
             )}
           </div>
@@ -1075,10 +1086,7 @@ function LogsToolsTraceRow({
         <>
           {trace.hookStatus === "blocked" && (
             <div className="border-warning/30 bg-warning/10 flex items-start gap-3 border-y px-5 py-3 text-xs">
-              <Icon
-                name="shield-alert"
-                className="text-warning mt-0.5 size-4 shrink-0"
-              />
+              <ShieldAlert className="text-warning mt-0.5 size-4 shrink-0" />
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <div className="text-warning font-semibold tracking-wide uppercase">
                   Blocked

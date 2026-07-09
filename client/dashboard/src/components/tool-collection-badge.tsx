@@ -1,14 +1,12 @@
 import { ReactElement } from "react";
 import { cn } from "@/lib/utils";
+import { Badge, Stack } from "@/components/ui/moonshine";
 import {
-  Badge,
-  Icon,
-  Stack,
   Tooltip,
   TooltipContent,
-  TooltipPortal,
   TooltipTrigger,
-} from "@/components/ui/moonshine";
+} from "@/components/ui/tooltip";
+import { TriangleAlert } from "lucide-react";
 
 export const ToolCollectionBadge = ({
   toolNames,
@@ -77,7 +75,7 @@ export const ToolCollectionBadge = ({
     >
       {toolsWarnings && (
         <Badge.LeftIcon>
-          <Icon name="triangle-alert" className="inline-block" />
+          <TriangleAlert className="inline-block" />
         </Badge.LeftIcon>
       )}
       <Badge.Text>
@@ -96,9 +94,7 @@ export const ToolCollectionBadge = ({
   return (
     <Tooltip>
       <TooltipTrigger>{badge}</TooltipTrigger>
-      <TooltipPortal>
-        <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
-      </TooltipPortal>
+      <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
     </Tooltip>
   );
 };

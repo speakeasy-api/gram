@@ -1,8 +1,8 @@
 import { Input } from "@/components/moon/input";
 import { Label } from "@/components/moon/label";
 import { Dialog } from "@/components/ui/dialog";
-import { Button, Icon } from "@/components/ui/moonshine";
-import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/moonshine";
+import { Loader2, X } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 interface PublishDialogProps {
@@ -281,7 +281,7 @@ export const PublishDialog = memo(function PublishDialog({
                       aria-label={`Remove ${u}`}
                       className="hover:opacity-70"
                     >
-                      <Icon name="x" className="h-3 w-3" />
+                      <X className="h-3 w-3" />
                     </button>
                   </span>
                 ))}

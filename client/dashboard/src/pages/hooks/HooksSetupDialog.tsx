@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import {
@@ -7,6 +6,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/moonshine";
 import { useRoutes } from "@/routes";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { ExternalLink, Plus, Sparkles } from "lucide-react";
@@ -70,7 +70,7 @@ function ClaudeInstallContent() {
             </div>
           </div>
 
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="secondary" size="sm" asChild>
             <a
               href="https://code.claude.com/docs/en/plugin-marketplaces#require-marketplaces-for-your-team"
               target="_blank"
@@ -179,7 +179,7 @@ function CursorInstallContent() {
       </div>
 
       <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" asChild>
+        <Button variant="secondary" size="sm" asChild>
           <a
             href="https://cursor.com/docs/plugins"
             target="_blank"
@@ -190,7 +190,7 @@ function CursorInstallContent() {
             Plugin Docs
           </a>
         </Button>
-        <Button variant="outline" size="sm" asChild>
+        <Button variant="secondary" size="sm" asChild>
           <a
             href="https://cursor.com/docs/hooks"
             target="_blank"
@@ -328,7 +328,7 @@ function CodexInstallContent({
       </div>
 
       <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" asChild>
+        <Button variant="secondary" size="sm" asChild>
           <a
             href="https://developers.openai.com/codex/hooks"
             target="_blank"
@@ -339,7 +339,7 @@ function CodexInstallContent({
             Hooks Docs
           </a>
         </Button>
-        <Button variant="outline" size="sm" asChild>
+        <Button variant="secondary" size="sm" asChild>
           <a
             href="https://developers.openai.com/codex/plugins/build"
             target="_blank"
@@ -414,7 +414,7 @@ function PublishedRepoPanel() {
         team observability automatically — no manual SessionStart hook, no
         credential paste.
       </p>
-      <Button variant="outline" size="sm" asChild>
+      <Button variant="secondary" size="sm" asChild>
         <Link to={routes.plugins.href()}>Go to Plugins</Link>
       </Button>
     </div>
@@ -513,9 +513,11 @@ export function HooksSetupButton(): JSX.Element {
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Plus className="h-4 w-4" />
-        Add provider
+      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
+        <Button.LeftIcon>
+          <Plus />
+        </Button.LeftIcon>
+        <Button.Text>Add provider</Button.Text>
       </Button>
       <HooksSetupDialog open={open} onOpenChange={setOpen} />
     </>

@@ -4,7 +4,7 @@ import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { Network } from "lucide-react";
-import { Badge } from "../ui/badge";
+import { Badge } from "@/components/ui/moonshine";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
 
 // MCPServerTableRow renders an mcp_servers row in the /mcp listing table
@@ -64,7 +64,9 @@ export function MCPServerTableRow({
 
       {/* Tools column slot — mcp_servers don't expose tool catalogs through Gram today */}
       <td className="px-3 py-3">
-        <Badge variant="outline">MCP Server</Badge>
+        <Badge variant="neutral" background={false}>
+          MCP Server
+        </Badge>
       </td>
     </DotRow>
   );

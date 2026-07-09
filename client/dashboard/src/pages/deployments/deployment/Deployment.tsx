@@ -5,6 +5,8 @@ import {
   SecondaryRouteAction,
 } from "@/components/route-not-found-state";
 import { Heading } from "@/components/ui/heading";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { dateTimeFormatters } from "@/lib/dates";
 import { isNotFoundError, isUuidRouteParam } from "@/lib/route-errors";
@@ -14,7 +16,7 @@ import {
   useDeployment,
   useDeploymentSuspense,
 } from "@gram/client/react-query/deployment.js";
-import { Button, Separator, Skeleton } from "@/components/ui/moonshine";
+import { Button } from "@/components/ui/moonshine";
 import {
   CheckIcon,
   DotIcon,
@@ -76,9 +78,7 @@ function DeploymentPageContent({ deploymentId }: { deploymentId: string }) {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <Skeleton>
-            <div className="h-4 w-1/3" />
-          </Skeleton>
+          <Skeleton className="h-4 w-1/3" />
         </Page.Body>
       </Page>
     );
@@ -137,13 +137,7 @@ function DeploymentLogs(props: { deploymentId: string }) {
       <section className="min-w-0 space-y-6">
         <HeadingSection />
 
-        <Suspense
-          fallback={
-            <Skeleton>
-              <div className="h-4 w-1/3" />
-            </Skeleton>
-          }
-        >
+        <Suspense fallback={<Skeleton className="h-4 w-1/3" />}>
           <StatsSection
             onClickTools={() => setSearchParams({ tab: "tools" })}
             onClickAssets={() => setSearchParams({ tab: "assets" })}

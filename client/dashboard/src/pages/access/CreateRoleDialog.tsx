@@ -2,7 +2,6 @@ import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-import { Button as LocalButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Sheet,
@@ -818,11 +817,11 @@ export function CreateRoleDialog({
                                           getDenyPanels(
                                             getAllowLevel(grant.rules),
                                           ).length > 0 && (
-                                            <LocalButton
+                                            <Button
                                               type="button"
-                                              variant="ghost"
-                                              size="inline"
-                                              className="text-muted-foreground text-xs"
+                                              variant="tertiary"
+                                              size="xs"
+                                              className="text-muted-foreground"
                                               onClick={() =>
                                                 openRuleEditor(
                                                   scopeDef.slug,
@@ -830,9 +829,11 @@ export function CreateRoleDialog({
                                                 )
                                               }
                                             >
-                                              <Plus className="h-3 w-3" />
-                                              Except…
-                                            </LocalButton>
+                                              <Button.LeftIcon>
+                                                <Plus />
+                                              </Button.LeftIcon>
+                                              <Button.Text>Except…</Button.Text>
+                                            </Button>
                                           )}
                                       </div>
                                     )}

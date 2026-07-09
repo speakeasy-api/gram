@@ -1,6 +1,5 @@
 import { AnnotationBadges } from "@/components/tool-list/AnnotationBadges";
 import { MethodBadge } from "@/components/tool-list/MethodBadge";
-import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
@@ -30,6 +29,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { McpIcon } from "@/components/ui/mcp-icon";
+import { Button } from "@/components/ui/moonshine";
 
 interface ToolsetInfo {
   name: string;
@@ -340,7 +340,8 @@ export function PlaygroundConfigPanel({
 
             <Button
               size="sm"
-              variant="ghost"
+              variant="tertiary"
+              aria-label="Add tools"
               className="h-6 px-2"
               onClick={(e: React.MouseEvent) => {
                 e.stopPropagation();

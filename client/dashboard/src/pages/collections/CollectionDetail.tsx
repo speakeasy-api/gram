@@ -1,7 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { ProjectAvatar } from "@/components/project-menu";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
 import { Combobox } from "@/components/ui/combobox";
@@ -20,7 +19,7 @@ import {
   Server,
   Server as ServerIcon,
 } from "lucide-react";
-import { Button, Input } from "@/components/ui/moonshine";
+import { Badge, Button, Input } from "@/components/ui/moonshine";
 import { Textarea } from "@/components/moon/textarea";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router";
@@ -335,7 +334,7 @@ function CollectionDetailInner() {
           {/* Main content */}
           <div className="min-w-0 flex-1">
             {/* Header */}
-            <div className="bg-card mb-6 rounded-xl border p-5 shadow-sm">
+            <div className="bg-card mb-6 border p-5">
               <div className="flex flex-col gap-5 2xl:flex-row 2xl:items-start 2xl:justify-between">
                 <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
                   <div className="bg-muted/60 flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border">
@@ -344,21 +343,26 @@ function CollectionDetailInner() {
                   <div className="min-w-0 space-y-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h1 className="truncate text-2xl font-semibold">
+                        <h1 className="font-display truncate text-2xl font-thin tracking-[-0.015em]">
                           {collection.name}
                         </h1>
-                        <Badge variant="outline" className="text-xs">
-                          {collection.visibility === "private" ? (
-                            <>
-                              <Lock className="mr-1 h-3 w-3" />
-                              Private
-                            </>
-                          ) : (
-                            <>
-                              <Globe className="mr-1 h-3 w-3" />
-                              Public
-                            </>
-                          )}
+                        <Badge
+                          variant="neutral"
+                          background={false}
+                          className="text-xs"
+                        >
+                          <Badge.LeftIcon>
+                            {collection.visibility === "private" ? (
+                              <Lock className="h-3 w-3" />
+                            ) : (
+                              <Globe className="h-3 w-3" />
+                            )}
+                          </Badge.LeftIcon>
+                          <Badge.Text>
+                            {collection.visibility === "private"
+                              ? "Private"
+                              : "Public"}
+                          </Badge.Text>
                         </Badge>
                       </div>
                       <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
@@ -560,7 +564,7 @@ function CollectionDetailInner() {
             {/* About */}
             {!editing && (
               <div className="mb-4 rounded-lg border p-5">
-                <h2 className="mb-2 text-base font-semibold">
+                <h2 className="text-muted-foreground mb-2 font-mono text-xs tracking-[0.08em] uppercase">
                   About this collection
                 </h2>
                 <p className="text-muted-foreground text-sm">
@@ -573,15 +577,23 @@ function CollectionDetailInner() {
             <div className="rounded-lg border p-5">
               <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <h2 className="text-base font-semibold">Included servers</h2>
+                  <h2 className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase">
+                    Included servers
+                  </h2>
                   <p className="text-muted-foreground mt-1 text-sm">
                     These servers install together into the selected project.
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="shrink-0">
-                    <Server className="mr-1 h-3 w-3" />
-                    {servers.length}
+                  <Badge
+                    variant="neutral"
+                    background={false}
+                    className="shrink-0"
+                  >
+                    <Badge.LeftIcon>
+                      <Server className="h-3 w-3" />
+                    </Badge.LeftIcon>
+                    <Badge.Text>{servers.length}</Badge.Text>
                   </Badge>
                   <RequireScope scope="org:admin" level="component">
                     <Button
@@ -658,17 +670,21 @@ function CollectionDetailInner() {
                                     </span>
                                     {server.kind === "mcpServer" && (
                                       <Badge
-                                        variant="secondary"
+                                        variant="neutral"
+                                        background={false}
                                         className="shrink-0 text-xs"
                                       >
-                                        Remote MCP
+                                        <Badge.Text>Remote MCP</Badge.Text>
                                       </Badge>
                                     )}
                                     <Badge
-                                      variant="secondary"
+                                      variant="neutral"
+                                      background={false}
                                       className="shrink-0 text-xs"
                                     >
-                                      {server.projectName}
+                                      <Badge.Text>
+                                        {server.projectName}
+                                      </Badge.Text>
                                     </Badge>
                                   </div>
                                   {server.description && (
@@ -826,7 +842,9 @@ function CollectionDetailInner() {
           <div className="w-full shrink-0 space-y-4 xl:w-72">
             {/* Stats */}
             <div className="rounded-lg border p-5">
-              <h3 className="mb-3 text-base font-semibold">Stats</h3>
+              <h3 className="text-muted-foreground mb-3 font-mono text-xs tracking-[0.08em] uppercase">
+                Stats
+              </h3>
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Servers</span>
@@ -837,7 +855,9 @@ function CollectionDetailInner() {
 
             {/* Details */}
             <div className="rounded-lg border p-5">
-              <h3 className="mb-3 text-base font-semibold">Details</h3>
+              <h3 className="text-muted-foreground mb-3 font-mono text-xs tracking-[0.08em] uppercase">
+                Details
+              </h3>
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Visibility</span>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/moonshine";
 import {
   Popover,
   PopoverContent,
@@ -178,7 +178,7 @@ export function CustomFilterChip({
         <div className="flex items-center justify-between">
           <Button
             type="button"
-            variant="destructiveGhost"
+            variant="destructive-secondary"
             size="sm"
             onClick={() => {
               onRemove(filter.id);
@@ -190,7 +190,7 @@ export function CustomFilterChip({
           <div className="flex gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
               onClick={() => setOpen(false)}
             >
