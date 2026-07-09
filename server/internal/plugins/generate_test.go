@@ -3970,6 +3970,8 @@ printf '\n===GRAM===\n'
 gram_enrich_identity_payload '{"hook_event_name":"PreToolUse","user_email":"","tool_input":{"user_email":""}}'
 printf '\n===GRAM===\n'
 gram_enrich_identity_payload '{"hook_event_name":"beforeSubmitPrompt","user_email":"personal@example.net"}'
+printf '\n===GRAM===\n'
+gram_enrich_identity_payload '{"hook_event_name":"PreToolUse","user_email": "dup@example.net","tool_input":{"user_email":"dup@example.net"}}'
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "driver.sh"), []byte(driver), 0o755))
 
@@ -3983,7 +3985,7 @@ gram_enrich_identity_payload '{"hook_event_name":"beforeSubmitPrompt","user_emai
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
 	parts := strings.Split(string(output), "\n===GRAM===\n")
-	require.Len(t, parts, 3)
+	require.Len(t, parts, 4)
 	require.Contains(t, parts[0], `"user_email":"agent@example.com"`,
 		"an empty provider user_email must not shadow the device identity on jq-less machines")
 	require.NotContains(t, parts[1], "agent@example.com",
@@ -3991,6 +3993,10 @@ gram_enrich_identity_payload '{"hook_event_name":"beforeSubmitPrompt","user_emai
 	require.Contains(t, parts[2], `"user_email":"agent@example.com"`,
 		"a uniquely locatable provider email must be overwritten by the device identity, matching the jq path")
 	require.NotContains(t, parts[2], "personal@example.net")
+	require.NotContains(t, parts[3], "agent@example.com",
+		"a whitespace-formatted top-level pair must not let a nested compact twin absorb the rewrite")
+	require.Contains(t, parts[3], `"tool_input":{"user_email":"dup@example.net"}`,
+		"the nested tool argument must survive unchanged")
 }
 
 func TestRenderHookScriptFallsBackWhenDeviceAgentMissing(t *testing.T) {

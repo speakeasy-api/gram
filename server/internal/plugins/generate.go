@@ -1288,8 +1288,16 @@ gram_enrich_identity_payload() {
     needle='"user_email":'"$existing_token"
     replacement='"user_email":"'"$email"'"'
     if [ "$(printf '%s' "$trimmed" | grep -oF -- "$needle" | wc -l | tr -d '[:space:]')" = "1" ]; then
-      printf '%s' "${trimmed/"$needle"/$replacement}"
-      return
+      # Post-condition over cleverness: if the unique occurrence was not the
+      # top-level pair after all (say the top-level pair is
+      # whitespace-formatted and a nested compact twin matched instead), the
+      # extractor still sees the old value and the rewrite is discarded.
+      local rewritten
+      rewritten="${trimmed/"$needle"/$replacement}"
+      if [ "$(gram_hooks_json_top_level_value "$rewritten" "user_email")" = '"'"$email"'"' ]; then
+        printf '%s' "$rewritten"
+        return
+      fi
     fi
     gram_hooks_identity_debug "existing user_email not uniquely locatable; keeping it (no jq to rewrite safely)"
     printf '%s' "$trimmed"
