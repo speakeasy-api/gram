@@ -173,8 +173,15 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 	}
 
 	if previousAccountType != updatedAccountType {
-		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID, nil); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").LogError(ctx, logger)
+		for _, keyType := range []openrouter.KeyType{openrouter.KeyTypeChat, openrouter.KeyTypeInternal} {
+			if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID, keyType, nil); err != nil {
+				// The internal key is provisioned lazily on the first judge
+				// call, so most orgs have none yet — skip, don't fail.
+				if keyType == openrouter.KeyTypeInternal && errors.Is(err, pgx.ErrNoRows) {
+					continue
+				}
+				return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").LogError(ctx, logger)
+			}
 		}
 	}
 

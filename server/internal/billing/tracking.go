@@ -47,6 +47,11 @@ var (
 	// though no end user initiates the completions. The billing page reports
 	// it as its own "Risk policy analysis model" section, separate from
 	// user-facing completion surfaces.
+	//
+	// Callers tagging gram or risk-analysis (platform-initiated inference)
+	// must also set openrouter.KeyTypeInternal on the completion request so
+	// the usage bills against the org's internal OpenRouter key, not the
+	// customer-facing chat key's monthly cap.
 	ModelUsageSourceRiskAnalysis = registerModelUsageSource("risk-analysis")
 )
 

@@ -1,11 +1,13 @@
 -- name: CreateOpenRouterAPIKey :one
 INSERT INTO openrouter_api_keys (
     organization_id
+  , key_type
   , key
   , key_hash
   , monthly_credits
 ) VALUES (
     @organization_id
+  , @key_type
   , @key
   , @key_hash
   , @monthly_credits
@@ -16,12 +18,14 @@ RETURNING *;
 SELECT *
 FROM openrouter_api_keys
 WHERE organization_id = @organization_id
+  AND key_type = @key_type
   AND deleted IS FALSE;
 
 -- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = @monthly_credits, key_hash = @key_hash, key = @key
 WHERE organization_id = @organization_id
+  AND key_type = @key_type
   AND deleted IS FALSE
 RETURNING *;
 
@@ -34,4 +38,5 @@ RETURNING *;
 UPDATE openrouter_api_keys
 SET monthly_credits = @monthly_credits
 WHERE organization_id = @organization_id
+  AND key_type = @key_type
   AND deleted IS FALSE;

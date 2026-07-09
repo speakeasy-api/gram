@@ -89,7 +89,7 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 	}
 
 	// Provision API key
-	apiKey, err := c.provisioner.ProvisionAPIKey(ctx, req.OrgID)
+	apiKey, err := c.provisioner.ProvisionAPIKey(ctx, req.OrgID, req.KeyType.OrDefault())
 	if err != nil {
 		return nil, fmt.Errorf("provision OpenRouter key: %w", err)
 	}
@@ -236,7 +236,7 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 		go func() {
 			modelUsage := inlineUsage
 			if response.MessageID != "" && (modelUsage == nil || modelUsage.TotalCost == nil) {
-				fallbackUsage, err := c.provisioner.GetModelUsage(context.WithoutCancel(ctx), response.MessageID, req.OrgID)
+				fallbackUsage, err := c.provisioner.GetModelUsage(context.WithoutCancel(ctx), response.MessageID, req.OrgID, req.KeyType.OrDefault())
 				if err != nil {
 					c.logger.WarnContext(ctx, "failed to fetch fallback openrouter usage", attr.SlogError(err))
 				} else if fallbackUsage != nil {
@@ -518,6 +518,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		UserID:                    req.UserID,
 		ExternalUserID:            req.ExternalUserID,
 		UserEmail:                 req.UserEmail,
+		KeyType:                   req.KeyType,
 		HTTPMetadata:              req.HTTPMetadata,
 		JSONSchema:                req.JSONSchema,
 		CacheControl:              nil,
@@ -806,7 +807,7 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 }
 
 func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model string, inputs []string, dimensions *int64) ([][]float32, error) {
-	openrouterKey, err := c.provisioner.ProvisionAPIKey(ctx, orgID)
+	openrouterKey, err := c.provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
 	if err != nil {
 		return nil, fmt.Errorf("provisioning OpenRouter key: %w", err)
 	}

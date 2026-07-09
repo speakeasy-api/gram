@@ -218,6 +218,7 @@ SELECT
     om.id AS organization_id,
     om.slug AS organization_slug,
     om.gram_account_type,
+    k.key_type,
     k.monthly_credits,
     k.key AS api_key
 FROM organization_metadata om
@@ -233,6 +234,7 @@ type GetOpenRouterCreditsMonitoringTargetsRow struct {
 	OrganizationID   string
 	OrganizationSlug string
 	GramAccountType  string
+	KeyType          string
 	MonthlyCredits   int64
 	ApiKey           string
 }
@@ -258,6 +260,7 @@ func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, acc
 			&i.OrganizationID,
 			&i.OrganizationSlug,
 			&i.GramAccountType,
+			&i.KeyType,
 			&i.MonthlyCredits,
 			&i.ApiKey,
 		); err != nil {

@@ -31,6 +31,31 @@ import (
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
 
+// KeyType selects which of an org's provisioned OpenRouter keys pays for a
+// request. Each org can hold one key per type (openrouter_api_keys is keyed
+// by (organization_id, key_type)): the chat key funds customer-facing
+// completion surfaces, while the internal key funds platform-initiated LLM
+// usage (risk judges, title generation, chat resolutions, memory) so a burst
+// of scanning inference can never exhaust the chat cap and 402 the
+// customer's chat surface. Selection is an explicit request field — never
+// derived from the usage source, which the completions proxy accepts from
+// clients and could be spoofed onto the internal key.
+type KeyType string
+
+const (
+	KeyTypeChat     KeyType = "chat"
+	KeyTypeInternal KeyType = "internal"
+)
+
+// OrDefault resolves the zero value to the chat key, so existing callers
+// that never set a key type keep their behavior.
+func (k KeyType) OrDefault() KeyType {
+	if k == "" {
+		return KeyTypeChat
+	}
+	return k
+}
+
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
@@ -130,13 +155,13 @@ func IsSpecialLimitOrg(orgID string) bool {
 }
 
 type Provisioner interface {
-	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
+	ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error)
 
 	// RefreshAPIKeyLimit mutates the upstream OpenRouter key limit (PATCH
 	// /v1/keys/:hash) and mirrors the new value into the local DB.
-	RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error)
+	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error)
 
-	GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error)
+	GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error)
 
 	// GetKeyUsage issues GET /v1/key for the given API key and returns the
 	// rounded monthly usage along with the upstream-configured monthly limit
@@ -151,16 +176,17 @@ type Provisioner interface {
 	// introduced by out-of-band edits on the OpenRouter dashboard. A nil
 	// upstreamLimit (unlimited key) is treated as a no-op. Returns the
 	// effective limit the caller should use for the current tick.
-	ReconcileMonthlyCredits(ctx context.Context, orgID string, currentLimit int64, upstreamLimit *int64) (int64, error)
+	ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error)
 
 	// GetModelUsage fetches generation usage by ID. Normal completion paths use
 	// inline usage; this is only a fallback for streams closed before the final
-	// usage chunk arrives.
-	GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error)
+	// usage chunk arrives. A generation is only visible under the key that made
+	// it, so the caller must name the same key type the completion used.
+	GetModelUsage(ctx context.Context, generationID string, orgID string, keyType KeyType) (*ModelUsage, error)
 }
 
 type KeyRefresher interface {
-	ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string) error
+	ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType KeyType) error
 }
 
 type OpenRouter struct {
@@ -191,10 +217,14 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolic
 	}
 }
 
-func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string, error) {
+func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
 	var openrouterKey string
 
-	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
+	keyType = keyType.OrDefault()
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
 		org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
@@ -204,13 +234,14 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 
 		creditAmount := o.getLimitForOrg(org)
 
-		keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, org.Slug, creditAmount)
+		keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, org.Slug, keyType, creditAmount)
 		if err != nil {
 			return "", err
 		}
 
 		_, err = o.repo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
 			OrganizationID: orgID,
+			KeyType:        string(keyType),
 			Key:            *keyResponse.Key,
 			KeyHash:        keyResponse.Data.Hash,
 			MonthlyCredits: int64(creditAmount),
@@ -220,7 +251,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 		}
 
 		if o.refresher != nil {
-			if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID); err != nil {
+			if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID, keyType); err != nil {
 				return "", oops.E(oops.CodeUnexpected, err, "error scheduling open router key refresh").LogError(ctx, o.logger)
 			}
 		}
@@ -241,8 +272,12 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 	return openrouterKey, nil
 }
 
-func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error) {
-	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
+func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
+	keyType = keyType.OrDefault()
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to get OpenRouter API key: %w", err)
 	}
@@ -270,6 +305,7 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, limit
 
 	_, err = o.repo.UpdateOpenRouterKey(ctx, repo.UpdateOpenRouterKeyParams{
 		OrganizationID: orgID,
+		KeyType:        string(keyType),
 		MonthlyCredits: int64(keyLimit),
 		KeyHash:        keyResponse.Data.Hash,
 		Key:            key.Key,
@@ -288,14 +324,17 @@ type keyUsageResponse struct {
 	} `json:"data"`
 }
 
-func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error) {
+func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error) {
 	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
 	if err != nil {
 		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
 	limit := o.getLimitForOrg(org)
 
-	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType.OrDefault()),
+	})
 	if err != nil {
 		return 0, limit, nil // the key doesn't exist yet
 	}
@@ -362,7 +401,7 @@ func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, *
 // ReconcileMonthlyCredits self-heals drift in the locally cached monthly limit
 // after an out-of-band change on the OpenRouter dashboard. See the
 // Provisioner interface doc for the full contract.
-func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, currentLimit int64, upstreamLimit *int64) (int64, error) {
+func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
 	if upstreamLimit == nil {
 		return currentLimit, nil
 	}
@@ -374,6 +413,7 @@ func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, 
 
 	if err := o.repo.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
 		OrganizationID: orgID,
+		KeyType:        string(keyType.OrDefault()),
 		MonthlyCredits: newLimit,
 	}); err != nil {
 		return currentLimit, fmt.Errorf("reconcile openrouter monthly credits: %w", err)
@@ -396,6 +436,19 @@ func (o *OpenRouter) getLimitForOrg(org orgRepo.OrganizationMetadatum) int {
 	return creditsAccountTypeMap[org.GramAccountType]
 }
 
+// upstreamKeyIdentity names an org's OpenRouter key. Chat key naming must
+// stay byte-identical to the historical format — the upstream keys already
+// exist under these names — so only internal keys get a suffix.
+func upstreamKeyIdentity(env, orgID, orgSlug string, keyType KeyType) (name, label string) {
+	name = fmt.Sprintf("gram-%s-%s", env, orgID)
+	label = fmt.Sprintf("%s (%s environment)", orgSlug, env)
+	if keyType == KeyTypeInternal {
+		name += "-internal"
+		label = fmt.Sprintf("%s (%s environment, internal)", orgSlug, env)
+	}
+	return name, label
+}
+
 type createKeyRequest struct {
 	Name       string   `json:"name"`
 	Label      string   `json:"label"`
@@ -416,11 +469,12 @@ type keyResponse struct {
 	Key *string `json:"key,omitempty"` // will be empty outside of createKey
 }
 
-func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, orgSlug string, keyLimit int) (*keyResponse, error) {
+func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, orgSlug string, keyType KeyType, keyLimit int) (*keyResponse, error) {
 	creditLimit := float64(keyLimit)
+	name, label := upstreamKeyIdentity(o.env, orgID, orgSlug, keyType)
 	requestBody := createKeyRequest{
-		Name:       fmt.Sprintf("gram-%s-%s", o.env, orgID),
-		Label:      fmt.Sprintf("%s (%s environment)", orgSlug, o.env),
+		Name:       name,
+		Label:      label,
 		Limit:      &creditLimit,
 		LimitReset: "monthly",
 	}
@@ -534,8 +588,14 @@ type generationResponse struct {
 	} `json:"data"`
 }
 
-func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID string, orgID string) (*generationResponse, int, error) {
-	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
+func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID string, orgID string, keyType KeyType) (*generationResponse, int, error) {
+	// A generation is only visible under the key that produced it — querying
+	// with the wrong key type 404s (e.g. a streamed internal completion's
+	// usage fallback).
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType.OrDefault()),
+	})
 	if err != nil {
 		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to get openrouter API key").LogError(ctx, o.logger)
 	}
@@ -575,7 +635,7 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 
 // GetModelUsage fetches generation details from OpenRouter when inline usage is
 // unavailable, currently only for streams closed before the final usage chunk.
-func (o *OpenRouter) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
+func (o *OpenRouter) GetModelUsage(ctx context.Context, generationID string, orgID string, keyType KeyType) (*ModelUsage, error) {
 	var genResp *generationResponse
 	var statusCode int
 	var err error
@@ -594,7 +654,7 @@ func (o *OpenRouter) GetModelUsage(ctx context.Context, generationID string, org
 			}
 		}
 
-		genResp, statusCode, err = o.getGenerationDetails(ctx, generationID, orgID)
+		genResp, statusCode, err = o.getGenerationDetails(ctx, generationID, orgID, keyType)
 		if err == nil {
 			break
 		}
