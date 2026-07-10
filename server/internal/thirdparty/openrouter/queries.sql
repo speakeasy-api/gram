@@ -1,3 +1,8 @@
+-- name: LockOpenRouterKeyProvisioning :exec
+-- Serialize first-time key creation per (org, key type) so concurrent
+-- completions cannot both mint an upstream OpenRouter key.
+SELECT pg_advisory_xact_lock(hashtext('openrouter_key:' || @organization_id::text || ':' || @key_type::text));
+
 -- name: CreateOpenRouterAPIKey :one
 INSERT INTO openrouter_api_keys (
     organization_id

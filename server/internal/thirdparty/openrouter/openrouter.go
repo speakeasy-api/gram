@@ -208,11 +208,14 @@ type OpenRouter struct {
 	provisioningKey string
 	env             string
 	logger          *slog.Logger
+	db              *pgxpool.Pool
 	repo            *repo.Queries
 	orgRepo         *orgRepo.Queries
 	orClient        *guardian.HTTPClient
 	refresher       KeyRefresher
 	featureClient   *productfeatures.Client
+	// baseURL is OpenRouterBaseURL outside of tests.
+	baseURL string
 }
 
 var _ Provisioner = (*OpenRouter)(nil)
@@ -224,11 +227,13 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolic
 		provisioningKey: provisioningKey,
 		env:             env,
 		logger:          logger.With(attr.SlogComponent("openrouter")),
+		db:              db,
 		repo:            repo.New(db),
 		orgRepo:         orgRepo.New(db),
 		orClient:        orClient,
 		refresher:       refresher,
 		featureClient:   featureClient,
+		baseURL:         OpenRouterBaseURL,
 	}
 }
 
@@ -245,36 +250,10 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
-		org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
-		}
-
-		creditAmount := o.getLimitForOrg(org)
-
-		keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, org.Slug, keyType, creditAmount)
+		openrouterKey, err = o.createAndStoreAPIKey(ctx, orgID, keyType)
 		if err != nil {
 			return "", err
 		}
-
-		_, err = o.repo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
-			OrganizationID: orgID,
-			KeyType:        string(keyType),
-			Key:            *keyResponse.Key,
-			KeyHash:        keyResponse.Data.Hash,
-			MonthlyCredits: int64(creditAmount),
-		})
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").LogError(ctx, o.logger)
-		}
-
-		if o.refresher != nil {
-			if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID, keyType); err != nil {
-				return "", oops.E(oops.CodeUnexpected, err, "error scheduling open router key refresh").LogError(ctx, o.logger)
-			}
-		}
-
-		openrouterKey = *keyResponse.Key
 
 	case err != nil:
 		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
@@ -288,6 +267,78 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 	}
 
 	return openrouterKey, nil
+}
+
+// createAndStoreAPIKey mints an upstream OpenRouter key and records it,
+// serialized per (org, key type) with an advisory lock held across the
+// upstream call: concurrent first completions would otherwise both miss the
+// row, both create upstream keys, and the loser's insert would fail on the
+// composite primary key, leaving an orphaned upstream key. Contention only
+// happens on an org's first completion per key type, so holding the
+// transaction across one HTTP round trip is acceptable.
+func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
+	dbtx, err := o.db.Begin(ctx)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "error provisioning openrouter key").LogError(ctx, o.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := o.repo.WithTx(dbtx)
+	if err := txRepo.LockOpenRouterKeyProvisioning(ctx, repo.LockOpenRouterKeyProvisioningParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	}); err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "error locking openrouter key provisioning").LogError(ctx, o.logger)
+	}
+
+	// Re-read under the lock: a concurrent provisioner may have created the
+	// key while we waited.
+	key, err := txRepo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
+	case err != nil:
+		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+	default:
+		return key.Key, nil
+	}
+
+	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
+	}
+
+	creditAmount := o.getLimitForOrg(org)
+
+	keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, org.Slug, keyType, creditAmount)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = txRepo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+		Key:            *keyResponse.Key,
+		KeyHash:        keyResponse.Data.Hash,
+		MonthlyCredits: int64(creditAmount),
+	})
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").LogError(ctx, o.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").LogError(ctx, o.logger)
+	}
+
+	if o.refresher != nil {
+		if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID, keyType); err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "error scheduling open router key refresh").LogError(ctx, o.logger)
+		}
+	}
+
+	return *keyResponse.Key, nil
 }
 
 func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
@@ -373,7 +424,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 // openrouter_api_keys in a single SQL query) can skip the org/key DB lookups
 // in GetCreditsUsed.
 func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, *int64, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/key", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/v1/key", nil)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to build openrouter key usage request", attr.SlogError(err))
 		return 0, nil, fmt.Errorf("build key usage request: %w", err)
@@ -503,7 +554,7 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, o
 		return nil, fmt.Errorf("failed to serialize create key request body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", OpenRouterBaseURL+"/v1/keys", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "POST", o.baseURL+"/v1/keys", bytes.NewReader(bodyBytes))
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to create openrouter key HTTP request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to build create key request: %w", err)
@@ -550,7 +601,7 @@ func (o *OpenRouter) updateOpenRouterAPIKeyLimit(ctx context.Context, keyHash st
 		return nil, fmt.Errorf("failed to serialize update key request body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "PATCH", OpenRouterBaseURL+fmt.Sprintf("/v1/keys/%s", keyHash), bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "PATCH", o.baseURL+fmt.Sprintf("/v1/keys/%s", keyHash), bytes.NewReader(bodyBytes))
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to create update openrouter key HTTP request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to create update key request: %w", err)
@@ -618,7 +669,7 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to get openrouter API key").LogError(ctx, o.logger)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/generation", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/v1/generation", nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("create generation request: %w", err)
 	}

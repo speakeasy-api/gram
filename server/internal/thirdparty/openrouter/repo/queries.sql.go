@@ -89,6 +89,22 @@ func (q *Queries) GetOpenRouterAPIKey(ctx context.Context, arg GetOpenRouterAPIK
 	return i, err
 }
 
+const lockOpenRouterKeyProvisioning = `-- name: LockOpenRouterKeyProvisioning :exec
+SELECT pg_advisory_xact_lock(hashtext('openrouter_key:' || $1::text || ':' || $2::text))
+`
+
+type LockOpenRouterKeyProvisioningParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+// Serialize first-time key creation per (org, key type) so concurrent
+// completions cannot both mint an upstream OpenRouter key.
+func (q *Queries) LockOpenRouterKeyProvisioning(ctx context.Context, arg LockOpenRouterKeyProvisioningParams) error {
+	_, err := q.db.Exec(ctx, lockOpenRouterKeyProvisioning, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
 const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = $1, key_hash = $2, key = $3
