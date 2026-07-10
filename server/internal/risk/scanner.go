@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -175,7 +174,7 @@ type Scanner struct {
 	customRuleScanner *customruleanalyzer.Scanner // required; evaluates custom CEL detection rules
 	piiScanner        ra.PIIScanner               // nil if Presidio is unavailable
 	piScanner         *promptinjection.Scanner    // never nil; stub-classifier when L1 disabled
-	judge             promptpolicy.Evaluator      // nil-safe; guarded at the call site
+	promptPolicy      *promptpolicy.Scanner       // nil-safe; owns prompt policy finding decisions
 	flags             feature.Provider            // nil disables prompt_based enforcement
 	metrics           *scannerMetrics
 	celEng            *celenv.Engine
@@ -196,7 +195,7 @@ func NewScanner(
 	customRuleScanner *customruleanalyzer.Scanner,
 	piiScanner ra.PIIScanner,
 	piScanner *promptinjection.Scanner,
-	judge promptpolicy.Evaluator,
+	promptPolicy *promptpolicy.Scanner,
 	flags feature.Provider,
 	celEng *celenv.Engine,
 ) (*Scanner, error) {
@@ -218,7 +217,7 @@ func NewScanner(
 		gitleaks:          gitleaksScanner,
 		piiScanner:        piiScanner,
 		piScanner:         piScanner,
-		judge:             judge,
+		promptPolicy:      promptPolicy,
 		flags:             flags,
 		metrics:           newScannerMetrics(meterProvider, logger),
 		celEng:            celEng,
@@ -637,28 +636,21 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 	if !promptPoliciesOn {
 		return nil
 	}
-	if s.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
-		return promptPolicyUnavailableResult(policy, messageType, cfg, nil)
+	prompt := ""
+	if policy.Prompt.Valid {
+		prompt = policy.Prompt.String
 	}
-
-	verdict, err := s.judge(ctx, promptpolicy.Input{
-		OrgID:     policy.OrganizationID,
-		ProjectID: policy.ProjectID.String(),
-		Prompt:    policy.Prompt.String,
-		// text is the type-appropriate body the hook layer already flattened:
-		// the prompt for user messages, tool-input JSON for tool_request,
-		// tool-output JSON for tool_response.
-		Message: judgemessage.New(messageType, toolName, text),
-		Config:  cfg,
-	})
-	if err != nil {
-		return promptPolicyUnavailableResult(policy, messageType, cfg, err)
+	var findings []scanners.Finding
+	if s.promptPolicy != nil {
+		findings = s.promptPolicy.Scan(ctx, policy.OrganizationID, policy.ProjectID.String(), prompt, cfg, judgemessage.New(messageType, toolName, text))
+	} else {
+		findings = promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true)
 	}
-	if verdict == nil || !verdict.Matched {
+	if len(findings) == 0 {
 		return nil
 	}
 
-	finding := promptpolicy.NewFinding(*verdict)
+	finding := findings[0]
 	return &ScanResult{
 		Action:      policy.Action,
 		PolicyID:    policy.ID.String(),
@@ -677,27 +669,6 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 
 func (s *Scanner) projectFlagEnabled(ctx context.Context, orgID string, projectID uuid.UUID, flag feature.Flag) bool {
 	return policyflags.ProjectFlagEnabled(ctx, s.logger, s.repo, s.flags, orgID, projectID, flag)
-}
-
-func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.Type, cfg promptpolicy.Config, err error) *ScanResult {
-	if cfg.FailOpen {
-		return nil
-	}
-	verdict := promptpolicy.FailClosedVerdict(err)
-	return &ScanResult{
-		Action:      policy.Action,
-		PolicyID:    policy.ID.String(),
-		PolicyName:  policy.Name,
-		Source:      promptpolicy.Source,
-		MessageType: messageType,
-		RuleID:      promptpolicy.Rule,
-		Description: verdict.Rationale,
-		UserMessage: conv.FromPGText[string](policy.UserMessage),
-		// No literal match for a fail-closed judge result.
-		MatchedValue:    "",
-		Entity:          promptpolicy.Rule,
-		CallFingerprint: "",
-	}
 }
 
 func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) ([]scanners.Finding, error) {

@@ -82,11 +82,9 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 	}
 
 	if a.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
-		if !cfg.FailOpen {
-			finding := promptpolicy.NewFinding(promptpolicy.FailClosedVerdict(nil))
-			for _, idx := range indices {
-				out[idx] = []scanners.Finding{finding}
-			}
+		findings := promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true)
+		for _, idx := range indices {
+			out[idx] = findings
 		}
 		return out
 	}
@@ -96,13 +94,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		args.OrganizationID, args.ProjectID.String(), policy.Prompt.String, cfg,
 		messages, indices,
 		func(_, idx int, verdict *promptpolicy.Verdict, err error, _ time.Duration) {
-			if err != nil {
-				if !cfg.FailOpen {
-					out[idx] = []scanners.Finding{promptpolicy.NewFinding(promptpolicy.FailClosedVerdict(err))}
-				}
-			} else if verdict != nil && verdict.Matched {
-				out[idx] = []scanners.Finding{promptpolicy.NewFinding(*verdict)}
-			}
+			out[idx] = promptpolicy.FindingsFromEvaluation(cfg, verdict, err, false)
 		},
 		func(end int) { activity.RecordHeartbeat(ctx, promptpolicy.Source, end) },
 	)
