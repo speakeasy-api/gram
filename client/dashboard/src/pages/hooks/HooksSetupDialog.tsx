@@ -237,9 +237,9 @@ function CursorInstallContent() {
               Script Content:
             </span>
             <div className="bg-background/50 mt-1 overflow-x-auto rounded p-3 font-mono text-xs break-all whitespace-pre-wrap">
-              {`#!/bin/bash\necho '{"env":{"GRAM_API_KEY":"`}
+              {`#!/bin/bash\necho '{"env":{"GRAM_HOOKS_API_KEY":"`}
               <span className="text-primary font-semibold">{`<YOUR_API_KEY>`}</span>
-              {`","GRAM_PROJECT_SLUG":"`}
+              {`","GRAM_HOOKS_PROJECT_SLUG":"`}
               <span className="text-primary font-semibold">{`<YOUR_PROJECT_SLUG>`}</span>
               {`"}}'`}
             </div>
