@@ -128,8 +128,13 @@ export function PluginStatusBanner({
     plugin.servers?.some((s) => serverMatchesRef(s, server)),
   );
   const isPublished = memberPlugins.length > 0;
+  // A repo existing isn't enough — a marketplace with no active collaborator
+  // isn't discoverable in Claude/Codex/etc, so it isn't truly set up yet.
+  // Mirrors the connected/hasCollaborators gate on the Plugins page.
   const marketplaceReady = !!(
-    publishStatus?.repoOwner && publishStatus.repoName
+    publishStatus?.repoOwner &&
+    publishStatus.repoName &&
+    publishStatus.hasCollaborators !== false
   );
   // "Published" means a teammate can actually install it — server
   // membership in a plugin alone isn't enough if the marketplace repo
@@ -253,7 +258,7 @@ export function PluginStatusBanner({
                       memberPlugins.length > 1 ? "s" : ""
                     }`
                   : isPublished
-                    ? "Marketplace needs publishing"
+                    ? "Marketplace needs setup"
                     : "Not published to any plugin"}
               </Type>
             </div>
@@ -337,12 +342,14 @@ export function PluginStatusBanner({
                   Install the plugin
                 </Type>
                 <Type variant="small" className="text-muted-foreground/90">
-                  {publishStatus?.repoOwner && publishStatus.repoName
+                  {marketplaceReady
                     ? "Your team installs the plugin in their AI client to start using this server."
-                    : "Your project marketplace isn't set up yet, so there's no repo to install from. Set it up on the Plugins page to unlock install instructions."}
+                    : "Your project marketplace isn't fully set up yet, which means you won't be able to install this MCP via the plugin."}
                 </Type>
               </div>
-              {publishStatus?.repoOwner && publishStatus.repoName ? (
+              {marketplaceReady &&
+              publishStatus?.repoOwner &&
+              publishStatus.repoName ? (
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"

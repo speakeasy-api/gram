@@ -64,6 +64,7 @@ export function MarketplaceCard({
               <span className="text-muted-foreground/60 mx-1">/</span>
             )}
             <span className="font-semibold">{publishStatus.repoName}</span>
+            <ExternalLink className="ml-1 inline h-3.5 w-3.5 align-text-top" />
           </a>
           <span className="border-border text-muted-foreground rounded-full border px-2 py-0 text-[10px] font-medium tracking-wider uppercase">
             Private
@@ -216,6 +217,7 @@ export function UninitializedMarketplaceCard({
                 <span className="text-muted-foreground/60 mx-1">/</span>
               )}
               <span className="font-semibold">{publishStatus.repoName}</span>
+              <ExternalLink className="ml-1 inline h-3.5 w-3.5 align-text-top" />
             </a>
           ) : (
             <span className="text-muted-foreground min-w-0 truncate text-base">
