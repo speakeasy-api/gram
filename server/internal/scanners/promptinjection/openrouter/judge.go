@@ -110,7 +110,7 @@ type Engine struct {
 	schema      or.ChatJSONSchemaConfig // built once; the verdict shape is constant
 }
 
-var _ promptinjection.Engine = (*Engine)(nil).Classify
+var _ promptinjection.Classifier = (*Engine)(nil)
 
 var safeResult = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: ""}
 

@@ -32,9 +32,19 @@ type Result struct {
 	Rationale string
 }
 
-type Engine func(ctx context.Context, req Request) ([]Result, error)
+type Classifier interface {
+	Classify(ctx context.Context, req Request) ([]Result, error)
+}
 
-func NoopEngine(_ context.Context, req Request) ([]Result, error) {
+type ClassifierFunc func(ctx context.Context, req Request) ([]Result, error)
+
+func (f ClassifierFunc) Classify(ctx context.Context, req Request) ([]Result, error) {
+	return f(ctx, req)
+}
+
+type noopClassifier struct{}
+
+func (noopClassifier) Classify(_ context.Context, req Request) ([]Result, error) {
 	results := make([]Result, len(req.Messages))
 	for i := range results {
 		results[i] = Result{Label: LabelSafe, Score: 0, Rationale: ""}
@@ -42,20 +52,22 @@ func NoopEngine(_ context.Context, req Request) ([]Result, error) {
 	return results, nil
 }
 
+var NoopClassifier Classifier = noopClassifier{}
+
 func Describe() (string, string) {
 	return scanners.GuardRuleID(Rule), "Detected a prompt injection attempt."
 }
 
 type Scanner struct {
-	classify Engine
-	logger   *slog.Logger
+	classifier Classifier
+	logger     *slog.Logger
 }
 
-func NewScanner(logger *slog.Logger, classify Engine) *Scanner {
-	if classify == nil {
-		classify = NoopEngine
+func NewScanner(logger *slog.Logger, classifier Classifier) *Scanner {
+	if classifier == nil {
+		classifier = NoopClassifier
 	}
-	return &Scanner{classify: classify, logger: logger}
+	return &Scanner{classifier: classifier, logger: logger}
 }
 
 func (s *Scanner) l1Active(l1Enabled bool) bool {
@@ -73,7 +85,7 @@ func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID string, msg j
 		return findings, nil
 	}
 
-	results, err := s.classify(ctx, Request{Messages: []judgemessage.Message{msg}, OrgID: orgID, ProjectID: projectID})
+	results, err := s.classifier.Classify(ctx, Request{Messages: []judgemessage.Message{msg}, OrgID: orgID, ProjectID: projectID})
 	if err != nil {
 		s.logger.WarnContext(ctx, "pi L1 scan failed; returning L0 findings only",
 			attr.SlogError(err),
@@ -104,7 +116,7 @@ func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectI
 		return out, nil
 	}
 
-	results, err := s.classify(ctx, Request{Messages: msgs, OrgID: orgID, ProjectID: projectID})
+	results, err := s.classifier.Classify(ctx, Request{Messages: msgs, OrgID: orgID, ProjectID: projectID})
 	if err != nil {
 		s.logger.WarnContext(ctx, "pi L1 batch scan failed; returning L0 findings only",
 			attr.SlogError(err),

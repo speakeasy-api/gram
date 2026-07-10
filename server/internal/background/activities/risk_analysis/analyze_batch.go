@@ -81,7 +81,7 @@ func NewAnalyzeBatch(
 		piiScanner = &StubPIIScanner{}
 	}
 	if promptInjectionScanner == nil {
-		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopEngine)
+		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 	}
 
 	return &AnalyzeBatch{

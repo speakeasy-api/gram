@@ -201,7 +201,7 @@ func NewScanner(
 	celEng *celenv.Engine,
 ) (*Scanner, error) {
 	if piScanner == nil {
-		piScanner = promptinjection.NewScanner(logger, promptinjection.NoopEngine)
+		piScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 	}
 
 	gitleaksScanner := gitleaks.NewScanner()
