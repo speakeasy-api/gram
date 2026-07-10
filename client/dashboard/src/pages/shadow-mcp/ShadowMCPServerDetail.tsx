@@ -8,7 +8,6 @@ import {
   ShadowMCPInventoryActionSheet,
   type ShadowMCPPolicy,
 } from "@/components/shadow-mcp/ShadowMCPInventoryActions";
-import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicyStatus";
 import {
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusBadgeVariant,
@@ -110,13 +109,24 @@ function ServerStatus({
   );
 }
 
-function DetailStat({ label, value }: { label: string; value: string }) {
+function DetailStat({
+  emphasized = false,
+  label,
+  value,
+}: {
+  emphasized?: boolean;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="min-w-0">
       <Type muted small>
         {label}
       </Type>
-      <Type variant="body" className="mt-1 truncate font-medium">
+      <Type
+        variant={emphasized ? "body" : "small"}
+        className="mt-1 truncate font-medium"
+      >
         {value}
       </Type>
     </div>
@@ -131,24 +141,43 @@ function ServerSummary({
   server: ShadowMCPInventoryServer;
 }) {
   return (
-    <div className="border-border grid gap-4 rounded-md border p-4 md:grid-cols-4">
-      <DetailStat label="URL" value={server.canonicalServerUrl} />
-      <DetailStat label="Host" value={server.urlHost} />
-      <DetailStat
-        label="Observed use"
-        value={usageCountLabel(server.observedUseCount)}
-      />
-      <DetailStat label="Users" value={userCountLabel(server.userCount)} />
-      <DetailStat
-        label="First seen"
-        value={formatShortDate(server.firstSeen)}
-      />
-      <DetailStat label="Last seen" value={formatShortDate(server.lastSeen)} />
-      <DetailStat
-        label="Last called"
-        value={formatShortDate(server.lastCalled)}
-      />
-      <ServerStatus policyState={policyState} server={server} />
+    <div className="border-border overflow-hidden rounded-md border">
+      <div className="bg-muted/20 grid gap-4 p-4 md:grid-cols-4">
+        <ServerStatus policyState={policyState} server={server} />
+        <DetailStat
+          emphasized
+          label="Requests"
+          value={`${server.requestCount} ${server.requestCount === 1 ? "request" : "requests"}`}
+        />
+        <DetailStat
+          emphasized
+          label="Users"
+          value={userCountLabel(server.userCount)}
+        />
+        <DetailStat
+          emphasized
+          label="Allowed policies"
+          value={`${server.allowedPolicyIds.length} ${server.allowedPolicyIds.length === 1 ? "policy" : "policies"}`}
+        />
+      </div>
+      <div className="border-border grid gap-4 border-t p-4 md:grid-cols-4">
+        <DetailStat
+          label="Observed use"
+          value={usageCountLabel(server.observedUseCount)}
+        />
+        <DetailStat
+          label="Last called"
+          value={formatShortDate(server.lastCalled)}
+        />
+        <DetailStat
+          label="Last seen"
+          value={formatShortDate(server.lastSeen)}
+        />
+        <DetailStat
+          label="First seen"
+          value={formatShortDate(server.firstSeen)}
+        />
+      </div>
     </div>
   );
 }
@@ -457,6 +486,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs
           substitutions={{
+            ["shadow-mcp"]: "Shadow MCP",
             [serverSlug]: server?.serverName || server?.urlHost,
           }}
         />
@@ -507,7 +537,6 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                     roles={rolesQuery.data?.roles ?? []}
                     shadowMCPPolicies={shadowMCPPolicies}
                   />
-                  <ShadowMCPPolicyStatus policyState={policyState} />
                   <ServerSummary policyState={policyState} server={server} />
                   <section className="min-h-0 space-y-3">
                     <div>
