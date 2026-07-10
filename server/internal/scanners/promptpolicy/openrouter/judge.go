@@ -138,7 +138,7 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 		j.logger.WarnContext(ctx, "llm judge rate limited",
 			attr.SlogOrganizationID(in.OrgID),
 		)
-		return nil, fmt.Errorf("allow judge call: %w", promptpolicy.ErrRateLimited)
+		return nil, fmt.Errorf("llm judge call: %w", promptpolicy.ErrRateLimited)
 	}
 
 	start := time.Now()

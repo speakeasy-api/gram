@@ -15,7 +15,7 @@ const (
 	// window, producing an error that a fail-open policy turns into an allow.
 	maxPayloadBodyLen = 16000
 	// maxPayloadRenderedToolCall caps how many tool calls a single multi-call
-	// message renders. Excess calls are dropped and flagged via
+	// message renders. Oversized call lists keep head and tail calls, and set
 	// tool_calls_truncated.
 	maxPayloadRenderedToolCall = 50
 )
@@ -45,12 +45,7 @@ type ToolCallPayload struct {
 // RenderPayload maps a judge message onto the JSON payload both prompt judges read.
 func RenderPayload(m Message) Payload {
 	if len(m.ToolCalls) > 0 {
-		calls := m.ToolCalls
-		truncatedCalls := false
-		if len(calls) > maxPayloadRenderedToolCall {
-			calls = calls[:maxPayloadRenderedToolCall]
-			truncatedCalls = true
-		}
+		calls, truncatedCalls := payloadToolCalls(m.ToolCalls)
 		rendered := make([]ToolCallPayload, 0, len(calls))
 		for _, c := range calls {
 			args, argsTruncated := truncatePayloadBody(c.Arguments, maxPayloadBodyLen)
@@ -82,6 +77,18 @@ func RenderPayload(m Message) Payload {
 		ToolCalls:          nil,
 		ToolCallsTruncated: false,
 	}
+}
+
+func payloadToolCalls(calls []ToolCall) ([]ToolCall, bool) {
+	if len(calls) <= maxPayloadRenderedToolCall {
+		return calls, false
+	}
+	head := maxPayloadRenderedToolCall / 2
+	tail := maxPayloadRenderedToolCall - head
+	rendered := make([]ToolCall, 0, maxPayloadRenderedToolCall)
+	rendered = append(rendered, calls[:head]...)
+	rendered = append(rendered, calls[len(calls)-tail:]...)
+	return rendered, true
 }
 
 func payloadDescriptors(messageType message.Type) (producedBy, bodyKind string) {
