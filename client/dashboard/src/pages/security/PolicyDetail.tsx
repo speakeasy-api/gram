@@ -26,6 +26,7 @@ import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
+import { useRiskCategories } from "@gram/client/react-query/riskCategories.js";
 import { invalidateAllRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskPoliciesUpdateMutation } from "@gram/client/react-query/riskPoliciesUpdate.js";
 import {
@@ -34,6 +35,7 @@ import {
 } from "@gram/client/react-query/riskPoliciesGet.js";
 import { riskEvalsEvaluate } from "@gram/client/funcs/riskEvalsEvaluate.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { RiskCategoryDefinition } from "@gram/client/models/components/riskcategorydefinition.js";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import {
   keepPreviousData,
@@ -651,6 +653,9 @@ function PromptPolicyEditor({
   const [scopeMode, setScopeMode] = useState<"messageTypes" | "cel">(
     policy?.scopeInclude ? "cel" : "messageTypes",
   );
+  const [disabledRecommendedScopes, setDisabledRecommendedScopes] = useState<
+    Set<string>
+  >(() => new Set(policy?.disabledRecommendedScopes ?? []));
   const [action, setAction] = useState<PolicyAction>(policy?.action ?? "flag");
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
@@ -675,6 +680,10 @@ function PromptPolicyEditor({
       failOpen !== (policy.modelConfig?.failOpen ?? true) ||
       scopeInclude !== (policy.scopeInclude ?? "") ||
       scopeExempt !== (policy.scopeExempt ?? "") ||
+      !sameSet(
+        disabledRecommendedScopes,
+        new Set(policy.disabledRecommendedScopes ?? []),
+      ) ||
       action !== (policy.action ?? "flag") ||
       userMessage !== (policy.userMessage ?? "") ||
       audienceType !==
@@ -742,9 +751,19 @@ function PromptPolicyEditor({
   // Blank name → the backend auto-generates one from the guardrail (mirrors
   // standard policies auto-naming from detectors).
   const autoName = name.trim() === "";
+  const promptPolicyCategories = useMemo(
+    () => new Set<RuleCategory>(["prompt_policy"]),
+    [],
+  );
+  const disabledRecommendedScopesPayloadForPrompt = () =>
+    disabledRecommendedScopesPayload(
+      promptPolicyCategories,
+      disabledRecommendedScopes,
+    );
 
   const save = () => {
     if (!policy) return;
+    const disabledRecommendations = disabledRecommendedScopesPayloadForPrompt();
     updateMutation.mutate({
       request: {
         updateRiskPolicyRequestBody: {
@@ -758,6 +777,7 @@ function PromptPolicyEditor({
             failOpen,
           },
           ...scopePayload(),
+          disabledRecommendedScopes: disabledRecommendations,
           ...actionPayload(),
           userMessage,
           autoName,
@@ -767,6 +787,7 @@ function PromptPolicyEditor({
   };
 
   const create = () => {
+    const disabledRecommendations = disabledRecommendedScopesPayloadForPrompt();
     createMutation.mutate({
       request: {
         createRiskPolicyRequestBody: {
@@ -776,6 +797,9 @@ function PromptPolicyEditor({
           prompt,
           modelConfig: { model: model || undefined, temperature, failOpen },
           ...scopePayload(),
+          ...(disabledRecommendations.length > 0
+            ? { disabledRecommendedScopes: disabledRecommendations }
+            : {}),
           ...actionPayload(),
           ...(userMessage.trim() ? { userMessage } : {}),
           autoName,
@@ -848,6 +872,9 @@ function PromptPolicyEditor({
       {step === 1 && (
         <ScopeStep
           description="Which messages the judge evaluates. Narrow the scope to reduce noise and cost."
+          selectedCategories={promptPolicyCategories}
+          disabledRecommendedScopes={disabledRecommendedScopes}
+          setDisabledRecommendedScopes={setDisabledRecommendedScopes}
           messageTypes={messageTypes}
           setMessageTypes={setMessageTypes}
           scopeMode={scopeMode}
@@ -1054,6 +1081,9 @@ function JudgeSection({
 // shapes plug in.
 function ScopeStep({
   description,
+  selectedCategories,
+  disabledRecommendedScopes,
+  setDisabledRecommendedScopes,
   messageTypes,
   setMessageTypes,
   scopeMode,
@@ -1064,6 +1094,9 @@ function ScopeStep({
   setScopeExempt,
 }: {
   description: string;
+  selectedCategories: Set<RuleCategory>;
+  disabledRecommendedScopes: Set<string>;
+  setDisabledRecommendedScopes: (next: Set<string>) => void;
   messageTypes: Set<PolicyMessageType>;
   setMessageTypes: (next: Set<PolicyMessageType>) => void;
   scopeMode: "messageTypes" | "cel";
@@ -1106,6 +1139,12 @@ function ScopeStep({
               : "Apply only to messages matching the expression below — this replaces the message-type selection."}
           </p>
         </div>
+
+        <RecommendedScopesPanel
+          selectedCategories={selectedCategories}
+          disabledRecommendedScopes={disabledRecommendedScopes}
+          setDisabledRecommendedScopes={setDisabledRecommendedScopes}
+        />
 
         {scopeMode === "messageTypes" ? (
           <>
@@ -1162,6 +1201,184 @@ function ScopeStep({
         </div>
       </Stack>
     </Card>
+  );
+}
+
+function RecommendedScopesPanel({
+  selectedCategories,
+  disabledRecommendedScopes,
+  setDisabledRecommendedScopes,
+}: {
+  selectedCategories: Set<RuleCategory>;
+  disabledRecommendedScopes: Set<string>;
+  setDisabledRecommendedScopes: (next: Set<string>) => void;
+}): JSX.Element | null {
+  const categoriesQuery = useRiskCategories();
+
+  const rows = useMemo(() => {
+    if (!categoriesQuery.data?.categories) return [];
+    return categoriesQuery.data.categories
+      .filter((category) =>
+        selectedCategories.has(category.key as RuleCategory),
+      )
+      .filter((category) => hasDisplayableRecommendedScope(category));
+  }, [categoriesQuery.data?.categories, selectedCategories]);
+
+  if (
+    categoriesQuery.isLoading ||
+    categoriesQuery.isError ||
+    rows.length === 0
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="border-border space-y-3 border-t pt-6">
+      <div className="space-y-1">
+        <Label className="text-sm font-medium">Recommended scopes</Label>
+        <p className="text-muted-foreground text-xs">
+          These category-specific refinements compose with your policy scope
+          server-side.
+        </p>
+      </div>
+      <div className="space-y-2">
+        {rows.map((category) => (
+          <RecommendedScopeRow
+            key={category.key}
+            category={category}
+            disabled={disabledRecommendedScopes.has(category.key)}
+            onDisabledChange={(disabled) => {
+              const next = new Set(disabledRecommendedScopes);
+              if (disabled) next.add(category.key);
+              else next.delete(category.key);
+              setDisabledRecommendedScopes(next);
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RecommendedScopeRow({
+  category,
+  disabled,
+  onDisabledChange,
+}: {
+  category: RiskCategoryDefinition;
+  disabled: boolean;
+  onDisabledChange: (disabled: boolean) => void;
+}): JSX.Element {
+  if (!category.recommendedScopeApplicable) {
+    return (
+      <div className="border-border bg-muted/20 rounded-md border px-3 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <Type small className="font-medium">
+              {category.label}
+            </Type>
+            <Type small muted>
+              {category.recommendedScopeRationale}
+            </Type>
+          </div>
+          <Badge variant="neutral">N/A — session-scoped</Badge>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-border rounded-md border px-3 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-2">
+          <div className="space-y-1">
+            <Type small className="font-medium">
+              {category.label}
+            </Type>
+            <Type small muted>
+              {category.recommendedScopeRationale}
+            </Type>
+          </div>
+          <RecommendedScopeCode
+            include={category.recommendedScopeInclude}
+            exempt={category.recommendedScopeExempt}
+          />
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Type small muted>
+            Apply recommended scope
+          </Type>
+          <Switch
+            checked={!disabled}
+            onCheckedChange={(checked) => onDisabledChange(!checked)}
+          />
+        </div>
+      </div>
+      {disabled && (
+        <div className="border-warning/40 bg-warning/10 mt-3 flex items-start gap-2 rounded-md border px-3 py-2">
+          <TriangleAlert className="text-warning mt-0.5 size-4 shrink-0" />
+          <Type small>
+            Disabling re-widens detection to surfaces this recommendation
+            excludes: {category.recommendedScopeRationale}
+          </Type>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecommendedScopeCode({
+  include,
+  exempt,
+}: {
+  include: string;
+  exempt: string;
+}): JSX.Element {
+  return (
+    <div className="space-y-1.5">
+      {include.trim() !== "" && (
+        <RecommendedScopeCodeLine label="Include" expr={include} />
+      )}
+      {exempt.trim() !== "" && (
+        <RecommendedScopeCodeLine label="Exempt" expr={exempt} />
+      )}
+    </div>
+  );
+}
+
+function RecommendedScopeCodeLine({
+  label,
+  expr,
+}: {
+  label: string;
+  expr: string;
+}): JSX.Element {
+  return (
+    <div className="grid gap-1 sm:grid-cols-[4.5rem_minmax(0,1fr)]">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <pre className="bg-muted/50 text-muted-foreground overflow-x-auto rounded px-2 py-1 font-mono text-[11px] leading-tight whitespace-pre">
+        {expr}
+      </pre>
+    </div>
+  );
+}
+
+function hasDisplayableRecommendedScope(
+  category: RiskCategoryDefinition,
+): boolean {
+  if (!category.recommendedScopeApplicable) return true;
+  return (
+    category.recommendedScopeInclude.trim() !== "" ||
+    category.recommendedScopeExempt.trim() !== ""
+  );
+}
+
+function disabledRecommendedScopesPayload(
+  selectedCategories: Set<RuleCategory>,
+  disabledRecommendedScopes: Set<string>,
+): string[] {
+  return [...selectedCategories].filter((category) =>
+    disabledRecommendedScopes.has(category),
   );
 }
 
@@ -2739,6 +2956,9 @@ function StandardPolicyEditor({
       scopeExempt: policy.scopeExempt ?? "",
       messageTypes: policyMessageTypesForForm(policy.messageTypes),
       disabledRules: new Set(policy.disabledRules ?? []),
+      disabledRecommendedScopes: new Set(
+        policy.disabledRecommendedScopes ?? [],
+      ),
       customRuleIds: new Set(policy.customRuleIds ?? []),
       categories: cats,
       approvedDomains: (policy.approvedEmailDomains ?? []).join(", "),
@@ -2761,6 +2981,9 @@ function StandardPolicyEditor({
   const [disabledRules, setDisabledRules] = useState<Set<string>>(
     () => new Set(policy?.disabledRules ?? []),
   );
+  const [disabledRecommendedScopes, setDisabledRecommendedScopes] = useState<
+    Set<string>
+  >(() => new Set(policy?.disabledRecommendedScopes ?? []));
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
   >(() => new Set(policy?.customRuleIds ?? []));
@@ -2837,6 +3060,7 @@ function StandardPolicyEditor({
       audienceType !== orig.audienceType ||
       !sameSet(selectedMessageTypes, orig.messageTypes) ||
       !sameSet(disabledRules, orig.disabledRules) ||
+      !sameSet(disabledRecommendedScopes, orig.disabledRecommendedScopes) ||
       !sameSet(selectedCustomRuleIds, orig.customRuleIds) ||
       !sameSet(selectedCategories, orig.categories) ||
       approvedDomains !== orig.approvedDomains ||
@@ -2912,6 +3136,10 @@ function StandardPolicyEditor({
     // preserves whatever is stored.
     const identityActive = selectedCategories.has("account_identity");
     const approvedEmailDomains = parseApprovedEmailDomains(approvedDomains);
+    const disabledRecommendations = disabledRecommendedScopesPayload(
+      selectedCategories,
+      disabledRecommendedScopes,
+    );
 
     if (policy) {
       updateMutation.mutate({
@@ -2923,6 +3151,7 @@ function StandardPolicyEditor({
             sources,
             presidioEntities,
             promptInjectionRules,
+            disabledRecommendedScopes: disabledRecommendations,
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
             messageTypes,
@@ -2946,6 +3175,9 @@ function StandardPolicyEditor({
             sources,
             presidioEntities,
             promptInjectionRules,
+            ...(disabledRecommendations.length > 0
+              ? { disabledRecommendedScopes: disabledRecommendations }
+              : {}),
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
             messageTypes,
@@ -3045,6 +3277,9 @@ function StandardPolicyEditor({
         {step === 1 && (
           <ScopeStep
             description="Apply everywhere, or narrow the scope to reduce noise and cost."
+            selectedCategories={selectedCategories}
+            disabledRecommendedScopes={disabledRecommendedScopes}
+            setDisabledRecommendedScopes={setDisabledRecommendedScopes}
             messageTypes={selectedMessageTypes}
             setMessageTypes={setSelectedMessageTypes}
             scopeMode={scopeMode}
