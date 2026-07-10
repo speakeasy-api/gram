@@ -37,7 +37,11 @@ import {
   periodDisplayRange,
   periodFromCycle,
 } from "./billing-cycles";
-import { BREAKDOWN_TOTAL, stackModeFor } from "./breakdown-options";
+import {
+  BREAKDOWN_TOTAL,
+  scopeNoteFor,
+  stackModeFor,
+} from "./breakdown-options";
 import { BreakdownPicker } from "./breakdown-picker";
 import { type GroupSeries, TokenUsagePanel } from "./token-usage-panel";
 import { TumDetailsTable } from "./tum-details-table";
@@ -137,6 +141,7 @@ function TumTokenBreakdown({
       groups={groups}
       billedSeries={billedSeries}
       stackBy={stackBy}
+      scopeNote={scopeNoteFor(breakdown)}
       breakdownPicker={breakdownPicker}
       loading={isFetching && !data}
       onSelectRange={onSelectRange}

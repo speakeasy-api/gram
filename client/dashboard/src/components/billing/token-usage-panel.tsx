@@ -250,6 +250,7 @@ export function TokenUsagePanel({
   groups,
   billedSeries,
   stackBy,
+  scopeNote,
   breakdownPicker,
   loading,
   onSelectRange,
@@ -265,6 +266,9 @@ export function TokenUsagePanel({
   billedSeries: number[] | null;
   // How the bars stack — controlled by the caller's breakdown picker.
   stackBy: StackMode;
+  // Shown when the active breakdown charts only a slice of the billed
+  // population (the model cut), so lower bars aren't read as less usage.
+  scopeNote?: string | null;
   // The unified breakdown selector (dimensions + token type), rendered at
   // the head of the control row.
   breakdownPicker: ReactNode;
@@ -487,6 +491,9 @@ export function TokenUsagePanel({
             <Info className="text-muted-foreground size-3.5" />
           </SimpleTooltip>
         </div>
+        {scopeNote && (
+          <span className="text-muted-foreground text-xs">{scopeNote}</span>
+        )}
         <div className="ml-auto flex items-center gap-3">
           {breakdownPicker}
           <div className="bg-border h-4 w-px" />

@@ -1066,7 +1066,7 @@ const getMessageContentBatch = `-- name: GetMessageContentBatch :many
 SELECT cm.id, cm.role, cm.content, cm.tool_calls,
   COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
 FROM chat_messages cm
-JOIN chats c ON c.id = cm.chat_id
+LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 WHERE cm.id = ANY($1::uuid[])
   AND cm.project_id = $2
 `
@@ -1087,7 +1087,8 @@ type GetMessageContentBatchRow struct {
 // The scanned user's id rides along so the LLM judge's completion telemetry
 // can attribute scanning volume to whose traffic was analyzed. Same
 // attribution rule as ListRiskOverviewTopUsers: the message's own user_id
-// wins, the chat owner's is the fallback.
+// wins, the chat owner's is the fallback — and a soft-deleted chat's owner
+// never is (LEFT JOIN so the message still gets scanned, just unattributed).
 func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageContentBatchParams) ([]GetMessageContentBatchRow, error) {
 	rows, err := q.db.Query(ctx, getMessageContentBatch, arg.Ids, arg.ProjectID)
 	if err != nil {

@@ -123,6 +123,20 @@ export function stackModeFor(breakdown: string): StackMode {
   }
 }
 
+// The model cut is the one breakdown whose bars do NOT sum to the billed
+// total: each option charts only its half of the population. The panel shows
+// this note so lower bars read as a narrower scope, not less usage.
+export function scopeNoteFor(breakdown: string): string | null {
+  switch (breakdown) {
+    case RISK_ANALYSIS_MODEL_DIM:
+      return "Risk policy analysis inference only — one slice of the billed total";
+    case COMPLETION_MODEL_DIM:
+      return "Completion surfaces only — one slice of the billed total";
+    default:
+      return null;
+  }
+}
+
 export function breakdownLabel(value: string): string {
   for (const group of BREAKDOWN_GROUPS) {
     const hit = group.options.find((o) => o.value === value);
