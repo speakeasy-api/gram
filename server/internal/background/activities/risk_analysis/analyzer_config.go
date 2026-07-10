@@ -9,9 +9,10 @@ import (
 // risk_policies.analyzer_config (JSONB), namespaced by analyzer. New per-scanner
 // options live here rather than as a dedicated column each.
 type AnalyzerConfig struct {
-	Presidio        *PresidioConfig        `json:"presidio,omitempty"`
-	BuiltinPresets  *BuiltinPresetsConfig  `json:"builtin_presets,omitempty"`
-	AccountIdentity *AccountIdentityConfig `json:"account_identity,omitempty"`
+	Presidio          *PresidioConfig          `json:"presidio,omitempty"`
+	BuiltinPresets    *BuiltinPresetsConfig    `json:"builtin_presets,omitempty"`
+	AccountIdentity   *AccountIdentityConfig   `json:"account_identity,omitempty"`
+	RecommendedScopes *RecommendedScopesConfig `json:"recommended_scopes,omitempty"`
 }
 
 // PresidioConfig holds presidio-scanner options.
@@ -36,6 +37,12 @@ type AccountIdentityConfig struct {
 	// produce an identity.unapproved_domain finding. Empty means the domain
 	// rule is inert.
 	ApprovedEmailDomains []string `json:"approved_email_domains,omitempty"`
+}
+
+// RecommendedScopesConfig holds per-policy opt-outs from centrally recommended
+// per-category detection scopes.
+type RecommendedScopesConfig struct {
+	DisabledCategories []string `json:"disabled_categories,omitempty"`
 }
 
 // ParseAnalyzerConfig decodes the JSONB blob, returning a zero config for
@@ -91,6 +98,16 @@ func ApprovedEmailDomainsFromConfig(b []byte) []string {
 	return nil
 }
 
+// DisabledRecommendedScopesFromConfig returns categories whose centrally
+// recommended detection scopes are disabled for this policy.
+func DisabledRecommendedScopesFromConfig(b []byte) []string {
+	c := ParseAnalyzerConfig(b)
+	if c.RecommendedScopes != nil {
+		return c.RecommendedScopes.DisabledCategories
+	}
+	return nil
+}
+
 // WithApprovedEmailDomains returns analyzer_config JSON with
 // account_identity.approved_email_domains set to v, or cleared when v is
 // empty. Only fields known to AnalyzerConfig are round-tripped; any
@@ -104,6 +121,27 @@ func WithApprovedEmailDomains(base []byte, v []string) ([]byte, error) {
 		// ApprovedEmailDomains is account_identity's only field today; clearing
 		// it leaves the section empty, so drop it entirely.
 		c.AccountIdentity = nil
+	}
+	out, err := json.Marshal(c)
+	if err != nil {
+		return nil, fmt.Errorf("marshal analyzer config: %w", err)
+	}
+	return out, nil
+}
+
+// WithDisabledRecommendedScopes returns analyzer_config JSON with
+// recommended_scopes.disabled_categories set to v, or cleared when v is empty.
+// Only fields known to AnalyzerConfig are round-tripped; any unrecognized keys
+// in base are dropped.
+func WithDisabledRecommendedScopes(base []byte, v []string) ([]byte, error) {
+	c := ParseAnalyzerConfig(base)
+	switch {
+	case len(v) > 0:
+		c.RecommendedScopes = &RecommendedScopesConfig{DisabledCategories: v}
+	case c.RecommendedScopes != nil:
+		// DisabledCategories is recommended_scopes' only field today; clearing
+		// it leaves the section empty, so drop it entirely.
+		c.RecommendedScopes = nil
 	}
 	out, err := json.Marshal(c)
 	if err != nil {

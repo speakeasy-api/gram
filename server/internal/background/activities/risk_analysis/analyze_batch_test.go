@@ -91,7 +91,8 @@ func newCustomRulesPub() *gcp.MockPublisher[*riskv1.CustomRulesAnalysis] {
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newCustomRulesPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil)
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newCustomRulesPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil)
+	require.NoError(t, err)
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -134,7 +135,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		testenv.NewLogger(t),
 	)
 
-	ab := risk_analysis.NewAnalyzeBatch(
+	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
@@ -152,6 +153,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		mustCELEngine(t),
 		nil,
 	)
+	require.NoError(t, err)
 
 	// Execute via Temporal test activity environment to satisfy activity.RecordHeartbeat
 	var ts testsuite.WorkflowTestSuite
@@ -228,7 +230,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 	}})
 	require.NoError(t, err)
 
-	ab := risk_analysis.NewAnalyzeBatch(
+	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
@@ -246,6 +248,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		mustCELEngine(t),
 		nil,
 	)
+	require.NoError(t, err)
 
 	var ts testsuite.WorkflowTestSuite
 	env := ts.NewTestActivityEnvironment()
@@ -334,7 +337,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
 	judge := &recordingPromptJudge{}
-	ab := risk_analysis.NewAnalyzeBatch(
+	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
@@ -352,6 +355,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		mustCELEngine(t),
 		nil,
 	)
+	require.NoError(t, err)
 
 	var ts testsuite.WorkflowTestSuite
 	env := ts.NewTestActivityEnvironment()
@@ -420,7 +424,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
 	judge := &recordingPromptJudge{}
-	ab := risk_analysis.NewAnalyzeBatch(
+	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
@@ -438,6 +442,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		mustCELEngine(t),
 		nil,
 	)
+	require.NoError(t, err)
 
 	var ts testsuite.WorkflowTestSuite
 	env := ts.NewTestActivityEnvironment()
@@ -929,7 +934,7 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 
 	accessStore := accesscontrol.NewRedisStore(cache.NoopCache, accesscontrol.AlphaTTL)
 	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, accessStore)
-	ab := risk_analysis.NewAnalyzeBatch(
+	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
@@ -947,6 +952,7 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		mustCELEngine(t),
 		nil,
 	)
+	require.NoError(t, err)
 
 	var ts testsuite.WorkflowTestSuite
 	env := ts.NewTestActivityEnvironment()

@@ -162,6 +162,28 @@ func NewActivities(
 	judgeRateLimiter *ratelimit.Limiter,
 	builtinPresets *presetlib.Library,
 ) *Activities {
+	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
+		logger,
+		tracerProvider,
+		meterProvider,
+		db,
+		piiScanner,
+		piScanner,
+		shadowMCPClient,
+		telemetryRepo,
+		riskjudge.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter),
+		features,
+		publishers.PresidioAnalysis,
+		publishers.GitleaksAnalysis,
+		publishers.CustomRulesAnalysis,
+		customRuleScanner,
+		celEng,
+		builtinPresets,
+	)
+	if err != nil {
+		panic(fmt.Errorf("new analyze batch: %w", err))
+	}
+
 	return &Activities{
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -193,7 +215,7 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), riskjudge.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter), features, publishers.PresidioAnalysis, publishers.GitleaksAnalysis, publishers.CustomRulesAnalysis, customRuleScanner, celEng, builtinPresets),
+		analyzeBatch:                    analyzeBatch,
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
