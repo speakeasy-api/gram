@@ -37,6 +37,7 @@ const (
 	shadowMCPInventoryBypassStatusRequested = "requested"
 	shadowMCPInventoryBypassStatusApproved  = "approved"
 	shadowMCPInventoryBypassStatusDenied    = "denied"
+	shadowMCPInventoryBypassStatusRevoked   = "revoked"
 	shadowMCPInventoryBypassTargetKind      = "shadow_mcp_server"
 
 	shadowMCPInventoryDecisionAllow = "allow"
@@ -213,6 +214,9 @@ func (s *Service) DeleteShadowMCPInventoryPolicyBypass(ctx context.Context, payl
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	if _, err := s.replaceShadowMCPInventoryURLBypassGrants(ctx, dbtx, ac.ActiveOrganizationID, projectID, inventoryURL.CanonicalURL, nil); err != nil {
+		return nil, err
+	}
+	if err := s.revokeShadowMCPInventoryURLRequests(ctx, dbtx, projectID, inventoryURL.CanonicalURL, ac.UserID); err != nil {
 		return nil, err
 	}
 
@@ -537,6 +541,59 @@ func (s *Service) resolveShadowMCPInventoryURLRequests(
 			ProjectID:            projectID,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "resolve shadow mcp inventory request").LogError(ctx, s.logger)
+		}
+	}
+	return nil
+}
+
+func (s *Service) revokeShadowMCPInventoryURLRequests(
+	ctx context.Context,
+	db riskrepo.DBTX,
+	projectID uuid.UUID,
+	canonicalURL string,
+	revokedBy string,
+) error {
+	policies, err := s.shadowMCPInventoryProjectPolicies(ctx, db, projectID)
+	if err != nil {
+		return err
+	}
+	policyIDs := make(map[string]struct{}, len(policies))
+	for _, policy := range policies {
+		policyIDs[policy.ID.String()] = struct{}{}
+	}
+
+	q := riskrepo.New(db)
+	requests, err := q.ListRiskPolicyBypassRequests(ctx, riskrepo.ListRiskPolicyBypassRequestsParams{
+		ProjectID:    projectID,
+		RiskPolicyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Status:       conv.ToPGText(shadowMCPInventoryBypassStatusApproved),
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list approved shadow mcp inventory requests").LogError(ctx, s.logger)
+	}
+
+	for _, request := range requests {
+		if _, ok := policyIDs[request.RiskPolicyID.String()]; !ok {
+			continue
+		}
+		if conv.FromPGTextOrEmpty[string](request.TargetKind) != shadowMCPInventoryBypassTargetKind {
+			continue
+		}
+		dimensions, err := shadowMCPInventoryBypassDimensions(request.TargetDimensions)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "parse approved shadow mcp inventory request dimensions").LogError(ctx, s.logger)
+		}
+		if dimensions[authz.SelectorKeyServerURL] != canonicalURL {
+			continue
+		}
+		if _, err := q.UpdateRiskPolicyBypassRequestStatus(ctx, riskrepo.UpdateRiskPolicyBypassRequestStatusParams{
+			Status:               shadowMCPInventoryBypassStatusRevoked,
+			DecidedBy:            conv.ToPGText(revokedBy),
+			GrantedPrincipalUrns: []string{},
+			ID:                   request.ID,
+			ProjectID:            projectID,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "revoke shadow mcp inventory request").LogError(ctx, s.logger)
 		}
 	}
 	return nil

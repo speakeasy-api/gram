@@ -565,6 +565,65 @@ func TestService_DeleteShadowMCPInventoryPolicyBypass_RemovesURLGrants(t *testin
 	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://mcp.example.com/mcp"))
 }
 
+func TestService_DeleteShadowMCPInventoryPolicyBypass_RevokesApprovedRequestAndAllowsRerequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	serverURL := "https://mcp.example.com/mcp"
+	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Block Shadow MCP",
+		Action:         "block",
+	})
+	requestID := createShadowMCPInventoryBypassRequest(t, ctx, ti, shadowMCPInventoryBypassRequestInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		PolicyID:       policy.ID.String(),
+		ServerURL:      serverURL,
+		RequesterID:    authCtx.UserID,
+		RequesterEmail: "alex@example.com",
+	})
+	_, err := riskrepo.New(ti.conn).UpdateRiskPolicyBypassRequestStatus(ctx, riskrepo.UpdateRiskPolicyBypassRequestStatusParams{
+		Status:               shadowMCPInventoryBypassStatusApproved,
+		DecidedBy:            conv.ToPGText(authCtx.UserID),
+		GrantedPrincipalUrns: []string{authz.AllUsersPrincipal().String()},
+		ID:                   uuid.MustParse(requestID),
+		ProjectID:            uuid.MustParse(projectID),
+	})
+	require.NoError(t, err)
+	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), serverURL)
+
+	_, err = ti.service.DeleteShadowMCPInventoryPolicyBypass(ctx, &gen.DeleteShadowMCPInventoryPolicyBypassPayload{
+		ProjectID: projectID,
+		ServerURL: serverURL,
+	})
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryBypassStatusRevoked, shadowMCPInventoryBypassRequestStatus(t, ctx, ti, projectID, requestID))
+	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), serverURL))
+
+	rerequestID := createShadowMCPInventoryBypassRequest(t, ctx, ti, shadowMCPInventoryBypassRequestInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		PolicyID:       policy.ID.String(),
+		ServerURL:      serverURL,
+		RequesterID:    authCtx.UserID,
+		RequesterEmail: "alex@example.com",
+	})
+	require.Equal(t, requestID, rerequestID)
+	require.Equal(t, shadowMCPInventoryBypassStatusRequested, shadowMCPInventoryBypassRequestStatus(t, ctx, ti, projectID, requestID))
+
+	state, err := ti.service.shadowMCPInventoryURLState(ctx, authCtx.ActiveOrganizationID, uuid.MustParse(projectID), serverURL)
+	require.NoError(t, err)
+	require.Equal(t, 1, state.RequestCount)
+	require.NotNil(t, state.LatestRequest)
+	require.Equal(t, requestID, state.LatestRequest.ID)
+}
+
 func TestService_DeleteShadowMCPInventoryPolicyBypass_RemovesStaleURLGrants(t *testing.T) {
 	t.Parallel()
 
@@ -745,7 +804,7 @@ func createShadowMCPInventoryBypassRequest(t *testing.T, ctx context.Context, ti
 	}
 
 	requestID := uuid.New()
-	_, err = riskrepo.New(ti.conn).UpsertRiskPolicyBypassRequest(ctx, riskrepo.UpsertRiskPolicyBypassRequestParams{
+	request, err := riskrepo.New(ti.conn).UpsertRiskPolicyBypassRequest(ctx, riskrepo.UpsertRiskPolicyBypassRequestParams{
 		ID:               requestID,
 		OrganizationID:   input.OrganizationID,
 		ProjectID:        projectID,
@@ -763,12 +822,12 @@ func createShadowMCPInventoryBypassRequest(t *testing.T, ctx context.Context, ti
 
 	err = testrepo.New(ti.conn).UpdateRiskPolicyBypassRequestTimestamps(ctx, testrepo.UpdateRiskPolicyBypassRequestTimestampsParams{
 		RequestedAt: conv.ToPGTimestamptz(requestedAt),
-		ID:          requestID,
+		ID:          request.ID,
 		ProjectID:   projectID,
 	})
 	require.NoError(t, err)
 
-	return requestID.String()
+	return request.ID.String()
 }
 
 func insertShadowMCPInventoryTelemetry(t *testing.T, ctx context.Context, ti *testInstance, input shadowMCPInventoryTelemetryInput) {
