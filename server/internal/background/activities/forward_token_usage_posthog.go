@@ -109,6 +109,13 @@ func (f *ForwardTokenUsageToPostHog) forwardOrganization(ctx context.Context, qu
 	if len(rows) >= 2 {
 		properties["tum_tokens_previous_cycle"] = rows[len(rows)-2].TumTokens
 	}
+	// Group properties merge (last write wins per key), so the limit keys are
+	// written on EVERY refresh: an org whose contracted limit was removed
+	// would otherwise keep its stale allowance and ratio on the PostHog group
+	// and GTM cohorts would keep treating it as limited. nil overwrites the
+	// old value for unlimited orgs.
+	properties["tum_monthly_token_limit"] = nil
+	properties["tum_allowance_used_ratio"] = nil
 	if meta.TumMonthlyTokenLimit.Valid && meta.TumMonthlyTokenLimit.Int64 > 0 {
 		limit := meta.TumMonthlyTokenLimit.Int64
 		properties["tum_monthly_token_limit"] = limit

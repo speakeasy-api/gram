@@ -159,6 +159,15 @@ func TestForwardTokenUsageToPostHog_EventOncePerDay(t *testing.T) {
 
 	require.Len(t, captured.identifies, 2, "group properties refresh on every run")
 	require.Len(t, captured.events, 1, "the usage event is emitted once per day")
+
+	// This org has no contracted limit: the limit keys must still be written
+	// (as nil) so a removed contract clears stale values off the group
+	// instead of leaving GTM cohorts treating the org as limited.
+	props := captured.identifies[0].properties
+	require.Contains(t, props, "tum_monthly_token_limit")
+	require.Nil(t, props["tum_monthly_token_limit"])
+	require.Contains(t, props, "tum_allowance_used_ratio")
+	require.Nil(t, props["tum_allowance_used_ratio"])
 }
 
 // TestForwardTokenUsageToPostHog_SkipsOrgsWithoutSnapshots pins that dormant

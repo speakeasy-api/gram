@@ -23,9 +23,10 @@ const (
 	snapshotBillingCycleUsageStartToCloseTimeout = 5 * time.Minute
 	refreshBillingUsageActivityMaximumAttempts   = 3
 	// Reserve more than the worst-case retry path for one batch: the Polar
-	// refresh (3 attempts × 60s) plus the cycle snapshot (3 attempts × 5m),
-	// each with 10s/15s retry backoffs and Temporal jitter.
-	refreshBillingUsageBatchWorstCaseRetryWindow = 20 * time.Minute
+	// refresh (3 attempts × 60s), the cycle snapshot (3 attempts × 5m), and
+	// the PostHog usage forward (3 attempts × 60s), each with 10s/15s retry
+	// backoffs and Temporal jitter.
+	refreshBillingUsageBatchWorstCaseRetryWindow = 24 * time.Minute
 	refreshBillingUsageWorkflowRunTimeout        = 30 * time.Minute
 	refreshBillingUsagesWaitInterval             = 10 * time.Second
 )

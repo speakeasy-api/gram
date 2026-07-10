@@ -134,8 +134,11 @@ func TestRefreshBillingUsageWorkflow_FailingBatchDoesNotAbortRun(t *testing.T) {
 		},
 		activity.RegisterOptions{Name: "SnapshotBillingCycleUsage"},
 	)
+	forwardCallCount := 0
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, batch []string) error {
+			forwardCallCount++
+			require.NotEmpty(t, batch)
 			return nil
 		},
 		activity.RegisterOptions{Name: "ForwardTokenUsageToPostHog"},
@@ -152,6 +155,7 @@ func TestRefreshBillingUsageWorkflow_FailingBatchDoesNotAbortRun(t *testing.T) {
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, 2, refreshCallCount)
 	require.Equal(t, 2, snapshotCallCount, "snapshots still run when the Polar refresh batch fails")
+	require.Equal(t, 2, forwardCallCount, "posthog forwarding still runs when the Polar refresh batch fails")
 }
 
 func TestRefreshBillingUsageWorkflow_SleepCancellationFailsRun(t *testing.T) {
