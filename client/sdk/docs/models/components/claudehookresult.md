@@ -1,0 +1,23 @@
+# ClaudeHookResult
+
+Unified result for all Claude Code hook events with proper response structure
+
+## Example Usage
+
+```typescript
+import { ClaudeHookResult } from "@gram/client/models/components/claudehookresult.js";
+
+let value: ClaudeHookResult = {};
+```
+
+## Fields
+
+| Field                                                                                                              | Type                                                                                                               | Required                                                                                                           | Description                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `continue`                                                                                                         | *boolean*                                                                                                          | :heavy_minus_sign:                                                                                                 | Whether to continue (SessionStart only)                                                                            |
+| `decision`                                                                                                         | *string*                                                                                                           | :heavy_minus_sign:                                                                                                 | Top-level block decision for UserPromptSubmit / PostToolUse / Stop / SubagentStop. Use 'block' to halt processing. |
+| `hookSpecificOutput`                                                                                               | *any*                                                                                                              | :heavy_minus_sign:                                                                                                 | Hook-specific output as JSON object                                                                                |
+| `reason`                                                                                                           | *string*                                                                                                           | :heavy_minus_sign:                                                                                                 | Reason accompanying decision; shown to the user (UserPromptSubmit) or Claude (PostToolUse/Stop).                   |
+| `stopReason`                                                                                                       | *string*                                                                                                           | :heavy_minus_sign:                                                                                                 | Reason if blocked (SessionStart only)                                                                              |
+| `suppressOutput`                                                                                                   | *boolean*                                                                                                          | :heavy_minus_sign:                                                                                                 | Whether to suppress the hook's output                                                                              |
+| `systemMessage`                                                                                                    | *string*                                                                                                           | :heavy_minus_sign:                                                                                                 | Warning message shown to the user in the terminal                                                                  |

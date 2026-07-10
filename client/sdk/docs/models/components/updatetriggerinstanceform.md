@@ -1,0 +1,24 @@
+# UpdateTriggerInstanceForm
+
+## Example Usage
+
+```typescript
+import { UpdateTriggerInstanceForm } from "@gram/client/models/components/updatetriggerinstanceform.js";
+
+let value: UpdateTriggerInstanceForm = {
+  id: "80f81fe3-2067-4c92-8175-f8aaffe203fb",
+};
+```
+
+## Fields
+
+| Field                                                                                                            | Type                                                                                                             | Required                                                                                                         | Description                                                                                                      |
+| ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `config`                                                                                                         | Record<string, *any*>                                                                                            | :heavy_minus_sign:                                                                                               | The trigger config payload.                                                                                      |
+| `environmentId`                                                                                                  | *string*                                                                                                         | :heavy_minus_sign:                                                                                               | The linked environment ID.                                                                                       |
+| `id`                                                                                                             | *string*                                                                                                         | :heavy_check_mark:                                                                                               | The trigger instance ID.                                                                                         |
+| `name`                                                                                                           | *string*                                                                                                         | :heavy_minus_sign:                                                                                               | The trigger instance name.                                                                                       |
+| `status`                                                                                                         | [components.UpdateTriggerInstanceFormStatus](../../models/components/updatetriggerinstanceformstatus.md)         | :heavy_minus_sign:                                                                                               | The trigger status.                                                                                              |
+| `targetDisplay`                                                                                                  | *string*                                                                                                         | :heavy_minus_sign:                                                                                               | The user-facing target display value.                                                                            |
+| `targetKind`                                                                                                     | [components.UpdateTriggerInstanceFormTargetKind](../../models/components/updatetriggerinstanceformtargetkind.md) | :heavy_minus_sign:                                                                                               | The trigger target kind.                                                                                         |
+| `targetRef`                                                                                                      | *string*                                                                                                         | :heavy_minus_sign:                                                                                               | The opaque target reference.                                                                                     |

@@ -1,0 +1,23 @@
+# DetachUserSessionIssuerRequest
+
+## Example Usage
+
+```typescript
+import { DetachUserSessionIssuerRequest } from "@gram/client/models/operations/detachusersessionissuer.js";
+
+let value: DetachUserSessionIssuerRequest = {
+  attachUserSessionIssuerForm: {
+    id: "b7afe2ac-97d8-410d-91e6-70360129b939",
+    userSessionIssuerId: "7265b04e-41b7-4587-8320-221f8d63f3e2",
+  },
+};
+```
+
+## Fields
+
+| Field                                                                                            | Type                                                                                             | Required                                                                                         | Description                                                                                      |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `gramSession`                                                                                    | *string*                                                                                         | :heavy_minus_sign:                                                                               | Session header                                                                                   |
+| `gramKey`                                                                                        | *string*                                                                                         | :heavy_minus_sign:                                                                               | API Key header                                                                                   |
+| `gramProject`                                                                                    | *string*                                                                                         | :heavy_minus_sign:                                                                               | project header                                                                                   |
+| `attachUserSessionIssuerForm`                                                                    | [components.AttachUserSessionIssuerForm](../../models/components/attachusersessionissuerform.md) | :heavy_check_mark:                                                                               | N/A                                                                                              |

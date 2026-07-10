@@ -1,0 +1,19 @@
+# ListRiskResultsSecurityOption2
+
+## Example Usage
+
+```typescript
+import { ListRiskResultsSecurityOption2 } from "@gram/client/models/operations/listriskresults.js";
+
+let value: ListRiskResultsSecurityOption2 = {
+  projectSlugHeaderGramProject: "<value>",
+  sessionHeaderGramSession: "<value>",
+};
+```
+
+## Fields
+
+| Field                          | Type                           | Required                       | Description                    |
+| ------------------------------ | ------------------------------ | ------------------------------ | ------------------------------ |
+| `projectSlugHeaderGramProject` | *string*                       | :heavy_check_mark:             | N/A                            |
+| `sessionHeaderGramSession`     | *string*                       | :heavy_check_mark:             | N/A                            |

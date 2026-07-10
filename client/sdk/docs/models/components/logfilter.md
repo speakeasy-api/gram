@@ -1,0 +1,21 @@
+# LogFilter
+
+A single filter condition for a log search query.
+
+## Example Usage
+
+```typescript
+import { LogFilter } from "@gram/client/models/components/logfilter.js";
+
+let value: LogFilter = {
+  path: "@user.region",
+};
+```
+
+## Fields
+
+| Field                                                                                                                                                     | Type                                                                                                                                                      | Required                                                                                                                                                  | Description                                                                                                                                               | Example                                                                                                                                                   |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `operator`                                                                                                                                                | [components.Operator](../../models/components/operator.md)                                                                                                | :heavy_minus_sign:                                                                                                                                        | Comparison operator                                                                                                                                       |                                                                                                                                                           |
+| `path`                                                                                                                                                    | *string*                                                                                                                                                  | :heavy_check_mark:                                                                                                                                        | Attribute path. Use @ prefix for custom attributes (e.g. '@user.region'), or bare path for system attributes (e.g. 'http.route').                         | @user.region                                                                                                                                              |
+| `values`                                                                                                                                                  | *string*[]                                                                                                                                                | :heavy_minus_sign:                                                                                                                                        | Values to compare against. Pass one value for single-value operators (eq, not_eq, contains) and multiple for 'in'. Ignored for 'exists' and 'not_exists'. |                                                                                                                                                           |

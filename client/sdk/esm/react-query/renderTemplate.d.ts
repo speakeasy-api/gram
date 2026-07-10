@@ -1,0 +1,41 @@
+import { InvalidateQueryFilters, QueryClient, UseQueryResult, UseSuspenseQueryResult } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import { ConnectionError, InvalidRequestError, RequestAbortedError, RequestTimeoutError, UnexpectedClientError } from "../models/errors/httpclienterrors.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import { RenderTemplateRequest, RenderTemplateSecurity } from "../models/operations/rendertemplate.js";
+import { QueryHookOptions, SuspenseQueryHookOptions, TupleToPrefixes } from "./_types.js";
+import { buildRenderTemplateQuery, prefetchRenderTemplate, queryKeyRenderTemplate, RenderTemplateQueryData } from "./renderTemplate.core.js";
+export { buildRenderTemplateQuery, prefetchRenderTemplate, queryKeyRenderTemplate, type RenderTemplateQueryData, };
+export type RenderTemplateQueryError = ServiceError | GramError | ResponseValidationError | ConnectionError | RequestAbortedError | RequestTimeoutError | InvalidRequestError | UnexpectedClientError | SDKValidationError;
+/**
+ * renderTemplate templates
+ *
+ * @remarks
+ * Render a prompt template directly with all template fields provided.
+ */
+export declare function useRenderTemplate(request: RenderTemplateRequest, security?: RenderTemplateSecurity | undefined, options?: QueryHookOptions<RenderTemplateQueryData, RenderTemplateQueryError>): UseQueryResult<RenderTemplateQueryData, RenderTemplateQueryError>;
+/**
+ * renderTemplate templates
+ *
+ * @remarks
+ * Render a prompt template directly with all template fields provided.
+ */
+export declare function useRenderTemplateSuspense(request: RenderTemplateRequest, security?: RenderTemplateSecurity | undefined, options?: SuspenseQueryHookOptions<RenderTemplateQueryData, RenderTemplateQueryError>): UseSuspenseQueryResult<RenderTemplateQueryData, RenderTemplateQueryError>;
+export declare function setRenderTemplateData(client: QueryClient, queryKeyBase: [
+    parameters: {
+        gramKey?: string | undefined;
+        gramSession?: string | undefined;
+        gramProject?: string | undefined;
+    }
+], data: RenderTemplateQueryData): RenderTemplateQueryData | undefined;
+export declare function invalidateRenderTemplate(client: QueryClient, queryKeyBase: TupleToPrefixes<[
+    parameters: {
+        gramKey?: string | undefined;
+        gramSession?: string | undefined;
+        gramProject?: string | undefined;
+    }
+]>, filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">): Promise<void>;
+export declare function invalidateAllRenderTemplate(client: QueryClient, filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">): Promise<void>;
+//# sourceMappingURL=renderTemplate.d.ts.map

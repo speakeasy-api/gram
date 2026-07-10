@@ -1,0 +1,43 @@
+import { InvalidateQueryFilters, QueryClient, UseQueryResult, UseSuspenseQueryResult } from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import { ConnectionError, InvalidRequestError, RequestAbortedError, RequestTimeoutError, UnexpectedClientError } from "../models/errors/httpclienterrors.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import { ServeOpenAPIv3Request, ServeOpenAPIv3Security } from "../models/operations/serveopenapiv3.js";
+import { QueryHookOptions, SuspenseQueryHookOptions, TupleToPrefixes } from "./_types.js";
+import { buildServeOpenAPIv3Query, prefetchServeOpenAPIv3, queryKeyServeOpenAPIv3, ServeOpenAPIv3QueryData } from "./serveOpenAPIv3.core.js";
+export { buildServeOpenAPIv3Query, prefetchServeOpenAPIv3, queryKeyServeOpenAPIv3, type ServeOpenAPIv3QueryData, };
+export type ServeOpenAPIv3QueryError = ServiceError | GramError | ResponseValidationError | ConnectionError | RequestAbortedError | RequestTimeoutError | InvalidRequestError | UnexpectedClientError | SDKValidationError;
+/**
+ * serveOpenAPIv3 assets
+ *
+ * @remarks
+ * Serve an OpenAPIv3 asset from Gram.
+ */
+export declare function useServeOpenAPIv3(request: ServeOpenAPIv3Request, security?: ServeOpenAPIv3Security | undefined, options?: QueryHookOptions<ServeOpenAPIv3QueryData, ServeOpenAPIv3QueryError>): UseQueryResult<ServeOpenAPIv3QueryData, ServeOpenAPIv3QueryError>;
+/**
+ * serveOpenAPIv3 assets
+ *
+ * @remarks
+ * Serve an OpenAPIv3 asset from Gram.
+ */
+export declare function useServeOpenAPIv3Suspense(request: ServeOpenAPIv3Request, security?: ServeOpenAPIv3Security | undefined, options?: SuspenseQueryHookOptions<ServeOpenAPIv3QueryData, ServeOpenAPIv3QueryError>): UseSuspenseQueryResult<ServeOpenAPIv3QueryData, ServeOpenAPIv3QueryError>;
+export declare function setServeOpenAPIv3Data(client: QueryClient, queryKeyBase: [
+    parameters: {
+        id: string;
+        projectId: string;
+        gramKey?: string | undefined;
+        gramSession?: string | undefined;
+    }
+], data: ServeOpenAPIv3QueryData): ServeOpenAPIv3QueryData | undefined;
+export declare function invalidateServeOpenAPIv3(client: QueryClient, queryKeyBase: TupleToPrefixes<[
+    parameters: {
+        id: string;
+        projectId: string;
+        gramKey?: string | undefined;
+        gramSession?: string | undefined;
+    }
+]>, filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">): Promise<void>;
+export declare function invalidateAllServeOpenAPIv3(client: QueryClient, filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">): Promise<void>;
+//# sourceMappingURL=serveOpenAPIv3.d.ts.map

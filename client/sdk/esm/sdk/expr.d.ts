@@ -1,0 +1,13 @@
+import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { ExprCompileResult } from "../models/components/exprcompileresult.js";
+import { CompileExprRequest, CompileExprSecurity } from "../models/operations/compileexpr.js";
+export declare class Expr extends ClientSDK {
+    /**
+     * compileExpr risk
+     *
+     * @remarks
+     * Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).
+     */
+    compile(request?: CompileExprRequest | undefined, security?: CompileExprSecurity | undefined, options?: RequestOptions): Promise<ExprCompileResult>;
+}
+//# sourceMappingURL=expr.d.ts.map

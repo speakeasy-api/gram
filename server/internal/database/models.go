@@ -1243,6 +1243,7 @@ type PluginGithubConnection struct {
 	PublishedFingerprint     pgtype.Text
 	PublishedMcpFingerprints []byte
 	PublishedHooksVersion    pgtype.Text
+	PublishedHooksConfig     []byte
 	CreatedAt                pgtype.Timestamptz
 	UpdatedAt                pgtype.Timestamptz
 }

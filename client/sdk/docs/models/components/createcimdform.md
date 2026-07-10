@@ -1,0 +1,22 @@
+# CreateCimdForm
+
+Form for creating a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the row carries no secret and authenticates with token_endpoint_auth_method=none. The caller supplies no client_id or credentials.
+
+## Example Usage
+
+```typescript
+import { CreateCimdForm } from "@gram/client/models/components/createcimdform.js";
+
+let value: CreateCimdForm = {
+  remoteSessionIssuerId: "5ab42aff-8f90-445b-9762-c5cf4576489a",
+};
+```
+
+## Fields
+
+| Field                                                                                                                                                | Type                                                                                                                                                 | Required                                                                                                                                             | Description                                                                                                                                          |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `audience`                                                                                                                                           | *string*                                                                                                                                             | :heavy_minus_sign:                                                                                                                                   | Optional upstream OAuth audience to send on the authorize redirect and token exchange.                                                               |
+| `remoteSessionIssuerId`                                                                                                                              | *string*                                                                                                                                             | :heavy_check_mark:                                                                                                                                   | The owning remote_session_issuer id. Must advertise client_id_metadata_document_supported.                                                           |
+| `scope`                                                                                                                                              | *string*[]                                                                                                                                           | :heavy_minus_sign:                                                                                                                                   | Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.                         |
+| `userSessionIssuerIds`                                                                                                                               | *string*[]                                                                                                                                           | :heavy_minus_sign:                                                                                                                                   | The user_session_issuers to attach this client to via the join table. Omit or pass an empty array to create a standalone client with no attachments. |

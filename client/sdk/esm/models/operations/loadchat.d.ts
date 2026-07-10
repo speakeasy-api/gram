@@ -1,0 +1,99 @@
+import * as z from "zod/v4-mini";
+export type LoadChatSecurityOption1 = {
+    projectSlugHeaderGramProject: string;
+    sessionHeaderGramSession: string;
+};
+export type LoadChatSecurityOption2 = {
+    chatSessionsTokenHeaderGramChatSession: string;
+};
+export type LoadChatSecurity = {
+    option1?: LoadChatSecurityOption1 | undefined;
+    option2?: LoadChatSecurityOption2 | undefined;
+};
+export type LoadChatRequest = {
+    /**
+     * The ID of the chat
+     */
+    id: string;
+    /**
+     * Generation to load. A generation is an immutable snapshot of the chat transcript: a new one is opened whenever the conversation is compacted or an earlier message is edited, while normal turns append to the current generation. Generations are numbered from 0 (oldest) up to `max_generation` (latest). Omit this attribute to receive the latest generation, or page through history by walking from `max_generation` down to 0.
+     */
+    generation?: number | undefined;
+    /**
+     * Maximum number of messages to return for this page.
+     */
+    limit?: number | undefined;
+    /**
+     * Keyset cursor: return the page of messages with `seq` strictly less than this value (older messages). The returned `messages` are always ordered oldest to newest by `seq`, like every other response. Use the `seq` of the oldest message you currently hold to load the previous page. Ignored when `risk_only` is set. Mutually exclusive with `after_seq`; if both are supplied, `after_seq` takes precedence.
+     */
+    beforeSeq?: number | undefined;
+    /**
+     * Keyset cursor: return the page of messages with `seq` strictly greater than this value (newer messages). The returned `messages` are always ordered oldest to newest by `seq`. Use the `seq` of the newest message you currently hold to load the next page. Ignored when `risk_only` is set. Mutually exclusive with `before_seq`; if both are supplied, `after_seq` takes precedence.
+     */
+    afterSeq?: number | undefined;
+    /**
+     * When true, return the oldest page of the generation (the start of the thread), ordered oldest to newest, with `has_more_before=false`. Page forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`, or `risk_only` is set.
+     */
+    fromStart?: boolean | undefined;
+    /**
+     * When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). The flagged messages themselves are marked with `is_risk` on each `ChatMessage` (surrounding context is `is_risk: false`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.
+     */
+    riskOnly?: boolean | undefined;
+    /**
+     * When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
+     */
+    query?: string | undefined;
+    /**
+     * Session header
+     */
+    gramSession?: string | undefined;
+    /**
+     * project header
+     */
+    gramProject?: string | undefined;
+    /**
+     * Chat Sessions token header
+     */
+    gramChatSession?: string | undefined;
+};
+/** @internal */
+export type LoadChatSecurityOption1$Outbound = {
+    "project_slug_header_Gram-Project": string;
+    "session_header_Gram-Session": string;
+};
+/** @internal */
+export declare const LoadChatSecurityOption1$outboundSchema: z.ZodMiniType<LoadChatSecurityOption1$Outbound, LoadChatSecurityOption1>;
+export declare function loadChatSecurityOption1ToJSON(loadChatSecurityOption1: LoadChatSecurityOption1): string;
+/** @internal */
+export type LoadChatSecurityOption2$Outbound = {
+    "chat_sessions_token_header_Gram-Chat-Session": string;
+};
+/** @internal */
+export declare const LoadChatSecurityOption2$outboundSchema: z.ZodMiniType<LoadChatSecurityOption2$Outbound, LoadChatSecurityOption2>;
+export declare function loadChatSecurityOption2ToJSON(loadChatSecurityOption2: LoadChatSecurityOption2): string;
+/** @internal */
+export type LoadChatSecurity$Outbound = {
+    Option1?: LoadChatSecurityOption1$Outbound | undefined;
+    Option2?: LoadChatSecurityOption2$Outbound | undefined;
+};
+/** @internal */
+export declare const LoadChatSecurity$outboundSchema: z.ZodMiniType<LoadChatSecurity$Outbound, LoadChatSecurity>;
+export declare function loadChatSecurityToJSON(loadChatSecurity: LoadChatSecurity): string;
+/** @internal */
+export type LoadChatRequest$Outbound = {
+    id: string;
+    generation?: number | undefined;
+    limit: number;
+    before_seq?: number | undefined;
+    after_seq?: number | undefined;
+    from_start: boolean;
+    risk_only: boolean;
+    query?: string | undefined;
+    "Gram-Session"?: string | undefined;
+    "Gram-Project"?: string | undefined;
+    "Gram-Chat-Session"?: string | undefined;
+};
+/** @internal */
+export declare const LoadChatRequest$outboundSchema: z.ZodMiniType<LoadChatRequest$Outbound, LoadChatRequest>;
+export declare function loadChatRequestToJSON(loadChatRequest: LoadChatRequest): string;
+//# sourceMappingURL=loadchat.d.ts.map

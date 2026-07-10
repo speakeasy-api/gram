@@ -1,0 +1,30 @@
+import { MutationKey, UseMutationResult } from "@tanstack/react-query";
+import { GramCore } from "../core.js";
+import { RequestOptions } from "../lib/sdks.js";
+import { GramError } from "../models/errors/gramerror.js";
+import { ConnectionError, InvalidRequestError, RequestAbortedError, RequestTimeoutError, UnexpectedClientError } from "../models/errors/httpclienterrors.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import { RemoveOrganizationRemoteSessionClientFromMcpServerRequest, RemoveOrganizationRemoteSessionClientFromMcpServerSecurity } from "../models/operations/removeorganizationremotesessionclientfrommcpserver.js";
+import { MutationHookOptions } from "./_types.js";
+export type RemoveOrganizationRemoteSessionClientFromMcpServerMutationVariables = {
+    request: RemoveOrganizationRemoteSessionClientFromMcpServerRequest;
+    security?: RemoveOrganizationRemoteSessionClientFromMcpServerSecurity | undefined;
+    options?: RequestOptions;
+};
+export type RemoveOrganizationRemoteSessionClientFromMcpServerMutationData = void;
+export type RemoveOrganizationRemoteSessionClientFromMcpServerMutationError = ServiceError | GramError | ResponseValidationError | ConnectionError | RequestAbortedError | RequestTimeoutError | InvalidRequestError | UnexpectedClientError | SDKValidationError;
+/**
+ * removeClientFromMcpServer organizationRemoteSessionClients
+ *
+ * @remarks
+ * Detach a remote_session_client from an MCP server (clears the MCP server's user_session_issuer link) in the caller's organization. Requires org:admin.
+ */
+export declare function useRemoveOrganizationRemoteSessionClientFromMcpServerMutation(options?: MutationHookOptions<RemoveOrganizationRemoteSessionClientFromMcpServerMutationData, RemoveOrganizationRemoteSessionClientFromMcpServerMutationError, RemoveOrganizationRemoteSessionClientFromMcpServerMutationVariables>): UseMutationResult<RemoveOrganizationRemoteSessionClientFromMcpServerMutationData, RemoveOrganizationRemoteSessionClientFromMcpServerMutationError, RemoveOrganizationRemoteSessionClientFromMcpServerMutationVariables>;
+export declare function mutationKeyRemoveOrganizationRemoteSessionClientFromMcpServer(): MutationKey;
+export declare function buildRemoveOrganizationRemoteSessionClientFromMcpServerMutation(client$: GramCore, hookOptions?: RequestOptions): {
+    mutationKey: MutationKey;
+    mutationFn: (variables: RemoveOrganizationRemoteSessionClientFromMcpServerMutationVariables) => Promise<RemoveOrganizationRemoteSessionClientFromMcpServerMutationData>;
+};
+//# sourceMappingURL=removeOrganizationRemoteSessionClientFromMcpServer.d.ts.map
