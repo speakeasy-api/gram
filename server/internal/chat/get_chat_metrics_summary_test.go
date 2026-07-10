@@ -61,4 +61,16 @@ func TestGetChatMetricsSummaryUsesLatestResolution(t *testing.T) {
 	require.Equal(t, int64(1), result.TotalChats)
 	require.Equal(t, int64(1), result.ResolvedChats)
 	require.Zero(t, result.FailedChats)
+
+	emptyResult, err := queries.GetChatMetricsSummary(ctx, repo.GetChatMetricsSummaryParams{
+		ProjectID: ti.projectID,
+		TimeStart: pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		TimeEnd:   pgtype.Timestamptz{Time: now.Add(2 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Zero(t, emptyResult.TotalChats)
+	require.Zero(t, emptyResult.ResolvedChats)
+	require.Zero(t, emptyResult.FailedChats)
+	require.Zero(t, emptyResult.AvgSessionDurationMs)
+	require.Zero(t, emptyResult.AvgResolutionTimeMs)
 }

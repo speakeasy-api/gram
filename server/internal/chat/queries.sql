@@ -1113,37 +1113,37 @@ WHERE c.project_id = @project_id
   AND m.created_at <= @time_end;
 
 -- name: GetChatMetricsSummary :one
-WITH latest_resolutions AS MATERIALIZED (
-  SELECT DISTINCT ON (cr.chat_id)
-    cr.chat_id,
-    cr.resolution
-  FROM chat_resolutions cr
-  WHERE cr.project_id = @project_id
-  ORDER BY cr.chat_id, cr.created_at DESC
-),
-chat_stats AS (
+-- Aggregate the requested chat window first so resolution selection does not
+-- sort unrelated project history for empty or narrow windows.
+WITH chat_stats AS MATERIALIZED (
   SELECT
     c.id as chat_id,
-    MIN(m.created_at) as first_message_at,
-    MAX(m.created_at) as last_message_at,
-    EXTRACT(EPOCH FROM (MAX(m.created_at) - MIN(m.created_at))) * 1000 as duration_ms,
-    COALESCE(latest_resolutions.resolution, '') as resolution_status
+    EXTRACT(EPOCH FROM (MAX(m.created_at) - MIN(m.created_at))) * 1000 as duration_ms
   FROM chats c
   INNER JOIN chat_messages m ON m.chat_id = c.id
-  LEFT JOIN latest_resolutions ON latest_resolutions.chat_id = c.id
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND m.created_at >= @time_start
     AND m.created_at <= @time_end
-  GROUP BY c.id, latest_resolutions.resolution
+  GROUP BY c.id
+),
+latest_resolutions AS (
+  SELECT DISTINCT ON (cr.chat_id)
+    cr.chat_id,
+    cr.resolution
+  FROM chat_resolutions cr
+  INNER JOIN chat_stats cs ON cs.chat_id = cr.chat_id
+  WHERE cr.project_id = @project_id
+  ORDER BY cr.chat_id, cr.created_at DESC
 )
 SELECT
   COUNT(*)::bigint as total_chats,
-  COALESCE(SUM(CASE WHEN resolution_status = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
-  COALESCE(SUM(CASE WHEN resolution_status = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
-  COALESCE(AVG(duration_ms), 0)::double precision as avg_session_duration_ms,
-  COALESCE(AVG(CASE WHEN resolution_status != '' THEN duration_ms END), 0)::double precision as avg_resolution_time_ms
-FROM chat_stats;
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolutions.resolution, '') = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolutions.resolution, '') = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
+  COALESCE(AVG(chat_stats.duration_ms), 0)::double precision as avg_session_duration_ms,
+  COALESCE(AVG(CASE WHEN COALESCE(latest_resolutions.resolution, '') != '' THEN chat_stats.duration_ms END), 0)::double precision as avg_resolution_time_ms
+FROM chat_stats
+LEFT JOIN latest_resolutions ON latest_resolutions.chat_id = chat_stats.chat_id;
 
 -- name: CreateChatMessageWithToolCalls :exec
 -- Inserts a single chat_messages row with optional tool_calls JSON,
