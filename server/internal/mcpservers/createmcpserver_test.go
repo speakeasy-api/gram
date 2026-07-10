@@ -175,7 +175,9 @@ func TestCreateMcpServer_WithUserSessionIssuer(t *testing.T) {
 	require.Equal(t, issuerID, *result.UserSessionIssuerID)
 }
 
-func TestCreateMcpServer_RemoteRequiresUserSessionIssuer(t *testing.T) {
+// Remote-backed create without an issuer mints one in the same transaction —
+// the server can never exist without its lifetime issuer.
+func TestCreateMcpServer_RemoteMintsUserSessionIssuerWhenOmitted(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -185,7 +187,7 @@ func TestCreateMcpServer_RemoteRequiresUserSessionIssuer(t *testing.T) {
 
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
-	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+	result, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
 		SessionToken:      nil,
 		ApikeyToken:       nil,
 		ProjectSlugInput:  nil,
@@ -195,10 +197,12 @@ func TestCreateMcpServer_RemoteRequiresUserSessionIssuer(t *testing.T) {
 		ToolsetID:         nil,
 		Visibility:        types.McpServerVisibility("disabled"),
 	})
-	requireOopsCode(t, err, oops.CodeInvalid)
+	require.NoError(t, err)
+	require.NotNil(t, result.UserSessionIssuerID)
+	require.NotEmpty(t, *result.UserSessionIssuerID)
 }
 
-func TestCreateMcpServer_TunneledRequiresUserSessionIssuer(t *testing.T) {
+func TestCreateMcpServer_TunneledMintsUserSessionIssuerWhenOmitted(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -208,7 +212,7 @@ func TestCreateMcpServer_TunneledRequiresUserSessionIssuer(t *testing.T) {
 
 	tunneledServerID := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
-	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+	result, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
@@ -218,7 +222,9 @@ func TestCreateMcpServer_TunneledRequiresUserSessionIssuer(t *testing.T) {
 		ToolsetID:           nil,
 		Visibility:          types.McpServerVisibility("private"),
 	})
-	requireOopsCode(t, err, oops.CodeInvalid)
+	require.NoError(t, err)
+	require.NotNil(t, result.UserSessionIssuerID)
+	require.NotEmpty(t, *result.UserSessionIssuerID)
 }
 
 func TestCreateMcpServer_TunneledMcpRejectsPublicVisibility(t *testing.T) {

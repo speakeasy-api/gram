@@ -131,9 +131,6 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err := validateTunneledMCPVisibility(ids, payload.Visibility); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
-	if err := validateServerIssuerRequired(ids); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
-	}
 
 	// Generate the server ID up front so the slug can include its suffix and
 	// the row can be inserted in a single statement (no insert-then-update).
@@ -157,6 +154,17 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
+	}
+
+	// Remote- and tunneled-backed servers carry a user_session_issuer for
+	// their lifetime (mcp_servers_issuer_required_check). When the caller
+	// didn't supply one, mint it here in the same transaction as the server
+	// row so a failed create can never leak an orphan issuer.
+	if (ids.RemoteMcpServerID.Valid || ids.TunneledMcpServerID.Valid) && !ids.UserSessionIssuerID.Valid {
+		ids.UserSessionIssuerID, err = mintServerUserSessionIssuer(ctx, dbtx, *authCtx.ProjectID, slug)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "mint mcp server issuer").LogError(ctx, logger)
+		}
 	}
 
 	server, err := txRepo.CreateMCPServer(ctx, repo.CreateMCPServerParams{
@@ -737,17 +745,6 @@ func validateServerBackendExclusivity(remoteMcpServerID, tunneledMcpServerID, to
 func validateTunneledMCPVisibility(ids serverIDs, visibility types.McpServerVisibility) error {
 	if ids.TunneledMcpServerID.Valid && string(visibility) == VisibilityPublic {
 		return fmt.Errorf("tunneled MCP servers cannot be public")
-	}
-	return nil
-}
-
-// validateServerIssuerRequired mirrors the mcp_servers_issuer_required_check
-// DB constraint: remote- and tunneled-backed servers carry a
-// user_session_issuer attached at create time for the server's lifetime.
-// Toolset-backed servers are exempt (their issuer lives on the toolset).
-func validateServerIssuerRequired(ids serverIDs) error {
-	if (ids.RemoteMcpServerID.Valid || ids.TunneledMcpServerID.Valid) && !ids.UserSessionIssuerID.Valid {
-		return fmt.Errorf("user_session_issuer_id is required for remote and tunneled MCP servers")
 	}
 	return nil
 }

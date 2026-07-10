@@ -1,9 +1,5 @@
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
-import {
-  buildUserSessionResourceSlug,
-  DEFAULT_USER_SESSION_DURATION_HOURS,
-} from "@/lib/externalMcpUserSessions";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
 import { createDefaultMcpEndpoint } from "@/lib/mcpEndpoints";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -23,39 +19,6 @@ import {
   autoConfigureRemoteMcpAuth,
   type AutoConfigureAuthResult,
 } from "./autoConfigureAuth";
-
-type SdkClient = ReturnType<typeof useSdkClient>;
-
-// Mint the one permanent user_session_issuer a remote/tunneled-backed server
-// carries for its lifetime. Must run BEFORE mcpServers.create — the create API
-// requires the issuer up front and updates can never attach one later.
-async function mintUserSessionIssuer(
-  client: SdkClient,
-  baseSlug: string,
-): Promise<string> {
-  const userSessionIssuer = await client.userSessionIssuers.create({
-    createUserSessionIssuerForm: {
-      slug: buildUserSessionResourceSlug(baseSlug),
-      authnChallengeMode: "interactive",
-      sessionDurationHours: DEFAULT_USER_SESSION_DURATION_HOURS,
-    },
-  });
-  return userSessionIssuer.id;
-}
-
-async function deleteUserSessionIssuerQuietly(
-  client: SdkClient,
-  userSessionIssuerId: string,
-): Promise<void> {
-  try {
-    await client.userSessionIssuers.delete({ id: userSessionIssuerId });
-  } catch (cleanupError) {
-    console.info("Failed to clean up user session issuer after failure.", {
-      userSessionIssuerId,
-      cleanupError,
-    });
-  }
-}
 
 export type CreateRemoteMcpSourceVariables = {
   name?: string | undefined;
@@ -88,29 +51,22 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         },
       });
 
-      // Mint the server's permanent USI first — mcpServers.create requires it
-      // and updates can never attach one later.
-      const displayName = formatRemoteMcpDisplay(remoteMcpServer);
-      const userSessionIssuerId = await mintUserSessionIssuer(
-        client,
-        displayName,
-      );
-
       let mcpServer: McpServer;
       try {
+        // The backend mints the server's permanent user_session_issuer in the
+        // same transaction as the mcp_servers row, so there is nothing to
+        // pre-create or roll back here.
         mcpServer = await client.mcpServers.create({
           createMcpServerForm: {
             // mcp_servers.name is required; reuse the canonical
             // formatRemoteMcpDisplay fallback so the auto-linked row matches
             // what the dashboard shows for the source.
-            name: displayName,
+            name: formatRemoteMcpDisplay(remoteMcpServer),
             remoteMcpServerId: remoteMcpServer.id,
-            userSessionIssuerId,
             visibility: "disabled",
           },
         });
       } catch (linkError) {
-        await deleteUserSessionIssuerQuietly(client, userSessionIssuerId);
         try {
           await client.remoteMcp.deleteServer({ id: remoteMcpServer.id });
         } catch (rollbackError) {
@@ -200,31 +156,16 @@ export function useLinkMcpServerToRemote(): UseMutationResult<
 
   return useMutation({
     mutationFn: async ({ remoteMcpServer }) => {
-      // Mirror the create flow: mint the re-linked server's permanent USI
-      // before the create call, since it is required up front. Auto-config of
-      // the upstream client is intentionally left to the Authentication tab.
-      const displayName = formatRemoteMcpDisplay(remoteMcpServer);
-      const userSessionIssuerId = await mintUserSessionIssuer(
-        client,
-        displayName,
-      );
-
-      let mcpServer: McpServer;
-      try {
-        mcpServer = await client.mcpServers.create({
-          createMcpServerForm: {
-            name: displayName,
-            remoteMcpServerId: remoteMcpServer.id,
-            userSessionIssuerId,
-            visibility: "disabled",
-          },
-        });
-      } catch (createError) {
-        await deleteUserSessionIssuerQuietly(client, userSessionIssuerId);
-        throw createError instanceof Error
-          ? createError
-          : new Error(String(createError));
-      }
+      // The backend mints the re-linked server's permanent USI in the create
+      // transaction. Auto-config of the upstream client is intentionally left
+      // to the Authentication tab here.
+      const mcpServer = await client.mcpServers.create({
+        createMcpServerForm: {
+          name: formatRemoteMcpDisplay(remoteMcpServer),
+          remoteMcpServerId: remoteMcpServer.id,
+          visibility: "disabled",
+        },
+      });
 
       // Mirror the create flow: pre-stage a default endpoint. Best-effort.
       await createDefaultMcpEndpoint(client, mcpServer, orgSlug);

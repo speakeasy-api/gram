@@ -21,9 +21,11 @@ type CreateMcpServerRequestBody struct {
 	// The ID of the environment to associate with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
-	// authentication. Required for remote and tunneled backends — the issuer is
-	// attached for the server's lifetime and cannot be changed later.
-	// Toolset-backed servers must omit it (their issuer lives on the toolset).
+	// authentication. Remote- and tunneled-backed servers always carry one: omit
+	// it and the server mints a dedicated issuer in the same transaction. Either
+	// way the issuer is attached for the server's lifetime and cannot be changed
+	// later. Toolset-backed servers must omit it (their issuer lives on the
+	// toolset).
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
