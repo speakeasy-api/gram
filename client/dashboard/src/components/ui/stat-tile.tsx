@@ -3,9 +3,12 @@ import * as React from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
+/** @public — part of the component's prop API. */
 export type StatTileTone = "default" | "destructive" | "warning";
+/** @public — part of the component's prop API. */
 export type StatTileDeltaTone = "positive" | "negative" | "neutral";
 
+/** @public — part of the component's prop API. */
 export interface StatTileDelta {
   value: string;
   tone?: StatTileDeltaTone;

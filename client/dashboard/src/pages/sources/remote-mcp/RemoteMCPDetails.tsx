@@ -25,6 +25,7 @@ import {
   getRemoteMcpServerArgs,
   remoteMcpRouteParam,
 } from "@/lib/sources";
+import { toastError } from "@/lib/toast-error";
 import { useRoutes } from "@/routes";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
@@ -446,9 +447,7 @@ function McpServersEmptyState({
       await link.mutateAsync({ remoteMcpServer });
       toast.success("MCP server added");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to add MCP server";
-      toast.error(message);
+      toastError(error, "Failed to add MCP server");
     }
   };
 
@@ -564,9 +563,7 @@ function NameSection({
       ]);
       toast.success("Remote MCP name updated");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update name";
-      toast.error(message);
+      toastError(error, "Failed to update name");
     }
   };
 
@@ -679,9 +676,7 @@ function UrlSection({
       ]);
       toast.success("Remote MCP URL updated");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update URL";
-      toast.error(message);
+      toastError(error, "Failed to update URL");
     }
   };
 

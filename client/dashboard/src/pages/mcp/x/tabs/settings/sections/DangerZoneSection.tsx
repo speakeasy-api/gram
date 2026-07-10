@@ -2,6 +2,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
+import { toastError } from "@/lib/toast-error";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type {
@@ -96,9 +97,7 @@ export function DangerZoneSection({
   const [isFetchingLatestMcpServer, setIsFetchingLatestMcpServer] =
     useState(false);
   const notifyVisibilityUpdateError = (error: unknown) => {
-    toast.error(
-      error instanceof Error ? error.message : "Failed to update MCP server",
-    );
+    toastError(error, "Failed to update MCP server");
   };
   const updateVisibility = useUpdateMcpServerMutation({
     onSuccess: async (_data, variables) => {
@@ -312,9 +311,7 @@ function DeleteMcpServerDialogContent({
       onSuccess();
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to delete MCP server",
-      );
+      toastError(error, "Failed to delete MCP server");
     },
   });
 

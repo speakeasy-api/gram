@@ -46,6 +46,7 @@ import { useProductTier } from "@/hooks/useProductTier";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { isNotFoundError } from "@/lib/route-errors";
+import { toastError } from "@/lib/toast-error";
 import { Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import { PromptsTabContent } from "@/pages/toolsets/PromptsTab";
@@ -591,9 +592,7 @@ function RenameMCPServerButton({ toolset }: { toolset: Toolset }) {
           setIsOpen(false);
         },
         onError: (error) => {
-          toast.error(
-            error instanceof Error ? error.message : "Failed to rename server",
-          );
+          toastError(error, "Failed to rename server");
         },
       },
     );
@@ -804,11 +803,7 @@ function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
           toast.success(label);
         },
         onError: (error) => {
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : "Failed to update server status",
-          );
+          toastError(error, "Failed to update server status");
         },
       },
     );
@@ -2281,11 +2276,7 @@ export function GramOAuthProxyModal({
     },
     onError: (error) => {
       console.error("Failed to configure Platform OAuth:", error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to configure Platform OAuth",
-      );
+      toastError(error, "Failed to configure Platform OAuth");
     },
   });
 

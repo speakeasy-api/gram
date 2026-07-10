@@ -32,7 +32,6 @@ const badgeSizes = ["sm", "md", "lg"] as const;
 export type BadgeSize = (typeof badgeSizes)[number];
 
 // Generic
-export type Orientation = "horizontal" | "vertical";
 
 export const sizes = ["small", "medium", "large", "xl", "2xl"] as const;
 export type Size = (typeof sizes)[number];

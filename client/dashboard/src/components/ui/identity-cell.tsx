@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getInitials } from "@/lib/initials";
 import { cn } from "@/lib/utils";
 
+/** @public — part of the component's prop API. */
 export type IdentityCellSize = "sm" | "md";
 
 export interface IdentityCellProps {

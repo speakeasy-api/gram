@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+/** @public — part of the component's prop API. */
 export type StatusDotTone =
   | "success"
   | "warning"
@@ -31,6 +32,7 @@ export type StatusDotTone =
  * "all statuses" map here) keeps each domain's status vocabulary and tone
  * choice in exactly one file.
  */
+/** @public — the per-domain status map convention. */
 export interface StatusPresentation {
   label: string;
   tone: StatusDotTone;

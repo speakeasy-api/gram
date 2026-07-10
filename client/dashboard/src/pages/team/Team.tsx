@@ -13,6 +13,7 @@ import {
 import { Type } from "@/components/ui/type";
 import { useOrganization, useUser } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
+import { toastError } from "@/lib/toast-error";
 import { formatDistanceToNow } from "date-fns";
 import { z } from "zod";
 import {
@@ -204,17 +205,13 @@ function TeamInner() {
 
   const inviteMutation = useSendInviteMutation({
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to send invite",
-      );
+      toastError(error, "Failed to send invite");
     },
   });
 
   const removeMemberMutation = useRemoveOrganizationUserMutation({
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to remove member",
-      );
+      toastError(error, "Failed to remove member");
     },
   });
 

@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+/** @public — part of the component's prop API. */
 export type ProgressTone =
   | "neutral"
   | "success"
@@ -62,6 +63,7 @@ export function Progress({
   );
 }
 
+/** @public — part of the component's prop API. */
 export interface UsageMeterLabels {
   /** Left-aligned mono caption, e.g. "420 used". */
   primary?: React.ReactNode;

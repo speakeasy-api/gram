@@ -41,6 +41,7 @@ export type TimeseriesSeries = {
   color?: string;
 };
 
+/** @public — part of the component's prop API. */
 export type TimeseriesMode = "line" | "area" | "stacked-bar" | "bar-with-trend";
 
 export type TimeseriesProps = {

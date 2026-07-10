@@ -2,6 +2,7 @@ import { RequireScope } from "@/components/require-scope";
 import { DotRow } from "@/components/ui/dot-row";
 import { DotTable } from "@/components/ui/dot-table";
 import { Type } from "@/components/ui/type";
+import { toastError } from "@/lib/toast-error";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import {
   invalidateAllOrganizationRemoteSessionClientSessions,
@@ -40,9 +41,7 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
       toast.success("Session revoked");
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to revoke session",
-      );
+      toastError(error, "Failed to revoke session");
     },
   });
 
@@ -54,9 +53,7 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
       toast.success("Session refreshed");
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to refresh session",
-      );
+      toastError(error, "Failed to refresh session");
     },
   });
 

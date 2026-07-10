@@ -5,6 +5,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { toastError } from "@/lib/toast-error";
 import { useOrgRoutes } from "@/routes";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
@@ -95,9 +96,7 @@ function SetupStepButton({ step }: { step: "connect-idp" | "directory-sync" }) {
 function SSOConfigureButton() {
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to start SSO setup",
-      );
+      toastError(error, "Failed to start SSO setup");
     },
   });
 
@@ -142,11 +141,7 @@ function SSOConfigureButton() {
 function DirectorySyncConfigureButton() {
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to start Directory Sync setup",
-      );
+      toastError(error, "Failed to start Directory Sync setup");
     },
   });
 

@@ -36,6 +36,7 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Kbd } from "@/components/ui/kbd";
+import { getInitials } from "@/lib/initials";
 import {
   useHideInsightsDock,
   useInsightsState,
@@ -611,25 +612,6 @@ function RecentEntryView({ entry }: { entry: RecentEntry }): ReactElement {
   return <RecentRow chat={entry.chat} pinned={false} />;
 }
 
-/**
- * Two-letter initials from a display name or email handle: first letter of
- * the first and last word for a multi-word name ("Adam Bull" -> "AB"), or
- * the first two characters of the email's local part / a single-word name
- * otherwise ("adam@..." -> "AD").
- */
-function initialsOf(identifier: string): string {
-  const handle = identifier.includes("@")
-    ? (identifier.split("@")[0] ?? identifier)
-    : identifier;
-  const words = handle.trim().split(/\s+/).filter(Boolean);
-  if (words.length >= 2) {
-    return (
-      words[0]!.charAt(0) + words[words.length - 1]!.charAt(0)
-    ).toUpperCase();
-  }
-  return handle.trim().slice(0, 2).toUpperCase();
-}
-
 // Row icon: the chat creator's avatar when it resolves against the org
 // member list, otherwise the default message icon (e.g. chats with no
 // internal user attached, or before members have loaded). Chats started from
@@ -656,7 +638,7 @@ function RecentRowIcon({
           <AvatarImage src={member.photoUrl} alt={display} />
         ) : null}
         <AvatarFallback className="border-border bg-card text-muted-foreground border text-xs font-medium">
-          {initialsOf(display)}
+          {getInitials(display)}
         </AvatarFallback>
       </Avatar>
     );

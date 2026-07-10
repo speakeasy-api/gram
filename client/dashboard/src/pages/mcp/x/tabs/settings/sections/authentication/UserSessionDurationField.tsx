@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toastError } from "@/lib/toast-error";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useUpdateUserSessionIssuerMutation } from "@gram/client/react-query/updateUserSessionIssuer.js";
 import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
@@ -78,11 +79,7 @@ export function UserSessionDurationField({
       toast.success("Session duration updated");
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update session duration",
-      );
+      toastError(error, "Failed to update session duration");
     },
   });
 

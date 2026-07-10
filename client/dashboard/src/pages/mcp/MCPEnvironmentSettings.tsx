@@ -10,6 +10,7 @@ import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
+import { toastError } from "@/lib/toast-error";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components/mcpenvironmentconfiginput.js";
@@ -214,9 +215,7 @@ export function MCPAuthenticationTab({
       });
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to create environment",
-      );
+      toastError(error, "Failed to create environment");
     },
   });
 
@@ -233,11 +232,7 @@ export function MCPAuthenticationTab({
       });
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update attached environment",
-      );
+      toastError(error, "Failed to update attached environment");
     },
   });
 
@@ -649,9 +644,7 @@ export function MCPAuthenticationTab({
 
       toast.success(`Saved ${varsToSave.length} variable(s)`);
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to save variables",
-      );
+      toastError(error, "Failed to save variables");
       return;
     }
 

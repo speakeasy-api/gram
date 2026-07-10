@@ -31,7 +31,6 @@ export {
   type MoonshineConfigProviderProps as ThemeProviderProps,
 } from "@/components/ui/moonshine/context/ConfigContext";
 export { useConfig as useTheme } from "@/components/ui/moonshine/hooks/useConfig";
-export { type Theme } from "@/components/ui/moonshine/hooks/useTheme";
 export { Alert } from "@/components/ui/moonshine/components/Alert";
 export {
   Table,

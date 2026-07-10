@@ -4,6 +4,7 @@ import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-que
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { StepContainer } from "../step-container";
+import { toastError } from "@/lib/toast-error";
 import { getServerURL } from "@/lib/utils";
 
 interface DirectorySyncStepProps {
@@ -21,11 +22,7 @@ export function DirectorySyncStep({
 
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to launch directory sync portal",
-      );
+      toastError(error, "Failed to launch directory sync portal");
     },
   });
 

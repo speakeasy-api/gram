@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { StepContainer } from "../step-container";
 import { IDP_PROVIDERS } from "../../providers";
 import type { IdpProvider } from "../../types";
+import { toastError } from "@/lib/toast-error";
 import { cn, getServerURL } from "@/lib/utils";
 
 function ProviderIcon({
@@ -64,11 +65,7 @@ export function ConnectIdpStep({
 
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to launch SSO setup portal",
-      );
+      toastError(error, "Failed to launch SSO setup portal");
     },
   });
 

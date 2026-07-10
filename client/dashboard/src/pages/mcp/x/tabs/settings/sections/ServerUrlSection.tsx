@@ -15,6 +15,7 @@ import { Type } from "@/components/ui/type";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useCustomDomains } from "@/hooks/useToolsetUrl";
+import { toastError } from "@/lib/toast-error";
 import { getServerURL } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
@@ -252,9 +253,7 @@ function AddressRow({
       toast.success("Address updated");
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to update address",
-      );
+      toastError(error, "Failed to update address");
     },
   });
   const remove = useDeleteMcpEndpointMutation({
@@ -263,9 +262,7 @@ function AddressRow({
       toast.success("Address removed");
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to remove address",
-      );
+      toastError(error, "Failed to remove address");
     },
   });
   const slugError = useMcpEndpointSlugValidation(

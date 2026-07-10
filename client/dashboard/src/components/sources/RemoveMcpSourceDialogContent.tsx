@@ -3,6 +3,7 @@ import { LinkedMcpServerRow } from "@/components/sources/LinkedMcpServerRow";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { Alert, Button, Input } from "@/components/ui/moonshine";
 import { Dialog } from "@/components/ui/dialog";
+import { toastError } from "@/lib/toast-error";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -56,8 +57,7 @@ export function RemoveMcpSourceDialogContent({
       toast.success(successMessage);
       onSuccess();
     } catch (error) {
-      const message = error instanceof Error ? error.message : failureMessage;
-      toast.error(message);
+      toastError(error, failureMessage);
     }
   };
 

@@ -3,6 +3,7 @@ import { DotRow } from "@/components/ui/dot-row";
 import { DotTable } from "@/components/ui/dot-table";
 import { Type } from "@/components/ui/type";
 import { useSlugs } from "@/contexts/Sdk";
+import { toastError } from "@/lib/toast-error";
 import { cn } from "@/lib/utils";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
 import type { OrganizationMcpServer } from "@gram/client/models/components/organizationmcpserver.js";
@@ -52,11 +53,7 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
       toast.success("Removed client from MCP server");
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to remove client from MCP server",
-      );
+      toastError(error, "Failed to remove client from MCP server");
     },
   });
 

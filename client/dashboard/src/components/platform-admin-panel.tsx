@@ -1,6 +1,7 @@
 import { Input } from "@/components/ui/moonshine";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { toastError } from "@/lib/toast-error";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useDisableRBACMutation } from "@gram/client/react-query/disableRBAC.js";
 import { useEnableRBACMutation } from "@gram/client/react-query/enableRBAC.js";
@@ -355,9 +356,7 @@ function OnboardingSection(): ReactElement {
       setEmailsInput("");
     },
     onError: (err) => {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to send onboarding email",
-      );
+      toastError(err, "Failed to send onboarding email");
     },
   });
 

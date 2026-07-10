@@ -1,6 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
+import { toastError } from "@/lib/toast-error";
 import { useOrgRoutes } from "@/routes";
 import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
@@ -44,9 +45,7 @@ export function SettingsTab({
       toast.success("Client updated");
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to update client",
-      );
+      toastError(error, "Failed to update client");
     },
   });
 

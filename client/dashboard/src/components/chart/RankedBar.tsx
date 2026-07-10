@@ -20,6 +20,7 @@ export type RankedBarItem = {
   active?: boolean;
 };
 
+/** @public — part of the component's prop API. */
 export type RankedBarColorMode = "single" | "rank-gradient";
 
 export type RankedBarProps = {

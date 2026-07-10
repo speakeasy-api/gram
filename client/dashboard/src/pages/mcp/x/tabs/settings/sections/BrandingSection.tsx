@@ -6,6 +6,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { mcpServerRouteParam } from "@/lib/sources";
+import { toastError } from "@/lib/toast-error";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
@@ -78,9 +79,7 @@ export function BrandingSection({
       ]);
       toast.success("MCP server updated");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update MCP server";
-      toast.error(message);
+      toastError(error, "Failed to update MCP server");
     }
   };
 

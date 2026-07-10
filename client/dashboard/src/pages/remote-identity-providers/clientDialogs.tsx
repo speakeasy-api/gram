@@ -4,6 +4,7 @@ import { invalidateAllOrganizationRemoteSessionClientSessions } from "@gram/clie
 import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { useRevokeAllOrganizationRemoteSessionClientSessionsMutation } from "@gram/client/react-query/revokeAllOrganizationRemoteSessionClientSessions.js";
+import { toastError } from "@/lib/toast-error";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -40,9 +41,7 @@ export function DeleteClientDialog({
       onClose();
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to delete client",
-      );
+      toastError(error, "Failed to delete client");
     },
   });
 
@@ -96,9 +95,7 @@ export function RevokeAllSessionsDialog({
         onClose();
       },
       onError: (error) => {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to revoke sessions",
-        );
+        toastError(error, "Failed to revoke sessions");
       },
     },
   );

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
+import { toastError } from "@/lib/toast-error";
 import { useOrgRoutes } from "@/routes";
 import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/components/organizationremotesessionissuer.js";
 import { useDeleteOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/deleteOrganizationRemoteSessionIssuer.js";
@@ -89,9 +90,7 @@ function RemoteIdentityProvidersOverview() {
       toast.success("Provider is now organizational");
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to move provider",
-      );
+      toastError(error, "Failed to move provider");
     },
   });
 
@@ -466,11 +465,7 @@ export function DeleteIssuerDialog({
       onClose();
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to delete identity provider",
-      );
+      toastError(error, "Failed to delete identity provider");
     },
   });
 

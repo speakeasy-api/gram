@@ -13,6 +13,7 @@ import {
   trendDirection,
 } from "./sparkline-math";
 
+/** @public — part of the component's prop API. */
 export type SparklineMode = "line" | "area";
 
 export type SparklineProps = {

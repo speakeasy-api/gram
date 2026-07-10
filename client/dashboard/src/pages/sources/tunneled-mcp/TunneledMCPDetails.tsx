@@ -23,6 +23,7 @@ import {
   formatTunneledMcpDisplay,
   getTunneledMcpServerArgs,
 } from "@/lib/sources";
+import { toastError } from "@/lib/toast-error";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -586,9 +587,7 @@ function McpServersEmptyState({
       await link.mutateAsync({ tunneledMcpServer });
       toast.success("MCP server added");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to add MCP server";
-      toast.error(message);
+      toastError(error, "Failed to add MCP server");
     }
   };
 
@@ -692,9 +691,7 @@ function NameSection({
       ]);
       toast.success("Tunneled MCP name updated");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update name";
-      toast.error(message);
+      toastError(error, "Failed to update name");
     }
   };
 
@@ -768,9 +765,7 @@ function TunnelKeySection({
       setRotatedKey(result);
       toast.success("Tunnel key rotated");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to rotate tunnel key";
-      toast.error(message);
+      toastError(error, "Failed to rotate tunnel key");
     }
   };
 

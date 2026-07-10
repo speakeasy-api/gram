@@ -1,6 +1,6 @@
 import type { TimeseriesSeries } from "@/components/chart/Timeseries";
 
-export function bucketStartNsToMs(bucketStartNs: string): number | null {
+function bucketStartNsToMs(bucketStartNs: string): number | null {
   try {
     const ms = Number(BigInt(bucketStartNs) / 1_000_000n);
     return Number.isFinite(ms) ? ms : null;

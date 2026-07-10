@@ -12,6 +12,7 @@ import { RequireScope } from "@/components/require-scope";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { getMcpServerArgs } from "@/lib/sources";
+import { toastError } from "@/lib/toast-error";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type {
@@ -320,11 +321,7 @@ function MCPServerStatusDropdown({ server }: { server: McpServer }) {
       );
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update server visibility",
-      );
+      toastError(error, "Failed to update server visibility");
     },
   });
 

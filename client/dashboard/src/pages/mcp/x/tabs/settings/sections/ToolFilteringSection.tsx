@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toastError } from "@/lib/toast-error";
 import { toolVariationsGroupDisplayName } from "@/lib/toolVariationGroups";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useCreateGlobalToolVariationGroupMutation } from "@gram/client/react-query/createGlobalToolVariationGroup.js";
@@ -46,11 +47,7 @@ export function ToolFilteringSection({
   }, [currentValue]);
 
   const notifyError = (error: unknown) =>
-    toast.error(
-      error instanceof Error
-        ? error.message
-        : "Failed to update tool filtering settings",
-    );
+    toastError(error, "Failed to update tool filtering settings");
 
   const updateMcpServer = useUpdateMcpServerMutation({
     onSuccess: async () => {
@@ -93,10 +90,7 @@ export function ToolFilteringSection({
       // single click rather than leaving the user on "Disabled".
       applyGroup(data.group.id);
     },
-    onError: (error) =>
-      toast.error(
-        error instanceof Error ? error.message : "Failed to create tool group",
-      ),
+    onError: (error) => toastError(error, "Failed to create tool group"),
   });
 
   const isSaving = updateMcpServer.isPending || createGroup.isPending;

@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+/** @public — part of the component's prop API. */
 export type DetailListOrientation = "stacked" | "inline";
 
 const DetailListOrientationContext =
@@ -40,6 +41,7 @@ function DetailListRoot({
   );
 }
 
+/** @public — part of the component's prop API. */
 export interface DetailListItemProps extends React.ComponentProps<"div"> {
   label: React.ReactNode;
   value: React.ReactNode;
