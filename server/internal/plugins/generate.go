@@ -2221,21 +2221,34 @@ gram_hooks_post_authenticated() {
       GRAM_HTTP_CODE="$first_status"
       return 78
     fi
-    # The wiped cache held this machine's only identity: the org key never
-    # attributes to its owner, and the canonical payload was built before
-    # the cache was cleared. The first prepare_auth exported the cached
-    # login email, so stamp it into source.user_email rather than sending
-    # the recovered event unattributed. Only source.user_email drives
-    # attribution, and the raw provider payload can mention user_email
-    # (e.g. empty on Cursor events) without the source member being set —
-    # so the already-stamped check reads the source object alone.
+    # The wiped cache held this machine's authenticated identity: the org
+    # key never attributes to its owner, and the canonical payload was built
+    # before the cache was cleared. The first prepare_auth exported the
+    # cached login email, so stamp it into source.user_email — replacing a
+    # self-reported provider email, not just filling an absent one. Under
+    # the personal key an unresolvable self-reported email fell back to the
+    # key owner (this same login identity); the shared org key has no owner
+    # fallback, so deferring to a provider email that resolves to no Gram
+    # user would run user-scoped policies with an empty user exactly on
+    # stale-cache recovery. The source object is machine-built by
+    # gram_hooks_build_canonical_payload with user_email as its final
+    # member, so the rewrite is positional, not a payload-wide search: the
+    # raw section keeps the provider's own user_email untouched.
     if [ -n "${GRAM_HOOKS_AUTH_EMAIL:-}" ]; then
-      local stamped_email stamped_rest stamped_source
+      local stamped_email stamped_rest stamped_source stamped_head
+      stamped_email="$(printf '%s' "$GRAM_HOOKS_AUTH_EMAIL" | gram_hooks_json_escape_string)"
       stamped_source="${payload%%'},"event":{'*}"
       case "$stamped_source" in
-        *'"user_email"'*) ;;
+        *'"user_email":"'*)
+          stamped_head="${stamped_source%',"user_email":"'*}"
+          if [ "$stamped_head" != "$stamped_source" ]; then
+            stamped_rest="${payload#"$stamped_source"}"
+            payload="${stamped_head}"',"user_email":"'"$stamped_email"'"'"$stamped_rest"
+          else
+            echo "Speakeasy hooks: unexpected canonical source; org-key retry keeps the self-reported user_email." >&2
+          fi
+          ;;
         *)
-          stamped_email="$(printf '%s' "$GRAM_HOOKS_AUTH_EMAIL" | gram_hooks_json_escape_string)"
           stamped_rest="${payload#'{"schema_version":"hook.ingest.v1","source":{'}"
           if [ "$stamped_rest" != "$payload" ]; then
             payload='{"schema_version":"hook.ingest.v1","source":{"user_email":"'"$stamped_email"'",'"$stamped_rest"

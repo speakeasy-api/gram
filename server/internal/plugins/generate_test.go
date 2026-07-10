@@ -1603,6 +1603,91 @@ fi
 		"the org-key retry must stamp the cached login email into source.user_email")
 }
 
+// TestRenderHookScriptClaudeOrgKeyRetryReplacesSelfReportedEmail verifies the
+// org-key retry replaces a provider-supplied source.user_email with the wiped
+// cache's login identity rather than deferring to it. The personal key's
+// server-side owner fallback covered an unresolvable self-reported email; the
+// shared org key has no owner fallback, so a personal provider account email
+// that matches no Gram user would leave user-scoped policies keying an empty
+// user exactly on stale-cache recovery. The raw section must keep the
+// provider's own value.
+func TestRenderHookScriptClaudeOrgKeyRetryReplacesSelfReportedEmail(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_org_key_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "requests.txt")
+	require.NoError(t, os.WriteFile(hookPath, renderHookScript(cfg, "claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.sh"), renderSharedAuthScript(), 0o755))
+	// 401 the stale cached key, 200 the org key.
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "curl"), []byte(`#!/usr/bin/env bash
+url=""
+config=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --config) config="$2"; cat "$2" >> "$GRAM_CAPTURE_REQUESTS"; shift 2 ;;
+    -H|-w|-X|--data-binary|--max-time) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+payload="$(cat)"
+printf '%s\n---GRAM---\n' "$payload" >> "$GRAM_CAPTURE_PAYLOADS"
+printf '%s\n' "$url" >> "$GRAM_CAPTURE_REQUESTS"
+if [ -n "$config" ] && grep -q "gram_local_org_key_xyz" "$config"; then
+  printf '{}\n200'
+else
+  printf '{"message":"unauthorized: api_key not found"}\n401'
+fi
+`), 0o755))
+
+	authFile := filepath.Join(dir, "auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://app.getgram.ai\napi_key=gram_stale_cached_key\nproject=acme-prod\nemail=dev@example.com\n"), 0o600))
+	require.NoError(t, os.WriteFile(authFile+".established", nil, 0o600))
+	payloadsPath := filepath.Join(dir, "payloads.txt")
+	env := hookAuthTestEnv(dir,
+		"GRAM_CAPTURE_REQUESTS="+capturePath,
+		"GRAM_CAPTURE_PAYLOADS="+payloadsPath,
+		"GRAM_HOOKS_AUTH_FILE="+authFile,
+	)
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-stale-cache-replace","prompt":"hi","user_email":"personal@gmail.example"}`)
+	cmd.Env = env
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), "stale cached key must recover through the org key: %s", stderr.String())
+
+	payloads := strings.Split(string(requireFileBytes(t, payloadsPath)), "\n---GRAM---\n")
+	require.GreaterOrEqual(t, len(payloads), 2)
+
+	firstSource, _, ok := strings.Cut(payloads[0], `},"event":{`)
+	require.True(t, ok)
+	require.Contains(t, firstSource, `"user_email":"personal@gmail.example"`,
+		"the first attempt carries the provider's self-reported email; the personal key's owner fallback covers it")
+
+	retrySource, _, ok := strings.Cut(payloads[1], `},"event":{`)
+	require.True(t, ok)
+	require.Contains(t, retrySource, `"user_email":"dev@example.com"`,
+		"the org-key retry must replace the self-reported email with the cached login identity")
+	require.NotContains(t, retrySource, "personal@gmail.example",
+		"the unresolvable provider email must not survive in source on the org-key retry")
+	require.Contains(t, payloads[1], `"user_email":"personal@gmail.example"`,
+		"the raw section must keep the provider's own user_email untouched")
+}
+
 // TestRenderHookScriptClaudeRejectedCachedKeyStillBlocksToolUse verifies that
 // stale-cache recovery is not a general bypass: after clearing the rejected
 // cached token, blocking non-prompt events still fail closed.
