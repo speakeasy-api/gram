@@ -9,14 +9,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
-import type { HeaderInput } from "@gram/client/models/components/headerinput.js";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
+import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
+import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
 import {
-  invalidateAllGetRemoteMcpServer,
-  useGetRemoteMcpServer,
-} from "@gram/client/react-query/getRemoteMcpServer.js";
-import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
-import { useUpdateRemoteMcpServerMutation } from "@gram/client/react-query/updateRemoteMcpServer.js";
+  invalidateAllRemoteMcpServerHeaders,
+  useRemoteMcpServerHeaders,
+} from "@gram/client/react-query/remoteMcpServerHeaders.js";
+import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2 } from "lucide-react";
@@ -29,6 +29,8 @@ type HeaderSource = "static" | "environment" | "request";
 
 type HeaderDraft = {
   key: string;
+  /** Set for headers that already exist on the server. */
+  id?: string;
   name: string;
   source: HeaderSource;
   staticValue: string;
@@ -54,6 +56,7 @@ function headerDraftFromServer(header: RemoteMcpServerHeader): HeaderDraft {
 
   return {
     key: header.id,
+    id: header.id,
     name: header.name,
     source,
     staticValue:
@@ -65,43 +68,6 @@ function headerDraftFromServer(header: RemoteMcpServerHeader): HeaderDraft {
   };
 }
 
-function headerDraftToInput(draft: HeaderDraft): HeaderInput {
-  const base: HeaderInput = {
-    name: draft.name.trim(),
-    isRequired: draft.isRequired,
-  };
-
-  if (draft.source === "request") {
-    return {
-      ...base,
-      isSecret: false,
-      valueFromRequestHeader: draft.valueFromRequestHeader.trim(),
-    };
-  }
-
-  if (draft.source === "environment") {
-    return {
-      ...base,
-      isSecret: false,
-      value: "",
-    };
-  }
-
-  const trimmedValue = draft.staticValue.trim();
-  if (draft.isSecret && trimmedValue === "" && draft.hadSecret) {
-    return {
-      ...base,
-      isSecret: true,
-    };
-  }
-
-  return {
-    ...base,
-    isSecret: draft.isSecret,
-    value: draft.staticValue,
-  };
-}
-
 function draftsEqual(a: HeaderDraft[], b: HeaderDraft[]): boolean {
   if (a.length !== b.length) return false;
   for (let index = 0; index < a.length; index += 1) {
@@ -109,6 +75,7 @@ function draftsEqual(a: HeaderDraft[], b: HeaderDraft[]): boolean {
     const other = b[index];
     if (!draft || !other) return false;
     if (
+      draft.id !== other.id ||
       draft.name !== other.name ||
       draft.source !== other.source ||
       draft.staticValue !== other.staticValue ||
@@ -164,17 +131,63 @@ function newHeaderDraft(): HeaderDraft {
   };
 }
 
+type HeaderWriteFields = {
+  name: string;
+  isRequired: boolean;
+  isSecret?: boolean;
+  value?: string;
+  valueFromRequestHeader?: string;
+};
+
+function headerDraftToWriteFields(draft: HeaderDraft): HeaderWriteFields {
+  const base = {
+    name: draft.name.trim(),
+    isRequired: draft.isRequired,
+  };
+
+  if (draft.source === "request") {
+    return {
+      ...base,
+      isSecret: false,
+      valueFromRequestHeader: draft.valueFromRequestHeader.trim(),
+    };
+  }
+
+  if (draft.source === "environment") {
+    // Empty non-null value is the env-source sentinel (ADR-0002).
+    return {
+      ...base,
+      isSecret: false,
+      value: "",
+    };
+  }
+
+  const trimmedValue = draft.staticValue.trim();
+  if (draft.isSecret && trimmedValue === "" && draft.hadSecret) {
+    return {
+      ...base,
+      isSecret: true,
+    };
+  }
+
+  return {
+    ...base,
+    isSecret: draft.isSecret,
+    value: draft.staticValue,
+  };
+}
+
 export function HeadersSection({
   remoteMcpServerId,
 }: {
   remoteMcpServerId: string;
 }): JSX.Element {
-  const remoteMcpQuery = useGetRemoteMcpServer(
-    { id: remoteMcpServerId },
+  const headersQuery = useRemoteMcpServerHeaders(
+    { remoteMcpServerId },
     undefined,
     { enabled: remoteMcpServerId !== "" },
   );
-  const initialHeaders = remoteMcpQuery.data?.headers ?? [];
+  const initialHeaders = headersQuery.data?.headers ?? [];
 
   const initialDrafts = useMemo(
     () => initialHeaders.map(headerDraftFromServer),
@@ -187,38 +200,83 @@ export function HeadersSection({
   }, [initialDrafts]);
 
   const queryClient = useQueryClient();
-  const update = useUpdateRemoteMcpServerMutation();
+  const createHeader = useCreateRemoteMcpServerHeaderMutation();
+  const updateHeader = useUpdateRemoteMcpServerHeaderMutation();
+  const deleteHeader = useDeleteRemoteMcpServerHeaderMutation();
 
   const validationError = validateDrafts(drafts);
   const dirty = !draftsEqual(drafts, initialDrafts);
+  const saving =
+    createHeader.isPending || updateHeader.isPending || deleteHeader.isPending;
   const saveDisabled =
-    !dirty ||
-    update.isPending ||
-    validationError !== null ||
-    remoteMcpQuery.isLoading;
+    !dirty || saving || validationError !== null || headersQuery.isLoading;
 
   const handleSave = async () => {
     if (validationError) return;
+
+    const initialById = new Map(
+      initialDrafts
+        .filter((draft): draft is HeaderDraft & { id: string } => !!draft.id)
+        .map((draft) => [draft.id, draft]),
+    );
+    const keptIds = new Set(
+      drafts.flatMap((draft) => (draft.id ? [draft.id] : [])),
+    );
+
     try {
-      await update.mutateAsync({
-        request: {
-          updateServerForm: {
-            id: remoteMcpServerId,
-            headers: drafts.map(headerDraftToInput),
+      for (const draft of initialDrafts) {
+        if (draft.id && !keptIds.has(draft.id)) {
+          await deleteHeader.mutateAsync({
+            request: { id: draft.id },
+          });
+        }
+      }
+
+      for (const draft of drafts) {
+        const fields = headerDraftToWriteFields(draft);
+        if (!draft.id) {
+          await createHeader.mutateAsync({
+            request: {
+              createServerHeaderForm: {
+                remoteMcpServerId,
+                ...fields,
+              },
+            },
+          });
+          continue;
+        }
+
+        const initial = initialById.get(draft.id);
+        if (!initial || draftsEqual([draft], [initial])) {
+          continue;
+        }
+
+        await updateHeader.mutateAsync({
+          request: {
+            updateServerHeaderForm: {
+              id: draft.id,
+              ...fields,
+            },
           },
-        },
+        });
+      }
+
+      await invalidateAllRemoteMcpServerHeaders(queryClient, {
+        refetchType: "all",
       });
-      await Promise.all([
-        invalidateAllGetRemoteMcpServer(queryClient, { refetchType: "all" }),
-        invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
-      ]);
       toast.success("Upstream headers updated");
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to update headers";
       toast.error(message);
+      await invalidateAllRemoteMcpServerHeaders(queryClient, {
+        refetchType: "all",
+      });
     }
   };
+
+  const mutationError =
+    createHeader.error ?? updateHeader.error ?? deleteHeader.error;
 
   return (
     <div className="rounded-lg border p-6">
@@ -226,12 +284,13 @@ export function HeadersSection({
         Upstream Headers
       </Type>
       <Type muted small className="mb-4">
-        Headers sent to the remote MCP URL. Choose &ldquo;From environment&rdquo;
-        to fill the value from the environment attached to an MCP server that
-        fronts this source (header name must match the environment variable).
+        Headers sent to the remote MCP URL. Choose &ldquo;From
+        environment&rdquo; to fill the value from the environment attached to an
+        MCP server that fronts this source (header name must match the
+        environment variable).
       </Type>
       <Stack gap={4}>
-        {remoteMcpQuery.isLoading ? (
+        {headersQuery.isLoading ? (
           <Type muted small>
             Loading headers…
           </Type>
@@ -268,9 +327,9 @@ export function HeadersSection({
           </Type>
         ) : null}
 
-        {update.isError ? (
+        {mutationError ? (
           <Alert variant="error" dismissible={false}>
-            {update.error.message}
+            {mutationError.message}
           </Alert>
         ) : null}
 
@@ -278,7 +337,7 @@ export function HeadersSection({
           <Button
             variant="secondary"
             size="md"
-            disabled={remoteMcpQuery.isLoading}
+            disabled={headersQuery.isLoading}
             onClick={() =>
               setDrafts((current) => [...current, newHeaderDraft()])
             }
@@ -303,7 +362,7 @@ export function HeadersSection({
               disabled={saveDisabled}
               onClick={() => void handleSave()}
             >
-              {update.isPending ? (
+              {saving ? (
                 <>
                   <Button.LeftIcon>
                     <Loader2 className="size-4 animate-spin" />

@@ -838,18 +838,22 @@ func createEnvSourcedRemoteHeader(
 	t *testing.T,
 	ctx context.Context,
 	conn *pgxpool.Pool,
+	projectID uuid.UUID,
 	remoteServerID uuid.UUID,
 	required bool,
 ) {
 	t.Helper()
 
-	_, err := remotemcprepo.New(conn).CreateHeader(ctx, remotemcprepo.CreateHeaderParams{
-		RemoteMcpServerID: remoteServerID,
-		Name:              envSourcedUpstreamHeader,
-		Value:             pgtype.Text{String: "", Valid: true},
-		IsRequired:        required,
+	remotemcptest.SeedHeader(t, ctx, conn, remotemcprepo.CreateServerHeaderParams{
+		RemoteMcpServerID:      remoteServerID,
+		ProjectID:              projectID,
+		Name:                   envSourcedUpstreamHeader,
+		Description:            pgtype.Text{Valid: false},
+		IsRequired:             required,
+		IsSecret:               false,
+		Value:                  pgtype.Text{String: "", Valid: true},
+		ValueFromRequestHeader: pgtype.Text{Valid: false},
 	})
-	require.NoError(t, err)
 }
 
 // TestServePublic_McpEndpoint_RemoteBacked_EnvSourcedHeader_FillsFromAttachedEnvironment
@@ -877,7 +881,7 @@ func TestServePublic_McpEndpoint_RemoteBacked_EnvSourcedHeader_FillsFromAttached
 
 	endpointSlug := "endpoint-" + uuid.NewString()
 	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
-	createEnvSourcedRemoteHeader(t, ctx, ti.conn, remoteServer.ID, true)
+	createEnvSourcedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, true)
 
 	envID := seedEnvironmentWithEntries(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, map[string]string{
 		"X_UPSTREAM_API_KEY": "from-attached-env",
@@ -914,7 +918,7 @@ func TestServePublic_McpEndpoint_RemoteBacked_RequiredEnvHeaderMissing_FailsClos
 
 	endpointSlug := "endpoint-" + uuid.NewString()
 	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
-	createEnvSourcedRemoteHeader(t, ctx, ti.conn, remoteServer.ID, true)
+	createEnvSourcedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, true)
 
 	envID := seedEnvironmentWithEntries(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, map[string]string{
 		"OTHER_KEY": "irrelevant",
@@ -958,7 +962,7 @@ func TestServePublic_McpEndpoint_RemoteBacked_OptionalEnvHeaderMissing_Proceeds(
 
 	endpointSlug := "endpoint-" + uuid.NewString()
 	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
-	createEnvSourcedRemoteHeader(t, ctx, ti.conn, remoteServer.ID, false)
+	createEnvSourcedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, false)
 
 	envID := seedEnvironmentWithEntries(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, map[string]string{
 		"OTHER_KEY": "irrelevant",
@@ -992,7 +996,7 @@ func TestServePublic_McpEndpoint_RemoteBacked_RequiredEnvHeaderNoEnvironment_Fai
 
 	endpointSlug := "endpoint-" + uuid.NewString()
 	_, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
-	createEnvSourcedRemoteHeader(t, ctx, ti.conn, remoteServer.ID, true)
+	createEnvSourcedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, true)
 
 	_, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
 	require.Error(t, err)

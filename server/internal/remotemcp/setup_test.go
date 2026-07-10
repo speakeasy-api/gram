@@ -160,6 +160,32 @@ func requireStoredSecretValue(t *testing.T, ctx context.Context, ti *testInstanc
 	t.Fatalf("header %q not found on server %s", name, serverID)
 }
 
+// requireStoredEnvSourcedValue asserts the empty-non-null sentinel that marks
+// an environment-sourced header (ADR-0002).
+func requireStoredEnvSourcedValue(t *testing.T, ctx context.Context, ti *testInstance, serverID string, name string) {
+	t.Helper()
+
+	parsed, err := uuid.Parse(serverID)
+	require.NoError(t, err)
+
+	headers, err := remotemcp.NewHeaders(testenv.NewLogger(t), ti.conn, ti.enc).ListHeaders(ctx, parsed, false)
+	require.NoError(t, err)
+
+	for _, header := range headers {
+		if header.Name != name {
+			continue
+		}
+
+		require.True(t, header.Value.Valid, "header %q value must be non-null empty", name)
+		require.Equal(t, "", header.Value.String)
+		require.False(t, header.ValueFromRequestHeader.Valid)
+		require.False(t, header.IsSecret)
+		return
+	}
+
+	t.Fatalf("header %q not found on server %s", name, serverID)
+}
+
 func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {
 	t.Helper()
 

@@ -80,13 +80,51 @@ func TestCreateServerHeader_BothValuesRejected(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-func TestCreateServerHeader_NeitherValueRejected(t *testing.T) {
+// A non-secret header with neither static value nor request-header source opts
+// into attached-environment resolution (ADR-0002). Persist value=” non-null
+// so the DB CHECK holds and the serve path can detect the opt-in.
+func TestCreateServerHeader_EnvSourced(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "Bad-Header", nil))
+	header, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", nil))
+	require.NoError(t, err)
+
+	require.False(t, header.IsSecret)
+	require.Nil(t, header.ValueFromRequestHeader)
+	require.NotNil(t, header.Value)
+	require.Equal(t, "", *header.Value)
+
+	requireStoredEnvSourcedValue(t, ctx, ti, server.ID, "X-Api-Key")
+}
+
+func TestCreateServerHeader_EnvSourcedEmptyValue(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+
+	header, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+		p.Value = new("")
+	}))
+	require.NoError(t, err)
+	require.NotNil(t, header.Value)
+	require.Equal(t, "", *header.Value)
+
+	requireStoredEnvSourcedValue(t, ctx, ti, server.ID, "X-Api-Key")
+}
+
+func TestCreateServerHeader_SecretNeitherValueRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+
+	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "Bad-Header", func(p *gen.CreateServerHeaderPayload) {
+		p.IsSecret = new(true)
+	}))
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
