@@ -1,5 +1,5 @@
 import { MetricCard } from "@/components/chart/MetricCard";
-import { RankedBarList } from "@/components/chart/RankedBarList";
+import { RankedBar } from "@/components/chart/RankedBar";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Heading } from "@/components/ui/heading";
@@ -108,7 +108,6 @@ export function AnalyticsTab({
           key: tool.gramUrn,
           label: toolLabelFromUrn(tool.gramUrn),
           value: tool.failureRate * 100,
-          valueLabel: `${(tool.failureRate * 100).toFixed(1)}%`,
         })),
     [telemetryData],
   );
@@ -214,7 +213,7 @@ export function AnalyticsTab({
                 Top tools by call count
               </Heading>
               {topByCount.length > 0 ? (
-                <RankedBarList items={topByCount} />
+                <RankedBar items={topByCount} />
               ) : (
                 <Type muted small>
                   No tool calls in the selected range.
@@ -226,7 +225,10 @@ export function AnalyticsTab({
                 Top tools by failure rate
               </Heading>
               {topByFailureRate.length > 0 ? (
-                <RankedBarList items={topByFailureRate} />
+                <RankedBar
+                  items={topByFailureRate}
+                  formatValue={(value) => `${value.toFixed(1)}%`}
+                />
               ) : (
                 <Type muted small>
                   No failed tool calls in the selected range.

@@ -1,16 +1,12 @@
 import { type QueryMeasures } from "@gram/client/models/components/querymeasures.js";
 import { type QuerySeries } from "@gram/client/models/components/queryseries.js";
 import { type RiskTokensPoint } from "@gram/client/models/components/risktokenspoint.js";
+import { Chart as ChartJS, type ChartOptions } from "chart.js";
 import {
-  BarElement,
-  CategoryScale,
-  Chart as ChartJS,
-  type ChartOptions,
-  Tooltip as ChartTooltip,
-  Legend,
-  LinearScale,
-} from "chart.js";
-import { seriesPalette, withAlpha } from "@/components/chart/chart-theme";
+  registerChartJs,
+  seriesPalette,
+  withAlpha,
+} from "@/components/chart/chart-theme";
 import { useTheme } from "@/components/ui/moonshine";
 import { Info } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -25,7 +21,7 @@ import {
   type StackMode,
 } from "./breakdown-options";
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
+registerChartJs();
 
 // Vercel-style consumption breakdown for tokens under management: a stacked
 // bar chart of tokens over the selected billing cycle, stacked by a chosen

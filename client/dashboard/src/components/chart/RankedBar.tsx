@@ -1,7 +1,8 @@
-// The promoted ranked horizontal bar list — a superset of RankedBarList.tsx
-// (kept as-is; new call sites should reach for this instead) adding optional
-// row links, sublabels, and a rank-based color gradient. Bars are thin and
-// squared, per the chart system's design language (no rounded()).
+// The ranked horizontal bar list for the chart system (formerly duplicated as
+// RankedBarList.tsx, now deleted — every call site has migrated here). Adds
+// optional row links, sublabels, an active/selected highlight, and a
+// rank-based color gradient. Bars are thin and squared, per the chart
+// system's design language (no rounded()).
 import { cn } from "@/components/ui/moonshine";
 import type { CSSProperties } from "react";
 import { Link } from "react-router";
@@ -15,6 +16,8 @@ export type RankedBarItem = {
   /** Row click handler for drill-throughs that update in-page state rather
    * than navigate (e.g. a query-param filter) — ignored when `href` is set. */
   onSelect?: () => void;
+  /** Highlights the row as the current selection (e.g. an active filter). */
+  active?: boolean;
 };
 
 export type RankedBarColorMode = "single" | "rank-gradient";
@@ -89,7 +92,10 @@ export function RankedBar({
         return (
           <li
             key={`${item.label}-${index}`}
-            className="flex items-center gap-3"
+            className={cn(
+              "flex items-center gap-3",
+              item.active && "bg-muted -mx-2 px-2 py-1.5",
+            )}
           >
             <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
               {index + 1}
@@ -105,6 +111,7 @@ export function RankedBar({
               <button
                 type="button"
                 onClick={item.onSelect}
+                aria-pressed={item.active}
                 className="flex min-w-0 flex-1 cursor-pointer bg-transparent p-0 text-left hover:opacity-80"
               >
                 {content}

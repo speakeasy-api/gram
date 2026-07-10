@@ -1,3 +1,4 @@
+import { RankedBar, type RankedBarItem } from "@/components/chart/RankedBar";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -8,9 +9,9 @@ import { useRoutes } from "@/routes";
 import { type DateRangePreset } from "@gram-ai/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
-import { ChevronRight, Inbox, LoaderCircle } from "lucide-react";
-import { useMemo } from "react";
-import { Link, useLocation } from "react-router";
+import { Inbox, LoaderCircle } from "lucide-react";
+import { useCallback, useMemo } from "react";
+import { useLocation } from "react-router";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 
 const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
@@ -59,15 +60,43 @@ function RiskOverviewCategoriesIndexContent() {
   );
 
   const overviewQuery = useRiskOverview({ from, to });
-  const categories = overviewQuery.data?.topCategories ?? [];
+  const categories = useMemo(
+    () => overviewQuery.data?.topCategories ?? [],
+    [overviewQuery.data],
+  );
   const total = categories.reduce((acc, c) => acc + Number(c.findings), 0);
-  const max = categories[0]?.findings ?? 0;
 
   const categoryDetailRoute = (
     routes.riskOverview as unknown as {
       categoryDetail?: { href: (...params: string[]) => string };
     }
   ).categoryDetail;
+
+  const categoryItems = useMemo<RankedBarItem[]>(
+    () =>
+      categories.map((c) => {
+        const meta = RULE_CATEGORY_META[c.category as RuleCategory];
+        return {
+          label: meta?.label ?? c.category,
+          value: Number(c.findings),
+          href: categoryDetailRoute
+            ? `${categoryDetailRoute.href(
+                encodeURIComponent(c.category),
+              )}${location.search}`
+            : undefined,
+          sublabel: meta?.description,
+        };
+      }),
+    [categories, categoryDetailRoute, location.search],
+  );
+
+  const formatFindingsValue = useCallback(
+    (value: number) =>
+      total > 0
+        ? `${value.toLocaleString()} (${((value / total) * 100).toFixed(1)}%)`
+        : value.toLocaleString(),
+    [total],
+  );
 
   const controls = (
     <TimeRangePicker
@@ -105,66 +134,12 @@ function RiskOverviewCategoriesIndexContent() {
             </span>
           </div>
         ) : (
-          <ul className="divide-border divide-y rounded-lg border">
-            {categories.map((c, i) => {
-              const meta = RULE_CATEGORY_META[c.category as RuleCategory];
-              const label = meta?.label ?? c.category;
-              const href = categoryDetailRoute
-                ? `${categoryDetailRoute.href(
-                    encodeURIComponent(c.category),
-                  )}${location.search}`
-                : null;
-              const pct =
-                max > 0 ? (Number(c.findings) / Number(max)) * 100 : 0;
-              const totalPct =
-                total > 0 ? (Number(c.findings) / total) * 100 : 0;
-              const body = (
-                <div className="flex items-center gap-4 px-4 py-3">
-                  <span className="text-muted-foreground w-6 shrink-0 text-right text-xs">
-                    {i + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium">
-                        {label}
-                      </span>
-                      <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                        {Number(c.findings).toLocaleString()}
-                        {total > 0 && (
-                          <span className="ml-2">({totalPct.toFixed(1)}%)</span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="bg-muted h-1 w-full rounded-full">
-                      <div
-                        className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    {meta?.description && (
-                      <div className="text-muted-foreground mt-1 text-xs">
-                        {meta.description}
-                      </div>
-                    )}
-                  </div>
-                  {href && (
-                    <ChevronRight className="text-muted-foreground size-4 shrink-0" />
-                  )}
-                </div>
-              );
-              return (
-                <li key={c.category}>
-                  {href ? (
-                    <Link to={href} className="hover:bg-muted/40 block">
-                      {body}
-                    </Link>
-                  ) : (
-                    body
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          <div className="border p-4">
+            <RankedBar
+              items={categoryItems}
+              formatValue={formatFindingsValue}
+            />
+          </div>
         )}
       </Page.Section.Body>
     </Page.Section>

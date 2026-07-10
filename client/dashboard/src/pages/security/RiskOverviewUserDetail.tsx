@@ -1,4 +1,5 @@
 import { MetricCard } from "@/components/chart/MetricCard";
+import { RankedBar, type RankedBarItem } from "@/components/chart/RankedBar";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -268,40 +269,16 @@ function CategoryBreakdown({
     );
   }
   if (categories.length === 0) return null;
-  const max = categories[0]?.findings || 1;
+
+  const items: RankedBarItem[] = categories.map((c) => ({
+    label: RULE_CATEGORY_META[c.category as RuleCategory]?.label ?? c.category,
+    value: Number(c.findings),
+  }));
 
   return (
     <div className="space-y-3 rounded-lg border p-4">
       <h4 className="text-sm font-medium">Findings by category</h4>
-      <ul className="space-y-2">
-        {categories.map((c, i) => {
-          const meta = RULE_CATEGORY_META[c.category as RuleCategory];
-          const label = meta?.label ?? c.category;
-          return (
-            <li key={c.category} className="flex items-center gap-3">
-              <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
-                {i + 1}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <span className="truncate text-sm">{label}</span>
-                  <span className="text-muted-foreground shrink-0 text-xs">
-                    {Number(c.findings).toLocaleString()}
-                  </span>
-                </div>
-                <div className="bg-muted h-1 w-full rounded-full">
-                  <div
-                    className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
-                    style={{
-                      width: `${(Number(c.findings) / Number(max)) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      <RankedBar items={items} />
     </div>
   );
 }
@@ -321,49 +298,16 @@ function RuleBreakdown({
     );
   }
   if (rules.length === 0) return null;
-  const max = rules[0]?.findings || 1;
+
+  const items: RankedBarItem[] = rules.map((r) => ({
+    label: r.ruleId ? getRuleTitleFallback(r.ruleId) : "(no rule_id)",
+    value: Number(r.findings),
+  }));
 
   return (
     <div className="space-y-3 rounded-lg border p-4">
       <h4 className="text-sm font-medium">Findings by rule</h4>
-      <ul className="space-y-2">
-        {rules.map((r, i) => {
-          const label = r.ruleId
-            ? getRuleTitleFallback(r.ruleId)
-            : "(no rule_id)";
-          return (
-            <li
-              key={r.ruleId || `__none_${i}`}
-              className="flex items-center gap-3"
-            >
-              <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
-                {i + 1}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <span
-                    className="truncate text-sm"
-                    title={r.ruleId || undefined}
-                  >
-                    {label}
-                  </span>
-                  <span className="text-muted-foreground shrink-0 text-xs">
-                    {Number(r.findings).toLocaleString()}
-                  </span>
-                </div>
-                <div className="bg-muted h-1 w-full rounded-full">
-                  <div
-                    className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
-                    style={{
-                      width: `${(Number(r.findings) / Number(max)) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      <RankedBar items={items} />
     </div>
   );
 }

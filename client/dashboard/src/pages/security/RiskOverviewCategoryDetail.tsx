@@ -1,4 +1,5 @@
 import { MetricCard } from "@/components/chart/MetricCard";
+import { RankedBar, type RankedBarItem } from "@/components/chart/RankedBar";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -384,7 +385,14 @@ function RuleBreakdown({
     );
   }
   if (rules.length === 0) return null;
-  const max = rules[0]?.findings || 1;
+
+  const items: RankedBarItem[] = rules.map((rule) => ({
+    label: rule.ruleId ? getRuleTitleFallback(rule.ruleId) : "(no rule_id)",
+    value: rule.findings,
+    active: activeRuleId === rule.ruleId,
+    onSelect: () =>
+      onSelectRule(activeRuleId === rule.ruleId ? "" : rule.ruleId),
+  }));
 
   return (
     <div className="space-y-3 rounded-lg border p-4">
@@ -400,49 +408,7 @@ function RuleBreakdown({
           </button>
         )}
       </div>
-      <ul className="space-y-2">
-        {rules.map((rule, i) => {
-          const isActive = activeRuleId === rule.ruleId;
-          const label = rule.ruleId
-            ? getRuleTitleFallback(rule.ruleId)
-            : "(no rule_id)";
-          return (
-            <li key={rule.ruleId || `__none_${i}`}>
-              <button
-                type="button"
-                onClick={() => onSelectRule(isActive ? "" : rule.ruleId)}
-                aria-pressed={isActive}
-                className={`hover:bg-muted/40 -mx-2 flex w-full items-center gap-3 rounded px-2 py-1.5 transition-colors ${
-                  isActive ? "bg-muted" : ""
-                }`}
-              >
-                <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
-                  {i + 1}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <span
-                      className="truncate text-left text-sm"
-                      title={rule.ruleId}
-                    >
-                      {label}
-                    </span>
-                    <span className="text-muted-foreground shrink-0 text-xs">
-                      {rule.findings.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="bg-muted h-1 w-full rounded-full">
-                    <div
-                      className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
-                      style={{ width: `${(rule.findings / max) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <RankedBar items={items} />
     </div>
   );
 }

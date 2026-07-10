@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
+import { toastError } from "@/lib/toast-error";
 import { cn } from "@/lib/utils";
 import { Badge, Button, Input } from "@/components/ui/moonshine";
 import { DynamicIcon, type IconName } from "@/components/ui/dynamic-icon";
@@ -703,8 +704,7 @@ function SamplePlayground({
       setReason(data.supported ? null : (data.reason ?? "Rule not supported"));
     },
     onError: (err) => {
-      const message = err instanceof Error ? err.message : "Failed to run rule";
-      toast.error(message);
+      toastError(err, "Failed to run rule");
     },
   });
 
@@ -935,7 +935,7 @@ function ChatPlayground({
         }
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load chat");
+      toastError(err, "Failed to load chat");
     } finally {
       setRunning(false);
     }
@@ -1254,9 +1254,7 @@ function CreateCustomRuleSheet({
       setStep("review");
     },
     onError: (err) => {
-      const message =
-        err instanceof Error ? err.message : "Failed to generate suggestion";
-      toast.error(message);
+      toastError(err, "Failed to generate suggestion");
     },
   });
 

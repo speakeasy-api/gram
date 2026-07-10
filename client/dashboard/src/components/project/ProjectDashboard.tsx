@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router";
 import { MetricCard } from "@/components/chart/MetricCard";
-import { RankedBarList } from "@/components/chart/RankedBarList";
+import { RankedBar } from "@/components/chart/RankedBar";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DashboardCard } from "@/components/ui/dashboard-card";
@@ -264,8 +264,6 @@ export function ProjectDashboard(): JSX.Element {
         // Keep the raw rate for the bar width: every tool here has ≥1 failure,
         // so rounding (e.g. 0.4% → 0) would zero out the bar and the label.
         value: t.rate,
-        // Never render "0%" in a failures-only list; show "<1%" below 1%.
-        valueLabel: t.rate < 1 ? "<1%" : `${Math.round(t.rate)}%`,
       }));
   }, [externalUsersData]);
 
@@ -479,7 +477,7 @@ export function ProjectDashboard(): JSX.Element {
                     0 ? (
                     <EmptyState message="No user activity recorded" />
                   ) : (
-                    <RankedBarList
+                    <RankedBar
                       items={hasHookData ? topUsersByTokens : topEndUsers}
                     />
                   )}
@@ -513,7 +511,7 @@ export function ProjectDashboard(): JSX.Element {
                   ) : (overview?.summary.topServers.length ?? 0) === 0 ? (
                     <EmptyState message="No server activity recorded" />
                   ) : (
-                    <RankedBarList
+                    <RankedBar
                       items={(overview?.summary.topServers ?? [])
                         .slice(0, 5)
                         .map((s) => ({
@@ -629,7 +627,7 @@ export function ProjectDashboard(): JSX.Element {
                       ) : mostUsedAgents.length === 0 ? (
                         <EmptyState message="No agent activity recorded" />
                       ) : (
-                        <RankedBarList items={mostUsedAgents} />
+                        <RankedBar items={mostUsedAgents} />
                       )}
                     </DashboardCard>
                   </>
@@ -649,7 +647,7 @@ export function ProjectDashboard(): JSX.Element {
                       ) : mostUsedTools.length === 0 ? (
                         <EmptyState message="No tool activity recorded" />
                       ) : (
-                        <RankedBarList items={mostUsedTools} />
+                        <RankedBar items={mostUsedTools} />
                       )}
                     </DashboardCard>
 
@@ -667,7 +665,10 @@ export function ProjectDashboard(): JSX.Element {
                       ) : topToolsByFailureRate.length === 0 ? (
                         <EmptyState message="No tool failures recorded" />
                       ) : (
-                        <RankedBarList items={topToolsByFailureRate} />
+                        <RankedBar
+                          items={topToolsByFailureRate}
+                          formatValue={formatFailureRatePercent}
+                        />
                       )}
                     </DashboardCard>
                   </>
@@ -805,6 +806,11 @@ async function fetchAllUsers(
 function toolLabelFromUrn(urn: string): string {
   const parts = urn.split(":");
   return parts[parts.length - 1] || urn;
+}
+
+// Never render "0%" in a failures-only list; show "<1%" below 1%.
+function formatFailureRatePercent(rate: number): string {
+  return rate < 1 ? "<1%" : `${Math.round(rate)}%`;
 }
 
 function emailInitials(email: string): string {
