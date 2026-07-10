@@ -24,7 +24,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -451,12 +453,18 @@ type scopeConfig struct {
 	ScopeExempt  string `json:"scope_exempt"`
 }
 
-// loadScopes reads the optional scopes.json policy-scope fixture. Returns
-// present=false when the file is absent so the harness runs unscoped.
+// loadScopes returns the candidate policy scope: the scopes.json fixture in
+// the corpus dir when present (an experimental override), otherwise the
+// production recommended scope for the prompt_injection category — so the
+// harness validates exactly what ships in the registry.
 func loadScopes(dir string) (cfg scopeConfig, present bool, err error) {
 	raw, err := os.ReadFile(filepath.Join(dir, "scopes.json")) // #nosec G304 -- local harness corpus path.
 	if errors.Is(err, os.ErrNotExist) {
-		return scopeConfig{ScopeInclude: "", ScopeExempt: ""}, false, nil
+		rec, ok := recommendedscopes.For(categories.CategoryPromptInjection)
+		if !ok {
+			return scopeConfig{ScopeInclude: "", ScopeExempt: ""}, false, nil
+		}
+		return scopeConfig{ScopeInclude: rec.ScopeInclude, ScopeExempt: rec.ScopeExempt}, true, nil
 	}
 	if err != nil {
 		return scopeConfig{ScopeInclude: "", ScopeExempt: ""}, false, fmt.Errorf("read scopes.json: %w", err)
