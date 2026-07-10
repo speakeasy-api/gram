@@ -143,10 +143,12 @@ type Service struct {
 	github    *GitHubConfig
 	serverURL string
 	keyPrefix string
-	// features gates the phased hooks rollout. Only the automated publisher
-	// (NewPublisher) sets it; the dashboard service leaves it nil, since a human
-	// publish is never phase-gated (PublishProjectInput.PhasedHooksRollout stays
-	// false). A nil provider disables gating entirely (full rollout).
+	// features drives the phased hooks rollout gate applied to every publish (see
+	// publishProject). Both the automated publisher (NewPublisher) and the
+	// dashboard service (NewService) set it, so interactive publishes are gated
+	// too. A nil provider fails CLOSED — non-canary orgs are treated as not
+	// eligible and carry their existing hooks — so a missing provider can never
+	// force-advance an org.
 	features feature.Provider
 }
 
@@ -163,6 +165,7 @@ func NewService(
 	github *GitHubConfig,
 	env string,
 	serverURL string,
+	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -177,7 +180,11 @@ func NewService(
 		github:    github,
 		serverURL: serverURL,
 		keyPrefix: auth.APIKeyPrefix(env),
-		features:  nil,
+		// features gates human/dashboard-initiated hook-output changes (marketplace
+		// rename via UpdateMarketplaceSettings, observability-mode toggle via
+		// productfeatures) on the phased hooks rollout, mirroring the automated
+		// publisher. Fail-closed when nil: non-canary orgs defer those changes.
+		features: features,
 	}
 }
 
@@ -1296,9 +1303,12 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 	}
 
 	// Up to date only when both components match what was last published: the MCP
-	// per-plugin fingerprints and the hooks generator version.
+	// per-plugin fingerprints, the hooks generator version, and the hook-affecting
+	// config (so a marketplace rename or observability-mode toggle that hasn't
+	// propagated to the hooks subtree yet reads as stale rather than current).
 	upToDate := maps.Equal(mcpFingerprints, decodeMCPFingerprints(conn.PublishedMcpFingerprints)) &&
-		conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion
+		conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion &&
+		storedHooksConfigHash(conn.PublishedHooksConfig) == hooksConfigHash(hooksConfigSnapshot(cfg))
 	return &upToDate
 }
 
@@ -1358,10 +1368,10 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		GitHubUsernames: payload.GithubUsernames,
 		CommitMessage:   "Update plugin packages",
 		// A human clicked Publish: always republish so the manifest version
-		// bumps and installed copies refresh.
+		// bumps and installed copies refresh. The hooks component is still gated
+		// by the rollout inside publishProject — clicking Publish cannot force a
+		// hooks upgrade onto an org the rollout hasn't cleared.
 		SkipIfUnchanged: false,
-		// A human publish is never phase-gated — always ship the current hooks.
-		PhasedHooksRollout: false,
 	})
 	if err != nil {
 		return nil, err
@@ -1378,14 +1388,13 @@ type PublishProjectInput struct {
 	// fingerprint matches the one last published, avoiding a no-op GitHub
 	// commit and fresh API keys. Set by the automated rollout; the dashboard
 	// publish leaves it false so a human-initiated publish always refreshes.
+	//
+	// There is deliberately NO flag to opt a publish into (or out of) hooks-
+	// version gating: every publish path is gated unconditionally inside
+	// publishProject, so no caller can force a hooks upgrade onto an org the
+	// rollout hasn't cleared. The only lever to advance hooks is the
+	// FlagHooksRollout payload pin in PostHog (plus the hardcoded canary).
 	SkipIfUnchanged bool
-	// PhasedHooksRollout opts this publish into per-org hooks-version gating: the
-	// org receives the current hooksGeneratorVersion only if it is in the current
-	// rollout phase (canary allowlist or cleared via the FlagHooksRollout
-	// payload); otherwise its already-published hooks are carried verbatim. Set
-	// by the automated rollout only. A human/dashboard publish leaves it false
-	// and always gets the current hooks version. MCP content is unaffected.
-	PhasedHooksRollout bool
 }
 
 type PublishProjectResult struct {
@@ -1421,16 +1430,57 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 			Slug:            nil,
 			CreatedByUserID: input.CreatedByUserID,
 		},
-		GitHubUsernames:    nil,
-		CommitMessage:      conv.Default(input.CommitMessage, "Update plugin packages"),
-		SkipIfUnchanged:    input.SkipIfUnchanged,
-		PhasedHooksRollout: input.PhasedHooksRollout,
+		GitHubUsernames: nil,
+		CommitMessage:   conv.Default(input.CommitMessage, "Update plugin packages"),
+		SkipIfUnchanged: input.SkipIfUnchanged,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	return &PublishProjectResult{RepoURL: result.RepoURL, Skipped: result.Skipped}, nil
+}
+
+// HooksRolloutEligible reports whether the organization is cleared to receive the
+// current observability (hooks) generator version. Exposed for other services
+// (e.g. productfeatures) that must decide, before persisting an org-level setting
+// that changes generated hook output, whether that change can actually be
+// published to the hooks subtree. Fails closed — see hooksRolloutEligible.
+func (s *Service) HooksRolloutEligible(ctx context.Context, orgID, orgSlug string) bool {
+	return s.hooksRolloutEligible(ctx, orgID, orgSlug)
+}
+
+// RepublishOrganizationProjects republishes every project in the organization
+// that has a plugin GitHub connection. It is used when an org-level setting that
+// affects generated output (e.g. observability mode) changes and must propagate
+// to all of the org's published marketplaces. SkipIfUnchanged is set so only the
+// components that actually changed are regenerated (the config-hash signal picks
+// up the setting change for the hooks component without rotating MCP keys), and
+// the hooks component stays phase-gated. Callers that require the hooks to update
+// synchronously should verify HooksRolloutEligible first; this method never fails
+// the caller for an ineligible org — the change is carried and the automated
+// rollout applies it once the org is eligible. Returns the joined errors of any
+// per-project publishes that failed.
+func (s *Service) RepublishOrganizationProjects(ctx context.Context, orgID string) error {
+	if s.github == nil {
+		return nil
+	}
+	targets, err := s.repo.ListOrgPluginPublishTargets(ctx, orgID)
+	if err != nil {
+		return fmt.Errorf("list org plugin publish targets: %w", err)
+	}
+	var errs []error
+	for _, t := range targets {
+		if _, err := s.PublishProject(ctx, PublishProjectInput{
+			ProjectID:       t.ProjectID,
+			CreatedByUserID: t.CreatedByUserID,
+			CommitMessage:   "Update observability settings",
+			SkipIfUnchanged: true,
+		}); err != nil {
+			errs = append(errs, fmt.Errorf("republish project %s: %w", t.ProjectID, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 type publishActor struct {
@@ -1441,16 +1491,15 @@ type publishActor struct {
 }
 
 type publishProjectInput struct {
-	ProjectID          uuid.UUID
-	ProjectName        string
-	ProjectSlug        string
-	OrganizationID     string
-	OrganizationSlug   string
-	Actor              publishActor
-	GitHubUsernames    []string
-	CommitMessage      string
-	SkipIfUnchanged    bool
-	PhasedHooksRollout bool
+	ProjectID        uuid.UUID
+	ProjectName      string
+	ProjectSlug      string
+	OrganizationID   string
+	OrganizationSlug string
+	Actor            publishActor
+	GitHubUsernames  []string
+	CommitMessage    string
+	SkipIfUnchanged  bool
 }
 
 // publishOutcome is the internal result of publishProject. Skipped is true when
@@ -1521,6 +1570,13 @@ func (s *Service) hooksRolloutEligible(ctx context.Context, orgID, orgSlug strin
 type publishOutcome struct {
 	RepoURL string
 	Skipped bool
+	// HooksConfigDeferred is true when hook-output-affecting config changed (a
+	// marketplace rename or observability-mode toggle) but the org isn't cleared
+	// for the current hooks version, so the hooks subtree was carried unchanged
+	// rather than regenerated (which would advance the org past the rollout gate).
+	// The change applies automatically once the org becomes eligible. MCP and the
+	// shared marketplace manifests still publish; only the observability hooks lag.
+	HooksConfigDeferred bool
 }
 
 func (s *Service) publishProject(ctx context.Context, input publishProjectInput) (*publishOutcome, error) {
@@ -1574,21 +1630,55 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	mcpChanged := firstPublish || !input.SkipIfUnchanged ||
 		!maps.Equal(mcpFingerprints, decodeMCPFingerprints(existing.PublishedMcpFingerprints))
 
-	// The hooks version this org should converge to. Normally the current
-	// generator version, but a phased rollout carries the org's already-published
-	// hooks (so hooksChanged stays false) until the org enters the current
-	// rollout phase. A first publish always gets the current version — there is
-	// no prior hooks subtree to carry, so phasing only ever gates UPGRADES.
+	// Snapshot the hook-output-affecting config (resolved marketplace name,
+	// observability mode, server URL, etc.). A rename or observability-mode toggle
+	// changes generated hook content while leaving hooksGeneratorVersion untouched,
+	// so this snapshot is the only signal that catches those; without it the hooks
+	// subtree would be carried stale. The version and this config together decide
+	// whether hooks must regenerate.
+	currentHooksConfig := hooksConfigSnapshot(cfg)
+	currentHooksConfigJSON, err := marshalHooksConfig(currentHooksConfig)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "marshal hooks config").LogError(ctx, s.logger)
+	}
+	currentHooksConfigHash := hooksConfigHash(currentHooksConfig)
+	publishedHooksConfigHash := storedHooksConfigHash(existing.PublishedHooksConfig)
+
+	// The hooks version + config this org should converge to. This gate is
+	// UNCONDITIONAL — it is not an opt-in per call site — so no publish path (the
+	// automated rollout, a dashboard publish, a marketplace rename, an
+	// observability-mode toggle) can force a hooks change onto an org that the
+	// rollout hasn't cleared. The single lever to advance an org is the
+	// FlagHooksRollout payload pin in PostHog (plus the hardcoded canary); see
+	// hooksRolloutEligible. When an org isn't eligible we carry its already-
+	// published hooks verbatim (both version AND config), because regenerating
+	// always lands on the current generator version and would advance it past the
+	// gate. A first publish always gets the current values — there is no prior
+	// hooks subtree to carry, so the gate only ever holds back UPGRADES.
 	targetHooksVersion := hooksGeneratorVersion
-	if input.PhasedHooksRollout && !firstPublish &&
-		!s.hooksRolloutEligible(ctx, input.OrganizationID, input.OrganizationSlug) {
+	targetHooksConfigJSON := currentHooksConfigJSON
+	targetHooksConfigHash := currentHooksConfigHash
+	hooksConfigDeferred := false
+	if !firstPublish && !s.hooksRolloutEligible(ctx, input.OrganizationID, input.OrganizationSlug) {
 		targetHooksVersion = conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion)
+		targetHooksConfigJSON = existing.PublishedHooksConfig
+		targetHooksConfigHash = publishedHooksConfigHash
+		if publishedHooksConfigHash != currentHooksConfigHash {
+			// Hook-affecting config changed but the org isn't cleared for the
+			// current hooks version, so we carry the published hooks rather than
+			// regenerate (which would advance it). The change applies automatically
+			// once the org becomes eligible; callers may surface the deferral.
+			hooksConfigDeferred = true
+			s.logger.InfoContext(ctx, "hooks config change deferred until org eligible for current hooks version",
+				attr.SlogOrganizationID(input.OrganizationID))
+		}
 	}
 	hooksChanged := firstPublish ||
-		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != targetHooksVersion
+		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != targetHooksVersion ||
+		publishedHooksConfigHash != targetHooksConfigHash
 
 	if input.SkipIfUnchanged && !mcpChanged && !hooksChanged {
-		return &publishOutcome{RepoURL: repoURL, Skipped: true}, nil
+		return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred}, nil
 	}
 
 	// When exactly one component changed, carry the other verbatim from the
@@ -1729,11 +1819,11 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// credentials when GitHub fails. If this transaction itself fails, the
 	// published repo contains key strings with no DB records — re-publish
 	// overwrites them with fresh valid keys.
-	if err := s.persistPluginAPIKeys(ctx, input, candidates, projectName, repoOwner, repoName, pluginSlugs, mcpFingerprintsJSON, targetHooksVersion); err != nil {
+	if err := s.persistPluginAPIKeys(ctx, input, candidates, projectName, repoOwner, repoName, pluginSlugs, mcpFingerprintsJSON, targetHooksVersion, targetHooksConfigJSON); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api keys").LogError(ctx, s.logger)
 	}
 
-	return &publishOutcome{RepoURL: repoURL, Skipped: false}, nil
+	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred}, nil
 }
 
 // validMarketplaceName matches identifiers Claude Code, Cursor, and Codex
@@ -1804,11 +1894,12 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 	// for this project. A first-time publish goes through PublishPlugins so the
 	// caller can supply collaborator usernames.
 	republished := false
+	hooksUpdateDeferred := false
 	if s.github != nil && ac.ProjectSlug != nil {
 		_, connErr := s.repo.GetGitHubConnection(ctx, *ac.ProjectID)
 		switch {
 		case connErr == nil:
-			if _, err := s.publishProject(ctx, publishProjectInput{
+			outcome, err := s.publishProject(ctx, publishProjectInput{
 				ProjectID:        *ac.ProjectID,
 				ProjectName:      "",
 				ProjectSlug:      *ac.ProjectSlug,
@@ -1823,14 +1914,18 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 				GitHubUsernames: nil,
 				CommitMessage:   "Update marketplace name",
 				// A human changed the marketplace name: always republish so the
-				// new name propagates to installed copies.
+				// new name propagates to installed copies (MCP + marketplace.json).
+				// The hooks component is gated by the rollout inside publishProject:
+				// if the org isn't cleared, the new name still reaches MCP and the
+				// marketplace manifests while the Codex hooks are carried and catch
+				// up once eligible; the outcome reports that so we can tell the user.
 				SkipIfUnchanged: false,
-				// A human publish is never phase-gated.
-				PhasedHooksRollout: false,
-			}); err != nil {
+			})
+			if err != nil {
 				return nil, err
 			}
 			republished = true
+			hooksUpdateDeferred = outcome.HooksConfigDeferred
 		case errors.Is(connErr, pgx.ErrNoRows):
 			// No published marketplace yet — settings saved, no republish.
 		default:
@@ -1851,7 +1946,8 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 			DefaultName:     defaultName,
 			EffectiveName:   effective,
 		},
-		Republished: republished,
+		Republished:         republished,
+		HooksUpdateDeferred: &hooksUpdateDeferred,
 	}, nil
 }
 
@@ -1940,6 +2036,7 @@ func (s *Service) persistPluginAPIKeys(
 	pluginSlugs []string,
 	mcpFingerprintsJSON []byte,
 	hooksVersion string,
+	hooksConfigJSON []byte,
 ) error {
 	projectID := uuid.NullUUID{UUID: input.ProjectID, Valid: true}
 
@@ -1995,6 +2092,7 @@ func (s *Service) persistPluginAPIKeys(
 		MarketplaceToken:         pgtype.Text{String: candidateToken, Valid: true},
 		PublishedMcpFingerprints: mcpFingerprintsJSON,
 		PublishedHooksVersion:    conv.ToPGText(hooksVersion),
+		PublishedHooksConfig:     hooksConfigJSON,
 	}); err != nil {
 		return fmt.Errorf("upsert github connection: %w", err)
 	}

@@ -1845,11 +1845,10 @@ func phasedRolloutFixture(t *testing.T, ctx context.Context, ti *testInstance, m
 	// Baseline publish (non-phased) records the current hooks version + MCP
 	// fingerprints, then we rewind the stored hooks version so a bump is pending.
 	_, err = ti.service.PublishProject(ctx, plugins.PublishProjectInput{
-		ProjectID:          *authCtx.ProjectID,
-		CreatedByUserID:    authCtx.UserID,
-		CommitMessage:      "baseline",
-		SkipIfUnchanged:    true,
-		PhasedHooksRollout: false,
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "baseline",
+		SkipIfUnchanged: true,
 	})
 	require.NoError(t, err)
 
@@ -1880,11 +1879,10 @@ func TestPluginsService_PublishProject_PhasedRollout_NonEligibleBlocksHooksBump(
 	mock.pushFilesCalled = false
 	mock.getRepoFilesCalled = false
 	res, err := pub.PublishProject(ctx, plugins.PublishProjectInput{
-		ProjectID:          *authCtx.ProjectID,
-		CreatedByUserID:    authCtx.UserID,
-		CommitMessage:      "phased",
-		SkipIfUnchanged:    true,
-		PhasedHooksRollout: true,
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "phased",
+		SkipIfUnchanged: true,
 	})
 	require.NoError(t, err)
 	require.True(t, res.Skipped, "non-eligible org with a pending hooks bump and no content change must skip")
@@ -1915,11 +1913,10 @@ func TestPluginsService_PublishProject_PhasedRollout_EligibleGetsHooksBump(t *te
 
 	mock.pushFilesCalled = false
 	res, err := pub.PublishProject(ctx, plugins.PublishProjectInput{
-		ProjectID:          *authCtx.ProjectID,
-		CreatedByUserID:    authCtx.UserID,
-		CommitMessage:      "phased",
-		SkipIfUnchanged:    true,
-		PhasedHooksRollout: true,
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "phased",
+		SkipIfUnchanged: true,
 	})
 	require.NoError(t, err)
 	require.False(t, res.Skipped, "eligible org must roll the pending hooks bump forward")
@@ -1962,11 +1959,10 @@ func TestPluginsService_PublishProject_PhasedRollout_MCPPublishesRegardlessOfPha
 	mock.pushFilesCalled = false
 	mock.getRepoFilesCalled = false
 	res, err := pub.PublishProject(ctx, plugins.PublishProjectInput{
-		ProjectID:          *authCtx.ProjectID,
-		CreatedByUserID:    authCtx.UserID,
-		CommitMessage:      "phased",
-		SkipIfUnchanged:    true,
-		PhasedHooksRollout: true,
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "phased",
+		SkipIfUnchanged: true,
 	})
 	require.NoError(t, err)
 	require.False(t, res.Skipped, "MCP content change must publish even for a phase-gated org")

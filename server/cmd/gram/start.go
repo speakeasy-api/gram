@@ -1103,8 +1103,9 @@ func newStartCommand() *cli.Command {
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}
-			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url")))
-			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine))
+			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
+			plugins.Attach(mux, pluginsSvc)
+			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, pluginsSvc))
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, authzEngine, auditLogger))

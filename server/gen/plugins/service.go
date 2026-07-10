@@ -367,6 +367,11 @@ type UpdateMarketplaceSettingsResult struct {
 	// Whether the marketplace was automatically republished to GitHub as part of
 	// this update.
 	Republished bool
+	// True when the new name reached the MCP plugins and marketplace manifests but
+	// the observability (hooks) plugin could not be updated yet because the
+	// organization is not approved for the latest hooks version; it will update
+	// automatically once the organization is rolled forward.
+	HooksUpdateDeferred *bool
 }
 
 // UpdatePluginPayload is the payload type of the plugins service updatePlugin

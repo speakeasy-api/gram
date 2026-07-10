@@ -100,7 +100,7 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai")
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -110,6 +110,15 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 }
 
 func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublisher) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestPluginsServiceWithGitHubAndFeatures(t, ghClient, nil)
+}
+
+// newTestPluginsServiceWithGitHubAndFeatures builds a dashboard-style Service
+// (with auth) that also carries a feature provider, so the phased-rollout gating
+// on human-initiated hook-output changes (marketplace rename, observability-mode
+// toggle) can be exercised end to end.
+func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.GitHubPublisher, features feature.Provider) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -159,6 +168,7 @@ func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublis
 		ghConfig,
 		"local",
 		"https://app.getgram.ai",
+		features,
 	)
 
 	return ctx, &testInstance{
@@ -211,6 +221,7 @@ func rewindPublishedHooksVersion(t *testing.T, ctx context.Context, conn *pgxpoo
 		MarketplaceToken:         current.MarketplaceToken,
 		PublishedMcpFingerprints: current.PublishedMcpFingerprints,
 		PublishedHooksVersion:    conv.ToPGText(version),
+		PublishedHooksConfig:     current.PublishedHooksConfig,
 	})
 	require.NoError(t, err)
 }
