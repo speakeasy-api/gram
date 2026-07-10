@@ -7,6 +7,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, Notify};
+use tracing::Instrument;
 
 use crate::runtime::{
     AppState, DEFAULT_THREAD_IDLE_TTL, McpCmd, build_host, ensure_thread, snapshot_threads,
@@ -78,12 +79,31 @@ async fn state_handler(State(host): State<AppState>) -> Json<RunnerStateResponse
     })
 }
 
-#[tracing::instrument(name = "thread_turn", skip_all, fields(thread_id = %thread_id))]
 async fn thread_turn(
     State(host): State<AppState>,
     Path(thread_id): Path<String>,
     headers: HeaderMap,
     Json(request): Json<ThreadTurnRequest>,
+) -> Result<Json<ThreadTurnResponse>, (StatusCode, String)> {
+    // Bind identity from the request before opening the span so the span
+    // processor stamps this turn's own spans too — a warm-pool sandbox
+    // learns its identity from the first turn that carries it. Binding
+    // before validation and bootstrap is safe: the backend routes a pod to
+    // exactly one assistant, so even a turn that goes on to fail carries
+    // this pod's real identity.
+    SpanIdentity::bind(&host.identity.assistant_id, request.assistant_id.as_deref());
+    SpanIdentity::bind(&host.identity.project_id, request.project_id.as_deref());
+    let span = tracing::info_span!("thread_turn", thread_id = %thread_id);
+    thread_turn_inner(host, thread_id, headers, request)
+        .instrument(span)
+        .await
+}
+
+async fn thread_turn_inner(
+    host: AppState,
+    thread_id: String,
+    headers: HeaderMap,
+    request: ThreadTurnRequest,
 ) -> Result<Json<ThreadTurnResponse>, (StatusCode, String)> {
     if thread_id.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "missing thread_id".to_string()));
@@ -121,12 +141,6 @@ async fn thread_turn(
     let thread = ensure_thread(&host, &thread_id, request.auth_token)
         .await
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
-
-    // A warm-pool sandbox boots without GRAM_ASSISTANT_ID and learns its
-    // identity from the first turn that carries it. Bind only after bootstrap
-    // succeeds so a failed turn can't poison the pod's identity.
-    SpanIdentity::bind(&host.identity.assistant_id, request.assistant_id.as_deref());
-    SpanIdentity::bind(&host.identity.project_id, request.project_id.as_deref());
 
     // Hand reconcile to the actor and proceed to enqueue. The actor runs
     // concurrently with the agent loop, so a server added by this /turn

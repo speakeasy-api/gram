@@ -22,6 +22,9 @@ impl SpanIdentity {
     /// Set-once with blank input ignored: an empty boot env or a turn that
     /// omits the id leaves the cell open for a later, real value.
     pub fn bind(cell: &OnceLock<String>, raw: Option<&str>) {
+        if cell.get().is_some() {
+            return;
+        }
         if let Some(id) = raw.map(str::trim).filter(|id| !id.is_empty()) {
             let _ = cell.set(id.to_string());
         }
