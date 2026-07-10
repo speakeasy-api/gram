@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -44,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -71,6 +73,7 @@ type WorkerOptions struct {
 	BillingRepository              billing.Repository
 	RedisClient                    *redis.Client
 	CacheAdapter                   cache.Cache
+	EmailService                   *email.Service
 	PosthogClient                  *posthog.Posthog
 	FunctionsDeployer              functions.Deployer
 	FunctionsVersion               functions.RunnerVersion
@@ -83,7 +86,7 @@ type WorkerOptions struct {
 	AssistantsCore                 *assistants.ServiceCore
 	TemporalEnv                    *tenv.Environment
 	PIIScanner                     risk_analysis.PIIScanner
-	PIScanner                      *risk_analysis.PromptInjectionScanner
+	PIScanner                      *promptinjection.Scanner
 	CustomRuleScanner              *customruleanalyzer.Scanner
 	BuiltinPresets                 *presetlib.Library
 	ShadowMCPClient                *shadowmcp.Client
@@ -131,6 +134,7 @@ func ForDeploymentProcessing(
 		TelemetryRepo:                  nil,
 		TriggersApp:                    nil,
 		CacheAdapter:                   nil,
+		EmailService:                   nil,
 		AssistantsCore:                 nil,
 		TemporalEnv:                    nil,
 		PIIScanner:                     nil,
@@ -183,6 +187,7 @@ func NewTemporalWorker(
 		TelemetryRepo:                  nil,
 		TriggersApp:                    nil,
 		CacheAdapter:                   nil,
+		EmailService:                   nil,
 		AssistantsCore:                 nil,
 		TemporalEnv:                    env,
 		PIIScanner:                     nil,
@@ -225,6 +230,7 @@ func NewTemporalWorker(
 			TelemetryRepo:                  conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
 			TriggersApp:                    conv.Default(o.TriggersApp, opts.TriggersApp),
 			CacheAdapter:                   conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			EmailService:                   conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:                 conv.Default(o.AssistantsCore, opts.AssistantsCore),
 			TemporalEnv:                    conv.Default(o.TemporalEnv, opts.TemporalEnv),
 			PIIScanner:                     conv.Default(o.PIIScanner, opts.PIIScanner),
@@ -301,6 +307,7 @@ func NewTemporalWorker(
 		opts.TelemetryRepo,
 		opts.TriggersApp,
 		opts.CacheAdapter,
+		opts.EmailService,
 		opts.AssistantsCore,
 		opts.PIIScanner,
 		opts.PIScanner,
@@ -332,6 +339,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
+	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)

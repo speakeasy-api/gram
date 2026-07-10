@@ -18,11 +18,15 @@ import (
 
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
 	adminrssrv "github.com/speakeasy-api/gram/server/gen/http/admin_remote_sessions/server"
+	orgclientssrv "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/server"
 	orgissuerssrv "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/server"
+	orgsessionssrv "github.com/speakeasy-api/gram/server/gen/http/organization_remote_sessions/server"
 	clientssrv "github.com/speakeasy-api/gram/server/gen/http/remote_session_clients/server"
 	issuerssrv "github.com/speakeasy-api/gram/server/gen/http/remote_session_issuers/server"
 	sessionssrv "github.com/speakeasy-api/gram/server/gen/http/remote_sessions/server"
+	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
+	orgsessionsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_sessions"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	sessionsgen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
@@ -52,16 +56,20 @@ type Service struct {
 }
 
 var (
-	_ issuersgen.Service    = (*Service)(nil)
-	_ issuersgen.Auther     = (*Service)(nil)
-	_ orgissuersgen.Service = (*Service)(nil)
-	_ orgissuersgen.Auther  = (*Service)(nil)
-	_ clientsgen.Service    = (*Service)(nil)
-	_ clientsgen.Auther     = (*Service)(nil)
-	_ sessionsgen.Service   = (*Service)(nil)
-	_ sessionsgen.Auther    = (*Service)(nil)
-	_ adminrsgen.Service    = (*Service)(nil)
-	_ adminrsgen.Auther     = (*Service)(nil)
+	_ issuersgen.Service     = (*Service)(nil)
+	_ issuersgen.Auther      = (*Service)(nil)
+	_ orgissuersgen.Service  = (*Service)(nil)
+	_ orgissuersgen.Auther   = (*Service)(nil)
+	_ orgclientsgen.Service  = (*Service)(nil)
+	_ orgclientsgen.Auther   = (*Service)(nil)
+	_ orgsessionsgen.Service = (*Service)(nil)
+	_ orgsessionsgen.Auther  = (*Service)(nil)
+	_ clientsgen.Service     = (*Service)(nil)
+	_ clientsgen.Auther      = (*Service)(nil)
+	_ sessionsgen.Service    = (*Service)(nil)
+	_ sessionsgen.Auther     = (*Service)(nil)
+	_ adminrsgen.Service     = (*Service)(nil)
+	_ adminrsgen.Auther      = (*Service)(nil)
 )
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, legacyRegistrations LegacyRegistrationStore) *Service {
@@ -99,6 +107,18 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		orgIssuerEndpoints.Use(m)
 	}
 	orgissuerssrv.Mount(mux, orgissuerssrv.New(orgIssuerEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+
+	orgClientEndpoints := orgclientsgen.NewEndpoints(service)
+	for _, m := range mw {
+		orgClientEndpoints.Use(m)
+	}
+	orgclientssrv.Mount(mux, orgclientssrv.New(orgClientEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+
+	orgSessionEndpoints := orgsessionsgen.NewEndpoints(service)
+	for _, m := range mw {
+		orgSessionEndpoints.Use(m)
+	}
+	orgsessionssrv.Mount(mux, orgsessionssrv.New(orgSessionEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 
 	clientEndpoints := clientsgen.NewEndpoints(service)
 	for _, m := range mw {

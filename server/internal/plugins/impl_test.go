@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -31,10 +32,15 @@ type mockGitHubPublisher struct {
 	createRepoCalled      bool
 	pushFilesCalled       bool
 	addCollaboratorCalled bool
+	getRepoFilesCalled    bool
 	collaborators         []string
 	lastPushedFiles       map[string][]byte
-	createRepoErr         error
-	pushFilesErr          error
+	// repoFiles, when set, is returned by GetRepoFiles; otherwise it falls back
+	// to lastPushedFiles so a second publish carries the first publish's files.
+	repoFiles       map[string][]byte
+	createRepoErr   error
+	pushFilesErr    error
+	getRepoFilesErr error
 }
 
 func (m *mockGitHubPublisher) CreateRepo(_ context.Context, _ int64, _, _ string, _ bool) error {
@@ -59,6 +65,20 @@ func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, _, 
 
 func (m *mockGitHubPublisher) HasDirectCollaborator(_ context.Context, _ int64, _, _ string) (bool, error) {
 	return len(m.collaborators) > 0, nil
+}
+
+func (m *mockGitHubPublisher) GetRepoFiles(_ context.Context, _ int64, _, _, _ string) (map[string][]byte, error) {
+	m.getRepoFilesCalled = true
+	if m.getRepoFilesErr != nil {
+		return nil, m.getRepoFilesErr
+	}
+	if m.repoFiles != nil {
+		return m.repoFiles, nil
+	}
+	if m.lastPushedFiles != nil {
+		return m.lastPushedFiles, nil
+	}
+	return nil, ghclient.ErrRepoNotFound
 }
 
 func TestPluginsService_CreatePlugin(t *testing.T) {
@@ -1052,10 +1072,13 @@ func TestPluginsService_PublishPlugins_RePublishCreatesAdditionalKey(t *testing.
 			hooksCount++
 		}
 	}
-	// Documents the current behavior: each publish mints fresh keys without
-	// revoking prior ones. A future improvement should revoke first.
+	// A human re-publish always refreshes the MCP component, minting a fresh MCP
+	// key each time (prior ones are not revoked — a future improvement should
+	// revoke first). The hooks component is decoupled: it is carried verbatim from
+	// the existing repo unless hooksGeneratorVersion bumps, so re-publishing does
+	// NOT mint a second hooks key.
 	require.Equal(t, 2, mcpCount, "expected 2 mcp keys after 2 publishes")
-	require.Equal(t, 2, hooksCount, "expected 2 hooks keys after 2 publishes")
+	require.Equal(t, 1, hooksCount, "expected hooks key to be reused (carried) across republishes")
 }
 
 // PublishPlugins must not persist the API key (or audit log entry, or
@@ -1797,6 +1820,79 @@ func TestPluginsService_PublishProject_SkipsWhenUnchanged(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, third.Skipped, "changed plugin set must re-publish")
 	require.True(t, mock.pushFilesCalled)
+}
+
+// hooksFilesOf returns the observability (hooks) plugin files from a pushed file
+// map, identified by the hooks/ subdirectory that only the observability plugins
+// use. These files embed the hooks API key, so comparing them across publishes
+// detects whether the hooks component was regenerated (fresh key) or carried.
+func hooksFilesOf(files map[string][]byte) map[string]string {
+	out := make(map[string]string)
+	for p, c := range files {
+		if strings.Contains(p, "/hooks/") {
+			out[p] = string(c)
+		}
+	}
+	return out
+}
+
+// An MCP-only republish must carry the observability (hooks) plugin verbatim —
+// the whole point of decoupling the two components. The hooks files (including
+// their embedded hooks API key) must be byte-identical across a publish driven
+// solely by an MCP content change.
+func TestPluginsService_PublishProject_MCPChangeCarriesHooksVerbatim(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Carry Hooks"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "carry-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Carry Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	input := plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	}
+
+	first, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, first.Skipped)
+
+	hooksBefore := hooksFilesOf(mock.lastPushedFiles)
+	require.NotEmpty(t, hooksBefore, "first publish must emit hooks files")
+
+	// Change the plugin set — an MCP-only change; hooksGeneratorVersion is untouched.
+	toolset2 := createTestToolset(t, ctx, ti.conn, "carry-toolset-2")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset2.ID.String()),
+		DisplayName: conv.PtrEmpty("Carry Server 2"),
+		Policy:      "optional",
+		SortOrder:   1,
+	})
+	require.NoError(t, err)
+
+	second, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, second.Skipped, "MCP change must republish")
+	require.True(t, mock.getRepoFilesCalled, "carrying hooks requires fetching the existing repo")
+
+	hooksAfter := hooksFilesOf(mock.lastPushedFiles)
+	require.Equal(t, hooksBefore, hooksAfter, "hooks subtree must be carried verbatim across an MCP-only publish")
 }
 
 // A dashboard publish (PublishPlugins, which never skips) must still record the

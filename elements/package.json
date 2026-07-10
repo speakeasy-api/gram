@@ -2,63 +2,52 @@
   "name": "@gram-ai/elements",
   "description": "Gram Elements is a library of UI primitives for building chat-like experiences for MCP Servers.",
   "type": "module",
-  "version": "1.41.0",
+  "version": "1.42.0",
   "main": "dist/index.js",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/elements.js",
-      "require": "./dist/elements.cjs"
+      "default": "./dist/elements.js"
     },
     "./server": {
       "types": "./dist/server.d.ts",
-      "import": "./dist/server.js",
-      "require": "./dist/server.cjs"
+      "default": "./dist/server.js"
     },
     "./server/core": {
       "types": "./dist/server/core.d.ts",
-      "import": "./dist/server/core.js",
-      "require": "./dist/server/core.cjs"
+      "default": "./dist/server/core.js"
     },
     "./server/express": {
       "types": "./dist/server/express.d.ts",
-      "import": "./dist/server/express.js",
-      "require": "./dist/server/express.cjs"
+      "default": "./dist/server/express.js"
     },
     "./server/nextjs": {
       "types": "./dist/server/nextjs.d.ts",
-      "import": "./dist/server/nextjs.js",
-      "require": "./dist/server/nextjs.cjs"
+      "default": "./dist/server/nextjs.js"
     },
     "./server/fastify": {
       "types": "./dist/server/fastify.d.ts",
-      "import": "./dist/server/fastify.js",
-      "require": "./dist/server/fastify.cjs"
+      "default": "./dist/server/fastify.js"
     },
     "./server/hono": {
       "types": "./dist/server/hono.d.ts",
-      "import": "./dist/server/hono.js",
-      "require": "./dist/server/hono.cjs"
+      "default": "./dist/server/hono.js"
     },
     "./server/bun": {
       "types": "./dist/server/bun.d.ts",
-      "import": "./dist/server/bun.js",
-      "require": "./dist/server/bun.cjs"
+      "default": "./dist/server/bun.js"
     },
     "./server/tanstack-start": {
       "types": "./dist/server/tanstack-start.d.ts",
-      "import": "./dist/server/tanstack-start.js",
-      "require": "./dist/server/tanstack-start.cjs"
+      "default": "./dist/server/tanstack-start.js"
     },
     "./plugins": {
       "types": "./dist/plugins/index.d.ts",
-      "import": "./dist/plugins.js",
-      "require": "./dist/plugins.cjs"
+      "default": "./dist/plugins.js"
     },
     "./compat": {
       "types": "./dist/compat-plugin.d.ts",
-      "import": "./dist/compat-plugin.js",
-      "require": "./dist/compat-plugin.cjs"
+      "default": "./dist/compat-plugin.js"
     },
     "./elements.css": "./dist/elements.css"
   },
@@ -91,8 +80,8 @@
     "build-storybook": "storybook build --stats-json",
     "chromatic": "chromatic --exit-zero-on-changes",
     "type-check": "tsc --noEmit",
-    "docs": "typedoc",
-    "docs:watch": "typedoc --watch",
+    "docs": "node --import ./scripts/typedoc-ts6-alias.mjs node_modules/typedoc/bin/typedoc",
+    "docs:watch": "node --import ./scripts/typedoc-ts6-alias.mjs node_modules/typedoc/bin/typedoc --watch",
     "prepack": "pnpm build",
     "knip": "pnpm dlx knip",
     "knip:fix": "pnpm dlx knip --fix",
@@ -103,7 +92,7 @@
   "keywords": [],
   "author": "Adam Bull <adam@speakeasy.com>",
   "license": "ISC",
-  "packageManager": "pnpm@11.9.0",
+  "packageManager": "pnpm@11.10.0",
   "peerDependencies": {
     "@assistant-ui/react": "^0.11.58",
     "@assistant-ui/react-ai-sdk": "~1.2.0",
@@ -189,7 +178,7 @@
     "@radix-ui/react-slot": "^1.3.0",
     "@radix-ui/react-tooltip": "^1.2.10",
     "@storybook/addon-themes": "^10.4.6",
-    "@tanstack/react-query": "^5.101.1",
+    "@tanstack/react-query": "^5.101.2",
     "ai": "catalog:",
     "assistant-stream": "^0.2.46",
     "class-variance-authority": "^0.7.1",
@@ -211,12 +200,13 @@
     "@openrouter/sdk": "^0.3.16",
     "@storybook/addon-docs": "^10.4.6",
     "@storybook/react-vite": "^10.4.6",
-    "@tailwindcss/vite": "^4.3.1",
-    "@tanstack/react-start": "1.168.26",
+    "@tailwindcss/vite": "catalog:",
+    "@tanstack/react-start": "1.168.27",
     "@types/express": "^5.0.6",
     "@types/lodash.merge": "^4.6.9",
     "@types/node": "^24.13.2",
-    "@vitejs/plugin-react": "^5.2.0",
+    "@typescript/typescript6": "^6.0.2",
+    "@vitejs/plugin-react": "catalog:",
     "chromatic": "^13.3.5",
     "fastify": "^5.8.5",
     "hono": "^4.12.27",
@@ -230,12 +220,13 @@
     "react-dom": "^19.2.7",
     "remark-gfm": "^4.0.1",
     "storybook": "^10.4.6",
-    "tailwindcss": "^4.3.1",
+    "tailwindcss": "^4.3.2",
     "tw-animate-css": "^1.3.8",
     "typedoc": "^0.28.19",
     "typedoc-plugin-markdown": "^4.12.0",
-    "vite": "^7.3.5",
-    "vite-plugin-dts": "^4.5.4",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-dts": "^5.0.3",
     "vite-plugin-turbosnap": "^1.0.3",
     "vitest": "^4.1.9",
     "zustand": "^5.0.14"

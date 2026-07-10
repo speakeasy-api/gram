@@ -337,17 +337,19 @@ WHERE marketplace_token = @marketplace_token;
 -- argument is the candidate token to use if no token is currently set; on
 -- conflict the existing token is preserved via COALESCE so callers can pass a
 -- freshly-generated token on every publish without overwriting prior state.
--- Token rotation goes through a separate query. published_fingerprint is the
--- content hash of the packages just published and is always overwritten, so
--- subsequent rollout runs can detect when nothing changed.
-INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint)
-VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token, @published_fingerprint)
+-- Token rotation goes through a separate query. published_mcp_fingerprints and
+-- published_hooks_version record the per-plugin MCP content hashes and hooks
+-- generator version just published; both are always overwritten so subsequent
+-- rollout runs can detect independently whether the MCP or hooks component changed.
+INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version)
+VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token, @published_mcp_fingerprints, @published_hooks_version)
 ON CONFLICT (project_id) DO UPDATE
   SET installation_id = EXCLUDED.installation_id,
       repo_owner = EXCLUDED.repo_owner,
       repo_name = EXCLUDED.repo_name,
       marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
-      published_fingerprint = EXCLUDED.published_fingerprint,
+      published_mcp_fingerprints = EXCLUDED.published_mcp_fingerprints,
+      published_hooks_version = EXCLUDED.published_hooks_version,
       updated_at = clock_timestamp()
 RETURNING *;
 

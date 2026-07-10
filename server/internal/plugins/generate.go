@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -116,13 +118,36 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 	return conv.Default(cfg.Version, "0.1.0")
 }
 
-// pluginGeneratorVersion is mixed into every plugin fingerprint. Bump it to
-// force the automated rollout to republish every connected project on the next
-// run, even when an individual project's generated output is byte-identical —
-// for generator changes that alter behaviour in ways the placeholder
-// fingerprint pass can't observe. The Plugin Generate Check CI workflow
-// requires this to change whenever generate.go does.
-const pluginGeneratorVersion = "9"
+// hooksManifestVersion is the version stamped into the observability plugin.json
+// on all three platforms. Unlike the MCP manifest version (a per-publish epoch),
+// it is derived deterministically from hooksGeneratorVersion so it changes only
+// on a manual bump — the single signal that publishes a new hooks plugin.
+// Rendered as 0.<hooksGeneratorVersion>.0, which sorts strictly above the
+// historical epoch-based 0.1.<epoch> hooks manifests already in users' caches
+// (minor component 9+ beats 1), so a bump is always seen as newer and triggers a
+// refresh.
+func hooksManifestVersion() string {
+	return "0." + hooksGeneratorVersion + ".0"
+}
+
+// mcpGeneratorVersion is mixed into the MCP fingerprint (see MCPFingerprint).
+// Bump it to force the automated rollout to republish every connected project's
+// MCP plugins on the next run, even when a project's generated MCP output is
+// byte-identical — for generator changes that alter MCP behaviour in ways the
+// placeholder fingerprint pass can't observe.
+const mcpGeneratorVersion = "9"
+
+// hooksGeneratorVersion is the sole rollout signal for the observability (hooks)
+// plugin. It is stamped into the hooks plugin.json version (see
+// hooksManifestVersion) rather than folded into a content hash, so bumping it is
+// the only thing that publishes a new hooks plugin to connected repos — an
+// MCP-only publish leaves the existing hooks subtree untouched. Bump it for ANY
+// change to hooks generation, including behaviour a fingerprint couldn't observe
+// (e.g. the observability_mode toggle's effect on emitted hooks).
+//
+// The Plugin Generate Check CI workflow requires the relevant one of these two
+// constants to change whenever generate.go does.
+const hooksGeneratorVersion = "9"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -134,22 +159,55 @@ const (
 	fingerprintHooksKeySentinel = "gram_fingerprint_hooks_key"
 )
 
-// PluginFingerprint returns a stable content hash of the packages that would be
-// generated for the given plugins. It normalizes the per-publish fields
-// (manifest version and injected API keys) so two publishes with the same
-// plugin configuration and generator version produce the same fingerprint,
-// while any change to the plugin set, project/org config, or generator output
-// changes it. The automated rollout uses this to skip no-op republishes.
-func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error) {
+// mcpSharedFingerprintKey is the reserved key under which MCPFingerprints stores
+// the hash of the shared marketplace/README files. Plugin slugs are kebab-case
+// and never collide with it. When per-plugin publishing lands, shared files will
+// be assembled per plugin and this reserved entry can be reworked away.
+const mcpSharedFingerprintKey = "__shared__"
+
+// MCPFingerprints returns per-plugin content fingerprints of the MCP (feature)
+// plugins that would be generated for the given plugins — a map of plugin slug ->
+// stable hash, plus a reserved mcpSharedFingerprintKey entry covering the shared
+// marketplace/README files. It deliberately excludes the observability (hooks)
+// subtree: that plugin rolls out on its own manual hooksGeneratorVersion signal,
+// so MCP-content and hooks changes move independently.
+//
+// Fingerprints are stored per plugin (rather than as one aggregate) so a future
+// per-plugin publish flow can decide independently which plugins have unpublished
+// changes without a schema migration; today the rollout treats the MCP component
+// as changed when any entry differs. Per-publish fields (manifest version, the
+// injected MCP API key) are normalized out so the same MCP configuration and
+// mcpGeneratorVersion always produce the same fingerprints.
+func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig) (map[string]string, error) {
 	cfg.Version = ""
 	cfg.APIKey = fingerprintAPIKeySentinel
+	// HooksAPIKey affects only the shared files here (whether the observability
+	// entry is listed in marketplace.json). Published repos always carry a hooks
+	// key, so pin a stable non-empty sentinel to keep that entry in the hash.
 	cfg.HooksAPIKey = fingerprintHooksKeySentinel
 
-	files, err := GeneratePluginPackages(plugins, cfg)
-	if err != nil {
-		return "", fmt.Errorf("generate plugin packages for fingerprint: %w", err)
+	out := make(map[string]string, len(plugins)+1)
+	for _, p := range plugins {
+		files, err := generateMCPFiles([]PluginInfo{p}, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("generate mcp files for plugin %s fingerprint: %w", p.Slug, err)
+		}
+		out[p.Slug] = hashFiles(mcpGeneratorVersion, files)
 	}
 
+	shared, err := generateSharedFiles(plugins, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("generate shared files for fingerprint: %w", err)
+	}
+	out[mcpSharedFingerprintKey] = hashFiles(mcpGeneratorVersion, shared)
+
+	return out, nil
+}
+
+// hashFiles returns a stable sha256 over a salt plus the sorted (path, content)
+// pairs. A NUL after each component disambiguates boundaries so no concatenation
+// of distinct (path, content) sequences can collide.
+func hashFiles(salt string, files map[string][]byte) string {
 	paths := make([]string, 0, len(files))
 	for p := range files {
 		paths = append(paths, p)
@@ -157,9 +215,7 @@ func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error)
 	sort.Strings(paths)
 
 	h := sha256.New()
-	// A NUL after each component disambiguates boundaries so no concatenation
-	// of distinct (path, content) sequences can collide.
-	_, _ = h.Write([]byte(pluginGeneratorVersion))
+	_, _ = h.Write([]byte(salt))
 	_, _ = h.Write([]byte{0})
 	for _, p := range paths {
 		_, _ = h.Write([]byte(p))
@@ -167,8 +223,7 @@ func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error)
 		_, _ = h.Write(files[p])
 		_, _ = h.Write([]byte{0})
 	}
-
-	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
+	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
 // claudeHookAsyncFlag returns the async flag for a Claude hook event.
@@ -239,28 +294,116 @@ var CursorObservabilityHookEvents = []string{
 // so plugin sources can be referenced by bare name relative to this root.
 const cursorPluginRoot = "cursor-plugins"
 
-// GeneratePluginPackages produces the complete file map for a plugin distribution
-// repository containing Claude Code, Cursor, and Codex plugins. Used for GitHub push.
+// GeneratePluginPackages produces the complete file map for a plugin
+// distribution repository containing Claude Code, Cursor, and Codex plugins.
+// Used for GitHub push. It is the union of the three independently-generatable
+// components: the hooks (observability) subtree, the MCP (feature) plugin
+// subtree, and the shared marketplace/README files. The publish path generates
+// and pushes these components separately (see publishProject) so a change to one
+// axis does not churn the other; this helper is the all-at-once composition used
+// for first publishes, fingerprinting, and tests.
 func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
+	hooks, err := generateHooksFiles(cfg)
+	if err != nil {
+		return nil, err
+	}
+	mcp, err := generateMCPFiles(plugins, cfg)
+	if err != nil {
+		return nil, err
+	}
+	shared, err := generateSharedFiles(plugins, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	files := make(map[string][]byte, len(hooks)+len(mcp)+len(shared))
+	maps.Copy(files, hooks)
+	maps.Copy(files, mcp)
+	maps.Copy(files, shared)
+	return files, nil
+}
+
+// generateHooksFiles produces the per-org observability (hooks) plugin subtree
+// for Claude, Cursor, and Codex. Returns an empty map when no hooks key is
+// configured (cfg.HooksAPIKey == ""), which omits the observability plugin —
+// typically only in tests that don't exercise the publish flow. This subtree
+// rolls out independently of the MCP subtree on the hooksGeneratorVersion signal.
+func generateHooksFiles(cfg GenerateConfig) (map[string][]byte, error) {
+	files := make(map[string][]byte)
+	if cfg.HooksAPIKey == "" {
+		return files, nil
+	}
+	if err := generateClaudeObservabilityPlugin(files, cfg); err != nil {
+		return nil, fmt.Errorf("generate claude observability plugin: %w", err)
+	}
+	if err := generateCursorObservabilityPlugin(files, cfg); err != nil {
+		return nil, fmt.Errorf("generate cursor observability plugin: %w", err)
+	}
+	if err := generateCodexObservabilityPlugin(files, cfg); err != nil {
+		return nil, fmt.Errorf("generate codex observability plugin: %w", err)
+	}
+	return files, nil
+}
+
+// hooksFilePaths returns the sorted set of repo paths the hooks (observability)
+// subtree occupies for the given config. The publish path uses it to carry the
+// hooks files verbatim from the existing repo when only the MCP component
+// changed. A non-empty hooks key sentinel is forced so the subtree is generated
+// (an empty key omits it), and it never reaches output because only the paths
+// are used.
+func hooksFilePaths(cfg GenerateConfig) ([]string, error) {
+	cfg.HooksAPIKey = fingerprintHooksKeySentinel
+	files, err := generateHooksFiles(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("enumerate hooks file paths: %w", err)
+	}
+	return slices.Sorted(maps.Keys(files)), nil
+}
+
+// mcpFilePaths returns the sorted set of repo paths the MCP (feature) plugin
+// subtree occupies for the given plugins and config, used to carry the MCP files
+// verbatim from the existing repo when only the hooks component changed.
+func mcpFilePaths(plugins []PluginInfo, cfg GenerateConfig) ([]string, error) {
+	cfg.APIKey = fingerprintAPIKeySentinel
+	files, err := generateMCPFiles(plugins, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("enumerate mcp file paths: %w", err)
+	}
+	return slices.Sorted(maps.Keys(files)), nil
+}
+
+// generateMCPFiles produces the feature (MCP) plugin subtree — one plugin per
+// PluginInfo — for Claude, Cursor, and Codex.
+func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
+	files := make(map[string][]byte)
+	for _, p := range plugins {
+		if err := generateClaudePlugin(files, p, cfg); err != nil {
+			return nil, fmt.Errorf("generate claude plugin %s: %w", p.Slug, err)
+		}
+		if err := generateCursorPlugin(files, p, cfg); err != nil {
+			return nil, fmt.Errorf("generate cursor plugin %s: %w", p.Slug, err)
+		}
+		if err := generateCodexPlugin(files, p, cfg); err != nil {
+			return nil, fmt.Errorf("generate codex plugin %s: %w", p.Slug, err)
+		}
+	}
+	return files, nil
+}
+
+// generateSharedFiles produces the files that reference both the hooks and MCP
+// plugins: the per-platform marketplace.json manifests and the README. They
+// embed no per-publish secrets or versions, so they are deterministic given the
+// plugin set and org config and are regenerated on every publish. The
+// observability entry is listed first (so it's the first thing team admins see)
+// and only when a hooks key is configured, matching generateHooksFiles.
+func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 
 	claudePlugins := make([]marketplaceEntry, 0)
 	cursorPlugins := make([]marketplaceEntry, 0)
 	codexPlugins := make([]codexMarketplaceEntry, 0)
 
-	// Observability plugin ships first in the marketplace so it's the first
-	// thing team admins see. Skipped when no hooks key is configured —
-	// typically only in tests that don't exercise the publish flow.
 	if cfg.HooksAPIKey != "" {
-		if err := generateClaudeObservabilityPlugin(files, cfg); err != nil {
-			return nil, fmt.Errorf("generate claude observability plugin: %w", err)
-		}
-		if err := generateCursorObservabilityPlugin(files, cfg); err != nil {
-			return nil, fmt.Errorf("generate cursor observability plugin: %w", err)
-		}
-		if err := generateCodexObservabilityPlugin(files, cfg); err != nil {
-			return nil, fmt.Errorf("generate codex observability plugin: %w", err)
-		}
 		claudeObservability := ClaudeObservabilitySlug(cfg)
 		claudePlugins = append(claudePlugins, marketplaceEntry{
 			Name:        claudeObservability,
@@ -290,15 +433,6 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	}
 
 	for _, p := range plugins {
-		if err := generateClaudePlugin(files, p, cfg); err != nil {
-			return nil, fmt.Errorf("generate claude plugin %s: %w", p.Slug, err)
-		}
-		if err := generateCursorPlugin(files, p, cfg); err != nil {
-			return nil, fmt.Errorf("generate cursor plugin %s: %w", p.Slug, err)
-		}
-		if err := generateCodexPlugin(files, p, cfg); err != nil {
-			return nil, fmt.Errorf("generate codex plugin %s: %w", p.Slug, err)
-		}
 		claudePlugins = append(claudePlugins, marketplaceEntry{
 			Name:        p.Slug,
 			DisplayName: p.Name,
@@ -665,7 +799,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 		Name:        name,
 		DisplayName: cfg.OrgName + " Observability",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
-		Version:     pluginManifestVersion(cfg),
+		Version:     hooksManifestVersion(),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
 		UserConfig:  nil,
@@ -735,7 +869,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 		Name:        name,
 		DisplayName: "Observability (Cursor)",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
-		Version:     pluginManifestVersion(cfg),
+		Version:     hooksManifestVersion(),
 		Author:      cursorAuthor{Name: cfg.OrgName, Email: cfg.OrgEmail},
 		Homepage:    "https://getgram.ai",
 	})
@@ -864,7 +998,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	}
 	pluginJSON, err := marshalJSON(codexPluginMeta{
 		Name:        name,
-		Version:     pluginManifestVersion(cfg),
+		Version:     hooksManifestVersion(),
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		MCPServers:  "",
 		Hooks:       "./hooks/hooks.json",
@@ -1315,7 +1449,17 @@ gram_hooks_login_handle_request() {
   local state="$2"
   local probe="$3"
   local request_line="" line="" path_query="" method="" content_length=""
-  IFS= read -r -t 10 request_line || request_line=""
+  # This read is what waits for the browser to hit the callback. nc has already
+  # accepted a connection (or is about to on a reused socket), but the countdown
+  # starts the instant the serve loop iteration begins — before the user has
+  # clicked through the dashboard, minted the key, and been redirected back,
+  # which routinely takes far longer than a few seconds. A short timeout here
+  # fires first, the handler returns with no HTTP response, and the browser
+  # renders ERR_EMPTY_RESPONSE on the reused connection. Wait the full login
+  # window so the callback is actually caught. Once the first line arrives the
+  # rest of the request follows immediately, so the header/body reads below stay
+  # short.
+  IFS= read -r -t "${GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS:-240}" request_line || request_line=""
   request_line="${request_line%$'\r'}"
   if [ -z "$request_line" ]; then
     return 0

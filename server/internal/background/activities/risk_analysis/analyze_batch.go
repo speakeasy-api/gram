@@ -28,6 +28,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
@@ -41,9 +43,9 @@ type AnalyzeBatch struct {
 	db                     *pgxpool.Pool
 	gitleaksScanner        *gitleaks.Scanner
 	piiScanner             PIIScanner
-	promptInjectionScanner *PromptInjectionScanner
+	promptInjectionScanner *promptinjection.Scanner
 	shadowMCPScanner       *shadowmcpscan.Scanner
-	judge                  PromptJudge
+	judge                  promptpolicy.Evaluator
 	flags                  feature.Provider
 	presidioPub            gcp.Publisher[*riskv1.PresidioAnalysis]
 	gitleaksPub            gcp.Publisher[*riskv1.GitleaksAnalysis]
@@ -61,10 +63,10 @@ func NewAnalyzeBatch(
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	piiScanner PIIScanner,
-	promptInjectionScanner *PromptInjectionScanner,
+	promptInjectionScanner *promptinjection.Scanner,
 	shadowMCPClient *shadowmcp.Client,
 	mcpMatchLookup MCPMatchLookup,
-	judge PromptJudge,
+	judge promptpolicy.Evaluator,
 	flags feature.Provider,
 	presidioPub gcp.Publisher[*riskv1.PresidioAnalysis],
 	gitleaksPub gcp.Publisher[*riskv1.GitleaksAnalysis],
@@ -79,7 +81,7 @@ func NewAnalyzeBatch(
 		piiScanner = &StubPIIScanner{}
 	}
 	if promptInjectionScanner == nil {
-		promptInjectionScanner = NewPromptInjectionScanner(logger, nil)
+		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 	}
 
 	return &AnalyzeBatch{

@@ -21,6 +21,10 @@ type Client struct {
 	// endpoint.
 	GetPluginsDoer goahttp.Doer
 
+	// ListSyncedUsers Doer is the HTTP client used to make requests to the
+	// listSyncedUsers endpoint.
+	ListSyncedUsersDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -42,6 +46,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		GetPluginsDoer:      doer,
+		ListSyncedUsersDoer: doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -69,6 +74,30 @@ func (c *Client) GetPlugins() goa.Endpoint {
 		resp, err := c.GetPluginsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agent", "getPlugins", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSyncedUsers returns an endpoint that makes HTTP requests to the agent
+// service listSyncedUsers server.
+func (c *Client) ListSyncedUsers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSyncedUsersRequest(c.encoder)
+		decodeResponse = DecodeListSyncedUsersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSyncedUsersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSyncedUsersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "listSyncedUsers", err)
 		}
 		return decodeResponse(resp)
 	}

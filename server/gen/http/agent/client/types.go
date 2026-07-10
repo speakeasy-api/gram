@@ -26,6 +26,13 @@ type GetPluginsResponseBody struct {
 	Plugins []*AgentPluginResponseBody `form:"plugins,omitempty" json:"plugins,omitempty" xml:"plugins,omitempty"`
 }
 
+// ListSyncedUsersResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body.
+type ListSyncedUsersResponseBody struct {
+	// Emails seen syncing the device agent, most recently active first.
+	Users []*SyncedAgentUserResponseBody `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
+}
+
 // GetPluginsUnauthorizedResponseBody is the type of the "agent" service
 // "getPlugins" endpoint HTTP response body for the "unauthorized" error.
 type GetPluginsUnauthorizedResponseBody struct {
@@ -206,6 +213,188 @@ type GetPluginsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListSyncedUsersUnauthorizedResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "unauthorized" error.
+type ListSyncedUsersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSyncedUsersForbiddenResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "forbidden" error.
+type ListSyncedUsersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSyncedUsersBadRequestResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "bad_request" error.
+type ListSyncedUsersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSyncedUsersNotFoundResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "not_found" error.
+type ListSyncedUsersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSyncedUsersConflictResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "conflict" error.
+type ListSyncedUsersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSyncedUsersUnsupportedMediaResponseBody is the type of the "agent"
+// service "listSyncedUsers" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListSyncedUsersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSyncedUsersInvalidResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "invalid" error.
+type ListSyncedUsersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSyncedUsersInvariantViolationResponseBody is the type of the "agent"
+// service "listSyncedUsers" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSyncedUsersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSyncedUsersUnexpectedResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "unexpected" error.
+type ListSyncedUsersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSyncedUsersGatewayErrorResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "gateway_error" error.
+type ListSyncedUsersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AgentMarketplaceResponseBody is used to define fields on response body types.
 type AgentMarketplaceResponseBody struct {
 	// Stable identifier for the marketplace, used as its key when the agent
@@ -226,6 +415,17 @@ type AgentPluginResponseBody struct {
 	// Name of the marketplace this plugin lives in. Always equals the `name` of
 	// one of the marketplaces in the same response.
 	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+}
+
+// SyncedAgentUserResponseBody is used to define fields on response body types.
+type SyncedAgentUserResponseBody struct {
+	// Email the device agent reported on sync. Resolve against org members for
+	// display.
+	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	// First time this email was seen syncing the device agent.
+	FirstSeenAt *string `form:"first_seen_at,omitempty" json:"first_seen_at,omitempty" xml:"first_seen_at,omitempty"`
+	// Most recent time this email was seen syncing the device agent.
+	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 }
 
 // NewGetPluginsResultOK builds a "agent" service "getPlugins" endpoint result
@@ -404,6 +604,172 @@ func NewGetPluginsGatewayError(body *GetPluginsGatewayErrorResponseBody) *goa.Se
 	return v
 }
 
+// NewListSyncedUsersResultOK builds a "agent" service "listSyncedUsers"
+// endpoint result from a HTTP "OK" response.
+func NewListSyncedUsersResultOK(body *ListSyncedUsersResponseBody) *agent.ListSyncedUsersResult {
+	v := &agent.ListSyncedUsersResult{}
+	v.Users = make([]*agent.SyncedAgentUser, len(body.Users))
+	for i, val := range body.Users {
+		if val == nil {
+			v.Users[i] = nil
+			continue
+		}
+		v.Users[i] = unmarshalSyncedAgentUserResponseBodyToAgentSyncedAgentUser(val)
+	}
+
+	return v
+}
+
+// NewListSyncedUsersUnauthorized builds a agent service listSyncedUsers
+// endpoint unauthorized error.
+func NewListSyncedUsersUnauthorized(body *ListSyncedUsersUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSyncedUsersForbidden builds a agent service listSyncedUsers endpoint
+// forbidden error.
+func NewListSyncedUsersForbidden(body *ListSyncedUsersForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSyncedUsersBadRequest builds a agent service listSyncedUsers endpoint
+// bad_request error.
+func NewListSyncedUsersBadRequest(body *ListSyncedUsersBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSyncedUsersNotFound builds a agent service listSyncedUsers endpoint
+// not_found error.
+func NewListSyncedUsersNotFound(body *ListSyncedUsersNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSyncedUsersConflict builds a agent service listSyncedUsers endpoint
+// conflict error.
+func NewListSyncedUsersConflict(body *ListSyncedUsersConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSyncedUsersUnsupportedMedia builds a agent service listSyncedUsers
+// endpoint unsupported_media error.
+func NewListSyncedUsersUnsupportedMedia(body *ListSyncedUsersUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSyncedUsersInvalid builds a agent service listSyncedUsers endpoint
+// invalid error.
+func NewListSyncedUsersInvalid(body *ListSyncedUsersInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSyncedUsersInvariantViolation builds a agent service listSyncedUsers
+// endpoint invariant_violation error.
+func NewListSyncedUsersInvariantViolation(body *ListSyncedUsersInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSyncedUsersUnexpected builds a agent service listSyncedUsers endpoint
+// unexpected error.
+func NewListSyncedUsersUnexpected(body *ListSyncedUsersUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSyncedUsersGatewayError builds a agent service listSyncedUsers
+// endpoint gateway_error error.
+func NewListSyncedUsersGatewayError(body *ListSyncedUsersGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetPluginsResponseBody runs the validations defined on
 // GetPluginsResponseBody
 func ValidateGetPluginsResponseBody(body *GetPluginsResponseBody) (err error) {
@@ -426,6 +792,22 @@ func ValidateGetPluginsResponseBody(body *GetPluginsResponseBody) (err error) {
 	for _, e := range body.Plugins {
 		if e != nil {
 			if err2 := ValidateAgentPluginResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateListSyncedUsersResponseBody runs the validations defined on
+// ListSyncedUsersResponseBody
+func ValidateListSyncedUsersResponseBody(body *ListSyncedUsersResponseBody) (err error) {
+	if body.Users == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("users", "body"))
+	}
+	for _, e := range body.Users {
+		if e != nil {
+			if err2 := ValidateSyncedAgentUserResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -673,6 +1055,246 @@ func ValidateGetPluginsGatewayErrorResponseBody(body *GetPluginsGatewayErrorResp
 	return
 }
 
+// ValidateListSyncedUsersUnauthorizedResponseBody runs the validations defined
+// on listSyncedUsers_unauthorized_response_body
+func ValidateListSyncedUsersUnauthorizedResponseBody(body *ListSyncedUsersUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSyncedUsersForbiddenResponseBody runs the validations defined on
+// listSyncedUsers_forbidden_response_body
+func ValidateListSyncedUsersForbiddenResponseBody(body *ListSyncedUsersForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSyncedUsersBadRequestResponseBody runs the validations defined
+// on listSyncedUsers_bad_request_response_body
+func ValidateListSyncedUsersBadRequestResponseBody(body *ListSyncedUsersBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSyncedUsersNotFoundResponseBody runs the validations defined on
+// listSyncedUsers_not_found_response_body
+func ValidateListSyncedUsersNotFoundResponseBody(body *ListSyncedUsersNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSyncedUsersConflictResponseBody runs the validations defined on
+// listSyncedUsers_conflict_response_body
+func ValidateListSyncedUsersConflictResponseBody(body *ListSyncedUsersConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSyncedUsersUnsupportedMediaResponseBody runs the validations
+// defined on listSyncedUsers_unsupported_media_response_body
+func ValidateListSyncedUsersUnsupportedMediaResponseBody(body *ListSyncedUsersUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSyncedUsersInvalidResponseBody runs the validations defined on
+// listSyncedUsers_invalid_response_body
+func ValidateListSyncedUsersInvalidResponseBody(body *ListSyncedUsersInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSyncedUsersInvariantViolationResponseBody runs the validations
+// defined on listSyncedUsers_invariant_violation_response_body
+func ValidateListSyncedUsersInvariantViolationResponseBody(body *ListSyncedUsersInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSyncedUsersUnexpectedResponseBody runs the validations defined
+// on listSyncedUsers_unexpected_response_body
+func ValidateListSyncedUsersUnexpectedResponseBody(body *ListSyncedUsersUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSyncedUsersGatewayErrorResponseBody runs the validations defined
+// on listSyncedUsers_gateway_error_response_body
+func ValidateListSyncedUsersGatewayErrorResponseBody(body *ListSyncedUsersGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAgentMarketplaceResponseBody runs the validations defined on
 // AgentMarketplaceResponseBody
 func ValidateAgentMarketplaceResponseBody(body *AgentMarketplaceResponseBody) (err error) {
@@ -693,6 +1315,27 @@ func ValidateAgentPluginResponseBody(body *AgentPluginResponseBody) (err error) 
 	}
 	if body.MarketplaceName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("marketplace_name", "body"))
+	}
+	return
+}
+
+// ValidateSyncedAgentUserResponseBody runs the validations defined on
+// SyncedAgentUserResponseBody
+func ValidateSyncedAgentUserResponseBody(body *SyncedAgentUserResponseBody) (err error) {
+	if body.Email == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
+	}
+	if body.FirstSeenAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("first_seen_at", "body"))
+	}
+	if body.LastSeenAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_seen_at", "body"))
+	}
+	if body.FirstSeenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_seen_at", *body.FirstSeenAt, goa.FormatDateTime))
+	}
+	if body.LastSeenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
 	}
 	return
 }

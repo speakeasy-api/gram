@@ -25,6 +25,8 @@ const (
 	transactionalIDTeamInvite                TransactionalID = "cml3n1h2n27o50i2rakc30bwb"
 	transactionalIDEnterpriseAdminOnboarding TransactionalID = "cmpqyxnzl00hj0jwtkibhyjdz"
 	transactionalIDAccessRequestCreated      TransactionalID = "cmq12wqp901sl0j0ll8cpr0yj"
+	transactionalIDTumUsageThreshold         TransactionalID = "cmrdon75q00390jvq44l87erv"
+	transactionalIDTumUsageOverage           TransactionalID = "cmrdopjpd028m0jx0v8sl25wj"
 )
 
 // Template is implemented by every concrete email template. Concrete types
@@ -63,5 +65,22 @@ var RegisteredTemplates = []Template{
 		RequesterEmail: "",
 		DisplayName:    "",
 		ApprovalURL:    "",
+	},
+	TumUsageThreshold{
+		OrganizationName: "",
+		ThresholdPercent: "",
+		UsageTokens:      "",
+		TokenLimit:       "",
+		CycleStart:       "",
+		CycleEnd:         "",
+	},
+	TumUsageOverage{
+		OrganizationName: "",
+		ThresholdPercent: "",
+		UsageTokens:      "",
+		TokenLimit:       "",
+		OverageTokens:    "",
+		CycleStart:       "",
+		CycleEnd:         "",
 	},
 }

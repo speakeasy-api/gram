@@ -189,12 +189,13 @@ func TestListPluginPublishCandidates_IncludesConnectedProjectWithoutDefaultPlugi
 	// silently drop out of the rollout just because is_default became part
 	// of the candidate signal.
 	_, err := queries.UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
-		ProjectID:            *authCtx.ProjectID,
-		InstallationID:       12345,
-		RepoOwner:            "test-org",
-		RepoName:             "test-project-plugins",
-		MarketplaceToken:     pgtype.Text{String: "test-token", Valid: true},
-		PublishedFingerprint: pgtype.Text{String: "test-fingerprint", Valid: true},
+		ProjectID:                *authCtx.ProjectID,
+		InstallationID:           12345,
+		RepoOwner:                "test-org",
+		RepoName:                 "test-project-plugins",
+		MarketplaceToken:         pgtype.Text{String: "test-token", Valid: true},
+		PublishedMcpFingerprints: []byte(`{}`),
+		PublishedHooksVersion:    pgtype.Text{String: "test-hooks-version", Valid: true},
 	})
 	require.NoError(t, err)
 

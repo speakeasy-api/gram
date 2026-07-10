@@ -86,7 +86,6 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/otelforwarding"
 	"github.com/speakeasy-api/gram/server/internal/packages"
-	"github.com/speakeasy-api/gram/server/internal/pijudge"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -98,7 +97,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
-	"github.com/speakeasy-api/gram/server/internal/riskjudge"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
+	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -452,8 +454,6 @@ func newStartCommand() *cli.Command {
 				attr.SlogServiceVersion(shortGitSHA()),
 				attr.SlogServiceEnv(serviceEnv),
 			)
-			tracerProvider := otel.GetTracerProvider()
-			meterProvider := otel.GetMeterProvider()
 			slog.SetDefault(logger)
 
 			if serviceEnv == "local" {
@@ -474,6 +474,9 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("setup opentelemetry sdk: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			tracerProvider := otel.GetTracerProvider()
+			meterProvider := otel.GetMeterProvider()
 
 			guardianPolicy, err := newGuardianPolicy(c, tracerProvider)
 			if err != nil {
@@ -595,7 +598,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create kubernetes client: %w", err)
 			}
 
-			temporalEnv, shutdown, err := newTemporalClient(logger, temporalClientOptions{
+			temporalEnv, shutdown, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
 				address:      c.String("temporal-address"),
 				namespace:    c.String("temporal-namespace"),
 				taskQueue:    c.String("temporal-task-queue"),
@@ -910,7 +913,7 @@ func newStartCommand() *cli.Command {
 			// Stop and flush the publishers before closing the Pub/Sub client
 			// they publish through. runShutdown executes shutdown funcs
 			// concurrently, so this ordering must be enforced inside a single
-			// func — appending the two separately would race the publisher
+			// func - appending the two separately would race the publisher
 			// flush against the client close and could drop in-flight messages.
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
 				stopErr := shutdown(ctx)
@@ -924,7 +927,7 @@ func newStartCommand() *cli.Command {
 			// Marketplace proxy routes (URL-based marketplace.json + git Smart
 			// HTTP for plugin source clones). Mounted via the outermost
 			// mux.Use middleware so /m/ and /p/ paths short-circuit the Goa
-			// mux. Public base URL is server-url by definition — the proxy
+			// mux. Public base URL is server-url by definition - the proxy
 			// lives on this server, so the plugin sources we embed in the
 			// rendered manifest must point back at it. nil when no App is
 			// configured.
@@ -1003,9 +1006,10 @@ func newStartCommand() *cli.Command {
 			// L1 prompt-injection engine is the LLM judge (POC-193). A completions
 			// client is always constructed, so the judge is always available.
 			hookJudgeLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
-			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Classify)
+			hookPIScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Classify)
 
-			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter)
+			hookPromptJudge := ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Evaluate
+			hookPromptPolicyScanner := promptpolicy.NewScanner(logger, hookPromptJudge)
 			celEngine, err := celenv.New()
 			if err != nil {
 				return fmt.Errorf("create cel engine: %w", err)
@@ -1018,7 +1022,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create custom rules scanner: %w", err)
 			}
-			riskScanner, err := risk.NewScanner(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, celEngine)
+			riskScanner, err := risk.NewScanner(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -1194,7 +1198,7 @@ func newStartCommand() *cli.Command {
 				// timeout so the backend retires an idle connection AFTER the LB
 				// would, never before. If the backend closes first the LB can
 				// still have an outstanding request on that connection and the
-				// client sees a TCP RST — the transient reset this change set is
+				// client sees a TCP RST - the transient reset this change set is
 				// hardening against. GCLB's backend keepalive is a fixed 600s and
 				// not configurable, and Google explicitly requires the backend's
 				// value to be > 600s, so 620s. No WriteTimeout: it is an absolute
@@ -1223,7 +1227,7 @@ func newStartCommand() *cli.Command {
 						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 					}
 
-					piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
+					piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:                 guardianPolicy,
@@ -1251,6 +1255,7 @@ func newStartCommand() *cli.Command {
 						TelemetryRepo:                  telemetryrepo.New(chDB),
 						TriggersApp:                    triggerApp,
 						CacheAdapter:                   cache.NewRedisCacheAdapter(redisClient),
+						EmailService:                   emailService,
 						AssistantsCore:                 assistantsCore,
 						TemporalEnv:                    temporalEnv,
 						PIIScanner:                     piiScanner,
@@ -1292,7 +1297,7 @@ func newStartCommand() *cli.Command {
 
 				// The HTTP server is now fully drained, so no new risk signals are
 				// produced. Flush the throttle's queued trailing signals here while the
-				// Temporal client is still open — runShutdown closes it concurrently.
+				// Temporal client is still open - runShutdown closes it concurrently.
 				if err := riskSignaler.Shutdown(graceCtx); err != nil {
 					logger.ErrorContext(ctx, "flush pending risk signals", attr.SlogError(err))
 				}

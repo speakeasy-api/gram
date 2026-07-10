@@ -42,6 +42,10 @@ if ! mise run install:pnpm --offline; then
   mise run install:pnpm
 fi
 
+# Build the workspace packages the dashboard's type-check depends on since these
+# are gitignored and not carried over to new worktrees.
+mise run build:elements
+
 suffix=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 4)
 compose_project="gram-infra-${suffix}"
 mise set --file mise.local.toml "COMPOSE_PROJECT_NAME=${compose_project}"

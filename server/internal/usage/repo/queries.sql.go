@@ -49,15 +49,66 @@ func (q *Queries) GetEnabledServerCount(ctx context.Context, organizationID stri
 	return count, err
 }
 
-const listProjectIDsByOrganization = `-- name: ListProjectIDsByOrganization :many
+const getOrganizationName = `-- name: GetOrganizationName :one
+SELECT name
+FROM organization_metadata
+WHERE id = $1
+`
+
+func (q *Queries) GetOrganizationName(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, getOrganizationName, organizationID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
+const listBillingCycleUsage = `-- name: ListBillingCycleUsage :many
+SELECT id, organization_id, cycle_start, cycle_end, tum_tokens, finalized_at, created_at, updated_at
+FROM billing_cycle_usage
+WHERE organization_id = $1
+ORDER BY cycle_start
+`
+
+func (q *Queries) ListBillingCycleUsage(ctx context.Context, organizationID string) ([]BillingCycleUsage, error) {
+	rows, err := q.db.Query(ctx, listBillingCycleUsage, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BillingCycleUsage
+	for rows.Next() {
+		var i BillingCycleUsage
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.CycleStart,
+			&i.CycleEnd,
+			&i.TumTokens,
+			&i.FinalizedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBillingProjectIDsByOrganization = `-- name: ListBillingProjectIDsByOrganization :many
 SELECT id
 FROM projects
 WHERE organization_id = $1
-  AND deleted IS FALSE
 `
 
-func (q *Queries) ListProjectIDsByOrganization(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listProjectIDsByOrganization, organizationID)
+// Intentionally includes soft-deleted projects: usage recorded while a
+// project was live is still billable, and deleting a project mid-cycle must
+// not shrink the cycle's tokens-under-management total.
+func (q *Queries) ListBillingProjectIDsByOrganization(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listBillingProjectIDsByOrganization, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +125,76 @@ func (q *Queries) ListProjectIDsByOrganization(ctx context.Context, organization
 		return nil, err
 	}
 	return items, nil
+}
+
+const listFinalizedBillingCycleStarts = `-- name: ListFinalizedBillingCycleStarts :many
+SELECT cycle_start
+FROM billing_cycle_usage
+WHERE organization_id = $1
+  AND finalized_at IS NOT NULL
+`
+
+func (q *Queries) ListFinalizedBillingCycleStarts(ctx context.Context, organizationID string) ([]pgtype.Timestamptz, error) {
+	rows, err := q.db.Query(ctx, listFinalizedBillingCycleStarts, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Timestamptz
+	for rows.Next() {
+		var cycle_start pgtype.Timestamptz
+		if err := rows.Scan(&cycle_start); err != nil {
+			return nil, err
+		}
+		items = append(items, cycle_start)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertBillingCycleUsage = `-- name: UpsertBillingCycleUsage :exec
+INSERT INTO billing_cycle_usage (
+    organization_id
+  , cycle_start
+  , cycle_end
+  , tum_tokens
+  , finalized_at
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+)
+ON CONFLICT (organization_id, cycle_start) DO UPDATE SET
+    cycle_end = EXCLUDED.cycle_end
+  , tum_tokens = EXCLUDED.tum_tokens
+  , finalized_at = EXCLUDED.finalized_at
+  , updated_at = clock_timestamp()
+WHERE billing_cycle_usage.finalized_at IS NULL
+`
+
+type UpsertBillingCycleUsageParams struct {
+	OrganizationID string
+	CycleStart     pgtype.Timestamptz
+	CycleEnd       pgtype.Timestamptz
+	TumTokens      int64
+	FinalizedAt    pgtype.Timestamptz
+}
+
+// Finalized rows are the permanent billing record and must never be
+// overwritten by later refreshes.
+func (q *Queries) UpsertBillingCycleUsage(ctx context.Context, arg UpsertBillingCycleUsageParams) error {
+	_, err := q.db.Exec(ctx, upsertBillingCycleUsage,
+		arg.OrganizationID,
+		arg.CycleStart,
+		arg.CycleEnd,
+		arg.TumTokens,
+		arg.FinalizedAt,
+	)
+	return err
 }
 
 const upsertBillingMetadata = `-- name: UpsertBillingMetadata :one

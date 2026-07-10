@@ -683,6 +683,76 @@ func BuildQueryPayload(telemetryQueryBody string, telemetryQuerySessionToken str
 	return v, nil
 }
 
+// BuildQueryRiskTokensPayload builds the payload for the telemetry
+// queryRiskTokens endpoint from CLI flags.
+func BuildQueryRiskTokensPayload(telemetryQueryRiskTokensBody string, telemetryQueryRiskTokensSessionToken string) (*telemetry.QueryRiskTokensPayload, error) {
+	var err error
+	var body QueryRiskTokensRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryQueryRiskTokensBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if body.ProjectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryQueryRiskTokensSessionToken != "" {
+			sessionToken = &telemetryQueryRiskTokensSessionToken
+		}
+	}
+	v := &telemetry.QueryRiskTokensPayload{
+		From:      body.From,
+		To:        body.To,
+		ProjectID: body.ProjectID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildQueryTumDetailsPayload builds the payload for the telemetry
+// queryTumDetails endpoint from CLI flags.
+func BuildQueryTumDetailsPayload(telemetryQueryTumDetailsBody string, telemetryQueryTumDetailsSessionToken string) (*telemetry.QueryTumDetailsPayload, error) {
+	var err error
+	var body QueryTumDetailsRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryQueryTumDetailsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if body.ProjectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryQueryTumDetailsSessionToken != "" {
+			sessionToken = &telemetryQueryTumDetailsSessionToken
+		}
+	}
+	v := &telemetry.QueryTumDetailsPayload{
+		From:      body.From,
+		To:        body.To,
+		ProjectID: body.ProjectID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListSessionsPayload builds the payload for the telemetry listSessions
 // endpoint from CLI flags.
 func BuildListSessionsPayload(telemetryListSessionsBody string, telemetryListSessionsSessionToken string) (*telemetry.ListSessionsPayload, error) {
@@ -1023,7 +1093,7 @@ func BuildListToolUsageTracesPayload(telemetryListToolUsageTracesBody string, te
 	{
 		err = json.Unmarshal([]byte(telemetryListToolUsageTracesBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"operator\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"limit\": 2,\n      \"query\": \"abc123\",\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"sort\": \"desc\",\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"operator\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"limit\": 2,\n      \"query\": \"abc123\",\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"sort\": \"desc\",\n      \"statuses\": [\n         \"success\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -1037,6 +1107,11 @@ func BuildListToolUsageTracesPayload(telemetryListToolUsageTracesBody string, te
 				if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
+			}
+		}
+		for _, e := range body.Statuses {
+			if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
 			}
 		}
 		for _, e := range body.Filters {
@@ -1118,6 +1193,12 @@ func BuildListToolUsageTracesPayload(telemetryListToolUsageTracesBody string, te
 		v.HookSources = make([]string, len(body.HookSources))
 		for i, val := range body.HookSources {
 			v.HookSources[i] = val
+		}
+	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
 		}
 	}
 	if body.Filters != nil {

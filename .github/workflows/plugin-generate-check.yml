@@ -37,27 +37,39 @@ jobs:
 
           echo "✅ server/internal/plugins/generate.go was updated alongside hooks/ changes"
 
-      - name: Remind to consider a generator version bump
+      - name: Check generator version bumps
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          # generate.go drives the plugin fingerprint that the automated rollout
-          # uses to skip unchanged projects. Output-affecting changes are caught
-          # automatically by the content hash, so we do NOT force a bump on every
-          # edit — that would invalidate every project's fingerprint and trigger
-          # a full republish (fresh keys + commits) for no reason. This is a
-          # non-blocking nudge for the rare case where generation BEHAVIOUR
-          # changes in a way the placeholder fingerprint pass can't observe.
           GENERATE_DIFF=$(git diff "origin/$BASE_REF"...HEAD -- server/internal/plugins/generate.go)
-          if [ -z "$GENERATE_DIFF" ]; then
-            echo "generate.go unchanged; nothing to check."
-            exit 0
+          CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF"...HEAD)
+          HOOKS_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^hooks/' | grep -v -E '^hooks/plugin-claude-test/' || true)
+
+          HOOKS_BUMPED=$(echo "$GENERATE_DIFF" | grep -E '^\+[[:space:]]*const hooksGeneratorVersion' || true)
+          MCP_BUMPED=$(echo "$GENERATE_DIFF" | grep -E '^\+[[:space:]]*const mcpGeneratorVersion' || true)
+
+          # The observability (hooks) plugin has no content fingerprint: the rollout
+          # republishes it ONLY when hooksGeneratorVersion is bumped. So any change to
+          # the embedded hook scripts (hooks/**) MUST bump the const, or the change
+          # would never roll out to connected repos. Blocking.
+          if [ -n "$HOOKS_CHANGED" ] && [ -z "$HOOKS_BUMPED" ]; then
+            echo "❌ Error: hooks/ changed but hooksGeneratorVersion was not bumped."
+            echo "The hooks plugin only republishes on a hooksGeneratorVersion bump, so this change would never reach users."
+            echo ""
+            echo "Changed hook files:"
+            echo "$HOOKS_CHANGED"
+            echo ""
+            echo "Bump hooksGeneratorVersion in server/internal/plugins/generate.go."
+            exit 1
           fi
 
-          VERSION_BUMPED=$(echo "$GENERATE_DIFF" | grep -E '^\+[[:space:]]*const pluginGeneratorVersion' || true)
-          if [ -n "$VERSION_BUMPED" ]; then
-            echo "✅ pluginGeneratorVersion was bumped."
-            exit 0
+          # The MCP fingerprint catches output-visible MCP changes automatically, so
+          # we do NOT force an mcpGeneratorVersion bump on every edit — that would
+          # invalidate every project's fingerprint and trigger a full MCP republish
+          # (fresh keys + commits) for no reason. Non-blocking nudge for MCP
+          # behaviour changes the placeholder fingerprint pass can't observe.
+          if [ -n "$GENERATE_DIFF" ] && [ -z "$MCP_BUMPED" ]; then
+            echo "::notice file=server/internal/plugins/generate.go::generate.go changed without bumping mcpGeneratorVersion. If this alters MCP generation behaviour in a way the fingerprint's placeholder pass can't observe (and you want every project's MCP plugins republished on the next rollout), bump mcpGeneratorVersion. Output-visible MCP changes are detected automatically and need no bump."
           fi
 
-          echo "::notice file=server/internal/plugins/generate.go::generate.go changed without bumping pluginGeneratorVersion. If this change alters generation behaviour in a way the fingerprint's placeholder pass can't observe (and you want every project republished on the next rollout), bump the const. Output-visible changes are detected automatically and need no bump."
+          echo "✅ Generator version checks passed."
