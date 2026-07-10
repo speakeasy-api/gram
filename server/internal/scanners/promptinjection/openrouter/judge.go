@@ -156,6 +156,16 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 		span.End()
 	}()
 
+	// UserIDs is documented as parallel to Messages; a shorter slice is a
+	// caller bug that would silently scan the tail unattributed. Scan anyway
+	// (attribution is best-effort, verdicts are not) but surface it. (cubic)
+	if len(req.UserIDs) != 0 && len(req.UserIDs) != n {
+		c.logger.WarnContext(ctx, "pi judge user ids not parallel to messages; unmatched messages scan unattributed",
+			attr.SlogOrganizationID(req.OrgID),
+			attr.SlogProjectID(req.ProjectID),
+		)
+	}
+
 	results := make([]promptinjection.Result, n)
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
