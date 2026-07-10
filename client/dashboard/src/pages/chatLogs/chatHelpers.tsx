@@ -149,6 +149,117 @@ export function useRowReveal(sensitive: boolean): {
   return { revealed, setRevealed };
 }
 
+/** The merged, sorted `[start, end)` character ranges covering every occurrence
+ * of `matches` in `text`. Overlapping/adjacent occurrences are coalesced so a
+ * longer secret and a substring of it don't double-mark. */
+export function matchRanges(
+  text: string,
+  matches: string[],
+): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  for (const match of matches) {
+    if (!match) continue;
+    let from = 0;
+    let idx = text.indexOf(match, from);
+    while (idx !== -1) {
+      ranges.push([idx, idx + match.length]);
+      from = idx + match.length;
+      idx = text.indexOf(match, from);
+    }
+  }
+  if (ranges.length === 0) return ranges;
+
+  ranges.sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [];
+  for (const range of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && range[0] <= last[1]) {
+      last[1] = Math.max(last[1], range[1]);
+    } else {
+      merged.push([range[0], range[1]]);
+    }
+  }
+  return merged;
+}
+
+/** A window of message text kept around one or more flagged spans when the rest
+ * of a long message is collapsed away. */
+export interface MessageSnippet {
+  /** The slice of the original message to render (spans intact, so
+   * `highlightMatches` still marks them). */
+  text: string;
+  /** Content was elided immediately before / after this slice — render an
+   * ellipsis marker there. */
+  elidedBefore: boolean;
+  elidedAfter: boolean;
+}
+
+/** Messages up to this many characters are always shown in full — short enough
+ * that a highlighted span is on screen without scrolling. */
+const COLLAPSE_THRESHOLD = 600;
+/** Characters of surrounding context kept on each side of a flagged span when a
+ * long message is collapsed. */
+const CONTEXT_CHARS = 140;
+
+// Nudge a window edge onto a nearby whitespace boundary (within `slack` chars)
+// so a snippet doesn't start/end mid-word. Falls back to the raw edge.
+function snapToBoundary(
+  text: string,
+  edge: number,
+  dir: "start" | "end",
+  slack = 20,
+): number {
+  if (dir === "start") {
+    for (let i = edge; i > Math.max(0, edge - slack); i--) {
+      if (/\s/.test(text[i - 1] ?? "")) return i;
+    }
+    return edge;
+  }
+  for (let i = edge; i < Math.min(text.length, edge + slack); i++) {
+    if (/\s/.test(text[i] ?? "")) return i;
+  }
+  return edge;
+}
+
+/** For a long flagged message, keep only a `CONTEXT_CHARS` window around each
+ * matched span and collapse the rest, so the flagged value is visible without
+ * scrolling. Returns `null` when nothing should be collapsed — the message is
+ * short, has no in-text span to anchor on, or the windows already cover
+ * (nearly) all of it. */
+export function collapseToMatchWindows(
+  text: string,
+  matches: string[],
+  context = CONTEXT_CHARS,
+): MessageSnippet[] | null {
+  if (text.length <= COLLAPSE_THRESHOLD) return null;
+  const ranges = matchRanges(text, matches);
+  if (ranges.length === 0) return null;
+
+  const windows: Array<[number, number]> = [];
+  for (const [start, end] of ranges) {
+    const from = snapToBoundary(text, Math.max(0, start - context), "start");
+    const to = snapToBoundary(
+      text,
+      Math.min(text.length, end + context),
+      "end",
+    );
+    const last = windows[windows.length - 1];
+    if (last && from <= last[1]) last[1] = Math.max(last[1], to);
+    else windows.push([from, to]);
+  }
+
+  // Only collapse when it meaningfully shortens the message; otherwise the
+  // ellipsis markers add noise for little gain.
+  const kept = windows.reduce((sum, [from, to]) => sum + (to - from), 0);
+  if (text.length - kept < context) return null;
+
+  return windows.map(([from, to]) => ({
+    text: text.slice(from, to),
+    elidedBefore: from > 0,
+    elidedAfter: to < text.length,
+  }));
+}
+
 /** Wrap every occurrence of `matches` in `text` with a yellow highlight. When
  * `masked`, the matched characters are dotted out (the surrounding context
  * stays visible). */
@@ -162,29 +273,8 @@ export function highlightMatches(
 ): ReactNode {
   if (matches.length === 0) return text;
 
-  const ranges: Array<[number, number]> = [];
-  for (const match of matches) {
-    if (!match) continue;
-    let from = 0;
-    let idx = text.indexOf(match, from);
-    while (idx !== -1) {
-      ranges.push([idx, idx + match.length]);
-      from = idx + match.length;
-      idx = text.indexOf(match, from);
-    }
-  }
-  if (ranges.length === 0) return text;
-
-  ranges.sort((a, b) => a[0] - b[0]);
-  const merged: Array<[number, number]> = [];
-  for (const range of ranges) {
-    const last = merged[merged.length - 1];
-    if (last && range[0] <= last[1]) {
-      last[1] = Math.max(last[1], range[1]);
-    } else {
-      merged.push([range[0], range[1]]);
-    }
-  }
+  const merged = matchRanges(text, matches);
+  if (merged.length === 0) return text;
 
   const nodes: ReactNode[] = [];
   let pos = 0;

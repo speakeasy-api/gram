@@ -22406,6 +22406,111 @@ paths:
       x-speakeasy-name-override: createServer
       x-speakeasy-react-hook:
         name: CreateRemoteMcpServer
+  /rpc/remoteMcp.createServerHeader:
+    post:
+      description: Create a header on a remote MCP server
+      operationId: createRemoteMcpServerHeader
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateServerHeaderForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteMcpServerHeader'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createServerHeader remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: createServerHeader
+      x-speakeasy-react-hook:
+        name: CreateRemoteMcpServerHeader
   /rpc/remoteMcp.deleteServer:
     delete:
       description: Delete a remote MCP server
@@ -22509,6 +22614,110 @@ paths:
       x-speakeasy-name-override: deleteServer
       x-speakeasy-react-hook:
         name: DeleteRemoteMcpServer
+  /rpc/remoteMcp.deleteServerHeader:
+    delete:
+      description: Delete a remote MCP server header
+      operationId: deleteRemoteMcpServerHeader
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the header to delete
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the header to delete
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: deleteServerHeader remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: deleteServerHeader
+      x-speakeasy-react-hook:
+        name: DeleteRemoteMcpServerHeader
   /rpc/remoteMcp.discoverProtectedResourceMetadata:
     post:
       description: Probe the remote MCP server's origin for an RFC 9728 .well-known/oauth-protected-resource document and return either the parsed metadata or a typed unavailability reason. Runs server-side under guardian.Policy so production resource servers without CORS can still be inspected.
@@ -22728,6 +22937,222 @@ paths:
       x-speakeasy-name-override: getServer
       x-speakeasy-react-hook:
         name: GetRemoteMcpServer
+  /rpc/remoteMcp.getServerHeader:
+    get:
+      description: Get a remote MCP server header by ID
+      operationId: getRemoteMcpServerHeader
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the header
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the header
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteMcpServerHeader'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getServerHeader remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: getServerHeader
+      x-speakeasy-react-hook:
+        name: GetRemoteMcpServerHeader
+  /rpc/remoteMcp.listServerHeaders:
+    get:
+      description: List the headers configured for a remote MCP server
+      operationId: listRemoteMcpServerHeaders
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the remote MCP server
+          in: query
+          name: remote_mcp_server_id
+          required: true
+          schema:
+            description: The ID of the remote MCP server
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListServerHeadersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listServerHeaders remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: listServerHeaders
+      x-speakeasy-react-hook:
+        name: RemoteMcpServerHeaders
   /rpc/remoteMcp.listServers:
     get:
       description: List all remote MCP servers for a project
@@ -22932,6 +23357,111 @@ paths:
       x-speakeasy-name-override: updateServer
       x-speakeasy-react-hook:
         name: UpdateRemoteMcpServer
+  /rpc/remoteMcp.updateServerHeader:
+    post:
+      description: Update a remote MCP server header
+      operationId: updateRemoteMcpServerHeader
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateServerHeaderForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteMcpServerHeader'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateServerHeader remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: updateServerHeader
+      x-speakeasy-react-hook:
+        name: UpdateRemoteMcpServerHeader
   /rpc/remoteMcp.verifyURL:
     post:
       description: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.
@@ -41747,11 +42277,6 @@ components:
     CreateServerForm:
       type: object
       properties:
-        headers:
-          type: array
-          items:
-            $ref: '#/components/schemas/HeaderInput'
-          description: Headers to send when proxying requests to the remote server
         name:
           type: string
           description: Optional human-readable name for the remote MCP server. Empty values are stored as null.
@@ -41766,7 +42291,35 @@ components:
       required:
         - url
         - transport_type
-        - headers
+    CreateServerHeaderForm:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Description of the header
+        is_required:
+          type: boolean
+          description: Whether the header is required. Defaults to false.
+        is_secret:
+          type: boolean
+          description: Whether the header value is a secret. Defaults to false. Incompatible with value_from_request_header.
+        name:
+          type: string
+          description: The header name
+        remote_mcp_server_id:
+          type: string
+          description: The ID of the remote MCP server to add the header to
+          format: uuid
+        value:
+          type: string
+          description: Static header value (mutually exclusive with value_from_request_header)
+        value_from_request_header:
+          type: string
+          description: Name of the inbound request header to pass through (mutually exclusive with value)
+      description: Form for creating a header on a remote MCP server. Exactly one of value or value_from_request_header must be provided.
+      required:
+        - remote_mcp_server_id
+        - name
     CreateShadowMCPAccessRuleForm:
       type: object
       properties:
@@ -44530,30 +45083,6 @@ components:
         - tool_urn
         - created_at
         - updated_at
-    HeaderInput:
-      type: object
-      properties:
-        description:
-          type: string
-          description: Description of the header
-        is_required:
-          type: boolean
-          description: Whether the header is required
-        is_secret:
-          type: boolean
-          description: Whether the header value is a secret
-        name:
-          type: string
-          description: The header name
-        value:
-          type: string
-          description: Static header value (mutually exclusive with value_from_request_header)
-        value_from_request_header:
-          type: string
-          description: Name of the inbound request header to pass through (mutually exclusive with value)
-      description: Input for a remote MCP server header
-      required:
-        - name
     HookIngestData:
       type: object
       properties:
@@ -45989,6 +46518,16 @@ components:
           description: The scopes available in access control.
       required:
         - scopes
+    ListServerHeadersResult:
+      type: object
+      properties:
+        headers:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteMcpServerHeader'
+      description: Result type for listing the headers of a remote MCP server
+      required:
+        - headers
     ListServersResponseBody:
       type: object
       properties:
@@ -48646,6 +49185,9 @@ components:
         connected:
           type: boolean
           description: Whether this project has a GitHub connection.
+        has_collaborators:
+          type: boolean
+          description: Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.
         last_published_at:
           type: string
           description: When the project was last published to GitHub. Absent when the project is not connected.
@@ -48973,11 +49515,6 @@ components:
           type: string
           description: When the remote MCP server was created
           format: date-time
-        headers:
-          type: array
-          items:
-            $ref: '#/components/schemas/RemoteMcpServerHeader'
-          description: Headers configured for this remote MCP server
         id:
           type: string
           description: The ID of the remote MCP server
@@ -49009,7 +49546,6 @@ components:
         - project_id
         - url
         - transport_type
-        - headers
         - created_at
         - updated_at
     RemoteMcpServerHeader:
@@ -53792,7 +54328,7 @@ components:
       properties:
         key:
           type: string
-          description: 'The breakdown dimension key (hook_source, risk_analysis_model, completion_model, email, division_name, role). The two model keys partition the billed population: risk_analysis_model covers the platform''s risk-policy scanning inference, completion_model covers user-facing completion surfaces.'
+          description: 'The breakdown dimension key (hook_source, risk_analysis_model, completion_model, division_name, role). The two model keys partition the billed population: risk_analysis_model covers the platform''s risk-policy scanning inference, completion_model covers user-facing completion surfaces.'
         rows:
           type: array
           items:
@@ -54802,11 +55338,6 @@ components:
     UpdateServerForm:
       type: object
       properties:
-        headers:
-          type: array
-          items:
-            $ref: '#/components/schemas/HeaderInput'
-          description: The complete desired set of headers. Omit to leave headers unchanged. Provide an empty array to remove all headers.
         id:
           type: string
           description: The ID of the remote MCP server to update
@@ -54820,9 +55351,38 @@ components:
           type: string
           description: The URL of the remote MCP server
           format: uri
-      description: Form for updating a remote MCP server. When headers is provided, it represents the complete desired set of headers — any existing headers not in the list will be removed.
+      description: Form for updating a remote MCP server
       required:
         - id
+    UpdateServerHeaderForm:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Description of the header
+        id:
+          type: string
+          description: The ID of the header to update
+          format: uuid
+        is_required:
+          type: boolean
+          description: Whether the header is required. Defaults to false.
+        is_secret:
+          type: boolean
+          description: Whether the header value is a secret. Defaults to false. Incompatible with value_from_request_header.
+        name:
+          type: string
+          description: The header name
+        value:
+          type: string
+          description: Static header value (mutually exclusive with value_from_request_header). Omit on an existing secret header to preserve its stored value.
+        value_from_request_header:
+          type: string
+          description: Name of the inbound request header to pass through (mutually exclusive with value)
+      description: 'Form for updating a remote MCP server header. Replaces every mutable field, so omitted optional fields are reset to their defaults. The one exception is value: omitting it for a header that is already secret preserves the stored value rather than clearing it.'
+      required:
+        - id
+        - name
     UpdateShadowMCPAccessRuleForm:
       type: object
       properties:

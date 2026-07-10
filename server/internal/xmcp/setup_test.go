@@ -210,7 +210,7 @@ func seedAPIKey(t *testing.T, ctx context.Context, ti *testInstance, organizatio
 
 // seedRemoteMCPServer inserts a new remote_mcp_servers row and any configured
 // headers, encrypting secret values the same way the management API does.
-func seedRemoteMCPServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, url string, headers ...remotemcprepo.CreateHeaderParams) remotemcprepo.RemoteMcpServer {
+func seedRemoteMCPServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, url string, headers ...remotemcprepo.CreateServerHeaderParams) remotemcprepo.RemoteMcpServer {
 	t.Helper()
 
 	r := remotemcprepo.New(ti.conn)
@@ -223,6 +223,7 @@ func seedRemoteMCPServer(t *testing.T, ctx context.Context, ti *testInstance, pr
 	for _, h := range headers {
 		params := h
 		params.RemoteMcpServerID = server.ID
+		params.ProjectID = projectID
 
 		if params.IsSecret && params.Value.Valid && params.Value.String != "" {
 			encrypted, encErr := ti.enc.Encrypt([]byte(params.Value.String))
@@ -230,7 +231,7 @@ func seedRemoteMCPServer(t *testing.T, ctx context.Context, ti *testInstance, pr
 			params.Value = pgtype.Text{String: encrypted, Valid: true}
 		}
 
-		_, err := r.CreateHeader(ctx, params)
+		_, err := r.CreateServerHeader(ctx, params)
 		require.NoError(t, err)
 	}
 
@@ -248,7 +249,7 @@ func randomSlug() string {
 // remote-backed mcp_server: a remote_mcp_servers row + an mcp_servers row
 // pointing at it + an mcp_endpoints row exposing it via the returned slug.
 // visibility must be "public", "private", or "disabled".
-func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, upstreamURL, visibility string, headers ...remotemcprepo.CreateHeaderParams) (slug string, mcpServer mcpserversrepo.McpServer, remoteServer remotemcprepo.RemoteMcpServer) {
+func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, upstreamURL, visibility string, headers ...remotemcprepo.CreateServerHeaderParams) (slug string, mcpServer mcpserversrepo.McpServer, remoteServer remotemcprepo.RemoteMcpServer) {
 	t.Helper()
 
 	remoteServer = seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL, headers...)

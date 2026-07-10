@@ -1528,7 +1528,7 @@ var TumDetailsBreakdownRow = Type("TumDetailsBreakdownRow", func() {
 var TumDetailsBreakdown = Type("TumDetailsBreakdown", func() {
 	Description("Per-dimension billed token breakdown for the usage details table")
 
-	Attribute("key", String, "The breakdown dimension key (hook_source, risk_analysis_model, completion_model, email, division_name, role). The two model keys partition the billed population: risk_analysis_model covers the platform's risk-policy scanning inference, completion_model covers user-facing completion surfaces.")
+	Attribute("key", String, "The breakdown dimension key (hook_source, risk_analysis_model, completion_model, division_name, role). The two model keys partition the billed population: risk_analysis_model covers the platform's risk-policy scanning inference, completion_model covers user-facing completion surfaces.")
 	Attribute("rows", ArrayOf(TumDetailsBreakdownRow), "Top values by tokens in descending order, with the remainder rolled into 'Other'")
 
 	Required("key", "rows")

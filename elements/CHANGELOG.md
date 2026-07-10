@@ -1,5 +1,15 @@
 # @gram-ai/elements
 
+## 1.42.0
+
+### Minor Changes
+
+- 608940e: Drop CommonJS support
+
+### Patch Changes
+
+- c7edd5a: Link entities mentioned in Project Assistant replies to their dashboard pages, styled in Moonshine blue with an external-link icon
+
 ## 1.41.0
 
 ### Minor Changes

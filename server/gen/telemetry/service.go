@@ -1674,8 +1674,8 @@ type TopUser struct {
 // Per-dimension billed token breakdown for the usage details table
 type TumDetailsBreakdown struct {
 	// The breakdown dimension key (hook_source, risk_analysis_model,
-	// completion_model, email, division_name, role). The two model keys partition
-	// the billed population: risk_analysis_model covers the platform's risk-policy
+	// completion_model, division_name, role). The two model keys partition the
+	// billed population: risk_analysis_model covers the platform's risk-policy
 	// scanning inference, completion_model covers user-facing completion surfaces.
 	Key string
 	// Top values by tokens in descending order, with the remainder rolled into

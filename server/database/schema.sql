@@ -3385,6 +3385,10 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- (model id, temperature, fail-mode, etc.) as a JSON object. NULL for
   -- standard policies.
   model_config JSONB,
+  -- CVSS-style severity (0.1-10) the policy author assigns to findings this
+  -- policy produces. Purely descriptive; changing it does NOT bump `version`
+  -- or re-scan messages. Bounds are validated in the application layer.
+  score DOUBLE PRECISION NOT NULL DEFAULT 5.0,
   version BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),

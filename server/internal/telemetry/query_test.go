@@ -907,8 +907,9 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 	// grandfathered nil-chat gram row alike).
 	require.Equal(t, map[string]int64{"anthropic/claude-4.6": 1000}, rowsByKey["completion_model"])
 	require.Equal(t, map[string]int64{"google/gemini-3.1-flash-lite": 370}, rowsByKey["risk_analysis_model"])
-	// Scanning inference attributes to the scanned user's identity.
-	require.Equal(t, map[string]int64{"user@example.com": 1000, "scanned@example.com": 300, "": 70}, rowsByKey["email"])
+	// Scanned-user attribution flows into the billed rows, but a per-user
+	// (email) cut is deliberately not served to the billing page yet.
+	require.NotContains(t, rowsByKey, "email")
 	require.Equal(t, map[string]int64{"dev": 1000}, rowsByKey["role"])
 	// The fixture carries no division attribute; the tokens land on the ''
 	// row (labeled by the frontend).

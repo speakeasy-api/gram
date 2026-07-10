@@ -4,20 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import {
-  HeaderInput,
-  HeaderInput$Outbound,
-  HeaderInput$outboundSchema,
-} from "./headerinput.js";
 
 /**
- * Form for updating a remote MCP server. When headers is provided, it represents the complete desired set of headers — any existing headers not in the list will be removed.
+ * Form for updating a remote MCP server
  */
 export type UpdateServerForm = {
-  /**
-   * The complete desired set of headers. Omit to leave headers unchanged. Provide an empty array to remove all headers.
-   */
-  headers?: Array<HeaderInput> | undefined;
   /**
    * The ID of the remote MCP server to update
    */
@@ -38,7 +29,6 @@ export type UpdateServerForm = {
 
 /** @internal */
 export type UpdateServerForm$Outbound = {
-  headers?: Array<HeaderInput$Outbound> | undefined;
   id: string;
   name?: string | undefined;
   transport_type?: string | undefined;
@@ -51,7 +41,6 @@ export const UpdateServerForm$outboundSchema: z.ZodMiniType<
   UpdateServerForm
 > = z.pipe(
   z.object({
-    headers: z.optional(z.array(HeaderInput$outboundSchema)),
     id: z.string(),
     name: z.optional(z.string()),
     transportType: z.optional(z.string()),

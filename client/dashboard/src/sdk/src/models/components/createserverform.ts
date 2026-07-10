@@ -4,20 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import {
-  HeaderInput,
-  HeaderInput$Outbound,
-  HeaderInput$outboundSchema,
-} from "./headerinput.js";
 
 /**
  * Form for creating a new remote MCP server
  */
 export type CreateServerForm = {
-  /**
-   * Headers to send when proxying requests to the remote server
-   */
-  headers: Array<HeaderInput>;
   /**
    * Optional human-readable name for the remote MCP server. Empty values are stored as null.
    */
@@ -34,7 +25,6 @@ export type CreateServerForm = {
 
 /** @internal */
 export type CreateServerForm$Outbound = {
-  headers: Array<HeaderInput$Outbound>;
   name?: string | undefined;
   transport_type: string;
   url: string;
@@ -46,7 +36,6 @@ export const CreateServerForm$outboundSchema: z.ZodMiniType<
   CreateServerForm
 > = z.pipe(
   z.object({
-    headers: z.array(HeaderInput$outboundSchema),
     name: z.optional(z.string()),
     transportType: z.string(),
     url: z.string(),

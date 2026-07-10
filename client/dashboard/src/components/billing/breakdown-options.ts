@@ -8,7 +8,6 @@ import {
   Shield,
   ShieldAlert,
   Sigma,
-  UserRound,
 } from "lucide-react";
 
 // The token-usage panel's breakdown catalog: every group-by dimension plus the
@@ -62,10 +61,11 @@ export type BreakdownGroup = {
 };
 
 // Only dimensions billed completion rows genuinely carry: the model, the
-// user identity snapshot hydrated at emit time (user, division, roles), and
-// the consuming surface. Fleet-only concepts (provider, account type, skill,
-// MCP server/tool, cache token types) live on the costs/insights pages,
-// whose analytics aggregate is scoped to agent-fleet provenance.
+// identity snapshot hydrated at emit time (division, roles — a per-user cut
+// is deliberately not exposed on the billing page yet), and the consuming
+// surface. Fleet-only concepts (provider, account type, skill, MCP
+// server/tool, cache token types) live on the costs/insights pages, whose
+// analytics aggregate is scoped to agent-fleet provenance.
 export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
   {
     // Ungrouped: the no-breakdown view leads the list, above every category.
@@ -97,10 +97,7 @@ export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
   },
   {
     heading: "People",
-    options: [
-      { value: Dimension.Email, label: "User", icon: UserRound },
-      { value: Dimension.Role, label: "Role", icon: Shield },
-    ],
+    options: [{ value: Dimension.Role, label: "Role", icon: Shield }],
   },
   {
     heading: "Surfaces",

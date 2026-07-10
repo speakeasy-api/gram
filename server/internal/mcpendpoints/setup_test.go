@@ -11,21 +11,30 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/externalmcptest"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/functionstest"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -33,7 +42,7 @@ import (
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true, Temporal: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -80,13 +89,101 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger)
+	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, false)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
 	}
+}
+
+// fakeGitHubPublisher is a no-op plugins.GitHubPublisher: it never touches
+// the network, so the initial-publish workflow's activity completes
+// successfully and leaves behind a real plugin_github_connections row.
+type fakeGitHubPublisher struct{}
+
+func (fakeGitHubPublisher) CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error {
+	return nil
+}
+
+func (fakeGitHubPublisher) PushFiles(ctx context.Context, installationID int64, owner, repo, branch, commitMsg string, files map[string][]byte) (string, error) {
+	return "fake-sha", nil
+}
+
+func (fakeGitHubPublisher) AddCollaborator(ctx context.Context, installationID int64, owner, repo, username, permission string) error {
+	return nil
+}
+
+func (fakeGitHubPublisher) HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error) {
+	return false, nil
+}
+
+func (fakeGitHubPublisher) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error) {
+	return nil, ghclient.ErrRepoNotFound
+}
+
+// newTestServiceWithGitHubPublishing is newTestService with GitHub publishing
+// turned on end-to-end: a Temporal worker is started, configured with a
+// plugins.Service backed by a fake (no-op) GitHub client, so an mcp_server's
+// auto-attach-triggered initial publish actually runs its workflow to
+// completion instead of just being enqueued.
+func newTestServiceWithGitHubPublishing(t *testing.T) (context.Context, *testInstance, *temporal.Environment) {
+	t.Helper()
+
+	ctx := t.Context()
+
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	enc := testenv.NewEncryptionClient(t)
+	funcs := functionstest.NewOrchestrator(t, assetStorage)
+	mcpRegistryClient := externalmcptest.NewRegistryClient(t, logger, tracerProvider)
+	temporalEnv, _ := infra.NewTemporalEnv(t)
+	auditLogger := audit.NewLogger()
+	f := &feature.InMemory{}
+
+	ghConfig := &plugins.GitHubConfig{
+		Client:         fakeGitHubPublisher{},
+		Org:            "test-org",
+		InstallationID: 12345,
+	}
+	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai")
+
+	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider,
+		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger),
+		&background.WorkerOptions{PluginPublisher: pluginPublisher},
+	)
+	t.Cleanup(func() {
+		worker.Stop()
+	})
+	require.NoError(t, worker.Start(), "start temporal worker")
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	billingClient := billing.NewStubClient(logger, tracerProvider)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+
+	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, temporalEnv, true)
+
+	return ctx, &testInstance{
+		service:        svc,
+		conn:           conn,
+		sessionManager: sessionManager,
+	}, temporalEnv
 }
 
 func withExactAuthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {
