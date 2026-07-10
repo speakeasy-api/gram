@@ -215,7 +215,6 @@ function OrgHomeInner() {
 
   const renderProjectItem = (project: OrgProject) => {
     const props = {
-      key: project.id,
       project,
       latestLog: latestActionByProjectSlug.get(project.slug),
       facepile: getFacepileMembers(project.slug),
@@ -223,9 +222,9 @@ function OrgHomeInner() {
       onToggleFavorite: () => toggleFavorite(project.id),
     };
     return viewMode === "grid" ? (
-      <ProjectCard {...props} />
+      <ProjectCard key={project.id} {...props} />
     ) : (
-      <ProjectRow {...props} />
+      <ProjectRow key={project.id} {...props} />
     );
   };
 
