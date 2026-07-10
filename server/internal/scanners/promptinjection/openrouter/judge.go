@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -110,7 +109,7 @@ type Engine struct {
 	schema      or.ChatJSONSchemaConfig // built once; the verdict shape is constant
 }
 
-var _ promptinjection.Classifier = (*Engine)(nil)
+var _ promptinjection.Classifier = (*Engine)(nil).Classify
 
 var safeResult = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: ""}
 
@@ -234,7 +233,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 // hostile body can never spoof a field or instruction line: it is always a
 // quoted value in a known field the system prompt tells the judge to evaluate.
 type judgePayload struct {
-	Message ppopenrouter.MessagePayload `json:"message"`
+	Message judgemessage.Payload `json:"message"`
 }
 
 // judgeVerdict is the judge's structured-output response: the model's call plus
@@ -261,7 +260,7 @@ func cachedSystemMessage() or.ChatMessages {
 }
 
 func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judgemessage.Message) (judgeVerdict, error) {
-	payload, err := json.Marshal(judgePayload{Message: ppopenrouter.RenderMessage(msg)})
+	payload, err := json.Marshal(judgePayload{Message: judgemessage.RenderPayload(msg)})
 	if err != nil {
 		// Unreachable: the payload is strings, bools, and slices. Fall back to the
 		// raw body so a marshaling regression can't silently drop the event.

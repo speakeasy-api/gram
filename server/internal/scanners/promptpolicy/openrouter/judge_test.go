@@ -370,7 +370,7 @@ func TestBuildJudgePromptTruncatesOversizeBody(t *testing.T) {
 	t.Parallel()
 
 	// A violation marker at the very end must survive tail truncation.
-	body := strings.Repeat("a", maxBodyLen*2) + "TAIL_SECRET"
+	body := strings.Repeat("a", 40000) + "TAIL_SECRET"
 	got := BuildJudgePrompt(promptpolicy.Input{
 		OrgID:     "",
 		ProjectID: "",
@@ -387,18 +387,20 @@ func TestBuildJudgePromptTruncatesOversizeBody(t *testing.T) {
 	require.Less(t, utf8.RuneCountInString(p.Message.Body), utf8.RuneCountInString(body))
 }
 
-func TestTruncateBodyRuneSafe(t *testing.T) {
+func TestBuildJudgePromptTruncatesRuneSafe(t *testing.T) {
 	t.Parallel()
 
-	// All multi-byte runes: truncation must not split a character.
-	body := strings.Repeat("世", maxBodyLen+500)
-	out, truncated := truncateBody(body, maxBodyLen)
-	require.True(t, truncated)
-	require.True(t, utf8.ValidString(out), "truncated output must remain valid UTF-8")
+	body := strings.Repeat("世", 40000)
+	got := BuildJudgePrompt(promptpolicy.Input{
+		OrgID:     "",
+		ProjectID: "",
+		Prompt:    "flag secrets",
+		Message:   judgemessage.New(message.ToolResponse, "web_fetch", body),
+		Config:    promptpolicy.Config{Model: "", Temperature: nil, FailOpen: true},
+	})
 
-	// Under the cap: returned unchanged.
-	small := "short body"
-	out, truncated = truncateBody(small, maxBodyLen)
-	require.False(t, truncated)
-	require.Equal(t, small, out)
+	var p parsedJudgePrompt
+	require.NoError(t, json.Unmarshal([]byte(got), &p))
+	require.True(t, p.Message.BodyTruncated)
+	require.True(t, utf8.ValidString(p.Message.Body), "truncated output must remain valid UTF-8")
 }

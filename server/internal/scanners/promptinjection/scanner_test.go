@@ -46,7 +46,7 @@ func (f *fakeEngine) classify(_ context.Context, req promptinjection.Request) ([
 
 func newScanner(t *testing.T, fc *fakeEngine) *promptinjection.Scanner {
 	t.Helper()
-	return promptinjection.NewScanner(testenv.NewLogger(t), promptinjection.ClassifierFunc(fc.classify))
+	return promptinjection.NewScanner(testenv.NewLogger(t), promptinjection.Classifier(fc.classify))
 }
 
 func mkMsg(text string) judgemessage.Message {

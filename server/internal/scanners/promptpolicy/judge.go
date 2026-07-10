@@ -21,15 +21,10 @@ const Rule = "llm_judge"
 
 var ErrRateLimited = errors.New("llm judge rate limited")
 
-// Evaluator evaluates one message against a natural-language guardrail
-// prompt. The concrete OpenRouter-backed implementation lives in the nested
-// openrouter package; consumers depend on this interface so they stay free of
-// the LLM-client dependency chain.
-type Evaluator interface {
-	// Evaluate returns (nil, nil) when there is nothing to judge, a verdict on a
-	// successful judge call, or an error when the judge degraded.
-	Evaluate(ctx context.Context, in Input) (*Verdict, error)
-}
+// Evaluator evaluates one message against a natural-language guardrail prompt.
+// It returns (nil, nil) when there is nothing to judge, a verdict on a
+// successful judge call, or an error when the judge degraded.
+type Evaluator func(ctx context.Context, in Input) (*Verdict, error)
 
 // Input carries everything needed for one judge evaluation.
 type Input struct {

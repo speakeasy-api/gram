@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
-	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
@@ -44,19 +43,6 @@ const (
 	// response schema's maxLength, now enforced in code because Anthropic routes
 	// reject that constraint (see call()).
 	maxRationaleLen = 500
-	// maxBodyLen caps each body/arguments string (in runes) sent to the judge.
-	// A body is head+tail truncated past this. This is a security control, not
-	// just a cost one: without it an oversized payload can blow the judge model's
-	// context window, producing an error that a fail-open policy turns into an
-	// allow - i.e. padding a risky message past the window would evade the
-	// guardrail. ~16k runes is a few-thousand tokens, ample context for a
-	// per-message verdict while bounding the prompt.
-	maxBodyLen = 16000
-	// maxRenderedToolCalls caps how many tool calls a single multi-call message
-	// renders, bounding total prompt size when an assistant message carries an
-	// unusual number of calls. Excess calls are dropped and flagged via
-	// tool_calls_truncated.
-	maxRenderedToolCalls = 50
 )
 
 // SystemPrompt is the judge's system message. It frames the policy and message
@@ -97,8 +83,6 @@ type Judge struct {
 	client  openrouter.CompletionClient
 	limiter *ratelimit.Limiter
 }
-
-var _ promptpolicy.Evaluator = (*Judge)(nil)
 
 // New constructs a Judge. A nil client yields a judge whose Evaluate always
 // returns (nil, nil), so callers can wire it unconditionally.
@@ -302,40 +286,18 @@ func VerdictSchema() map[string]any {
 // quoted string in a known field - and lets the system prompt say "evaluate only
 // the fields of this object".
 type judgePromptPayload struct {
-	Policy  string         `json:"policy"`
-	Message MessagePayload `json:"message"`
-}
-
-type MessagePayload struct {
-	ProducedBy         string            `json:"produced_by"`
-	Tool               *ToolPayload      `json:"tool,omitempty"`
-	BodyKind           string            `json:"body_kind"`
-	Body               string            `json:"body,omitempty"`
-	BodyTruncated      bool              `json:"body_truncated,omitempty"`
-	ToolCalls          []ToolCallPayload `json:"tool_calls,omitempty"`
-	ToolCallsTruncated bool              `json:"tool_calls_truncated,omitempty"`
-}
-
-type ToolPayload struct {
-	MCPServer   string `json:"mcp_server,omitempty"`
-	MCPFunction string `json:"mcp_function,omitempty"`
-	Name        string `json:"name,omitempty"`
-}
-
-type ToolCallPayload struct {
-	Tool               *ToolPayload `json:"tool,omitempty"`
-	Arguments          string       `json:"arguments"`
-	ArgumentsTruncated bool         `json:"arguments_truncated,omitempty"`
+	Policy  string               `json:"policy"`
+	Message judgemessage.Payload `json:"message"`
 }
 
 // BuildJudgePrompt renders the policy plus the message under evaluation as the
-// JSON user turn the judge reads. Bodies are truncated (see truncateBody) so an
+// JSON user turn the judge reads. Bodies are truncated by judgemessage so an
 // oversized payload cannot blow the model's context window. Exported so
 // server/cmd/riskjudgebench drives the exact production user prompt.
 func BuildJudgePrompt(in promptpolicy.Input) string {
 	payload := judgePromptPayload{
 		Policy:  in.Prompt,
-		Message: RenderMessage(in.Message),
+		Message: judgemessage.RenderPayload(in.Message),
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -346,102 +308,4 @@ func BuildJudgePrompt(in promptpolicy.Input) string {
 		return in.Message.Body
 	}
 	return string(b)
-}
-
-// RenderMessage maps a judge message onto the JSON payload the judge reads.
-// A multi-call tool request renders each call with its own attribution under
-// tool_calls; every other shape carries a single type-appropriate body.
-func RenderMessage(m judgemessage.Message) MessagePayload {
-	if len(m.ToolCalls) > 0 {
-		calls := m.ToolCalls
-		truncatedCalls := false
-		if len(calls) > maxRenderedToolCalls {
-			calls = calls[:maxRenderedToolCalls]
-			truncatedCalls = true
-		}
-		rendered := make([]ToolCallPayload, 0, len(calls))
-		for _, c := range calls {
-			args, argsTruncated := truncateBody(c.Arguments, maxBodyLen)
-			rendered = append(rendered, ToolCallPayload{
-				Tool:               toolPayload(c.ToolName, c.MCPServer, c.MCPFunction),
-				Arguments:          args,
-				ArgumentsTruncated: argsTruncated,
-			})
-		}
-		return MessagePayload{
-			ProducedBy:         "ai_assistant_tool_call",
-			Tool:               nil,
-			BodyKind:           "tool_calls",
-			Body:               "",
-			BodyTruncated:      false,
-			ToolCalls:          rendered,
-			ToolCallsTruncated: truncatedCalls,
-		}
-	}
-
-	producedBy, bodyKind := messageDescriptors(m.Type)
-	body, truncated := truncateBody(m.Body, maxBodyLen)
-	return MessagePayload{
-		ProducedBy:         producedBy,
-		Tool:               toolPayload(m.ToolName, m.MCPServer, m.MCPFunction),
-		BodyKind:           bodyKind,
-		Body:               body,
-		BodyTruncated:      truncated,
-		ToolCalls:          nil,
-		ToolCallsTruncated: false,
-	}
-}
-
-// messageDescriptors maps a message type to its judge-facing actor and body-kind
-// labels, so the judge can reason about the actor without knowing Gram's
-// internal enum. An unset/unknown type degrades to an opaque content body.
-func messageDescriptors(messageType message.Type) (producedBy, bodyKind string) {
-	switch messageType {
-	case message.User:
-		return "end_user", "content"
-	case message.Assistant:
-		return "ai_assistant", "content"
-	case message.ToolRequest:
-		return "ai_assistant_tool_call", "arguments"
-	case message.ToolResponse:
-		return "tool_result", "output"
-	default:
-		return "unknown", "content"
-	}
-}
-
-// toolPayload describes the tool a call/result targets: destructured MCP server
-// + function when known, otherwise the raw tool name. Returns nil when there is
-// no tool attribution.
-func toolPayload(name, mcpServer, mcpFunction string) *ToolPayload {
-	if mcpServer != "" || mcpFunction != "" {
-		return &ToolPayload{MCPServer: mcpServer, MCPFunction: mcpFunction, Name: ""}
-	}
-	if name != "" {
-		return &ToolPayload{MCPServer: "", MCPFunction: "", Name: name}
-	}
-	return nil
-}
-
-// truncateBody bounds a body to maxLen runes, keeping the head and tail so a
-// violation at either end survives (exfil payloads often trail at the end). The
-// split is by rune, not byte, so a multi-byte character can't be cut into
-// invalid UTF-8. Returns the (possibly shortened) text and whether it was cut.
-func truncateBody(s string, maxLen int) (string, bool) {
-	if maxLen <= 0 || utf8.RuneCountInString(s) <= maxLen {
-		return s, false
-	}
-	runes := []rune(s)
-	// Reserve room for the truncation marker so the returned text - marker
-	// included - stays within maxLen runes, rather than maxLen + marker. (cubic)
-	const markerBudget = 40
-	budget := max(maxLen-markerBudget, 0)
-	dropped := len(runes) - budget
-	head := budget * 3 / 5
-	tail := budget - head
-	var b strings.Builder
-	b.WriteString(string(runes[:head]))
-	fmt.Fprintf(&b, "\n…[%d characters truncated]…\n", dropped)
-	b.WriteString(string(runes[len(runes)-tail:]))
-	return b.String(), true
 }

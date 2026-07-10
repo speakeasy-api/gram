@@ -46,7 +46,7 @@ func judgeFanout(
 				defer wg.Done()
 				idx := indices[pos]
 				started := time.Now()
-				verdict, err := judge.Evaluate(ctx, promptpolicy.Input{
+				verdict, err := judge(ctx, promptpolicy.Input{
 					OrgID:     orgID,
 					ProjectID: projectID,
 					Prompt:    prompt,

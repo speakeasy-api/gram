@@ -641,7 +641,7 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		return promptPolicyUnavailableResult(policy, messageType, cfg, nil)
 	}
 
-	verdict, err := s.judge.Evaluate(ctx, promptpolicy.Input{
+	verdict, err := s.judge(ctx, promptpolicy.Input{
 		OrgID:     policy.OrganizationID,
 		ProjectID: policy.ProjectID.String(),
 		Prompt:    policy.Prompt.String,
