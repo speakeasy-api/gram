@@ -59,6 +59,13 @@ const deltaToneClasses: Record<StatTileDeltaTone, string> = {
  * in a page section or a table cell — wrap in `StatCard` for the
  * hairline-bordered tile treatment.
  */
+// "3,418", "78", "1.2M" are numeric; "No limit", "Unlimited" are not.
+function isNumericValue(value: React.ReactNode): boolean {
+  if (typeof value === "number") return true;
+  if (typeof value !== "string") return false;
+  return /\d/.test(value) && !/[a-zA-Z]{2,}/.test(value);
+}
+
 export function StatTile({
   label,
   value,
@@ -93,7 +100,10 @@ export function StatTile({
           ) : (
             <span
               className={cn(
-                "font-display text-4xl font-thin tabular-nums sm:text-5xl",
+                "font-display text-4xl font-thin sm:text-5xl",
+                // Tabular figures align columns of numbers, but they also pad
+                // letters — reserve them for values that are actually numeric.
+                isNumericValue(value) && "tabular-nums",
                 valueToneClasses[tone],
                 valueClassName,
               )}
