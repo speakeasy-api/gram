@@ -177,7 +177,7 @@ func requireStoredEnvSourcedValue(t *testing.T, ctx context.Context, ti *testIns
 		}
 
 		require.True(t, header.Value.Valid, "header %q value must be non-null empty", name)
-		require.Equal(t, "", header.Value.String)
+		require.Empty(t, header.Value.String)
 		require.False(t, header.ValueFromRequestHeader.Valid)
 		require.False(t, header.IsSecret)
 		return

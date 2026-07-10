@@ -187,11 +187,11 @@ export function HeadersSection({
     undefined,
     { enabled: remoteMcpServerId !== "" },
   );
-  const initialHeaders = headersQuery.data?.headers ?? [];
+  const headers = headersQuery.data?.headers;
 
   const initialDrafts = useMemo(
-    () => initialHeaders.map(headerDraftFromServer),
-    [initialHeaders],
+    () => (headers ?? []).map(headerDraftFromServer),
+    [headers],
   );
   const [drafts, setDrafts] = useState(initialDrafts);
 

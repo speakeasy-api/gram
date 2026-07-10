@@ -95,7 +95,7 @@ func TestCreateServerHeader_EnvSourced(t *testing.T) {
 	require.False(t, header.IsSecret)
 	require.Nil(t, header.ValueFromRequestHeader)
 	require.NotNil(t, header.Value)
-	require.Equal(t, "", *header.Value)
+	require.Empty(t, *header.Value)
 
 	requireStoredEnvSourcedValue(t, ctx, ti, server.ID, "X-Api-Key")
 }
@@ -111,7 +111,7 @@ func TestCreateServerHeader_EnvSourcedEmptyValue(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	require.NotNil(t, header.Value)
-	require.Equal(t, "", *header.Value)
+	require.Empty(t, *header.Value)
 
 	requireStoredEnvSourcedValue(t, ctx, ti, server.ID, "X-Api-Key")
 }

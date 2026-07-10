@@ -245,7 +245,7 @@ func TestUpdateServerHeader_StaticToEnvSourced(t *testing.T) {
 	require.False(t, updated.IsSecret)
 	require.Nil(t, updated.ValueFromRequestHeader)
 	require.NotNil(t, updated.Value)
-	require.Equal(t, "", *updated.Value)
+	require.Empty(t, *updated.Value)
 
 	requireStoredEnvSourcedValue(t, ctx, ti, server.ID, "X-Api-Key")
 }
@@ -264,7 +264,7 @@ func TestUpdateServerHeader_PassThroughToEnvSourced(t *testing.T) {
 	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Api-Key", nil))
 	require.NoError(t, err)
 	require.NotNil(t, updated.Value)
-	require.Equal(t, "", *updated.Value)
+	require.Empty(t, *updated.Value)
 	require.Nil(t, updated.ValueFromRequestHeader)
 
 	requireStoredEnvSourcedValue(t, ctx, ti, server.ID, "X-Api-Key")
@@ -281,7 +281,7 @@ func TestUpdateServerHeader_SecretToEnvSourced(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, updated.IsSecret)
 	require.NotNil(t, updated.Value)
-	require.Equal(t, "", *updated.Value)
+	require.Empty(t, *updated.Value)
 
 	requireStoredEnvSourcedValue(t, ctx, ti, server.ID, "Authorization")
 }
