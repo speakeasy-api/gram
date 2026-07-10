@@ -257,14 +257,17 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 		KeyType:        string(keyType),
 	})
 	switch {
+	// A real read failure must be checked before the missing-key case: a
+	// failed lookup returns a zero-valued row, so key.Key == "" would
+	// otherwise swallow the error and mint an upstream key.
+	case err != nil && !errors.Is(err, pgx.ErrNoRows):
+		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+
 	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
 		openrouterKey, err = o.createAndStoreAPIKey(ctx, orgID, keyType)
 		if err != nil {
 			return "", err
 		}
-
-	case err != nil:
-		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
 
 	default:
 		openrouterKey = key.Key
@@ -308,9 +311,11 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		KeyType:        string(keyType),
 	})
 	switch {
-	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
-	case err != nil:
+	// Read-failure check must precede the missing-key case — see
+	// ProvisionAPIKey.
+	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
 	default:
 		return key.Key, nil
 	}
@@ -362,6 +367,9 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 
 func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
 	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return 0, fmt.Errorf("refresh openrouter key limit: %w", err)
+	}
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType),
@@ -509,6 +517,7 @@ func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, 
 
 	o.logger.InfoContext(ctx, "reconciled openrouter monthly credits from upstream",
 		attr.SlogOrganizationID(orgID),
+		attr.SlogOpenRouterKeyType(string(keyType.OrDefault())),
 		attr.SlogOpenRouterKeyPreviousLimit(int(currentLimit)),
 		attr.SlogOpenRouterKeyLimit(int(newLimit)),
 	)
