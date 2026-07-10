@@ -12,8 +12,6 @@ import (
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// mintedIssuerSessionDuration matches the dashboard's default session length
-// for server-scoped issuers (14 days).
 const mintedIssuerSessionDuration = 14 * 24 * time.Hour
 
 // mintServerUserSessionIssuer creates the user_session_issuer a remote- or
