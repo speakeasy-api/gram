@@ -110,6 +110,8 @@ func TestCreateServerHeader_EnvSourcedEmptyValue(t *testing.T) {
 		p.Value = new("")
 	}))
 	require.NoError(t, err)
+	require.False(t, header.IsSecret)
+	require.Nil(t, header.ValueFromRequestHeader)
 	require.NotNil(t, header.Value)
 	require.Empty(t, *header.Value)
 

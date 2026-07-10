@@ -20,7 +20,7 @@ import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 const REDACTED_SECRET = "***";
@@ -194,9 +194,18 @@ export function HeadersSection({
     [headers],
   );
   const [drafts, setDrafts] = useState(initialDrafts);
+  // The server snapshot the current drafts were last synced from. Used to tell
+  // "user hasn't touched anything" apart from "user has unsaved edits" so a
+  // background refetch (window refocus, concurrent change) can't silently
+  // discard in-progress edits.
+  const syncedRef = useRef(initialDrafts);
 
   useEffect(() => {
-    setDrafts(initialDrafts);
+    const previousSynced = syncedRef.current;
+    syncedRef.current = initialDrafts;
+    setDrafts((current) =>
+      draftsEqual(current, previousSynced) ? initialDrafts : current,
+    );
   }, [initialDrafts]);
 
   const queryClient = useQueryClient();
@@ -264,6 +273,13 @@ export function HeadersSection({
       await invalidateAllRemoteMcpServerHeaders(queryClient, {
         refetchType: "all",
       });
+      // Intentionally adopt the canonical server state after a save so drafts
+      // pick up server-assigned ids and secret redaction. The sync effect
+      // preserves unsaved edits, so this reset must be explicit.
+      const refreshed = await headersQuery.refetch();
+      const synced = (refreshed.data?.headers ?? []).map(headerDraftFromServer);
+      syncedRef.current = synced;
+      setDrafts(synced);
       toast.success("Upstream headers updated");
     } catch (error) {
       const message =

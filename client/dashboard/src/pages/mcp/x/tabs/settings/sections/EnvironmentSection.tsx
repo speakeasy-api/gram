@@ -108,23 +108,25 @@ function EnvironmentSectionContent({
               Attached environment
             </FieldLabel>
             <RequireScope scope="mcp:write" level="component">
-              <Select
-                value={draft}
-                disabled={isSaving || environmentsQuery.isLoading}
-                onValueChange={(value) => setDraft(value)}
-              >
-                <SelectTrigger id="mcp-server-environment" className="w-72">
-                  <SelectValue placeholder="Select an environment" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE_VALUE}>None</SelectItem>
-                  {environments.map((environment) => (
-                    <SelectItem key={environment.id} value={environment.id}>
-                      {environment.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {({ disabled }) => (
+                <Select
+                  value={draft}
+                  disabled={disabled || isSaving || environmentsQuery.isLoading}
+                  onValueChange={(value) => setDraft(value)}
+                >
+                  <SelectTrigger id="mcp-server-environment" className="w-72">
+                    <SelectValue placeholder="Select an environment" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE_VALUE}>None</SelectItem>
+                    {environments.map((environment) => (
+                      <SelectItem key={environment.id} value={environment.id}>
+                        {environment.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </RequireScope>
           </Field>
         </SettingsSection.Body>
