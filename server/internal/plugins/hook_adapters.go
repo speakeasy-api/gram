@@ -73,14 +73,25 @@ func renderHookPayloadNormalizationSnippet(platform string) string {
 	}
 
 	return fmt.Sprintf(`gram_hooks_json_escape_string() {
-  awk 'BEGIN { first = 1; ORS = "" }
+  awk 'BEGIN {
+         first = 1; ORS = ""
+         # Every remaining C0 control character must be escaped or the
+         # payload is invalid JSON and the whole ingest post fails; ANSI
+         # escapes in tool output and prompts hit this in practice. NUL
+         # cannot survive shell command substitution, so start at 1.
+         for (i = 1; i < 32; i++) ctrl[sprintf("%%c", i)] = sprintf("\\u%%04x", i)
+       }
        {
          gsub(/\\/, "\\\\")
          gsub(/"/, "\\\"")
-         gsub(/\b/, "\\b")
-         gsub(/\f/, "\\f")
-         gsub(/\r/, "\\r")
-         gsub(/\t/, "\\t")
+         if ($0 ~ /[[:cntrl:]]/) {
+           n = length($0); out = ""
+           for (i = 1; i <= n; i++) {
+             c = substr($0, i, 1)
+             out = out ((c in ctrl) ? ctrl[c] : c)
+           }
+           $0 = out
+         }
          if (!first) printf "\\n"
          printf "%%s", $0
          first = 0
@@ -830,6 +841,43 @@ gram_hooks_cursor_mark_prompt_submitted() {
   printf '%%s\n' "$(gram_hooks_cursor_prompt_fingerprint "$(gram_hooks_json_string_value "$payload" "prompt")")" >"$state_path" 2>/dev/null || true
 }
 
+# gram_hooks_cursor_deny_scope reduces a payload's generation id to a single
+# stash-line token; "-" when the payload carries none.
+gram_hooks_cursor_deny_scope() {
+  local scope
+  scope="$(gram_hooks_json_string_value "$1" "generation_id" | tr -c 'A-Za-z0-9_.-' '_')"
+  [ -n "$scope" ] || scope="-"
+  printf '%%s' "$scope"
+}
+
+# gram_hooks_cursor_take_pending_prompt_deny prints the deny body stashed by
+# a backfill that ran on a non-decision event, consuming it so the deny is
+# relayed exactly once. The stash is scoped to the generation it was denied
+# for: when the denied turn ends without a decision event, the next turn must
+# not inherit the block — its own backfill re-checks its own prompt — so a
+# stash from another generation is discarded instead of printed. Returns 1
+# when nothing is pending for this generation.
+gram_hooks_cursor_take_pending_prompt_deny() {
+  local payload="$1"
+  local server_url_arg="$2"
+  local project_slug_arg="$3"
+  local session_id state_path pending stashed_scope
+  session_id="$(gram_hooks_session_id "$payload")"
+  state_path="$(gram_hooks_cursor_prompt_state_path "$session_id" "$server_url_arg" "$project_slug_arg")" || return 1
+  pending="$(sed -n '2p' "$state_path" 2>/dev/null)"
+  case "$pending" in
+    "deny "*) ;;
+    *) return 1 ;;
+  esac
+  sed -n '1p' "$state_path" >"$state_path.tmp" 2>/dev/null && mv "$state_path.tmp" "$state_path" 2>/dev/null || rm -f "$state_path.tmp"
+  pending="${pending#deny }"
+  stashed_scope="${pending%%%% *}"
+  if [ "$stashed_scope" != "$(gram_hooks_cursor_deny_scope "$payload")" ]; then
+    return 1
+  fi
+  printf '%%s' "${pending#* }"
+}
+
 # gram_hooks_cursor_prompt_fingerprint reduces a prompt to a stable content
 # fingerprint. Trailing blank lines are stripped first so the payload prompt
 # and its transcript rendering normalize identically.
@@ -892,7 +940,7 @@ gram_hooks_cursor_backfill_prompt_if_missing() {
   # a LATER turn is still backfilled. Consecutive identical prompts are
   # indistinguishable from already-handled ones and are not re-sent.
   fingerprint="$(gram_hooks_cursor_prompt_fingerprint "$prompt")"
-  if [ -r "$state_path" ] && [ "$(cat "$state_path" 2>/dev/null)" = "$fingerprint" ]; then
+  if [ -r "$state_path" ] && [ "$(sed -n '1p' "$state_path" 2>/dev/null)" = "$fingerprint" ]; then
     return 0
   fi
 
@@ -913,13 +961,22 @@ gram_hooks_cursor_backfill_prompt_if_missing() {
   unset GRAM_IDEMPOTENCY_TOKEN
   http_code="$GRAM_HTTP_CODE"
   if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
-    printf '%%s\n' "$fingerprint" >"$state_path" 2>/dev/null || true
     # Surface the server's verdict on the backfilled prompt: a deny would have
     # fired at beforeSubmitPrompt had that delivery not been missed, so the
     # caller can still relay it on the current decision event.
     GRAM_HOOKS_BACKFILL_STATUS="ok"
     GRAM_HOOKS_BACKFILL_DECISION="$(gram_hooks_json_string_value "$GRAM_HTTP_BODY" "decision")"
     GRAM_HOOKS_BACKFILL_BODY="$GRAM_HTTP_BODY"
+    if [ "$GRAM_HOOKS_BACKFILL_DECISION" = "deny" ]; then
+      # This invocation may be a non-decision event (stop, afterAgentResponse)
+      # that cannot relay the deny; stash it with the marker so the turn's
+      # next decision event relays it instead of the deny being swallowed.
+      # The stash carries the generation id so it can never block a later
+      # unrelated turn.
+      printf '%%s\ndeny %%s %%s\n' "$fingerprint" "$(gram_hooks_cursor_deny_scope "$payload")" "$GRAM_HOOKS_BACKFILL_BODY" >"$state_path" 2>/dev/null || true
+    else
+      printf '%%s\n' "$fingerprint" >"$state_path" 2>/dev/null || true
+    fi
   elif [ -n "$http_code" ]; then
     # A real attempt failed: this backfill was the turn's only prompt-policy
     # check, so decision events must not proceed on an unverified prompt.

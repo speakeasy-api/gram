@@ -783,6 +783,22 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 	require.NotNil(t, status.UpToDate)
 	require.True(t, *status.UpToDate)
 	require.NotNil(t, status.LastPublishedAt)
+
+	// The observability plugin slugs must name plugins that actually exist in
+	// the published marketplace — install UIs build `<plugin>@<marketplace>`
+	// strings from them.
+	require.NotNil(t, status.ClaudeObservabilityPlugin)
+	require.NotNil(t, status.CodexObservabilityPlugin)
+	claudePublished := false
+	codexPublished := false
+	for path := range mock.lastPushedFiles {
+		claudePublished = claudePublished || strings.HasPrefix(path, *status.ClaudeObservabilityPlugin+"/")
+		codexPublished = codexPublished || strings.HasPrefix(path, *status.CodexObservabilityPlugin+"/")
+	}
+	require.True(t, claudePublished,
+		"claude observability plugin slug %q not found among published files", *status.ClaudeObservabilityPlugin)
+	require.True(t, codexPublished,
+		"codex observability plugin slug %q not found among published files", *status.CodexObservabilityPlugin)
 }
 
 // Reproduces the plugin_github_connections_installation_repo_key conflict:
