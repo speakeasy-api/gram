@@ -792,7 +792,7 @@ function EmployeeTable({
   };
 
   return (
-    <section className="bg-card flex flex-col gap-4">
+    <section className="bg-card flex flex-col">
       <Table
         columns={columns}
         data={pageEmployees}
