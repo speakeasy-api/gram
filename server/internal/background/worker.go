@@ -278,6 +278,7 @@ func NewTemporalWorker(
 	}
 
 	judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(opts.RedisClient))
+	workosRateLimiter := activities.NewWorkOSRateLimiter(ratelimit.NewRedisStore(opts.RedisClient))
 
 	activities := NewActivities(
 		logger,
@@ -322,6 +323,7 @@ func NewTemporalWorker(
 		opts.Publishers,
 		celEng,
 		judgeRateLimiter,
+		workosRateLimiter,
 		opts.BuiltinPresets,
 	)
 

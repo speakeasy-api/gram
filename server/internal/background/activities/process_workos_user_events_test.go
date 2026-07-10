@@ -3,6 +3,7 @@ package activities_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -29,6 +30,30 @@ func newUserEventsTestConn(t *testing.T, name string) *pgxpool.Pool {
 	conn, err := infra.CloneTestDatabase(t, name)
 	require.NoError(t, err)
 	return conn
+}
+
+type allowingWorkOSRateLimiter struct{}
+
+func (allowingWorkOSRateLimiter) Wait(context.Context) error { return nil }
+
+type failingWorkOSRateLimiter struct {
+	err   error
+	calls int
+}
+
+func (l *failingWorkOSRateLimiter) Wait(context.Context) error {
+	l.calls++
+	return l.err
+}
+
+func newProcessWorkOSUserEvents(
+	t *testing.T,
+	logger *slog.Logger,
+	conn *pgxpool.Pool,
+	workosClient activities.WorkOSClient,
+) *activities.ProcessWorkOSUserEvents {
+	t.Helper()
+	return activities.NewProcessWorkOSUserEvents(logger, conn, workosClient, allowingWorkOSRateLimiter{})
 }
 
 func userEventData(workosUserID, email, firstName, lastName, photoURL string) []byte {
@@ -99,7 +124,7 @@ func TestProcessWorkOSUserEvents_CreatesUser(t *testing.T) {
 		{ID: "event_user_create", Event: "user.created", CreatedAt: time.Now(), Data: userEventData(workosUserID, "ada@example.com", "Ada", "Lovelace", "https://example.com/ada.png")},
 	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.NoError(t, err)
 	require.Equal(t, "event_user_create", res.LastEventID)
@@ -164,7 +189,7 @@ func TestProcessWorkOSUserEvents_CreatesUserWithExistingExternalID(t *testing.T)
 		{ID: "event_user_create_external_id", Event: "user.created", CreatedAt: time.Now(), Data: userEventDataWithExternalID(workosUserID, externalID, "ada@example.com", "Ada", "Lovelace", "")},
 	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.NoError(t, err)
 	require.Equal(t, "event_user_create_external_id", res.LastEventID)
@@ -193,7 +218,7 @@ func TestProcessWorkOSUserEvents_LinksExistingLocalUserByExternalID(t *testing.T
 		{ID: "event_user_link_external_id", Event: "user.updated", CreatedAt: time.Now(), Data: userEventDataWithExternalID(workosUserID, externalID, "ada@example.com", "Ada", "Lovelace", "")},
 	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.NoError(t, err)
 	require.Equal(t, "event_user_link_external_id", res.LastEventID)
@@ -229,7 +254,7 @@ func TestProcessWorkOSUserEvents_UsesExistingWorkOSLinkBeforeExternalID(t *testi
 		{ID: "event_user_workos_first", Event: "user.updated", CreatedAt: time.Now(), Data: userEventDataWithExternalID(workosUserID, externalID, "new@example.com", "New", "Name", "")},
 	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.NoError(t, err)
 	require.Equal(t, "event_user_workos_first", res.LastEventID)
@@ -264,7 +289,7 @@ func TestProcessWorkOSUserEvents_ExternalIDLinkedToDifferentWorkOSUserStopsSync(
 		{ID: "event_user_external_id_conflict", Event: "user.updated", CreatedAt: time.Now(), Data: userEventDataWithExternalID(workosUserID, externalID, "new@example.com", "New", "User", "")},
 	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.Error(t, err)
 	require.Nil(t, res)
@@ -333,7 +358,7 @@ func TestProcessWorkOSUserEvents_LinksOptimisticRoleAssignments(t *testing.T) {
 		{ID: "event_user_role_assignment", Event: "user.created", CreatedAt: time.Now(), Data: userEventData(workosUserID, "role@example.com", "Role", "User", "")},
 	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.NoError(t, err)
 	require.Equal(t, "event_user_role_assignment", res.LastEventID)
@@ -417,7 +442,7 @@ func TestProcessWorkOSUserEvents_LinksMultipleOptimisticRoleAssignments(t *testi
 		{ID: "event_user_multi_role_link", Event: "user.created", CreatedAt: time.Now(), Data: userEventData(workosUserID, "multirole@example.com", "Multi", "Role", "")},
 	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.NoError(t, err)
 	require.Equal(t, "event_user_multi_role_link", res.LastEventID)
@@ -500,7 +525,7 @@ func TestProcessWorkOSUserEvents_LinksPendingRelationshipOverTombstone(t *testin
 		{ID: "event_user_relationship_tombstone", Event: "user.updated", CreatedAt: time.Now(), Data: userEventDataWithExternalID(workosUserID, gramUserID, "new@example.com", "Existing", "User", "")},
 	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.NoError(t, err)
 	require.Equal(t, "event_user_relationship_tombstone", res.LastEventID)
@@ -561,7 +586,7 @@ func TestProcessWorkOSUserEvents_LinksPendingRelationshipToExistingExternalID(t 
 		{ID: "event_user_relationship_external", Event: "user.updated", CreatedAt: time.Now(), Data: userEventDataWithExternalID(workosUserID, externalID, "new@example.com", "External", "User", "")},
 	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.NoError(t, err)
 	require.Equal(t, "event_user_relationship_external", res.LastEventID)
@@ -593,7 +618,7 @@ func TestProcessWorkOSUserEvents_UsesExistingUserIDWhenExternalIDMissing(t *test
 		{ID: "event_user_existing_id", Event: "user.updated", CreatedAt: time.Now(), Data: userEventData(workosUserID, "new@example.com", "New", "Name", "")},
 	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.NoError(t, err)
 	require.Equal(t, "event_user_existing_id", res.LastEventID)
@@ -624,7 +649,7 @@ func TestProcessWorkOSUserEvents_UpdatesExistingUserAndPreservesBlankFields(t *t
 		{ID: "event_user_update", Event: "user.updated", CreatedAt: time.Now(), Data: userEventData(workosUserID, "new@example.com", "New", "Name", "")},
 	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	_, err = activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.NoError(t, err)
 
@@ -652,7 +677,7 @@ func TestProcessWorkOSUserEvents_SoftDeletesUser(t *testing.T) {
 		{ID: "event_user_delete", Event: "user.deleted", CreatedAt: time.Now(), Data: userEventData(workosUserID, "delete@example.com", "", "", "")},
 	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	_, err = activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.NoError(t, err)
 
@@ -681,7 +706,7 @@ func TestProcessWorkOSUserEvents_AdvancesAndResumesCursor(t *testing.T) {
 		{ID: "event_next", Event: "user.created", CreatedAt: time.Now(), Data: userEventData(workosUserID, "cursor@example.com", "", "", "")},
 	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.NoError(t, err)
 	require.Equal(t, "event_seed", res.SinceEventID)
@@ -705,7 +730,7 @@ func TestProcessWorkOSUserEvents_EmptyPageDoesNotAdvanceCursor(t *testing.T) {
 	const workosUserID = "user_empty"
 	workosClient := workos.NewStubClient()
 	workosClient.SetEventPages([][]events.Event{nil})
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.NoError(t, err)
 	require.Empty(t, res.LastEventID)
@@ -713,6 +738,22 @@ func TestProcessWorkOSUserEvents_EmptyPageDoesNotAdvanceCursor(t *testing.T) {
 
 	_, err = workosrepo.New(conn).GetUserSyncLastEventID(ctx, conv.ToPGText(workosUserID))
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestProcessWorkOSUserEvents_RateLimiterFailureFailsOpen(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newUserEventsTestConn(t, "workos_user_events_limiter_failure")
+	logger := testenv.NewLogger(t)
+	workosClient := workos.NewStubClient()
+	limiter := &failingWorkOSRateLimiter{err: errors.New("redis unavailable"), calls: 0}
+	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient, limiter)
+
+	_, err := activity.Do(ctx, processWorkOSUserEventsParams("user_limiter_failure"))
+	require.NoError(t, err)
+	require.Equal(t, 1, limiter.calls)
+	require.Len(t, workosClient.EventCalls(), 1)
 }
 
 func TestProcessWorkOSUserEvents_ExternalIDFailureDoesNotFail(t *testing.T) {
@@ -728,7 +769,7 @@ func TestProcessWorkOSUserEvents_ExternalIDFailureDoesNotFail(t *testing.T) {
 	}})
 	workosClient := &failingUpdateExternalIDWorkOSClient{StubClient: stub, err: errors.New("boom")}
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	activity := newProcessWorkOSUserEvents(t, logger, conn, workosClient)
 	res, err := activity.Do(ctx, processWorkOSUserEventsParams("user_external"))
 	require.NoError(t, err)
 	require.Equal(t, "event_external_id", res.LastEventID)

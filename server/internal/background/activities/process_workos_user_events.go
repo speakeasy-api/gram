@@ -39,16 +39,28 @@ type ProcessWorkOSUserEventsResult struct {
 }
 
 type ProcessWorkOSUserEvents struct {
-	db           *pgxpool.Pool
-	logger       *slog.Logger
-	workosClient WorkOSClient
+	db                *pgxpool.Pool
+	logger            *slog.Logger
+	workosClient      WorkOSClient
+	workosRateLimiter WorkOSRateLimiter
 }
 
-func NewProcessWorkOSUserEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient) *ProcessWorkOSUserEvents {
+// WorkOSRateLimiter waits for admission to the shared WorkOS API quota.
+type WorkOSRateLimiter interface {
+	Wait(ctx context.Context) error
+}
+
+func NewProcessWorkOSUserEvents(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	workosClient WorkOSClient,
+	workosRateLimiter WorkOSRateLimiter,
+) *ProcessWorkOSUserEvents {
 	return &ProcessWorkOSUserEvents{
-		db:           db,
-		logger:       logger,
-		workosClient: workosClient,
+		db:                db,
+		logger:            logger,
+		workosClient:      workosClient,
+		workosRateLimiter: workosRateLimiter,
 	}
 }
 
@@ -68,6 +80,15 @@ func (p *ProcessWorkOSUserEvents) Do(ctx context.Context, params ProcessWorkOSUs
 		default:
 			sinceEventID = cursor
 		}
+	}
+
+	if err := p.workosRateLimiter.Wait(ctx); err != nil {
+		if ctx.Err() != nil {
+			return nil, oops.E(oops.CodeUnexpected, ctx.Err(), "wait for WorkOS API rate limit").LogError(ctx, logger)
+		}
+		// A Redis outage is not a WorkOS throttle. Fail open so limiter
+		// infrastructure cannot halt identity synchronization.
+		logger.WarnContext(ctx, "WorkOS API rate limiter unavailable, allowing request", attr.SlogError(err))
 	}
 
 	resp, err := p.workosClient.ListEvents(ctx, events.ListEventsOpts{

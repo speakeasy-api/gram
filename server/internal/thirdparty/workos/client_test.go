@@ -8,12 +8,14 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/workos/workos-go/v6/pkg/common"
+	"github.com/workos/workos-go/v6/pkg/events"
 	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/roles"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
@@ -435,6 +437,48 @@ func newTestClient(t *testing.T, fake *fakeWorkOS) (*workos.Client, *fakeWorkOS)
 		ClientID:   "test-client-id",
 	})
 	return client, fake
+}
+
+func TestClientListEventsHonorsRetryAfter(t *testing.T) {
+	t.Parallel()
+
+	requestTimes := make(chan time.Time, 2)
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestTimes <- time.Now()
+		if requests.Add(1) == 1 {
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "rate limited", http.StatusTooManyRequests)
+			return
+		}
+		writeJSON(w, map[string]any{
+			"data":          []any{},
+			"list_metadata": map[string]string{"before": "", "after": ""},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	client := workos.NewClient(guardianPolicy, "test-api-key", workos.ClientOpts{
+		Endpoint:   srv.URL,
+		HTTPClient: nil,
+		ClientID:   "test-client-id",
+	})
+
+	_, err = client.ListEvents(t.Context(), events.ListEventsOpts{
+		Events:         nil,
+		Limit:          1,
+		After:          "",
+		OrganizationId: "",
+		RangeStart:     "",
+		RangeEnd:       "",
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, requests.Load())
+	first, second := <-requestTimes, <-requestTimes
+	require.GreaterOrEqual(t, second.Sub(first), 900*time.Millisecond)
 }
 
 // --- tests ---

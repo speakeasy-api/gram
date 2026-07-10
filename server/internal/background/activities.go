@@ -160,6 +160,7 @@ func NewActivities(
 	publishers *Publishers,
 	celEng *celenv.Engine,
 	judgeRateLimiter *ratelimit.Limiter,
+	workosRateLimiter activities.WorkOSRateLimiter,
 	builtinPresets *presetlib.Library,
 ) *Activities {
 	return &Activities{
@@ -212,7 +213,7 @@ func NewActivities(
 		backfillWorkOSGlobalRoles:       activities.NewBackfillWorkOSGlobalRoles(logger, db, workosClient),
 		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient),
 		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
-		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
+		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient, workosRateLimiter),
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
