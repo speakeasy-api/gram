@@ -21,6 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -1910,6 +1912,63 @@ func TestPluginsService_PublishProject_MCPChangeCarriesHooksVerbatim(t *testing.
 
 	hooksAfter := hooksFilesOf(mock.lastPushedFiles)
 	require.Equal(t, hooksBefore, hooksAfter, "hooks subtree must be carried verbatim across an MCP-only publish")
+}
+
+// Flipping an org-level hooks setting must regenerate the hooks subtree on the
+// next publish even though hooksGeneratorVersion is unchanged: the rendered
+// scripts bake the setting in, so carrying them verbatim would leave the old
+// behavior live until an unrelated generator bump. The persisted
+// published_hooks_config is what detects the flip.
+func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Flip Hooks"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "flip-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Flip Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	input := plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	}
+
+	first, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, first.Skipped)
+	hooksBefore := hooksFilesOf(mock.lastPushedFiles)
+	require.NotEmpty(t, hooksBefore)
+
+	require.NoError(t, productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureHooksBrowserLogin),
+	}))
+
+	second, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, second.Skipped, "a hooks settings flip must republish")
+	hooksAfter := hooksFilesOf(mock.lastPushedFiles)
+	require.NotEqual(t, hooksBefore, hooksAfter,
+		"hooks subtree must be regenerated, not carried, after a settings flip")
+
+	// The regenerated config is persisted, so the next unchanged rollout skips.
+	third, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.True(t, third.Skipped, "republishing with the same settings must skip again")
 }
 
 // A dashboard publish (PublishPlugins, which never skips) must still record the

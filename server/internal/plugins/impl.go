@@ -1448,10 +1448,45 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 	}
 
 	// Up to date only when both components match what was last published: the MCP
-	// per-plugin fingerprints and the hooks generator version.
+	// per-plugin fingerprints, the hooks generator version, and the org-level
+	// hooks settings baked into the rendered subtree.
+	publishedCfg := decodeHooksConfig(conn.PublishedHooksConfig)
 	upToDate := maps.Equal(mcpFingerprints, decodeMCPFingerprints(conn.PublishedMcpFingerprints)) &&
-		conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion
+		conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion &&
+		publishedCfg != nil && *publishedCfg == hooksConfigOf(cfg)
 	return &upToDate
+}
+
+// publishedHooksConfig captures the org-level settings that shape the rendered
+// hooks subtree. It is persisted (as published_hooks_config) alongside the
+// hooks generator version so a settings flip regenerates hooks on the next
+// publish — the version alone only tracks generator code changes and would
+// otherwise carry the old rendering verbatim until an unrelated bump.
+type publishedHooksConfig struct {
+	ObservabilityMode bool `json:"observability_mode"`
+	BrowserLogin      bool `json:"browser_login"`
+}
+
+func hooksConfigOf(cfg GenerateConfig) publishedHooksConfig {
+	return publishedHooksConfig{
+		ObservabilityMode: cfg.ObservabilityMode,
+		BrowserLogin:      cfg.BrowserLogin,
+	}
+}
+
+// decodeHooksConfig parses the persisted hooks settings from a connection. It
+// returns nil on empty or malformed input, so connections that predate the
+// column (or a decode failure) are treated as "nothing matches" — the safe
+// direction, forcing a hooks regeneration that backfills a valid value.
+func decodeHooksConfig(raw []byte) *publishedHooksConfig {
+	if len(raw) == 0 {
+		return nil
+	}
+	var c publishedHooksConfig
+	if err := json.Unmarshal(raw, &c); err != nil {
+		return nil
+	}
+	return &c
 }
 
 // decodeMCPFingerprints parses the JSON per-plugin fingerprint map stored on a
@@ -1653,8 +1688,10 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// version bumped.
 	mcpChanged := firstPublish || !input.SkipIfUnchanged ||
 		!maps.Equal(mcpFingerprints, decodeMCPFingerprints(existing.PublishedMcpFingerprints))
+	publishedCfg := decodeHooksConfig(existing.PublishedHooksConfig)
 	hooksChanged := firstPublish ||
-		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != hooksGeneratorVersion
+		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != hooksGeneratorVersion ||
+		publishedCfg == nil || *publishedCfg != hooksConfigOf(cfg)
 
 	if input.SkipIfUnchanged && !mcpChanged && !hooksChanged {
 		return &publishOutcome{RepoURL: repoURL, Skipped: true}, nil
@@ -1807,7 +1844,11 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// credentials when GitHub fails. If this transaction itself fails, the
 	// published repo contains key strings with no DB records — re-publish
 	// overwrites them with fresh valid keys.
-	if err := s.persistPluginAPIKeys(ctx, input, candidates, projectName, repoOwner, repoName, pluginSlugs, mcpFingerprintsJSON, hooksGeneratorVersion); err != nil {
+	hooksConfigJSON, err := json.Marshal(hooksConfigOf(cfg))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "marshal hooks config").LogError(ctx, s.logger)
+	}
+	if err := s.persistPluginAPIKeys(ctx, input, candidates, projectName, repoOwner, repoName, pluginSlugs, mcpFingerprintsJSON, hooksGeneratorVersion, hooksConfigJSON); err != nil {
 		if errors.Is(err, ErrGitHubRepoConflict) {
 			return nil, oops.E(oops.CodeConflict, err, "persist plugin api keys").LogWarn(ctx, s.logger)
 		}
@@ -2102,6 +2143,7 @@ func (s *Service) persistPluginAPIKeys(
 	pluginSlugs []string,
 	mcpFingerprintsJSON []byte,
 	hooksVersion string,
+	hooksConfigJSON []byte,
 ) error {
 	projectID := uuid.NullUUID{UUID: input.ProjectID, Valid: true}
 
@@ -2157,6 +2199,7 @@ func (s *Service) persistPluginAPIKeys(
 		MarketplaceToken:         pgtype.Text{String: candidateToken, Valid: true},
 		PublishedMcpFingerprints: mcpFingerprintsJSON,
 		PublishedHooksVersion:    conv.ToPGText(hooksVersion),
+		PublishedHooksConfig:     hooksConfigJSON,
 	}); err != nil {
 		return err
 	}
