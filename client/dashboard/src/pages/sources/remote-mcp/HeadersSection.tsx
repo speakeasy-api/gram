@@ -277,7 +277,15 @@ export function HeadersSection({
       // pick up server-assigned ids and secret redaction. The sync effect
       // preserves unsaved edits, so this reset must be explicit.
       const refreshed = await headersQuery.refetch();
-      const synced = (refreshed.data?.headers ?? []).map(headerDraftFromServer);
+      if (refreshed.isError || !refreshed.data) {
+        // Save succeeded, but the refresh failed. Don't treat the missing
+        // result as an empty header list — that would wipe the form. Leave the
+        // current drafts/cache intact and surface the refresh failure instead.
+        toast.success("Upstream headers updated");
+        toast.warning("Couldn't refresh headers. Reload to see the latest.");
+        return;
+      }
+      const synced = (refreshed.data.headers ?? []).map(headerDraftFromServer);
       syncedRef.current = synced;
       setDrafts(synced);
       toast.success("Upstream headers updated");
