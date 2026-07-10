@@ -249,7 +249,7 @@ export async function autoConfigureRemoteMcpAuth({
 // server's existing references alongside the new visibility. The user session
 // issuer is attached at create time for the server's lifetime and is not part
 // of the update payload.
-export async function setMcpServerVisibility(
+async function setMcpServerVisibility(
   client: Gram,
   mcpServer: McpServer,
   visibility: McpServerVisibility,
