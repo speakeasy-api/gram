@@ -24,11 +24,8 @@ export type AuthTarget = {
    * no probeable upstream (tunneled, toolset-backed), leaving the probe idle.
    */
   remoteMcpServerId?: string;
-  /**
-   * Link a freshly created issuer to the target (first add). Only targets
-   * that can be issuer-less provide it: toolsets do, mcp servers don't
-   * (they always come with an issuer).
-   */
+  /** Link a freshly created issuer to the target (first add). Absent for
+   * targets that always have an issuer (mcp servers). */
   linkUserSessionIssuer?: (userSessionIssuerId: string) => Promise<void>;
   /** Invalidate the target-specific queries that embed the link. */
   invalidate: (queryClient: QueryClient) => Promise<void>;

@@ -146,12 +146,8 @@ func TestServeMCP_DisabledReturns404(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, rr.Code)
 }
 
-// Public remote servers are issuer-gated like every other remote-backed
-// server (the issuer is mandatory at create). Anonymous access will return
-// once issuers grow an allow-anonymous mode; until then an unauthenticated
-// caller gets the OAuth challenge. The authenticated pass-through (including
-// Mcp-Session-Id relay) is covered by
-// TestServeMCP_PublicRemoteBackend_IssuerTokenForwardsUpstream below.
+// An unauthenticated caller gets the OAuth challenge even on a public
+// server; the authenticated pass-through is covered by the test below.
 func TestServeMCP_PublicRemoteBackend_UnauthenticatedChallenged(t *testing.T) {
 	t.Parallel()
 
@@ -280,12 +276,8 @@ func TestServeMCP_PublicRemoteBackend_DeleteForwardsSessionTermination(t *testin
 	require.Equal(t, "abc-session", gotSession)
 }
 
-// Private mcp_server: the caller's Authorization is a Gram API key used
-// for identity auth and must never reach the upstream MCP server.
-// A Gram API key against an (always issuer-gated) private remote server is
-// rejected at the gate, so no request — and therefore no Gram credential —
-// ever reaches the upstream. The public-server variant below covers the
-// header-stripping path where the proxy does forward.
+// A Gram API key is rejected at the issuer gate, so no request — and
+// therefore no Gram credential — ever reaches the upstream.
 func TestServeMCP_PrivateRemoteBackend_APIKeyNeverReachesUpstream(t *testing.T) {
 	t.Parallel()
 
@@ -342,9 +334,7 @@ func TestServeMCP_PublicRemoteBackend_IssuerTokenSendsNoAuthorizationUpstream(t 
 	require.Empty(t, gotAuth, "issuer-gated bearer must never leak to the remote MCP server")
 }
 
-// A Gram API key against an (always issuer-gated) public remote server is
-// rejected at the gate, so no request — and therefore no Gram credential —
-// ever reaches the upstream.
+// Public variant of the API-key rejection above.
 func TestServeMCP_PublicRemoteBackend_GramAPIKeyNeverReachesUpstream(t *testing.T) {
 	t.Parallel()
 
@@ -370,10 +360,8 @@ func TestServeMCP_PublicRemoteBackend_GramAPIKeyNeverReachesUpstream(t *testing.
 	require.False(t, upstreamCalled, "Gram API key must never leak even on a public mcp_server")
 }
 
-// Same-org cross-project API-key access dies at the issuer gate like any
-// other API-key call to a private remote server: the gate only accepts
-// user-session JWTs bound to the endpoint's issuer, so org membership
-// never enters the picture.
+// The gate only accepts user-session JWTs, so org membership never enters
+// the picture: same-org cross-project API keys are rejected too.
 func TestServeMCP_PrivateRemoteBackend_SameOrgCrossProjectAPIKeyRejected(t *testing.T) {
 	t.Parallel()
 
@@ -393,9 +381,7 @@ func TestServeMCP_PrivateRemoteBackend_SameOrgCrossProjectAPIKeyRejected(t *test
 	require.Equal(t, http.StatusUnauthorized, rr.Code, "body=%s", rr.Body.String())
 }
 
-// Cross-org access to a private mcp_server is rejected: the issuer gate
-// refuses any bearer that is not a user-session JWT for the endpoint's
-// issuer, so a foreign org's API key gets 401 just like a same-org one.
+// A foreign org's API key gets 401 just like a same-org one.
 func TestServeMCP_PrivateRemoteBackend_CrossOrgReturns401(t *testing.T) {
 	t.Parallel()
 
