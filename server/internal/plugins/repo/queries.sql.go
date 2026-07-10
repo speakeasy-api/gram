@@ -91,6 +91,30 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 	return i, err
 }
 
+const clearDefaultPlugin = `-- name: ClearDefaultPlugin :exec
+UPDATE plugins
+SET is_default = FALSE,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND project_id = $2
+  AND is_default IS TRUE
+  AND deleted IS FALSE
+`
+
+type ClearDefaultPluginParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Unsets whichever plugin is currently the project's default, if any. Run
+// immediately before SetDefaultPlugin within the same transaction so the
+// plugins_project_id_is_default_key partial unique index never sees two
+// defaults at once.
+func (q *Queries) ClearDefaultPlugin(ctx context.Context, arg ClearDefaultPluginParams) error {
+	_, err := q.db.Exec(ctx, clearDefaultPlugin, arg.OrganizationID, arg.ProjectID)
+	return err
+}
+
 const createDefaultPlugin = `-- name: CreateDefaultPlugin :one
 INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
 VALUES ($1, $2, 'Default', 'default', TRUE)
@@ -1041,6 +1065,45 @@ func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServer
 		&i.DisplayName,
 		&i.Policy,
 		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const setDefaultPlugin = `-- name: SetDefaultPlugin :one
+UPDATE plugins
+SET is_default = TRUE,
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+`
+
+type SetDefaultPluginParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Flags a specific plugin as the project's default target for new servers.
+// Callers must ClearDefaultPlugin first (same transaction) to satisfy the
+// single-default partial unique index.
+func (q *Queries) SetDefaultPlugin(ctx context.Context, arg SetDefaultPluginParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, setDefaultPlugin, arg.ID, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

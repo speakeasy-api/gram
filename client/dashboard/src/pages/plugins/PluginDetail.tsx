@@ -21,6 +21,7 @@ import {
 } from "@gram/client/react-query/publishStatus";
 import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 import { useUpdatePluginMutation } from "@gram/client/react-query/updatePlugin";
+import { useSetDefaultPluginMutation } from "@gram/client/react-query/setDefaultPlugin";
 import { useDeletePluginMutation } from "@gram/client/react-query/deletePlugin";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
@@ -49,10 +50,7 @@ import type { PluginServer } from "@gram/client/models/components/pluginserver.j
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useSdkClient } from "@/contexts/Sdk";
 import { toast } from "sonner";
-import {
-  DEFAULT_PLUGIN_DESCRIPTION,
-  isDefaultPluginSlug,
-} from "./default-plugin";
+import { DEFAULT_PLUGIN_DESCRIPTION, isDefaultPlugin } from "./default-plugin";
 import { downloadPluginPackage } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PublishDialog } from "./PublishDialog";
@@ -215,6 +213,23 @@ export default function PluginDetail(): JSX.Element | null {
     },
   });
 
+  const setDefaultMutation = useSetDefaultPluginMutation({
+    onSuccess: () => {
+      void invalidateAll();
+      offerPublish("Default plugin updated");
+    },
+    onError: () => {
+      toast.error("Failed to set default plugin");
+    },
+  });
+
+  const handleSetDefault = () => {
+    setDefaultMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: { id: pluginId! },
+    });
+  };
+
   const addServerMutation = useAddPluginServerMutation({
     onSuccess: () => {
       setIsAddServerOpen(false);
@@ -327,10 +342,10 @@ export default function PluginDetail(): JSX.Element | null {
 
   if (!plugin) return null;
 
-  const isDefaultPlugin = isDefaultPluginSlug(plugin.slug);
+  const isDefault = isDefaultPlugin(plugin);
   const description =
     plugin.description ??
-    (isDefaultPlugin ? DEFAULT_PLUGIN_DESCRIPTION : "No description");
+    (isDefault ? DEFAULT_PLUGIN_DESCRIPTION : "No description");
 
   const servers = plugin.servers ?? [];
 
@@ -364,7 +379,7 @@ export default function PluginDetail(): JSX.Element | null {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold">{plugin.name}</h1>
-                {isDefaultPlugin && (
+                {isDefault && (
                   <Badge variant="information">
                     <Badge.Text>Default</Badge.Text>
                   </Badge>
@@ -472,6 +487,17 @@ export default function PluginDetail(): JSX.Element | null {
               onRepublish={() => handlePublish([])}
               onOpenDialog={() => setIsPublishDialogOpen(true)}
             />
+            {!isDefault && (
+              <Button
+                variant="secondary"
+                onClick={handleSetDefault}
+                disabled={setDefaultMutation.isPending}
+              >
+                {setDefaultMutation.isPending
+                  ? "Setting default..."
+                  : "Set as default"}
+              </Button>
+            )}
             <Button variant="secondary" onClick={() => setIsEditOpen(true)}>
               Edit name
             </Button>

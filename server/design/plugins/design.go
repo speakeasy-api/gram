@@ -109,6 +109,33 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdatePlugin"}`)
 	})
 
+	Method("setDefaultPlugin", func() {
+		Description("Make a plugin the default target that newly created MCP servers are routed to, replacing any existing default.")
+
+		Payload(func() {
+			Attribute("id", String, func() {
+				Description("The plugin to make the default.")
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(PluginModel)
+
+		HTTP(func() {
+			POST("/rpc/plugins.setDefaultPlugin")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setDefaultPlugin")
+		Meta("openapi:extension:x-speakeasy-name-override", "setDefaultPlugin")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetDefaultPlugin"}`)
+	})
+
 	Method("deletePlugin", func() {
 		Description("Delete a plugin.")
 
@@ -481,7 +508,7 @@ var PluginAssignmentModel = Type("PluginAssignment", func() {
 
 // PluginModel is the full plugin representation.
 var PluginModel = Type("Plugin", func() {
-	Required("id", "name", "slug", "created_at", "updated_at")
+	Required("id", "name", "slug", "is_default", "created_at", "updated_at")
 
 	Attribute("id", String, func() {
 		Description("Unique plugin identifier.")
@@ -490,6 +517,7 @@ var PluginModel = Type("Plugin", func() {
 	Attribute("name", String, "Display name.")
 	Attribute("slug", String, "URL-safe identifier, unique per org.")
 	Attribute("description", String, "Optional description.")
+	Attribute("is_default", Boolean, "Whether newly created MCP servers are routed to this plugin by default. Exactly one plugin per project is the default.")
 	Attribute("server_count", Int64, "Number of active servers in this plugin.")
 	Attribute("assignment_count", Int64, "Number of role/user assignments.")
 	Attribute("servers", ArrayOf(PluginServerModel), "Servers included in this plugin.")

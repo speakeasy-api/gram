@@ -21524,6 +21524,101 @@ paths:
             x-speakeasy-name-override: removePluginServer
             x-speakeasy-react-hook:
                 name: RemovePluginServer
+    /rpc/plugins.setDefaultPlugin:
+        post:
+            description: Make a plugin the default target that newly created MCP servers are routed to, replacing any existing default.
+            operationId: setDefaultPlugin
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Plugin'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: setDefaultPlugin plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: setDefaultPlugin
+            x-speakeasy-react-hook:
+                name: SetDefaultPlugin
     /rpc/plugins.setPluginAssignments:
         put:
             description: Replace all assignments for a plugin with the given list of principal URNs.
@@ -48910,6 +49005,9 @@ components:
                     type: string
                     description: Unique plugin identifier.
                     format: uuid
+                is_default:
+                    type: boolean
+                    description: Whether newly created MCP servers are routed to this plugin by default. Exactly one plugin per project is the default.
                 name:
                     type: string
                     description: Display name.
@@ -48932,6 +49030,7 @@ components:
                 - id
                 - name
                 - slug
+                - is_default
                 - created_at
                 - updated_at
         PluginAssignment:

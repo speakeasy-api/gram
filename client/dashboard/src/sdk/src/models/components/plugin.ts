@@ -32,6 +32,10 @@ export type Plugin = {
    */
   id: string;
   /**
+   * Whether newly created MCP servers are routed to this plugin by default. Exactly one plugin per project is the default.
+   */
+  isDefault: boolean;
+  /**
    * Display name.
    */
   name: string;
@@ -57,25 +61,27 @@ export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
     assignments: z.optional(z.array(PluginAssignment$inboundSchema)),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
+      z.transform((v) => new Date(v)),
     ),
     description: z.optional(z.string()),
     id: z.string(),
+    is_default: z.boolean(),
     name: z.string(),
     server_count: z.optional(z.int()),
     servers: z.optional(z.array(PluginServer$inboundSchema)),
     slug: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
+      z.transform((v) => new Date(v)),
     ),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "assignment_count": "assignmentCount",
-      "created_at": "createdAt",
-      "server_count": "serverCount",
-      "updated_at": "updatedAt",
+      assignment_count: "assignmentCount",
+      created_at: "createdAt",
+      is_default: "isDefault",
+      server_count: "serverCount",
+      updated_at: "updatedAt",
     });
   }),
 );

@@ -25,6 +25,7 @@ type Server struct {
 	GetPlugin                   http.Handler
 	CreatePlugin                http.Handler
 	UpdatePlugin                http.Handler
+	SetDefaultPlugin            http.Handler
 	DeletePlugin                http.Handler
 	AddPluginServer             http.Handler
 	UpdatePluginServer          http.Handler
@@ -70,6 +71,7 @@ func New(
 			{"GetPlugin", "GET", "/rpc/plugins.getPlugin"},
 			{"CreatePlugin", "POST", "/rpc/plugins.createPlugin"},
 			{"UpdatePlugin", "PUT", "/rpc/plugins.updatePlugin"},
+			{"SetDefaultPlugin", "POST", "/rpc/plugins.setDefaultPlugin"},
 			{"DeletePlugin", "DELETE", "/rpc/plugins.deletePlugin"},
 			{"AddPluginServer", "POST", "/rpc/plugins.addPluginServer"},
 			{"UpdatePluginServer", "PUT", "/rpc/plugins.updatePluginServer"},
@@ -87,6 +89,7 @@ func New(
 		GetPlugin:                   NewGetPluginHandler(e.GetPlugin, mux, decoder, encoder, errhandler, formatter),
 		CreatePlugin:                NewCreatePluginHandler(e.CreatePlugin, mux, decoder, encoder, errhandler, formatter),
 		UpdatePlugin:                NewUpdatePluginHandler(e.UpdatePlugin, mux, decoder, encoder, errhandler, formatter),
+		SetDefaultPlugin:            NewSetDefaultPluginHandler(e.SetDefaultPlugin, mux, decoder, encoder, errhandler, formatter),
 		DeletePlugin:                NewDeletePluginHandler(e.DeletePlugin, mux, decoder, encoder, errhandler, formatter),
 		AddPluginServer:             NewAddPluginServerHandler(e.AddPluginServer, mux, decoder, encoder, errhandler, formatter),
 		UpdatePluginServer:          NewUpdatePluginServerHandler(e.UpdatePluginServer, mux, decoder, encoder, errhandler, formatter),
@@ -111,6 +114,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetPlugin = m(s.GetPlugin)
 	s.CreatePlugin = m(s.CreatePlugin)
 	s.UpdatePlugin = m(s.UpdatePlugin)
+	s.SetDefaultPlugin = m(s.SetDefaultPlugin)
 	s.DeletePlugin = m(s.DeletePlugin)
 	s.AddPluginServer = m(s.AddPluginServer)
 	s.UpdatePluginServer = m(s.UpdatePluginServer)
@@ -134,6 +138,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetPluginHandler(mux, h.GetPlugin)
 	MountCreatePluginHandler(mux, h.CreatePlugin)
 	MountUpdatePluginHandler(mux, h.UpdatePlugin)
+	MountSetDefaultPluginHandler(mux, h.SetDefaultPlugin)
 	MountDeletePluginHandler(mux, h.DeletePlugin)
 	MountAddPluginServerHandler(mux, h.AddPluginServer)
 	MountUpdatePluginServerHandler(mux, h.UpdatePluginServer)
@@ -342,6 +347,59 @@ func NewUpdatePluginHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updatePlugin")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetDefaultPluginHandler configures the mux to serve the "plugins"
+// service "setDefaultPlugin" endpoint.
+func MountSetDefaultPluginHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/plugins.setDefaultPlugin", f)
+}
+
+// NewSetDefaultPluginHandler creates a HTTP handler which loads the HTTP
+// request and calls the "plugins" service "setDefaultPlugin" endpoint.
+func NewSetDefaultPluginHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetDefaultPluginRequest(mux, decoder)
+		encodeResponse = EncodeSetDefaultPluginResponse(encoder)
+		encodeError    = EncodeSetDefaultPluginError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setDefaultPlugin")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
 		payload, err := decodeRequest(r)
 		if err != nil {

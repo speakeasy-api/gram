@@ -40,6 +40,32 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: ClearDefaultPlugin :exec
+-- Unsets whichever plugin is currently the project's default, if any. Run
+-- immediately before SetDefaultPlugin within the same transaction so the
+-- plugins_project_id_is_default_key partial unique index never sees two
+-- defaults at once.
+UPDATE plugins
+SET is_default = FALSE,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND is_default IS TRUE
+  AND deleted IS FALSE;
+
+-- name: SetDefaultPlugin :one
+-- Flags a specific plugin as the project's default target for new servers.
+-- Callers must ClearDefaultPlugin first (same transaction) to satisfy the
+-- single-default partial unique index.
+UPDATE plugins
+SET is_default = TRUE,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: GetPlugin :one
 SELECT *
 FROM plugins

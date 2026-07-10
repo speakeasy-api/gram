@@ -35,6 +35,13 @@ type UpdatePluginRequestBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 }
 
+// SetDefaultPluginRequestBody is the type of the "plugins" service
+// "setDefaultPlugin" endpoint HTTP request body.
+type SetDefaultPluginRequestBody struct {
+	// The plugin to make the default.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // AddPluginServerRequestBody is the type of the "plugins" service
 // "addPluginServer" endpoint HTTP request body.
 type AddPluginServerRequestBody struct {
@@ -104,6 +111,9 @@ type GetPluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether newly created MCP servers are routed to this plugin by default.
+	// Exactly one plugin per project is the default.
+	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -127,6 +137,9 @@ type CreatePluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether newly created MCP servers are routed to this plugin by default.
+	// Exactly one plugin per project is the default.
+	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -150,6 +163,35 @@ type UpdatePluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether newly created MCP servers are routed to this plugin by default.
+	// Exactly one plugin per project is the default.
+	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
+	// Number of active servers in this plugin.
+	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of role/user assignments.
+	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
+	// Servers included in this plugin.
+	Servers []*PluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// Role/user assignments.
+	Assignments []*PluginAssignmentResponseBody `form:"assignments,omitempty" json:"assignments,omitempty" xml:"assignments,omitempty"`
+	CreatedAt   string                          `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string                          `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// SetDefaultPluginResponseBody is the type of the "plugins" service
+// "setDefaultPlugin" endpoint HTTP response body.
+type SetDefaultPluginResponseBody struct {
+	// Unique plugin identifier.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Display name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// URL-safe identifier, unique per org.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Optional description.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether newly created MCP servers are routed to this plugin by default.
+	// Exactly one plugin per project is the default.
+	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -986,6 +1028,190 @@ type UpdatePluginUnexpectedResponseBody struct {
 // UpdatePluginGatewayErrorResponseBody is the type of the "plugins" service
 // "updatePlugin" endpoint HTTP response body for the "gateway_error" error.
 type UpdatePluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultPluginUnauthorizedResponseBody is the type of the "plugins"
+// service "setDefaultPlugin" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetDefaultPluginUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultPluginForbiddenResponseBody is the type of the "plugins" service
+// "setDefaultPlugin" endpoint HTTP response body for the "forbidden" error.
+type SetDefaultPluginForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultPluginBadRequestResponseBody is the type of the "plugins" service
+// "setDefaultPlugin" endpoint HTTP response body for the "bad_request" error.
+type SetDefaultPluginBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultPluginNotFoundResponseBody is the type of the "plugins" service
+// "setDefaultPlugin" endpoint HTTP response body for the "not_found" error.
+type SetDefaultPluginNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultPluginConflictResponseBody is the type of the "plugins" service
+// "setDefaultPlugin" endpoint HTTP response body for the "conflict" error.
+type SetDefaultPluginConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultPluginUnsupportedMediaResponseBody is the type of the "plugins"
+// service "setDefaultPlugin" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetDefaultPluginUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultPluginInvalidResponseBody is the type of the "plugins" service
+// "setDefaultPlugin" endpoint HTTP response body for the "invalid" error.
+type SetDefaultPluginInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultPluginInvariantViolationResponseBody is the type of the "plugins"
+// service "setDefaultPlugin" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetDefaultPluginInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultPluginUnexpectedResponseBody is the type of the "plugins" service
+// "setDefaultPlugin" endpoint HTTP response body for the "unexpected" error.
+type SetDefaultPluginUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultPluginGatewayErrorResponseBody is the type of the "plugins"
+// service "setDefaultPlugin" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetDefaultPluginGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3252,6 +3478,9 @@ type PluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether newly created MCP servers are routed to this plugin by default.
+	// Exactly one plugin per project is the default.
+	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of role/user assignments.
@@ -3332,6 +3561,7 @@ func NewGetPluginResponseBody(res *plugins.Plugin) *GetPluginResponseBody {
 		Name:            res.Name,
 		Slug:            res.Slug,
 		Description:     res.Description,
+		IsDefault:       res.IsDefault,
 		ServerCount:     res.ServerCount,
 		AssignmentCount: res.AssignmentCount,
 		CreatedAt:       res.CreatedAt,
@@ -3368,6 +3598,7 @@ func NewCreatePluginResponseBody(res *plugins.Plugin) *CreatePluginResponseBody 
 		Name:            res.Name,
 		Slug:            res.Slug,
 		Description:     res.Description,
+		IsDefault:       res.IsDefault,
 		ServerCount:     res.ServerCount,
 		AssignmentCount: res.AssignmentCount,
 		CreatedAt:       res.CreatedAt,
@@ -3404,6 +3635,44 @@ func NewUpdatePluginResponseBody(res *plugins.Plugin) *UpdatePluginResponseBody 
 		Name:            res.Name,
 		Slug:            res.Slug,
 		Description:     res.Description,
+		IsDefault:       res.IsDefault,
+		ServerCount:     res.ServerCount,
+		AssignmentCount: res.AssignmentCount,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
+	}
+	if res.Servers != nil {
+		body.Servers = make([]*PluginServerResponseBody, len(res.Servers))
+		for i, val := range res.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalPluginsPluginServerToPluginServerResponseBody(val)
+		}
+	}
+	if res.Assignments != nil {
+		body.Assignments = make([]*PluginAssignmentResponseBody, len(res.Assignments))
+		for i, val := range res.Assignments {
+			if val == nil {
+				body.Assignments[i] = nil
+				continue
+			}
+			body.Assignments[i] = marshalPluginsPluginAssignmentToPluginAssignmentResponseBody(val)
+		}
+	}
+	return body
+}
+
+// NewSetDefaultPluginResponseBody builds the HTTP response body from the
+// result of the "setDefaultPlugin" endpoint of the "plugins" service.
+func NewSetDefaultPluginResponseBody(res *plugins.Plugin) *SetDefaultPluginResponseBody {
+	body := &SetDefaultPluginResponseBody{
+		ID:              res.ID,
+		Name:            res.Name,
+		Slug:            res.Slug,
+		Description:     res.Description,
+		IsDefault:       res.IsDefault,
 		ServerCount:     res.ServerCount,
 		AssignmentCount: res.AssignmentCount,
 		CreatedAt:       res.CreatedAt,
@@ -4083,6 +4352,148 @@ func NewUpdatePluginUnexpectedResponseBody(res *goa.ServiceError) *UpdatePluginU
 // the result of the "updatePlugin" endpoint of the "plugins" service.
 func NewUpdatePluginGatewayErrorResponseBody(res *goa.ServiceError) *UpdatePluginGatewayErrorResponseBody {
 	body := &UpdatePluginGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultPluginUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "setDefaultPlugin" endpoint of the "plugins" service.
+func NewSetDefaultPluginUnauthorizedResponseBody(res *goa.ServiceError) *SetDefaultPluginUnauthorizedResponseBody {
+	body := &SetDefaultPluginUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultPluginForbiddenResponseBody builds the HTTP response body from
+// the result of the "setDefaultPlugin" endpoint of the "plugins" service.
+func NewSetDefaultPluginForbiddenResponseBody(res *goa.ServiceError) *SetDefaultPluginForbiddenResponseBody {
+	body := &SetDefaultPluginForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultPluginBadRequestResponseBody builds the HTTP response body from
+// the result of the "setDefaultPlugin" endpoint of the "plugins" service.
+func NewSetDefaultPluginBadRequestResponseBody(res *goa.ServiceError) *SetDefaultPluginBadRequestResponseBody {
+	body := &SetDefaultPluginBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultPluginNotFoundResponseBody builds the HTTP response body from
+// the result of the "setDefaultPlugin" endpoint of the "plugins" service.
+func NewSetDefaultPluginNotFoundResponseBody(res *goa.ServiceError) *SetDefaultPluginNotFoundResponseBody {
+	body := &SetDefaultPluginNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultPluginConflictResponseBody builds the HTTP response body from
+// the result of the "setDefaultPlugin" endpoint of the "plugins" service.
+func NewSetDefaultPluginConflictResponseBody(res *goa.ServiceError) *SetDefaultPluginConflictResponseBody {
+	body := &SetDefaultPluginConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultPluginUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "setDefaultPlugin" endpoint of the "plugins"
+// service.
+func NewSetDefaultPluginUnsupportedMediaResponseBody(res *goa.ServiceError) *SetDefaultPluginUnsupportedMediaResponseBody {
+	body := &SetDefaultPluginUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultPluginInvalidResponseBody builds the HTTP response body from
+// the result of the "setDefaultPlugin" endpoint of the "plugins" service.
+func NewSetDefaultPluginInvalidResponseBody(res *goa.ServiceError) *SetDefaultPluginInvalidResponseBody {
+	body := &SetDefaultPluginInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultPluginInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "setDefaultPlugin" endpoint of the "plugins"
+// service.
+func NewSetDefaultPluginInvariantViolationResponseBody(res *goa.ServiceError) *SetDefaultPluginInvariantViolationResponseBody {
+	body := &SetDefaultPluginInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultPluginUnexpectedResponseBody builds the HTTP response body from
+// the result of the "setDefaultPlugin" endpoint of the "plugins" service.
+func NewSetDefaultPluginUnexpectedResponseBody(res *goa.ServiceError) *SetDefaultPluginUnexpectedResponseBody {
+	body := &SetDefaultPluginUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultPluginGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "setDefaultPlugin" endpoint of the "plugins" service.
+func NewSetDefaultPluginGatewayErrorResponseBody(res *goa.ServiceError) *SetDefaultPluginGatewayErrorResponseBody {
+	body := &SetDefaultPluginGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5899,6 +6310,18 @@ func NewUpdatePluginPayload(body *UpdatePluginRequestBody, sessionToken *string,
 	return v
 }
 
+// NewSetDefaultPluginPayload builds a plugins service setDefaultPlugin
+// endpoint payload.
+func NewSetDefaultPluginPayload(body *SetDefaultPluginRequestBody, sessionToken *string, projectSlugInput *string) *plugins.SetDefaultPluginPayload {
+	v := &plugins.SetDefaultPluginPayload{
+		ID: *body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewDeletePluginPayload builds a plugins service deletePlugin endpoint
 // payload.
 func NewDeletePluginPayload(id string, sessionToken *string, projectSlugInput *string) *plugins.DeletePluginPayload {
@@ -6092,6 +6515,18 @@ func ValidateUpdatePluginRequestBody(body *UpdatePluginRequestBody) (err error) 
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSetDefaultPluginRequestBody runs the validations defined on
+// SetDefaultPluginRequestBody
+func ValidateSetDefaultPluginRequestBody(body *SetDefaultPluginRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))

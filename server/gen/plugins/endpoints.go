@@ -21,6 +21,7 @@ type Endpoints struct {
 	GetPlugin                   goa.Endpoint
 	CreatePlugin                goa.Endpoint
 	UpdatePlugin                goa.Endpoint
+	SetDefaultPlugin            goa.Endpoint
 	DeletePlugin                goa.Endpoint
 	AddPluginServer             goa.Endpoint
 	UpdatePluginServer          goa.Endpoint
@@ -71,6 +72,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetPlugin:                   NewGetPluginEndpoint(s, a.APIKeyAuth),
 		CreatePlugin:                NewCreatePluginEndpoint(s, a.APIKeyAuth),
 		UpdatePlugin:                NewUpdatePluginEndpoint(s, a.APIKeyAuth),
+		SetDefaultPlugin:            NewSetDefaultPluginEndpoint(s, a.APIKeyAuth),
 		DeletePlugin:                NewDeletePluginEndpoint(s, a.APIKeyAuth),
 		AddPluginServer:             NewAddPluginServerEndpoint(s, a.APIKeyAuth),
 		UpdatePluginServer:          NewUpdatePluginServerEndpoint(s, a.APIKeyAuth),
@@ -92,6 +94,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetPlugin = m(e.GetPlugin)
 	e.CreatePlugin = m(e.CreatePlugin)
 	e.UpdatePlugin = m(e.UpdatePlugin)
+	e.SetDefaultPlugin = m(e.SetDefaultPlugin)
 	e.DeletePlugin = m(e.DeletePlugin)
 	e.AddPluginServer = m(e.AddPluginServer)
 	e.UpdatePluginServer = m(e.UpdatePluginServer)
@@ -243,6 +246,41 @@ func NewUpdatePluginEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.UpdatePlugin(ctx, p)
+	}
+}
+
+// NewSetDefaultPluginEndpoint returns an endpoint function that calls the
+// method "setDefaultPlugin" of service "plugins".
+func NewSetDefaultPluginEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetDefaultPluginPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetDefaultPlugin(ctx, p)
 	}
 }
 

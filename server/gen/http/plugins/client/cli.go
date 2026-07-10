@@ -142,6 +142,42 @@ func BuildUpdatePluginPayload(pluginsUpdatePluginBody string, pluginsUpdatePlugi
 	return v, nil
 }
 
+// BuildSetDefaultPluginPayload builds the payload for the plugins
+// setDefaultPlugin endpoint from CLI flags.
+func BuildSetDefaultPluginPayload(pluginsSetDefaultPluginBody string, pluginsSetDefaultPluginSessionToken string, pluginsSetDefaultPluginProjectSlugInput string) (*plugins.SetDefaultPluginPayload, error) {
+	var err error
+	var body SetDefaultPluginRequestBody
+	{
+		err = json.Unmarshal([]byte(pluginsSetDefaultPluginBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if pluginsSetDefaultPluginSessionToken != "" {
+			sessionToken = &pluginsSetDefaultPluginSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsSetDefaultPluginProjectSlugInput != "" {
+			projectSlugInput = &pluginsSetDefaultPluginProjectSlugInput
+		}
+	}
+	v := &plugins.SetDefaultPluginPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildDeletePluginPayload builds the payload for the plugins deletePlugin
 // endpoint from CLI flags.
 func BuildDeletePluginPayload(pluginsDeletePluginID string, pluginsDeletePluginSessionToken string, pluginsDeletePluginProjectSlugInput string) (*plugins.DeletePluginPayload, error) {

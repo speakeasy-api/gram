@@ -15,6 +15,7 @@ import (
 const (
 	ActionPluginCreate         Action = "plugin:create"
 	ActionPluginUpdate         Action = "plugin:update"
+	ActionPluginSetDefault     Action = "plugin:set_default"
 	ActionPluginDelete         Action = "plugin:delete"
 	ActionPluginServerAdd      Action = "plugin:server_add"
 	ActionPluginServerUpdate   Action = "plugin:server_update"
@@ -116,6 +117,45 @@ func (l *Logger) LogPluginUpdate(ctx context.Context, dbtx repo.DBTX, event LogP
 
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
+		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PluginV1})
+}
+
+type LogPluginSetDefaultEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginName string
+	PluginSlug string
+}
+
+func (l *Logger) LogPluginSetDefault(ctx context.Context, dbtx repo.DBTX, event LogPluginSetDefaultEvent) error {
+	action := ActionPluginSetDefault
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.PluginID.String(),
+		SubjectType:        string(subjectTypePlugin),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.PluginName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.PluginSlug),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
 		Metadata:       nil,
 	}
 

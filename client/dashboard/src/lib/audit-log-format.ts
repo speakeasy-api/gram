@@ -203,6 +203,8 @@ export function renderVerb(log: AuditLog): string {
       return "created plugin";
     case "plugin:update":
       return "updated plugin";
+    case "plugin:set_default":
+      return "set default plugin";
     case "plugin:delete":
       return "deleted plugin";
     case "plugin:server_add":

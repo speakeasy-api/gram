@@ -14,6 +14,7 @@ import { pluginsGetPublishStatus } from "../funcs/pluginsGetPublishStatus.js";
 import { pluginsListPlugins } from "../funcs/pluginsListPlugins.js";
 import { pluginsPublishPlugins } from "../funcs/pluginsPublishPlugins.js";
 import { pluginsRemovePluginServer } from "../funcs/pluginsRemovePluginServer.js";
+import { pluginsSetDefaultPlugin } from "../funcs/pluginsSetDefaultPlugin.js";
 import { pluginsSetPluginAssignments } from "../funcs/pluginsSetPluginAssignments.js";
 import { pluginsUpdateMarketplaceSettings } from "../funcs/pluginsUpdateMarketplaceSettings.js";
 import { pluginsUpdatePlugin } from "../funcs/pluginsUpdatePlugin.js";
@@ -79,6 +80,10 @@ import {
   RemovePluginServerSecurity,
 } from "../models/operations/removepluginserver.js";
 import {
+  SetDefaultPluginRequest,
+  SetDefaultPluginSecurity,
+} from "../models/operations/setdefaultplugin.js";
+import {
   SetPluginAssignmentsRequest,
   SetPluginAssignmentsSecurity,
 } from "../models/operations/setpluginassignments.js";
@@ -108,12 +113,9 @@ export class Plugins extends ClientSDK {
     security?: AddPluginServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PluginServer> {
-    return unwrapAsync(pluginsAddPluginServer(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(
+      pluginsAddPluginServer(this, request, security, options),
+    );
   }
 
   /**
@@ -127,12 +129,7 @@ export class Plugins extends ClientSDK {
     security?: CreatePluginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Plugin> {
-    return unwrapAsync(pluginsCreatePlugin(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(pluginsCreatePlugin(this, request, security, options));
   }
 
   /**
@@ -146,12 +143,7 @@ export class Plugins extends ClientSDK {
     security?: DeletePluginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
-    return unwrapAsync(pluginsDeletePlugin(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(pluginsDeletePlugin(this, request, security, options));
   }
 
   /**
@@ -165,12 +157,9 @@ export class Plugins extends ClientSDK {
     security?: DownloadCodexInstallScriptSecurity | undefined,
     options?: RequestOptions,
   ): Promise<DownloadCodexInstallScriptResponse> {
-    return unwrapAsync(pluginsDownloadCodexInstallScript(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(
+      pluginsDownloadCodexInstallScript(this, request, security, options),
+    );
   }
 
   /**
@@ -184,12 +173,9 @@ export class Plugins extends ClientSDK {
     security?: DownloadObservabilityPluginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<DownloadObservabilityPluginResponse> {
-    return unwrapAsync(pluginsDownloadObservabilityPlugin(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(
+      pluginsDownloadObservabilityPlugin(this, request, security, options),
+    );
   }
 
   /**
@@ -203,12 +189,9 @@ export class Plugins extends ClientSDK {
     security?: DownloadPluginPackageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<DownloadPluginPackageResponse> {
-    return unwrapAsync(pluginsDownloadPluginPackage(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(
+      pluginsDownloadPluginPackage(this, request, security, options),
+    );
   }
 
   /**
@@ -222,12 +205,9 @@ export class Plugins extends ClientSDK {
     security?: GetMarketplaceSettingsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<MarketplaceSettingsResult> {
-    return unwrapAsync(pluginsGetMarketplaceSettings(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(
+      pluginsGetMarketplaceSettings(this, request, security, options),
+    );
   }
 
   /**
@@ -241,12 +221,7 @@ export class Plugins extends ClientSDK {
     security?: GetPluginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Plugin> {
-    return unwrapAsync(pluginsGetPlugin(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(pluginsGetPlugin(this, request, security, options));
   }
 
   /**
@@ -260,12 +235,9 @@ export class Plugins extends ClientSDK {
     security?: GetPublishStatusSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PublishStatusResult> {
-    return unwrapAsync(pluginsGetPublishStatus(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(
+      pluginsGetPublishStatus(this, request, security, options),
+    );
   }
 
   /**
@@ -279,12 +251,7 @@ export class Plugins extends ClientSDK {
     security?: ListPluginsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListPluginsResult> {
-    return unwrapAsync(pluginsListPlugins(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(pluginsListPlugins(this, request, security, options));
   }
 
   /**
@@ -298,12 +265,7 @@ export class Plugins extends ClientSDK {
     security?: PublishPluginsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PublishPluginsResult> {
-    return unwrapAsync(pluginsPublishPlugins(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(pluginsPublishPlugins(this, request, security, options));
   }
 
   /**
@@ -317,12 +279,9 @@ export class Plugins extends ClientSDK {
     security?: RemovePluginServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
-    return unwrapAsync(pluginsRemovePluginServer(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(
+      pluginsRemovePluginServer(this, request, security, options),
+    );
   }
 
   /**
@@ -331,17 +290,30 @@ export class Plugins extends ClientSDK {
    * @remarks
    * Replace all assignments for a plugin with the given list of principal URNs.
    */
+  /**
+   * setDefaultPlugin plugins
+   *
+   * @remarks
+   * Make a plugin the default target that newly created MCP servers are routed to, replacing any existing default.
+   */
+  async setDefaultPlugin(
+    request: SetDefaultPluginRequest,
+    security?: SetDefaultPluginSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Plugin> {
+    return unwrapAsync(
+      pluginsSetDefaultPlugin(this, request, security, options),
+    );
+  }
+
   async setPluginAssignments(
     request: SetPluginAssignmentsRequest,
     security?: SetPluginAssignmentsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<SetPluginAssignmentsResponseBody> {
-    return unwrapAsync(pluginsSetPluginAssignments(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(
+      pluginsSetPluginAssignments(this, request, security, options),
+    );
   }
 
   /**
@@ -355,12 +327,9 @@ export class Plugins extends ClientSDK {
     security?: UpdateMarketplaceSettingsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<UpdateMarketplaceSettingsResult> {
-    return unwrapAsync(pluginsUpdateMarketplaceSettings(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(
+      pluginsUpdateMarketplaceSettings(this, request, security, options),
+    );
   }
 
   /**
@@ -374,12 +343,7 @@ export class Plugins extends ClientSDK {
     security?: UpdatePluginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Plugin> {
-    return unwrapAsync(pluginsUpdatePlugin(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(pluginsUpdatePlugin(this, request, security, options));
   }
 
   /**
@@ -393,11 +357,8 @@ export class Plugins extends ClientSDK {
     security?: UpdatePluginServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PluginServer> {
-    return unwrapAsync(pluginsUpdatePluginServer(
-      this,
-      request,
-      security,
-      options,
-    ));
+    return unwrapAsync(
+      pluginsUpdatePluginServer(this, request, security, options),
+    );
   }
 }

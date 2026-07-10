@@ -25,6 +25,9 @@ type Service interface {
 	CreatePlugin(context.Context, *CreatePluginPayload) (res *Plugin, err error)
 	// Update plugin metadata.
 	UpdatePlugin(context.Context, *UpdatePluginPayload) (res *Plugin, err error)
+	// Make a plugin the default target that newly created MCP servers are routed
+	// to, replacing any existing default.
+	SetDefaultPlugin(context.Context, *SetDefaultPluginPayload) (res *Plugin, err error)
 	// Delete a plugin.
 	DeletePlugin(context.Context, *DeletePluginPayload) (err error)
 	// Add an MCP server to a plugin.
@@ -90,7 +93,7 @@ const ServiceName = "plugins"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [16]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "downloadPluginPackage", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
+var MethodNames = [17]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "setDefaultPlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "downloadPluginPackage", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
 
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
@@ -238,6 +241,9 @@ type Plugin struct {
 	Slug string
 	// Optional description.
 	Description *string
+	// Whether newly created MCP servers are routed to this plugin by default.
+	// Exactly one plugin per project is the default.
+	IsDefault bool
 	// Number of active servers in this plugin.
 	ServerCount *int64
 	// Number of role/user assignments.
@@ -337,6 +343,15 @@ type RemovePluginServerPayload struct {
 	// The plugin server ID to remove.
 	ID               string
 	PluginID         string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// SetDefaultPluginPayload is the payload type of the plugins service
+// setDefaultPlugin method.
+type SetDefaultPluginPayload struct {
+	// The plugin to make the default.
+	ID               string
 	SessionToken     *string
 	ProjectSlugInput *string
 }

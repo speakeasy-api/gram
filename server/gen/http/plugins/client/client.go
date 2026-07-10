@@ -34,6 +34,10 @@ type Client struct {
 	// updatePlugin endpoint.
 	UpdatePluginDoer goahttp.Doer
 
+	// SetDefaultPlugin Doer is the HTTP client used to make requests to the
+	// setDefaultPlugin endpoint.
+	SetDefaultPluginDoer goahttp.Doer
+
 	// DeletePlugin Doer is the HTTP client used to make requests to the
 	// deletePlugin endpoint.
 	DeletePluginDoer goahttp.Doer
@@ -106,6 +110,7 @@ func NewClient(
 		GetPluginDoer:                   doer,
 		CreatePluginDoer:                doer,
 		UpdatePluginDoer:                doer,
+		SetDefaultPluginDoer:            doer,
 		DeletePluginDoer:                doer,
 		AddPluginServerDoer:             doer,
 		UpdatePluginServerDoer:          doer,
@@ -217,6 +222,30 @@ func (c *Client) UpdatePlugin() goa.Endpoint {
 		resp, err := c.UpdatePluginDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("plugins", "updatePlugin", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetDefaultPlugin returns an endpoint that makes HTTP requests to the plugins
+// service setDefaultPlugin server.
+func (c *Client) SetDefaultPlugin() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetDefaultPluginRequest(c.encoder)
+		decodeResponse = DecodeSetDefaultPluginResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetDefaultPluginRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetDefaultPluginDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "setDefaultPlugin", err)
 		}
 		return decodeResponse(resp)
 	}

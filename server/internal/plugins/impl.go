@@ -276,6 +276,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 			Name:            r.Name,
 			Slug:            r.Slug,
 			Description:     conv.FromPGText[string](r.Description),
+			IsDefault:       r.IsDefault.Valid && r.IsDefault.Bool,
 			ServerCount:     &r.ServerCount,
 			AssignmentCount: &r.AssignmentCount,
 			Servers:         genServers,
@@ -533,6 +534,98 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 	}
 
 	return pluginToGen(plugin, servers, assignments), nil
+}
+
+func (s *Service) SetDefaultPlugin(ctx context.Context, payload *gen.SetDefaultPluginPayload) (*gen.Plugin, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	pluginID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").LogError(ctx, s.logger)
+	}
+
+	// Verify the target plugin belongs to this project before touching the
+	// default. A plugin that's already the default is an idempotent no-op —
+	// return it as-is rather than churning the audit log.
+	target, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
+		ID:             pluginID,
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load plugin").LogError(ctx, s.logger)
+	}
+
+	if !(target.IsDefault.Valid && target.IsDefault.Bool) {
+		tx, err := s.db.Begin(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+		txRepo := s.repo.WithTx(tx)
+
+		// Clear the current default before setting the new one so the
+		// plugins_project_id_is_default_key partial unique index never sees
+		// two defaults at once.
+		if err := txRepo.ClearDefaultPlugin(ctx, repo.ClearDefaultPluginParams{
+			OrganizationID: ac.ActiveOrganizationID,
+			ProjectID:      *ac.ProjectID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "clear default plugin").LogError(ctx, s.logger)
+		}
+
+		target, err = txRepo.SetDefaultPlugin(ctx, repo.SetDefaultPluginParams{
+			ID:             pluginID,
+			OrganizationID: ac.ActiveOrganizationID,
+			ProjectID:      *ac.ProjectID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.C(oops.CodeNotFound)
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "set default plugin").LogError(ctx, s.logger)
+		}
+
+		if err := s.audit.LogPluginSetDefault(ctx, tx, audit.LogPluginSetDefaultEvent{
+			OrganizationID:   ac.ActiveOrganizationID,
+			ProjectID:        *ac.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+			ActorDisplayName: ac.Email,
+			ActorSlug:        nil,
+			PluginID:         target.ID,
+			PluginName:       target.Name,
+			PluginSlug:       target.Slug,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "audit log set default plugin").LogError(ctx, s.logger)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
+		}
+	}
+
+	servers, err := s.repo.ListPluginServers(ctx, pluginID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").LogError(ctx, s.logger)
+	}
+
+	assignments, err := s.repo.ListPluginAssignments(ctx, pluginID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin assignments").LogError(ctx, s.logger)
+	}
+
+	return pluginToGen(target, servers, assignments), nil
 }
 
 func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPayload) error {
@@ -2430,6 +2523,7 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, assignments []repo.
 		Name:            p.Name,
 		Slug:            p.Slug,
 		Description:     conv.FromPGText[string](p.Description),
+		IsDefault:       p.IsDefault.Valid && p.IsDefault.Bool,
 		ServerCount:     nil,
 		AssignmentCount: nil,
 		Servers:         nil,

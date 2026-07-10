@@ -27,6 +27,11 @@ func UpdatePluginPluginsPath() string {
 	return "/rpc/plugins.updatePlugin"
 }
 
+// SetDefaultPluginPluginsPath returns the URL path to the plugins service setDefaultPlugin HTTP endpoint.
+func SetDefaultPluginPluginsPath() string {
+	return "/rpc/plugins.setDefaultPlugin"
+}
+
 // DeletePluginPluginsPath returns the URL path to the plugins service deletePlugin HTTP endpoint.
 func DeletePluginPluginsPath() string {
 	return "/rpc/plugins.deletePlugin"

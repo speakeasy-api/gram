@@ -111,7 +111,7 @@ func UsageCommands() []string {
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|set-default-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
@@ -1186,6 +1186,11 @@ func ParseEndpoint(
 		pluginsUpdatePluginBodyFlag             = pluginsUpdatePluginFlags.String("body", "REQUIRED", "")
 		pluginsUpdatePluginSessionTokenFlag     = pluginsUpdatePluginFlags.String("session-token", "", "")
 		pluginsUpdatePluginProjectSlugInputFlag = pluginsUpdatePluginFlags.String("project-slug-input", "", "")
+
+		pluginsSetDefaultPluginFlags                = flag.NewFlagSet("set-default-plugin", flag.ExitOnError)
+		pluginsSetDefaultPluginBodyFlag             = pluginsSetDefaultPluginFlags.String("body", "REQUIRED", "")
+		pluginsSetDefaultPluginSessionTokenFlag     = pluginsSetDefaultPluginFlags.String("session-token", "", "")
+		pluginsSetDefaultPluginProjectSlugInputFlag = pluginsSetDefaultPluginFlags.String("project-slug-input", "", "")
 
 		pluginsDeletePluginFlags                = flag.NewFlagSet("delete-plugin", flag.ExitOnError)
 		pluginsDeletePluginIDFlag               = pluginsDeletePluginFlags.String("id", "REQUIRED", "")
@@ -2685,6 +2690,7 @@ func ParseEndpoint(
 	pluginsGetPluginFlags.Usage = pluginsGetPluginUsage
 	pluginsCreatePluginFlags.Usage = pluginsCreatePluginUsage
 	pluginsUpdatePluginFlags.Usage = pluginsUpdatePluginUsage
+	pluginsSetDefaultPluginFlags.Usage = pluginsSetDefaultPluginUsage
 	pluginsDeletePluginFlags.Usage = pluginsDeletePluginUsage
 	pluginsAddPluginServerFlags.Usage = pluginsAddPluginServerUsage
 	pluginsUpdatePluginServerFlags.Usage = pluginsUpdatePluginServerUsage
@@ -3775,6 +3781,9 @@ func ParseEndpoint(
 
 			case "update-plugin":
 				epf = pluginsUpdatePluginFlags
+
+			case "set-default-plugin":
+				epf = pluginsSetDefaultPluginFlags
 
 			case "delete-plugin":
 				epf = pluginsDeletePluginFlags
@@ -5227,6 +5236,9 @@ func ParseEndpoint(
 			case "update-plugin":
 				endpoint = c.UpdatePlugin()
 				data, err = pluginsc.BuildUpdatePluginPayload(*pluginsUpdatePluginBodyFlag, *pluginsUpdatePluginSessionTokenFlag, *pluginsUpdatePluginProjectSlugInputFlag)
+			case "set-default-plugin":
+				endpoint = c.SetDefaultPlugin()
+				data, err = pluginsc.BuildSetDefaultPluginPayload(*pluginsSetDefaultPluginBodyFlag, *pluginsSetDefaultPluginSessionTokenFlag, *pluginsSetDefaultPluginProjectSlugInputFlag)
 			case "delete-plugin":
 				endpoint = c.DeletePlugin()
 				data, err = pluginsc.BuildDeletePluginPayload(*pluginsDeletePluginIDFlag, *pluginsDeletePluginSessionTokenFlag, *pluginsDeletePluginProjectSlugInputFlag)
@@ -10530,6 +10542,7 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-plugin: Get a plugin with its servers and assignments.`)
 	fmt.Fprintln(os.Stderr, `    create-plugin: Create a new plugin.`)
 	fmt.Fprintln(os.Stderr, `    update-plugin: Update plugin metadata.`)
+	fmt.Fprintln(os.Stderr, `    set-default-plugin: Make a plugin the default target that newly created MCP servers are routed to, replacing any existing default.`)
 	fmt.Fprintln(os.Stderr, `    delete-plugin: Delete a plugin.`)
 	fmt.Fprintln(os.Stderr, `    add-plugin-server: Add an MCP server to a plugin.`)
 	fmt.Fprintln(os.Stderr, `    update-plugin-server: Update a server's configuration within a plugin.`)
@@ -10630,6 +10643,28 @@ func pluginsUpdatePluginUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins update-plugin --body '{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsSetDefaultPluginUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins set-default-plugin", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Make a plugin the default target that newly created MCP servers are routed to, replacing any existing default.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins set-default-plugin --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsDeletePluginUsage() {

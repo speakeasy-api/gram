@@ -273,6 +273,7 @@ const ACTION_LABELS: Record<string, string> = {
   "variation:delete_global": "deleted variation",
   "plugin:create": "created plugin",
   "plugin:update": "updated plugin",
+  "plugin:set_default": "set default plugin",
   "plugin:delete": "deleted plugin",
   "plugin:server_add": "added server to plugin",
   "plugin:server_update": "updated plugin server",

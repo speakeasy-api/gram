@@ -19,10 +19,7 @@ import { ArrowRight, Puzzle, Server } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
-import {
-  DEFAULT_PLUGIN_DESCRIPTION,
-  isDefaultPluginSlug,
-} from "./default-plugin";
+import { DEFAULT_PLUGIN_DESCRIPTION, isDefaultPlugin } from "./default-plugin";
 import { downloadPluginPackage } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 
@@ -38,7 +35,7 @@ export function PluginCard({
   const client = useSdkClient();
   const detailHref = routes.plugins.detail.href(plugin.id);
   const serverCount = plugin.serverCount ?? 0;
-  const isDefault = isDefaultPluginSlug(plugin.slug);
+  const isDefault = isDefaultPlugin(plugin);
   const description =
     plugin.description ?? (isDefault ? DEFAULT_PLUGIN_DESCRIPTION : undefined);
   const [isInstallOpen, setIsInstallOpen] = useState(false);
