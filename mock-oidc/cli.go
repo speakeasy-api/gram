@@ -44,6 +44,11 @@ func NewApp() *cli.App {
 				Value:   "http://localhost:4000",
 				EnvVars: []string{"MOCK_OIDC_ISSUER"},
 			},
+			&cli.StringSliceFlag{
+				Name:    "redirect-uri",
+				Usage:   "Additional absolute redirect URI(s) to allow for every OAuth client, on top of those declared in the config file. Useful when the consumer's callback URL is assigned dynamically (e.g. a per-worktree remapped port).",
+				EnvVars: []string{"MOCK_OIDC_REDIRECT_URI"},
+			},
 			&cli.PathFlag{
 				Name:    "private-key",
 				Usage:   "Path to RSA private key (PEM). If absent, an ephemeral key is generated.",
@@ -117,6 +122,8 @@ func run(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+
+	cfg.AddRedirectURIs(c.StringSlice("redirect-uri")...)
 
 	privateKey, err := LoadOrGeneratePrivateKey(c.Path("private-key"), logger)
 	if err != nil {

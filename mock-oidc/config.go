@@ -60,6 +60,20 @@ func LoadConfig(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// AddRedirectURIs appends the given absolute redirect URIs to every OAuth
+// client's allow-list, skipping any a client already declares.
+func (c *Config) AddRedirectURIs(uris ...string) {
+	for i := range c.Provider.OAuthClients {
+		client := &c.Provider.OAuthClients[i]
+		for _, uri := range uris {
+			if uri == "" || slices.Contains(client.RedirectURIs, uri) {
+				continue
+			}
+			client.RedirectURIs = append(client.RedirectURIs, uri)
+		}
+	}
+}
+
 func (c *Config) FindUser(email string) (User, bool) {
 	for _, u := range c.Provider.Users {
 		if u.Email == email {
