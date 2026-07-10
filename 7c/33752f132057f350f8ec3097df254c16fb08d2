@@ -1,0 +1,29 @@
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_a1e983049864ec::t_cfce2f76137b1e 875-877
+  s_a1e983049864ec::t_ed0d6131bddf45 3280-3282
+  s_a1e983049864ec::t_27d30413b8a718 1207-1226,1232-1384
+  s_a1e983049864ec::t_7ef2993b81f7d3 29,38
+  s_a1e983049864ec::t_4ae561852c8682 2959-2961,2984-2986,3063,3139-3142,3154,3178-3180
+  s_a1e983049864ec::t_9c3595fbbc3a32 1227-1231
+  s_a1e983049864ec::t_2573bf11253747 1084-1086,1097-1099,1143-1147
+  s_a1e983049864ec::t_511b1921634122 656-658,683-686,754-762,766,780,790,800-802
+  s_a1e983049864ec::t_8d68b33a534c3e 1148
+.speakeasy/out.openapi.yaml
+  s_a1e983049864ec::t_24030145d1a12e 41665-41669,49547-49550,49554,49570-49581,49602-49605,49888-49892,54743-54747
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7c33752f132057f350f8ec3097df254c16fb08d2",
+  "prompts": {},
+  "sessions": {
+    "s_a1e983049864ec": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4a4c-8a3b-73d2-8970-e371e2d28932",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
