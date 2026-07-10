@@ -6,6 +6,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
@@ -190,6 +191,7 @@ func traceProjectOverviewQuery(ctx context.Context, tracer trace.Tracer, name st
 	err := query(queryCtx)
 	if err != nil {
 		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 	}
 
 	return err
