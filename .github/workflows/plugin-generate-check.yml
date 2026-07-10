@@ -1,0 +1,60 @@
+name: Plugin Generate Check
+
+on:
+  pull_request:
+    paths:
+      - "server/internal/plugins/generate.go"
+      - "server/internal/plugins/hook_adapters.go"
+      - "server/internal/plugins/naming/**"
+
+jobs:
+  generator-version-nudge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Remind to consider a generator version bump
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # The plugin generator sources drive the plugin fingerprint that the
+          # automated rollout uses to skip unchanged projects. Output-affecting
+          # changes are caught automatically by the content hash, so we do NOT
+          # force a bump on every edit — that would invalidate every project's
+          # fingerprint and trigger a full republish (fresh keys + commits) for
+          # no reason. This is a non-blocking nudge for the rare case where
+          # generation BEHAVIOUR changes in a way the placeholder fingerprint
+          # pass can't observe.
+          git fetch origin "$BASE_REF"
+          BASE=$(git merge-base "origin/$BASE_REF" HEAD)
+
+          # Hash the generation-input objects directly instead of diffing file
+          # lists. A vanished path hashes to a distinct sentinel so renames and
+          # deletions register as a change rather than an error.
+          generator_tree_hash() {
+            git rev-parse \
+              "${1}:server/internal/plugins/generate.go" \
+              "${1}:server/internal/plugins/hook_adapters.go" \
+              "${1}:server/internal/plugins/naming" \
+              2>/dev/null || echo "unresolvable:${1}"
+          }
+
+          if [ "$(generator_tree_hash "$BASE")" = "$(generator_tree_hash HEAD)" ]; then
+            echo "Plugin generator sources unchanged; nothing to check."
+            exit 0
+          fi
+
+          generator_version() {
+            git show "${1}:server/internal/plugins/generate.go" 2>/dev/null \
+              | grep -E '^[[:space:]]*const pluginGeneratorVersion' || true
+          }
+
+          if [ "$(generator_version "$BASE")" != "$(generator_version HEAD)" ]; then
+            echo "✅ pluginGeneratorVersion was bumped."
+            exit 0
+          fi
+
+          echo "::notice file=server/internal/plugins/generate.go::Plugin generator sources changed without bumping pluginGeneratorVersion. If this change alters generation behaviour in a way the fingerprint's placeholder pass can't observe (and you want every project republished on the next rollout), bump the const. Output-visible changes are detected automatically and need no bump."
