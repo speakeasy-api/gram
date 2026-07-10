@@ -476,6 +476,24 @@ func (q *Queries) SetDeploymentFunctionInfraOverrides(ctx context.Context, arg S
 	return err
 }
 
+const setFunctionToolVariables = `-- name: SetFunctionToolVariables :exec
+UPDATE function_tool_definitions
+SET variables = $1
+WHERE id = $2
+  AND project_id = $3
+`
+
+type SetFunctionToolVariablesParams struct {
+	Variables []byte
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionToolVariablesParams) error {
+	_, err := q.db.Exec(ctx, setFunctionToolVariables, arg.Variables, arg.ID, arg.ProjectID)
+	return err
+}
+
 const setOrgWebhookConfig = `-- name: SetOrgWebhookConfig :exec
 UPDATE organization_metadata
 SET svix_app_id = $1,

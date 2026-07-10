@@ -328,16 +328,16 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 		allowedSet[id] = struct{}{}
 	}
 
-	result := make([]*types.ToolsetEntry, 0, len(allowedIDs))
+	allowedToolsets := make([]repo.Toolset, 0, len(allowedIDs))
 	for _, toolset := range toolsets {
-		if _, ok := allowedSet[toolset.ID.String()]; !ok {
-			continue
+		if _, ok := allowedSet[toolset.ID.String()]; ok {
+			allowedToolsets = append(allowedToolsets, toolset)
 		}
-		toolsetDetails, err := mv.DescribeToolsetEntry(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, toolsetDetails)
+	}
+
+	result, err := mv.DescribeToolsetEntries(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), allowedToolsets)
+	if err != nil {
+		return nil, err
 	}
 
 	return &gen.ListToolsetsResult{
