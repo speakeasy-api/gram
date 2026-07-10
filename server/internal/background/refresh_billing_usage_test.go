@@ -56,6 +56,17 @@ func TestRefreshBillingUsageWorkflow_ContinuesAsNewNearRunTimeout(t *testing.T) 
 		activity.RegisterOptions{Name: "SnapshotBillingCycleUsage"},
 	)
 
+	forwardCallCount := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, batch []string) error {
+			forwardCallCount++
+			require.NotEmpty(t, batch)
+			require.LessOrEqual(t, len(batch), refreshBillingUsageBatchSize)
+			return nil
+		},
+		activity.RegisterOptions{Name: "ForwardTokenUsageToPostHog"},
+	)
+
 	env.ExecuteWorkflow(RefreshBillingUsageWorkflow, RefreshBillingUsageInput{
 		OrgIDs:           nil,
 		StartIndex:       0,
@@ -70,6 +81,7 @@ func TestRefreshBillingUsageWorkflow_ContinuesAsNewNearRunTimeout(t *testing.T) 
 	require.Equal(t, 1, getAllCallCount)
 	require.Equal(t, billingUsagePauseEveryBatches, refreshCallCount)
 	require.Equal(t, refreshCallCount, snapshotCallCount, "every batch gets a snapshot activity")
+	require.Equal(t, refreshCallCount, forwardCallCount, "every batch forwards token usage to posthog")
 
 	var nextInput RefreshBillingUsageInput
 	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(continueAsNewErr.Input, &nextInput))
@@ -122,6 +134,12 @@ func TestRefreshBillingUsageWorkflow_FailingBatchDoesNotAbortRun(t *testing.T) {
 		},
 		activity.RegisterOptions{Name: "SnapshotBillingCycleUsage"},
 	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, batch []string) error {
+			return nil
+		},
+		activity.RegisterOptions{Name: "ForwardTokenUsageToPostHog"},
+	)
 
 	env.ExecuteWorkflow(RefreshBillingUsageWorkflow, RefreshBillingUsageInput{
 		OrgIDs:           orgIDs,
@@ -170,6 +188,12 @@ func TestRefreshBillingUsageWorkflow_SleepCancellationFailsRun(t *testing.T) {
 			return nil
 		},
 		activity.RegisterOptions{Name: "SnapshotBillingCycleUsage"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, batch []string) error {
+			return nil
+		},
+		activity.RegisterOptions{Name: "ForwardTokenUsageToPostHog"},
 	)
 	env.RegisterDelayedCallback(func() {
 		env.CancelWorkflow()

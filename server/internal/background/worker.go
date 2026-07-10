@@ -340,6 +340,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
+	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)

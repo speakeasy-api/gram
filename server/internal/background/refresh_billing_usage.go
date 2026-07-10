@@ -135,6 +135,16 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 			failedOrgCount += len(batch)
 		}
 
+		// Forward the freshly snapshotted TUM usage to PostHog for GTM
+		// pricing analysis (AGE-2289). Reads only the durable snapshots, so
+		// it is cheap and safe even when the snapshot batch above partially
+		// failed — stale rows just re-forward the last known usage.
+		if err := workflow.ExecuteActivity(ctx, a.ForwardTokenUsageToPostHog, batch).Get(ctx, nil); err != nil {
+			logger.Error("Failed to forward token usage batch to posthog", "error", err, "batch_start", i)
+			failedBatchCount++
+			failedOrgCount += len(batch)
+		}
+
 		batchesProcessed++
 		if end < len(orgIDs) {
 			// Polar's usage endpoints are rate-limited, so keep a deterministic
