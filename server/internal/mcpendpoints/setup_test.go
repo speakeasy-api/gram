@@ -34,6 +34,7 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -116,6 +117,10 @@ func (fakeGitHubPublisher) AddCollaborator(ctx context.Context, installationID i
 
 func (fakeGitHubPublisher) HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error) {
 	return false, nil
+}
+
+func (fakeGitHubPublisher) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error) {
+	return nil, ghclient.ErrRepoNotFound
 }
 
 // newTestServiceWithGitHubPublishing is newTestService with GitHub publishing
