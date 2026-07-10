@@ -2,6 +2,7 @@ import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Heading } from "@/components/ui/heading";
+import { ListLayout } from "@/components/layouts/list-layout";
 import {
   Select,
   SelectContent,
@@ -773,44 +774,37 @@ function TeamInner() {
     <>
       <Stack direction="vertical" gap={8}>
         {/* Members Section */}
-        <div>
-          <Stack
-            direction="horizontal"
-            justify="space-between"
-            align="center"
-            className="mb-4"
-          >
-            <Stack direction="vertical" gap={1}>
-              <Heading variant="h4">Team Members</Heading>
-              <Type variant="body" className="text-muted-foreground">
-                Manage who has access to {organization.name}
-              </Type>
-            </Stack>
-            <RequireScope scope="org:admin" level="component">
-              {organization.scimEnabled ? (
-                <SimpleTooltip tooltip="Managed by your identity provider">
-                  <span className="inline-flex">
-                    <Button
-                      onClick={() => setIsInviteDialogOpen(true)}
-                      disabled
-                    >
-                      <Button.LeftIcon>
-                        <UserPlus className="h-4 w-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Invite Member</Button.Text>
-                    </Button>
-                  </span>
-                </SimpleTooltip>
-              ) : (
-                <Button onClick={() => setIsInviteDialogOpen(true)}>
-                  <Button.LeftIcon>
-                    <UserPlus className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Invite Member</Button.Text>
-                </Button>
-              )}
-            </RequireScope>
-          </Stack>
+        <ListLayout>
+          <ListLayout.Header
+            title="Team members"
+            subtitle={`Manage who has access to ${organization.name}`}
+            actions={
+              <RequireScope scope="org:admin" level="component">
+                {organization.scimEnabled ? (
+                  <SimpleTooltip tooltip="Managed by your identity provider">
+                    <span className="inline-flex">
+                      <Button
+                        onClick={() => setIsInviteDialogOpen(true)}
+                        disabled
+                      >
+                        <Button.LeftIcon>
+                          <UserPlus className="h-4 w-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>Invite Member</Button.Text>
+                      </Button>
+                    </span>
+                  </SimpleTooltip>
+                ) : (
+                  <Button onClick={() => setIsInviteDialogOpen(true)}>
+                    <Button.LeftIcon>
+                      <UserPlus className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Invite Member</Button.Text>
+                  </Button>
+                )}
+              </RequireScope>
+            }
+          />
 
           {organization.scimEnabled && (
             <Alert variant="info" dismissible={false} className="mb-8 text-sm">
@@ -893,7 +887,7 @@ function TeamInner() {
               </div>
             </div>
           )}
-        </div>
+        </ListLayout>
 
         {/* Pending Invites Section */}
         {invites.length > 0 && (
