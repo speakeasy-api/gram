@@ -228,7 +228,7 @@ func (s *Service) ResolveShadowMCPInventoryRequest(ctx context.Context, payload 
 	if err != nil {
 		return nil, err
 	}
-	decision := strings.TrimSpace(payload.Decision)
+	decision := strings.TrimSpace(string(payload.Decision))
 	switch decision {
 	case shadowMCPInventoryDecisionAllow, shadowMCPInventoryDecisionDeny:
 	default:
@@ -336,12 +336,20 @@ func (s *Service) replaceShadowMCPInventoryURLBypassGrants(
 		selected[policyID] = struct{}{}
 	}
 
-	audiences := make(map[string][]urn.Principal, len(selectedPolicyIDs))
-	for _, policy := range blockingPolicies {
+	shadowMCPPolicies, err := s.shadowMCPInventoryProjectPolicies(ctx, db, projectID)
+	if err != nil {
+		return nil, err
+	}
+	for _, policy := range shadowMCPPolicies {
 		policyID := policy.ID.String()
 		if err := revokeShadowMCPInventoryURLBypassGrant(ctx, db, organizationID, policyID, canonicalURL); err != nil {
 			return nil, err
 		}
+	}
+
+	audiences := make(map[string][]urn.Principal, len(selectedPolicyIDs))
+	for _, policy := range blockingPolicies {
+		policyID := policy.ID.String()
 		if _, ok := selected[policyID]; !ok {
 			continue
 		}
@@ -382,6 +390,21 @@ func (s *Service) shadowMCPInventoryBlockingPolicies(ctx context.Context, db ris
 	return policies, nil
 }
 
+func (s *Service) shadowMCPInventoryProjectPolicies(ctx context.Context, db riskrepo.DBTX, projectID uuid.UUID) ([]riskrepo.RiskPolicy, error) {
+	rows, err := riskrepo.New(db).ListRiskPolicies(ctx, projectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp project policies").LogError(ctx, s.logger)
+	}
+	policies := make([]riskrepo.RiskPolicy, 0, len(rows))
+	for _, row := range rows {
+		if !slices.Contains(row.Sources, "shadow_mcp") {
+			continue
+		}
+		policies = append(policies, row)
+	}
+	return policies, nil
+}
+
 func revokeShadowMCPInventoryURLBypassGrant(ctx context.Context, db riskrepo.DBTX, organizationID string, policyID string, canonicalURL string) error {
 	grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
 		OrganizationID: organizationID,
@@ -409,7 +432,7 @@ func revokeShadowMCPInventoryURLBypassGrant(ctx context.Context, db riskrepo.DBT
 	if len(principals) == 0 {
 		return nil
 	}
-	return authz.RevokeResourceFromPrincipals(ctx, db, authz.ResourceGrant{
+	if err := authz.RevokeResourceFromPrincipals(ctx, db, authz.ResourceGrant{
 		Resource: authz.Resource{
 			OrganizationID: organizationID,
 			Scope:          authz.ScopeRiskPolicyBypass,
@@ -418,7 +441,10 @@ func revokeShadowMCPInventoryURLBypassGrant(ctx context.Context, db riskrepo.DBT
 		Effect:     authz.PolicyEffectAllow,
 		Principals: principals,
 		Selector:   shadowMCPInventoryURLBypassSelector(policyID, canonicalURL),
-	})
+	}); err != nil {
+		return fmt.Errorf("revoke shadow mcp inventory policy bypass grant: %w", err)
+	}
+	return nil
 }
 
 func shadowMCPInventoryPolicyAudiencePrincipals(ctx context.Context, db riskrepo.DBTX, organizationID string, policyID string) ([]urn.Principal, error) {

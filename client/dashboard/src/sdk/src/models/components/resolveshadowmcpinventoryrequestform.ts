@@ -4,13 +4,34 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * Decision used when resolving a Shadow MCP inventory request.
+ */
+export const Decision = {
+  Allow: "allow",
+  Deny: "deny",
+} as const;
+/**
+ * Decision used when resolving a Shadow MCP inventory request.
+ */
+export type Decision = ClosedEnum<typeof Decision>;
 
 export type ResolveShadowMCPInventoryRequestForm = {
-  decision: string;
+  /**
+   * Decision used when resolving a Shadow MCP inventory request.
+   */
+  decision: Decision;
   policyIds?: Array<string> | undefined;
   projectId: string;
   serverUrl: string;
 };
+
+/** @internal */
+export const Decision$outboundSchema: z.ZodMiniEnum<typeof Decision> = z.enum(
+  Decision,
+);
 
 /** @internal */
 export type ResolveShadowMCPInventoryRequestForm$Outbound = {
@@ -26,7 +47,7 @@ export const ResolveShadowMCPInventoryRequestForm$outboundSchema: z.ZodMiniType<
   ResolveShadowMCPInventoryRequestForm
 > = z.pipe(
   z.object({
-    decision: z.string(),
+    decision: Decision$outboundSchema,
     policyIds: z.optional(z.array(z.string())),
     projectId: z.string(),
     serverUrl: z.string(),

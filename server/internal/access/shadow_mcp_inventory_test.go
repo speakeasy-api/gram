@@ -565,6 +565,40 @@ func TestService_DeleteShadowMCPInventoryPolicyBypass_RemovesURLGrants(t *testin
 	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://mcp.example.com/mcp"))
 }
 
+func TestService_DeleteShadowMCPInventoryPolicyBypass_RemovesStaleURLGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	flagPolicy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Flag Shadow MCP",
+		Action:         "flag",
+	})
+	disabledPolicy := createDisabledShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Disabled Block Shadow MCP",
+		Action:         "block",
+	})
+	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, flagPolicy.ID.String(), "https://mcp.example.com/mcp")
+	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, disabledPolicy.ID.String(), "https://mcp.example.com/mcp")
+
+	result, err := ti.service.DeleteShadowMCPInventoryPolicyBypass(ctx, &gen.DeleteShadowMCPInventoryPolicyBypassPayload{
+		ProjectID: projectID,
+		ServerURL: "https://mcp.example.com/mcp",
+	})
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryAccessNone, result.Access)
+	require.Empty(t, result.AllowedPolicyIds)
+	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, flagPolicy.ID.String(), "https://mcp.example.com/mcp"))
+	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, disabledPolicy.ID.String(), "https://mcp.example.com/mcp"))
+}
+
 type shadowMCPInventoryTelemetryInput struct {
 	ProjectID  string
 	ServerURL  string
@@ -593,6 +627,18 @@ type shadowMCPInventoryBypassRequestInput struct {
 func createShadowMCPInventoryPolicy(t *testing.T, ctx context.Context, ti *testInstance, input shadowMCPInventoryPolicyInput) riskrepo.RiskPolicy {
 	t.Helper()
 
+	return createShadowMCPInventoryPolicyWithEnabled(t, ctx, ti, input, true)
+}
+
+func createDisabledShadowMCPInventoryPolicy(t *testing.T, ctx context.Context, ti *testInstance, input shadowMCPInventoryPolicyInput) riskrepo.RiskPolicy {
+	t.Helper()
+
+	return createShadowMCPInventoryPolicyWithEnabled(t, ctx, ti, input, false)
+}
+
+func createShadowMCPInventoryPolicyWithEnabled(t *testing.T, ctx context.Context, ti *testInstance, input shadowMCPInventoryPolicyInput, enabled bool) riskrepo.RiskPolicy {
+	t.Helper()
+
 	projectID, err := uuid.Parse(input.ProjectID)
 	require.NoError(t, err)
 
@@ -602,7 +648,7 @@ func createShadowMCPInventoryPolicy(t *testing.T, ctx context.Context, ti *testI
 		OrganizationID: input.OrganizationID,
 		Name:           input.Name,
 		Sources:        []string{"shadow_mcp"},
-		Enabled:        true,
+		Enabled:        enabled,
 		Action:         input.Action,
 		AudienceType:   "everyone",
 		AutoName:       false,

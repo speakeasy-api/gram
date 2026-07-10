@@ -818,10 +818,13 @@ func BuildResolveShadowMCPInventoryRequestPayload(accessResolveShadowMCPInventor
 	{
 		err = json.Unmarshal([]byte(accessResolveShadowMCPInventoryRequestBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"decision\": \"abc123\",\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"decision\": \"deny\",\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
+		if !(body.Decision == "allow" || body.Decision == "deny") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", body.Decision, []any{"allow", "deny"}))
+		}
 		for _, e := range body.PolicyIds {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_ids[*]", e, goa.FormatUUID))
 		}
@@ -838,7 +841,7 @@ func BuildResolveShadowMCPInventoryRequestPayload(accessResolveShadowMCPInventor
 	v := &access.ResolveShadowMCPInventoryRequestPayload{
 		ProjectID: body.ProjectID,
 		ServerURL: body.ServerURL,
-		Decision:  body.Decision,
+		Decision:  access.ShadowMCPInventoryRequestDecision(body.Decision),
 	}
 	if body.PolicyIds != nil {
 		v.PolicyIds = make([]string, len(body.PolicyIds))

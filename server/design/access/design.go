@@ -1164,6 +1164,11 @@ var ShadowMCPInventoryPolicyBypassForm = Type("ShadowMCPInventoryPolicyBypassFor
 	})
 })
 
+var ShadowMCPInventoryRequestDecision = Type("ShadowMCPInventoryRequestDecision", String, func() {
+	Description("Decision used when resolving a Shadow MCP inventory request.")
+	Enum("allow", "deny")
+})
+
 var ResolveShadowMCPInventoryRequestForm = Type("ResolveShadowMCPInventoryRequestForm", func() {
 	Required("project_id", "server_url", "decision")
 
@@ -1173,7 +1178,7 @@ var ResolveShadowMCPInventoryRequestForm = Type("ResolveShadowMCPInventoryReques
 	Attribute("server_url", String, func() {
 		Format(FormatURI)
 	})
-	Attribute("decision", String)
+	Attribute("decision", ShadowMCPInventoryRequestDecision)
 	Attribute("policy_ids", ArrayOf(String), func() {
 		Elem(func() {
 			Format(FormatUUID)

@@ -10851,7 +10851,7 @@ func NewResolveShadowMCPInventoryRequestPayload(body *ResolveShadowMCPInventoryR
 	v := &access.ResolveShadowMCPInventoryRequestPayload{
 		ProjectID: *body.ProjectID,
 		ServerURL: *body.ServerURL,
-		Decision:  *body.Decision,
+		Decision:  access.ShadowMCPInventoryRequestDecision(*body.Decision),
 	}
 	if body.PolicyIds != nil {
 		v.PolicyIds = make([]string, len(body.PolicyIds))
@@ -11163,6 +11163,11 @@ func ValidateResolveShadowMCPInventoryRequestRequestBody(body *ResolveShadowMCPI
 	}
 	if body.ServerURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
+	}
+	if body.Decision != nil {
+		if !(*body.Decision == "allow" || *body.Decision == "deny") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", *body.Decision, []any{"allow", "deny"}))
+		}
 	}
 	for _, e := range body.PolicyIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_ids[*]", e, goa.FormatUUID))

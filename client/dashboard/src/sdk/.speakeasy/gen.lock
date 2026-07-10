@@ -5295,14 +5295,14 @@ examples:
   resolveShadowMCPInventoryRequest:
     speakeasy-default-resolve-shadow-MCP-inventory-request:
       requestBody:
-        application/json: {"decision": "<value>", "project_id": "15f38bdf-2293-4558-8035-bfdb3d2efbe1", "server_url": "https://concerned-bug.name/"}
+        application/json: {"decision": "allow", "project_id": "5f38bdf2-2935-4580-835b-fdb3d2efbe12", "server_url": "https://cautious-mentor.info/"}
       responses:
         "200":
-          application/json: {"access": "<value>", "allowed_policy_ids": ["<value 1>"], "request_count": 139543}
+          application/json: {"access": "<value>", "allowed_policy_ids": [], "request_count": 542291}
         "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   resumeTriggerInstance:
     speakeasy-default-resume-trigger-instance:
       parameters:

@@ -618,7 +618,7 @@ type ResolveShadowMCPInventoryRequestPayload struct {
 	SessionToken *string
 	ProjectID    string
 	ServerURL    string
-	Decision     string
+	Decision     ShadowMCPInventoryRequestDecision
 	PolicyIds    []string
 }
 
@@ -744,6 +744,9 @@ type ShadowMCPApprovalRequest struct {
 	CreatedAt              string
 	UpdatedAt              string
 }
+
+// Decision used when resolving a Shadow MCP inventory request.
+type ShadowMCPInventoryRequestDecision string
 
 type ShadowMCPInventoryRequestSummary struct {
 	ID              string

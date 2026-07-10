@@ -51009,6 +51009,10 @@ components:
             properties:
                 decision:
                     type: string
+                    description: Decision used when resolving a Shadow MCP inventory request.
+                    enum:
+                        - allow
+                        - deny
                 policy_ids:
                     type: array
                     items:

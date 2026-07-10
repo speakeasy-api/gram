@@ -6127,7 +6127,7 @@ func NewResolveShadowMCPInventoryRequestRequestBody(p *access.ResolveShadowMCPIn
 	body := &ResolveShadowMCPInventoryRequestRequestBody{
 		ProjectID: p.ProjectID,
 		ServerURL: p.ServerURL,
-		Decision:  p.Decision,
+		Decision:  string(p.Decision),
 	}
 	if p.PolicyIds != nil {
 		body.PolicyIds = make([]string, len(p.PolicyIds))
