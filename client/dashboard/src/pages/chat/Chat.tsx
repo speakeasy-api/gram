@@ -35,6 +35,7 @@ import {
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Kbd } from "@/components/ui/kbd";
 import {
   useHideInsightsDock,
   useInsightsState,
@@ -292,9 +293,7 @@ export function ChatLanding({
                 {placeholder}
               </span>
               <div className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 flex items-center gap-1.5 text-xs">
-                <kbd className="border-border rounded border px-1.5 py-0.5 font-mono">
-                  /
-                </kbd>
+                <Kbd className="px-1.5 py-0.5 text-xs">/</Kbd>
                 for suggestions
               </div>
             </>

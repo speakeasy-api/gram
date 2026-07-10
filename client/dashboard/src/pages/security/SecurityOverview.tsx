@@ -1,10 +1,8 @@
 import { MetricCard } from "@/components/chart/MetricCard";
 import { ChartCard } from "@/components/chart/ChartCard";
-import {
-  formatChartLabel,
-  formatChartZoomRangeLabel,
-} from "@/components/chart/chartUtils";
-import { useChartZoom } from "@/components/chart/useChartZoom";
+import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
+import { RankedBar } from "@/components/chart/RankedBar";
+import { Timeseries, ChartNoData } from "@/components/chart/Timeseries";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
@@ -17,7 +15,7 @@ import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { keepPreviousData } from "@tanstack/react-query";
 import { ArrowRight, CircleAlert, Shield } from "lucide-react";
-import { useCallback, useEffect, useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import { Link, Outlet, useLocation } from "react-router";
 import { useRoutes } from "@/routes";
 import {
@@ -26,32 +24,8 @@ import {
 } from "@/components/observe/useDateRangeFilter";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 import { getRuleTitleFallback } from "./risk-utils";
-import {
-  CategoryScale,
-  Chart as ChartJS,
-  Filler,
-  Legend,
-  LinearScale,
-  LineElement,
-  PointElement,
-  Tooltip,
-  type ChartOptions,
-} from "chart.js";
-import ZoomPlugin from "chartjs-plugin-zoom";
-import { Line } from "react-chartjs-2";
 import { Type } from "@/components/ui/type";
-import { buildRiskTrendChartData, type TrendPoint } from "./riskTrendChartData";
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend,
-  ZoomPlugin,
-);
+import { buildRiskTrendSeries, type TrendPoint } from "./riskTrendChartData";
 
 const RISK_TREND_CHART_ID = "risk-events-trend";
 const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
@@ -65,15 +39,6 @@ const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
   "15d",
   "30d",
 ];
-
-const CHART_COLORS = {
-  gridLine: "rgba(128, 128, 128, 0.2)",
-  gridLineFaint: "rgba(128, 128, 128, 0.1)",
-  tooltipBg: "#171717",
-  tooltipTitle: "#fafafa",
-  tooltipBody: "#d4d4d4",
-  tooltipBorder: "#262626",
-} as const;
 
 type BarDatum = {
   key: string;
@@ -427,7 +392,7 @@ function SecurityOverviewContent() {
               />
             }
           >
-            <RankedBarList items={topCategories} />
+            <RankedBar items={topCategories} />
           </DashboardChartCard>
           <DashboardChartCard
             title="Top Risk Events by Rule"
@@ -437,7 +402,7 @@ function SecurityOverviewContent() {
               <ViewAllLink href={rulesIndexHref} label="View all rules" />
             }
           >
-            <RankedBarList items={topRules} />
+            <RankedBar items={topRules} />
           </DashboardChartCard>
           <DashboardChartCard
             title="Users with Most Findings"
@@ -447,7 +412,7 @@ function SecurityOverviewContent() {
               <ViewAllLink href={usersIndexHref} label="View all users" />
             }
           >
-            <RankedBarList items={topUsers} />
+            <RankedBar items={topUsers} />
           </DashboardChartCard>
         </div>
 
@@ -470,8 +435,6 @@ function SecurityOverviewContent() {
           >
             <RiskTrendChart
               points={overview.timeSeriesFindings}
-              from={overview.from}
-              to={overview.to}
               height={250}
               onRangeSelect={handleChartRangeSelect}
             />
@@ -553,7 +516,13 @@ function DashboardChartCard({
 }) {
   return (
     <DashboardCard title={title} action={action}>
-      {loading ? <SkeletonList /> : empty ? <ChartEmptyState /> : children}
+      {loading ? (
+        <SkeletonList />
+      ) : empty ? (
+        <ChartNoData message="No findings recorded" height={120} />
+      ) : (
+        children
+      )}
     </DashboardCard>
   );
 }
@@ -566,10 +535,6 @@ function SkeletonList() {
       ))}
     </div>
   );
-}
-
-function ChartEmptyState() {
-  return <p className="text-muted-foreground text-sm">No findings recorded</p>;
 }
 
 function ViewAllLink({ href, label }: { href: string; label: string }) {
@@ -586,151 +551,25 @@ function ViewAllLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-function RankedBarList({ items }: { items: BarDatum[] }) {
-  const max = items[0]?.value || 1;
-
-  return (
-    <ul className="my-1 space-y-3">
-      {items.map((item, i) => {
-        const body = (
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="truncate text-sm">{item.label}</span>
-              <span className="text-muted-foreground ml-2 shrink-0 text-xs">
-                {item.value.toLocaleString()}
-              </span>
-            </div>
-            <div className="bg-muted h-1 w-full rounded-full">
-              <div
-                className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
-                style={{ width: `${(item.value / max) * 100}%` }}
-              />
-            </div>
-          </div>
-        );
-        return (
-          <li key={item.key} className="flex items-center gap-3">
-            <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
-              {i + 1}
-            </span>
-            {item.href ? (
-              <Link
-                to={item.href}
-                className="hover:bg-muted/40 -mx-2 flex min-w-0 flex-1 items-center rounded px-2 py-1 transition-colors"
-              >
-                {body}
-              </Link>
-            ) : (
-              body
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 function RiskTrendChart({
   points,
-  from,
-  to,
   height,
   onRangeSelect,
 }: {
   points: TrendPoint[];
-  from: Date;
-  to: Date;
   height: number;
   onRangeSelect?: (from: Date, to: Date) => void;
 }) {
-  const chartData = useMemo(
-    () => buildRiskTrendChartData(points, from, to),
-    [points, from, to],
-  );
-  const timeRangeMs = to.getTime() - from.getTime();
-  const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom({
-    onRangeSelect,
-  });
-
-  useEffect(() => {
-    resetZoom();
-  }, [points, resetZoom]);
-
-  if (chartData.labels.length === 0) {
-    return <ChartEmptyState />;
-  }
-
-  const options: ChartOptions<"line"> = {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: { mode: "index", intersect: false },
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: CHART_COLORS.tooltipBg,
-        titleColor: CHART_COLORS.tooltipTitle,
-        bodyColor: CHART_COLORS.tooltipBody,
-        borderColor: CHART_COLORS.tooltipBorder,
-        borderWidth: 1,
-        padding: 12,
-        boxPadding: 4,
-        callbacks: {
-          title: (items) => {
-            const x = items[0]?.parsed.x;
-            if (x == null)
-              return chartData.tooltipLabels[items[0]?.dataIndex ?? 0] ?? "";
-            return new Date(x).toLocaleString([], {
-              month: "short",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            });
-          },
-          label: (item) => {
-            if ((item.parsed.y ?? 0) === 0) return undefined;
-            return item.formattedValue
-              ? `${item.dataset.label}: ${item.formattedValue}`
-              : "";
-          },
-        },
-      },
-      zoom: zoomPluginOptions,
-    },
-    scales: {
-      x: {
-        type: "linear",
-        grid: {
-          display: true,
-          color: CHART_COLORS.gridLineFaint,
-          lineWidth: 1,
-        },
-        ticks: {
-          maxTicksLimit: 8,
-          callback: (value) =>
-            formatChartLabel(new Date(value as number), timeRangeMs),
-        },
-      },
-      y: {
-        beginAtZero: true,
-        grid: { color: CHART_COLORS.gridLine },
-        ticks: { precision: 0 },
-      },
-    },
-    transitions: {
-      resize: { animation: { duration: 0 } },
-    },
-  };
+  const series = useMemo(() => buildRiskTrendSeries(points), [points]);
 
   return (
-    <div
-      className="relative transition-all duration-200 ease-in-out"
-      style={{ height }}
-    >
-      <Line
-        ref={chartRef}
-        data={{ datasets: chartData.datasets }}
-        options={options}
-      />
-    </div>
+    <Timeseries
+      series={series}
+      mode="line"
+      height={height}
+      enableZoom
+      onZoomRange={onRangeSelect}
+      emptyMessage="No findings recorded"
+    />
   );
 }

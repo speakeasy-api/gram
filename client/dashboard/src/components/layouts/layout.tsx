@@ -20,7 +20,7 @@ function LayoutRoot({
 }: {
   children: React.ReactNode;
   className?: string;
-}) {
+}): JSX.Element {
   return <div className={cn("flex flex-col", className)}>{children}</div>;
 }
 

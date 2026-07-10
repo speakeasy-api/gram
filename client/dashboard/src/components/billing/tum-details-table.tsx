@@ -1,3 +1,5 @@
+import { Sparkline } from "@/components/chart/Sparkline";
+import { seriesPalette } from "@/components/chart/chart-theme";
 import { useOrganization } from "@/contexts/Auth";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type TumDetailsResult } from "@gram/client/models/components/tumdetailsresult.js";
@@ -12,7 +14,6 @@ import { isAttributionDim } from "@/pages/costs/taxonomy";
 import { type BillingPeriod } from "./billing-cycles";
 import {
   breakdownLabel,
-  CHART_COLORS,
   CLEAN_COLOR,
   OTHER_COLOR,
   RISKY_COLOR,
@@ -75,12 +76,17 @@ type MeasureRowSpec = {
   field: MeasureField;
 };
 
-const TOKEN_TYPE_ROWS: MeasureRowSpec[] = [
-  { label: "Input", color: CHART_COLORS[0]!, field: "inputTokens" },
-  { label: "Output", color: CHART_COLORS[1]!, field: "outputTokens" },
-  { label: "Cache read", color: CHART_COLORS[2]!, field: "cacheReadTokens" },
-  { label: "Cache write", color: CHART_COLORS[3]!, field: "cacheWriteTokens" },
-];
+// Built from the shared chart series palette (resolved at call time so
+// theme/token changes apply without a rebuild) rather than a duplicated
+// local color array.
+function tokenTypeRows(palette: string[]): MeasureRowSpec[] {
+  return [
+    { label: "Input", color: palette[0]!, field: "inputTokens" },
+    { label: "Output", color: palette[1]!, field: "outputTokens" },
+    { label: "Cache read", color: palette[2]!, field: "cacheReadTokens" },
+    { label: "Cache write", color: palette[3]!, field: "cacheWriteTokens" },
+  ];
+}
 
 const TOOL_MESSAGE_ROW: MeasureRowSpec = {
   label: "Tokens from tool call messages",
@@ -103,9 +109,9 @@ function bucketDate(nano: string): string {
 
 // Row color for a dimension value — same palette walk as the chart's stacks,
 // so a value's dot matches its chart series color.
-function valueColor(value: string, index: number): string {
+function valueColor(value: string, index: number, palette: string[]): string {
   if (value === "Other") return OTHER_COLOR;
-  return CHART_COLORS[index % CHART_COLORS.length]!;
+  return palette[index % palette.length]!;
 }
 
 // The dimension sections of the details table, mirroring the chart's group
@@ -113,6 +119,7 @@ function valueColor(value: string, index: number): string {
 function dimensionGroups(
   data: TumDetailsResult | undefined,
   keys: string[],
+  palette: string[],
 ): DetailGroup[] {
   const byKey = new Map(
     (data?.breakdowns ?? []).map((b) => [b.key, b.rows] as const),
@@ -140,52 +147,13 @@ function dimensionGroups(
           : undefined,
       rows: visible.map((r, i) => ({
         label: r.value === "" ? "(unset)" : r.value,
-        color: valueColor(r.value, i),
+        color: valueColor(r.value, i, palette),
         series: r.series,
         total: r.totalTokens,
       })),
     });
   }
   return groups;
-}
-
-// Minimal inline sparkline — a normalized polyline of the daily series.
-function Sparkline({
-  series,
-  color,
-}: {
-  series: number[];
-  color: string;
-}): JSX.Element {
-  const width = 120;
-  const height = 24;
-  const pad = 2;
-  const max = Math.max(...series, 1);
-  const step = series.length > 1 ? (width - pad * 2) / (series.length - 1) : 0;
-  const points = series
-    .map((v, i) => {
-      const x = pad + i * step;
-      const y = height - pad - (v / max) * (height - pad * 2);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-  return (
-    <svg
-      width={width}
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      aria-hidden="true"
-    >
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
 }
 
 function DetailRowItem({
@@ -217,7 +185,12 @@ function DetailRowItem({
       />
       <span className="min-w-0 flex-1 truncate text-sm">{row.label}</span>
       <span className="text-muted-foreground shrink-0">
-        <Sparkline series={row.series} color={row.color} />
+        <Sparkline
+          data={row.series}
+          color={row.color}
+          width={120}
+          height={24}
+        />
       </span>
       <span
         className="w-24 shrink-0 text-right text-sm tabular-nums"
@@ -350,6 +323,7 @@ export function TumDetailsTable({
   }, [data, billedCycle]);
 
   const groups = useMemo<DetailGroup[]>(() => {
+    const palette = seriesPalette();
     const points = data?.points ?? [];
     const totals = data?.totals;
     // The risk series comes from a separate request — align it to the main
@@ -384,14 +358,17 @@ export function TumDetailsTable({
         rows: [
           {
             label: "Total tokens",
-            color: CHART_COLORS[0]!,
+            color: palette[0]!,
             series: points.map((p) => p.totalTokens),
             total: totals?.totalTokens ?? 0,
           },
         ],
       },
-      ...dimensionGroups(data, LEAD_DIMENSION_SECTIONS),
-      { heading: "Token type", rows: TOKEN_TYPE_ROWS.map(measureRow) },
+      ...dimensionGroups(data, LEAD_DIMENSION_SECTIONS, palette),
+      {
+        heading: "Token type",
+        rows: tokenTypeRows(palette).map(measureRow),
+      },
       {
         heading: "Sessions & messages",
         rows: [
@@ -416,7 +393,7 @@ export function TumDetailsTable({
           measureRow(TOOL_MESSAGE_ROW),
         ],
       },
-      ...dimensionGroups(data, TAIL_DIMENSION_SECTIONS),
+      ...dimensionGroups(data, TAIL_DIMENSION_SECTIONS, palette),
     ];
 
     // Convert every row into billed units (see billedScale).

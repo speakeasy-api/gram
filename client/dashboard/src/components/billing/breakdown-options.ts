@@ -32,20 +32,8 @@ const BREAKDOWN_TOTAL = "total";
 const BREAKDOWN_TOKEN_TYPE = "tokenType";
 export const BREAKDOWN_RISK = "risk";
 
-// The chart series palette, shared with the usage details table so a metric's
-// dot color matches its chart legend color.
-export const CHART_COLORS = [
-  "#60a5fa", // blue
-  "#34d399", // emerald
-  "#f97316", // orange
-  "#a78bfa", // violet
-  "#fb7185", // rose
-  "#facc15", // yellow
-  "#38bdf8", // sky
-  "#c084fc", // purple
-  "#4ade80", // green
-  "#f472b6", // pink
-];
+// The chart series palette lives in chart-theme's `seriesPalette()` — pull
+// colors from there instead of a locally duplicated array.
 export const OTHER_COLOR = "#94a3b8"; // slate — the top-N remainder rollup
 export const RISKY_COLOR = "#fb7185"; // rose — tokens from sessions with risk findings
 export const CLEAN_COLOR = "#60a5fa"; // blue — everything else

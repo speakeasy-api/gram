@@ -1,4 +1,5 @@
 import { Heading } from "@/components/ui/heading";
+import { Kbd, KbdSequence } from "@/components/ui/kbd";
 import {
   Select,
   SelectContent,
@@ -654,44 +655,26 @@ export const LogsTabContent = ({
             {searchQuery ? (
               <>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                    N
-                  </kbd>
-                  <span>/</span>
-                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                    ⇧N
-                  </kbd>
+                  <KbdSequence keys={["N", "⇧N"]} separator="/" />
                   <span className="ml-0.5">results</span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                    ESC
-                  </kbd>
+                  <Kbd>ESC</Kbd>
                   <span>clear</span>
                 </span>
               </>
             ) : (
               <>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                    J
-                  </kbd>
-                  <span>/</span>
-                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                    K
-                  </kbd>
+                  <KbdSequence keys={["J", "K"]} separator="/" />
                   <span className="ml-0.5">navigate</span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                    G
-                  </kbd>
+                  <Kbd>G</Kbd>
                   <span>first</span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                    ⇧G
-                  </kbd>
+                  <Kbd>⇧G</Kbd>
                   <span>last</span>
                 </span>
               </>

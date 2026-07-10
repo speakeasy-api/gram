@@ -27,6 +27,13 @@ export interface LoadMoreFooterProps {
   isLoading?: boolean;
   onLoadMore: () => void;
   className?: string;
+  /** Overrides the "End of list" label shown once every row is loaded. */
+  endLabel?: string;
+  /**
+   * Shows a "Refreshing…" label in place of `endLabel` while a background
+   * refetch is in flight — only relevant once `hasMore` is false.
+   */
+  isRefreshing?: boolean;
 }
 
 /**
@@ -41,6 +48,8 @@ export function LoadMoreFooter({
   isLoading = false,
   onLoadMore,
   className,
+  endLabel = "End of list",
+  isRefreshing = false,
 }: LoadMoreFooterProps): React.JSX.Element {
   return (
     <div
@@ -56,7 +65,7 @@ export function LoadMoreFooter({
         <LoadMoreTrigger isLoading={isLoading} onLoadMore={onLoadMore} />
       ) : (
         <span className="font-mono text-xs uppercase tracking-[0.08em] text-muted">
-          End of list
+          {isRefreshing ? "Refreshing…" : endLabel}
         </span>
       )}
     </div>

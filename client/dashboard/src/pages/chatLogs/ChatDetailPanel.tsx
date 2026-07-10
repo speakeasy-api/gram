@@ -49,12 +49,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Dialog } from "@/components/ui/dialog";
+import { DetailList } from "@/components/ui/detail-list";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { AccountTypeBadge } from "@/components/account-type-badge";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { handleError, toError } from "@/lib/errors";
 import {
@@ -220,17 +222,6 @@ export function ChatDetailSheet({
   );
 }
 
-function MetaRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-start justify-between gap-3 py-1.5 text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="max-w-48 text-right font-medium break-words">
-        {children}
-      </span>
-    </div>
-  );
-}
-
 function SessionSummary({
   chat,
   messageCount,
@@ -301,46 +292,64 @@ function SessionSummary({
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72">
-        <div className="space-y-1">
-          <div className="mb-1 text-sm font-semibold">Session details</div>
-          <div className="divide-border divide-y">
-            <MetaRow label="User">{chat.externalUserId || "anonymous"}</MetaRow>
+        <div className="space-y-2">
+          <div className="text-sm font-semibold">Session details</div>
+          <DetailList orientation="inline">
+            <DetailList.Item
+              label="User"
+              value={chat.externalUserId || "anonymous"}
+            />
             {accountEmail && (
-              <MetaRow label="Account">
-                <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
-                  {accountEmail}
-                  <AccountTypeBadge accountType={chat.accountType} noTooltip />
-                </span>
-              </MetaRow>
+              <DetailList.Item
+                label="Account"
+                value={
+                  <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                    {accountEmail}
+                    <AccountTypeBadge
+                      accountType={chat.accountType}
+                      noTooltip
+                    />
+                  </span>
+                }
+              />
             )}
             {chat.source && (
-              <MetaRow label="Source">
-                <span className="inline-flex items-center gap-1.5">
-                  <HookSourceIcon source={chat.source} className="size-3.5" />
-                  {chat.source}
-                </span>
-              </MetaRow>
+              <DetailList.Item
+                label="Source"
+                value={
+                  <span className="inline-flex items-center gap-1.5">
+                    <HookSourceIcon source={chat.source} className="size-3.5" />
+                    {chat.source}
+                  </span>
+                }
+              />
             )}
-            <MetaRow label="Duration">{duration}s</MetaRow>
-            <MetaRow label="Messages">{messageCount}</MetaRow>
-            <MetaRow label="Tool calls">{toolCount}</MetaRow>
-            <MetaRow label="Total cost">
-              {hasCost ? formatUsageCost(chat.totalCost!) : "unknown"}
-            </MetaRow>
+            <DetailList.Item label="Duration" value={`${duration}s`} />
+            <DetailList.Item label="Messages" value={messageCount} />
+            <DetailList.Item label="Tool calls" value={toolCount} />
+            <DetailList.Item
+              label="Total cost"
+              value={hasCost ? formatUsageCost(chat.totalCost!) : "unknown"}
+            />
             {chat.totalInputTokens !== undefined && (
-              <MetaRow label="Input tokens">
-                {chat.totalInputTokens.toLocaleString()}
-              </MetaRow>
+              <DetailList.Item
+                label="Input tokens"
+                value={chat.totalInputTokens.toLocaleString()}
+              />
             )}
             {chat.totalOutputTokens !== undefined && (
-              <MetaRow label="Output tokens">
-                {chat.totalOutputTokens.toLocaleString()}
-              </MetaRow>
+              <DetailList.Item
+                label="Output tokens"
+                value={chat.totalOutputTokens.toLocaleString()}
+              />
             )}
             {tokens > 0 && (
-              <MetaRow label="Total tokens">{tokens.toLocaleString()}</MetaRow>
+              <DetailList.Item
+                label="Total tokens"
+                value={tokens.toLocaleString()}
+              />
             )}
-          </div>
+          </DetailList>
         </div>
       </PopoverContent>
     </Popover>
@@ -800,10 +809,10 @@ function ChatDetailPanel({
     null,
   );
   const [scrollNonce, setScrollNonce] = useState(0);
+  const debouncedSearchInput = useDebouncedValue(searchInput, 250);
   useEffect(() => {
-    const handle = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
-    return () => clearTimeout(handle);
-  }, [searchInput]);
+    setSearchQuery(debouncedSearchInput.trim());
+  }, [debouncedSearchInput]);
 
   // Risk-review contexts — explicit risk focus, or opened from the has-risk
   // filter — load the server-windowed risk transcript so findings load no matter

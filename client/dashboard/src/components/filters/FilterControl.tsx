@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import {
   Select,
   SelectContent,
@@ -205,6 +206,7 @@ function DebouncedTextInput({
   className?: string;
 }): JSX.Element {
   const [local, setLocal] = useState(value);
+  const debouncedLocal = useDebouncedValue(local, 350);
   const inputId = useId();
   const listId = useId();
 
@@ -213,10 +215,9 @@ function DebouncedTextInput({
   }, [value]);
 
   useEffect(() => {
-    if (local === value) return;
-    const timer = setTimeout(() => onChange(local), 350);
-    return () => clearTimeout(timer);
-  }, [local, value, onChange]);
+    if (debouncedLocal === value) return;
+    onChange(debouncedLocal);
+  }, [debouncedLocal, value, onChange]);
 
   // Browser-native <datalist> does substring matching client-side using these
   // as candidates; dedup and drop empties.
@@ -291,19 +292,19 @@ function DebouncedNumberInput({
   className?: string;
 }): JSX.Element {
   const [local, setLocal] = useState(value === null ? "" : String(value));
+  const debouncedLocal = useDebouncedValue(local, 350);
 
   useEffect(() => {
     setLocal(value === null ? "" : String(value));
   }, [value]);
 
   useEffect(() => {
-    const trimmed = local.trim();
+    const trimmed = debouncedLocal.trim();
     const parsed = trimmed === "" ? NaN : Number(trimmed);
     const next = Number.isFinite(parsed) ? parsed : null;
     if (next === value) return;
-    const timer = setTimeout(() => onChange(next), 350);
-    return () => clearTimeout(timer);
-  }, [local, value, onChange]);
+    onChange(next);
+  }, [debouncedLocal, value, onChange]);
 
   return (
     <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">

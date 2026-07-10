@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { Card } from "@/components/ui/card";
+import { DetailList } from "@/components/ui/detail-list";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
@@ -328,38 +329,26 @@ export default function CatalogDetail(): JSX.Element {
                   <Card.Title>Usage</Card.Title>
                 </Card.Header>
                 <Card.Content>
-                  <div className="space-y-3">
+                  <DetailList orientation="inline">
                     {weeklyUsage !== undefined && weeklyUsage > 0 && (
-                      <div className="flex justify-between gap-4">
-                        <Type small muted>
-                          This Week
-                        </Type>
-                        <Type className="font-medium">
-                          {weeklyUsage.toLocaleString()}
-                        </Type>
-                      </div>
+                      <DetailList.Item
+                        label="This Week"
+                        value={weeklyUsage.toLocaleString()}
+                      />
                     )}
                     {visitorsTotal !== undefined && visitorsTotal > 0 && (
-                      <div className="flex justify-between gap-4">
-                        <Type small muted>
-                          Monthly
-                        </Type>
-                        <Type className="font-medium">
-                          {visitorsTotal.toLocaleString()}
-                        </Type>
-                      </div>
+                      <DetailList.Item
+                        label="Monthly"
+                        value={visitorsTotal.toLocaleString()}
+                      />
                     )}
                     {totalUsage !== undefined && totalUsage > 0 && (
-                      <div className="flex justify-between gap-4">
-                        <Type small muted>
-                          All Time
-                        </Type>
-                        <Type className="font-medium">
-                          {totalUsage.toLocaleString()}
-                        </Type>
-                      </div>
+                      <DetailList.Item
+                        label="All Time"
+                        value={totalUsage.toLocaleString()}
+                      />
                     )}
-                  </div>
+                  </DetailList>
                 </Card.Content>
               </Card>
             )}
@@ -370,64 +359,58 @@ export default function CatalogDetail(): JSX.Element {
                 <Card.Title>Version & Release</Card.Title>
               </Card.Header>
               <Card.Content>
-                <div className="space-y-3">
-                  <div className="flex justify-between gap-4">
-                    <Type small muted>
-                      Version
-                    </Type>
-                    <Type className="font-mono">{server.version}</Type>
-                  </div>
+                <DetailList orientation="inline">
+                  <DetailList.Item
+                    label="Version"
+                    value={<span className="font-mono">{server.version}</span>}
+                  />
                   {versionMeta?.status && (
-                    <div className="flex justify-between gap-4">
-                      <Type small muted>
-                        Status
-                      </Type>
-                      <Type className="capitalize">{versionMeta.status}</Type>
-                    </div>
+                    <DetailList.Item
+                      label="Status"
+                      value={
+                        <span className="capitalize">{versionMeta.status}</span>
+                      }
+                    />
                   )}
                   {versionMeta?.publishedAt && (
-                    <div className="flex justify-between gap-4">
-                      <Type small muted>
-                        Published
-                      </Type>
-                      <Type>
-                        {new Date(versionMeta.publishedAt).toLocaleDateString()}
-                      </Type>
-                    </div>
+                    <DetailList.Item
+                      label="Published"
+                      value={new Date(
+                        versionMeta.publishedAt,
+                      ).toLocaleDateString()}
+                    />
                   )}
                   {versionMeta?.updatedAt && (
-                    <div className="flex justify-between gap-4">
-                      <Type small muted>
-                        Last Updated
-                      </Type>
-                      <Type>
-                        {new Date(versionMeta.updatedAt).toLocaleDateString()}
-                      </Type>
-                    </div>
+                    <DetailList.Item
+                      label="Last Updated"
+                      value={new Date(
+                        versionMeta.updatedAt,
+                      ).toLocaleDateString()}
+                    />
                   )}
                   {versionMeta?.source && (
-                    <div className="flex justify-between gap-4">
-                      <Type small muted>
-                        Source
-                      </Type>
-                      <a
-                        href={
-                          versionMeta.source.startsWith("http")
-                            ? versionMeta.source
-                            : `https://${versionMeta.source}`
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary flex items-center gap-1 hover:underline"
-                      >
-                        <Type className="max-w-[150px] truncate text-right">
-                          {versionMeta.source}
-                        </Type>
-                        <ExternalLink className="h-3 w-3 shrink-0" />
-                      </a>
-                    </div>
+                    <DetailList.Item
+                      label="Source"
+                      value={
+                        <a
+                          href={
+                            versionMeta.source.startsWith("http")
+                              ? versionMeta.source
+                              : `https://${versionMeta.source}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary inline-flex items-center gap-1 hover:underline"
+                        >
+                          <span className="max-w-[150px] truncate">
+                            {versionMeta.source}
+                          </span>
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                        </a>
+                      }
+                    />
                   )}
-                </div>
+                </DetailList>
               </Card.Content>
             </Card>
 
@@ -437,22 +420,17 @@ export default function CatalogDetail(): JSX.Element {
                 <Card.Title>Registry</Card.Title>
               </Card.Header>
               <Card.Content>
-                <div className="space-y-3">
-                  <div className="flex justify-between gap-4">
-                    <Type small muted>
-                      Registry
-                    </Type>
-                    <Type className="text-right">{server.registryId}</Type>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <Type small muted>
-                      Specifier
-                    </Type>
-                    <Type className="text-right font-mono text-xs break-all">
-                      {server.registrySpecifier}
-                    </Type>
-                  </div>
-                </div>
+                <DetailList orientation="inline">
+                  <DetailList.Item label="Registry" value={server.registryId} />
+                  <DetailList.Item
+                    label="Specifier"
+                    value={
+                      <span className="font-mono text-xs break-all">
+                        {server.registrySpecifier}
+                      </span>
+                    }
+                  />
+                </DetailList>
               </Card.Content>
             </Card>
           </div>

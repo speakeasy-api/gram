@@ -37,6 +37,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { CostMeasureLabel } from "@/components/estimated-cost";
+import { StatTile } from "@/components/ui/stat-tile";
 import { CostTable } from "./CostTable";
 import {
   type Crumb,
@@ -203,7 +204,8 @@ function entityIcon(entity: Crumb | null): LucideIcon {
 // ── Small presentational pieces ─────────────────────────────────────────────
 
 // A headline metric in the profile header (Cost / Sessions / …), echoing the
-// big Followers/Following/Likes numbers in the reference design.
+// big Followers/Following/Likes numbers in the reference design. A chrome-less
+// StatTile — no border/padding, just the label + value pairing.
 function HeaderStat({
   label,
   value,
@@ -215,26 +217,25 @@ function HeaderStat({
   // header entry point for the per-session list.
   onClick?: () => void;
 }): JSX.Element {
-  const inner = (
-    <>
-      <span className="font-display text-2xl font-thin tracking-[-0.015em] tabular-nums">
-        {value}
-      </span>
-      <span className="text-muted-foreground text-xs">{label}</span>
-    </>
+  const tile = (
+    <StatTile
+      label={label}
+      value={value}
+      valueClassName="text-2xl sm:text-2xl"
+    />
   );
   if (onClick) {
     return (
       <button
         type="button"
         onClick={onClick}
-        className="hover:bg-muted -mx-2 -my-1 flex flex-col rounded-md px-2 py-1 text-left transition-colors"
+        className="hover:bg-muted -mx-2 -my-1 px-2 py-1 text-left transition-colors"
       >
-        {inner}
+        {tile}
       </button>
     );
   }
-  return <div className="flex flex-col">{inner}</div>;
+  return tile;
 }
 
 // ── EntityProfile ───────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { faker } from "@faker-js/faker";
 
+import { Sparkline } from "@/components/chart/Sparkline";
 import { StatCard, StatTile } from "@/components/ui/stat-tile";
 
 faker.seed(7);
@@ -79,6 +80,26 @@ export const WarningTone: Story = {
         value="3"
         tone="warning"
         caption="Within the next 7 days"
+      />
+    </div>
+  ),
+};
+
+export const WithSparkline: Story = {
+  render: () => (
+    <div className="max-w-xs">
+      <StatTile
+        label="Agent sessions"
+        value="1,204"
+        delta={{ value: "+4.2%", tone: "neutral" }}
+        sparkline={
+          <Sparkline
+            data={[12, 18, 14, 22, 19, 27, 24, 31, 28, 35]}
+            trendColor
+            width={64}
+            height={24}
+          />
+        }
       />
     </div>
   ),

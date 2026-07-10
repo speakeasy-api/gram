@@ -3,6 +3,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { Button, Input } from "@/components/ui/moonshine";
@@ -263,13 +264,11 @@ export function ShowWebhookUrlComponent({
 }: ToolCallMessagePartProps): JSX.Element {
   const a = (args ?? {}) as Partial<WebhookArgs>;
   const url = a.webhook_url ?? "";
-  const [copied, setCopied] = useState(false);
+  const { copied, copy: copyToClipboard } = useCopyToClipboard();
 
   const copy = async () => {
     if (!url) return;
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    await copyToClipboard(url);
   };
 
   return (

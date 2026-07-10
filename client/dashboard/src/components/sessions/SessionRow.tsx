@@ -8,8 +8,8 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { MoreActions } from "@/components/ui/more-actions";
+import { StatusDot } from "@/components/ui/status-dot";
 import { useRBAC } from "@/hooks/useRBAC";
-import { cn } from "@/lib/utils";
 import {
   sessionStatus,
   sessionTimeLabel,
@@ -35,12 +35,7 @@ export function SessionRow({
 
   const rowContent = (
     <li className="flex items-center gap-3 px-3 py-2">
-      <span
-        className={cn(
-          "size-2 shrink-0 rounded-full",
-          STATUS_PRESENTATION[status].dotClass,
-        )}
-      />
+      <StatusDot tone={STATUS_PRESENTATION[status].badgeVariant} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{subjectLabel(session)}</p>
         <p className="text-muted-foreground truncate text-xs">

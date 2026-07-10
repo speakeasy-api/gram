@@ -6,6 +6,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SkeletonTable } from "@/components/ui/skeleton";
+import { LoadMoreFooter } from "@/components/ui/load-more-footer";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
@@ -15,11 +16,10 @@ import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.j
 import { useChallenges } from "@gram/client/react-query/challenges.js";
 import {
   Badge as MoonshineBadge,
-  Button,
   type Column,
   Table,
 } from "@/components/ui/moonshine";
-import { Check, Loader2 } from "lucide-react";
+import { Check } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -507,35 +507,15 @@ export function ChallengesTab(): JSX.Element {
             </Table.Body>
           </Table>
           {(accumulated.length > 0 || isLoadingMore) && (
-            <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
-              <Type muted small>
-                Showing {accumulated.length.toLocaleString()} of{" "}
-                {totalBuckets.toLocaleString()}
-              </Type>
-              {hasMore ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setPageCount((p) => p + 1)}
-                  disabled={isLoadingMore}
-                >
-                  {isLoadingMore ? (
-                    <>
-                      <Button.LeftIcon>
-                        <Loader2 className="animate-spin" />
-                      </Button.LeftIcon>
-                      <Button.Text>Loading...</Button.Text>
-                    </>
-                  ) : (
-                    <Button.Text>Load more</Button.Text>
-                  )}
-                </Button>
-              ) : (
-                <Type muted small>
-                  All results loaded
-                </Type>
-              )}
-            </div>
+            <LoadMoreFooter
+              shown={accumulated.length}
+              total={totalBuckets}
+              noun="results"
+              hasMore={hasMore}
+              isLoading={isLoadingMore}
+              onLoadMore={() => setPageCount((p) => p + 1)}
+              endLabel="All results loaded"
+            />
           )}
         </>
       )}

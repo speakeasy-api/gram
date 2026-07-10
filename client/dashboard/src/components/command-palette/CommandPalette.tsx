@@ -6,6 +6,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Kbd } from "@/components/ui/kbd";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useSlugs } from "@/contexts/Sdk";
@@ -23,9 +24,6 @@ import { ResourceResults } from "./ResourceResults";
 // surface reads as Gram without leaning on display type or heavy chrome.
 const BRAND_GRADIENT =
   "linear-gradient(90deg, #320F1E 0%, #C83228 12.5%, #FB873F 25%, #D2DC91 37.5%, #5A8250 50%, #002314 62%, #00143C 74%, #2873D7 86%, #9BC3FF 100%)";
-
-const KBD_CLASS =
-  "border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 min-w-5 items-center justify-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium select-none";
 
 export function CommandPalette(): JSX.Element {
   const { isOpen, close, actions, contextBadge } = useCommandPalette();
@@ -245,16 +243,16 @@ export function CommandPalette(): JSX.Element {
       {/* Keyboard navigation hints */}
       <div className="text-muted-foreground flex items-center gap-3 border-t px-3 py-2 text-xs">
         <span className="flex items-center gap-1.5">
-          <kbd className={KBD_CLASS}>↑</kbd>
-          <kbd className={KBD_CLASS}>↓</kbd>
+          <Kbd>↑</Kbd>
+          <Kbd>↓</Kbd>
           to navigate
         </span>
         <span className="flex items-center gap-1.5">
-          <kbd className={KBD_CLASS}>↵</kbd>
+          <Kbd>↵</Kbd>
           to select
         </span>
         <span className="flex items-center gap-1.5">
-          <kbd className={KBD_CLASS}>esc</kbd>
+          <Kbd>esc</Kbd>
           to close
         </span>
       </div>

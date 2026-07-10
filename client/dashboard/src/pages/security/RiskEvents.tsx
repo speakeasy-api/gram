@@ -12,7 +12,7 @@ import { getPresetRange } from "@gram-ai/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
-import { Button } from "@/components/ui/moonshine";
+import { LoadMoreFooter } from "@/components/ui/load-more-footer";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -251,11 +251,12 @@ export default function RiskEvents(): JSX.Element {
         }
         footer={
           results.length > 0 ? (
-            <RiskEventsFooter
-              count={results.length}
-              totalCount={totalCount}
-              hasNextPage={resultsQuery.hasNextPage}
-              isFetchingNextPage={resultsQuery.isFetchingNextPage}
+            <LoadMoreFooter
+              shown={results.length}
+              total={totalCount}
+              noun="findings"
+              hasMore={resultsQuery.hasNextPage}
+              isLoading={resultsQuery.isFetchingNextPage}
               onLoadMore={() => {
                 void resultsQuery.fetchNextPage();
               }}
@@ -518,40 +519,6 @@ function RiskEventsRow({
           </button>
         ) : null}
       </div>
-    </div>
-  );
-}
-
-function RiskEventsFooter({
-  count,
-  totalCount,
-  hasNextPage,
-  isFetchingNextPage,
-  onLoadMore,
-}: {
-  count: number;
-  totalCount: number;
-  hasNextPage: boolean;
-  isFetchingNextPage: boolean;
-  onLoadMore: () => void;
-}) {
-  return (
-    <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center justify-between gap-4 border-t px-5 py-3 text-sm">
-      <span>
-        Showing {count.toLocaleString()} of {totalCount.toLocaleString()}{" "}
-        {totalCount === 1 ? "finding" : "findings"}
-        {hasNextPage && " - Scroll to load more"}
-      </span>
-      {hasNextPage ? (
-        <Button
-          variant="tertiary"
-          size="sm"
-          disabled={isFetchingNextPage}
-          onClick={onLoadMore}
-        >
-          {isFetchingNextPage ? "Loading..." : "Load More"}
-        </Button>
-      ) : null}
     </div>
   );
 }

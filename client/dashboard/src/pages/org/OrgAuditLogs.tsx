@@ -6,6 +6,7 @@ import { InsightsConfig, InsightsProvider } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
+import { Kbd, KbdSequence } from "@/components/ui/kbd";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { Switch } from "@/components/ui/switch";
@@ -47,10 +48,10 @@ import { StructuredDiff } from "@/components/auditlogs/structured-diff";
 import {
   ActionBadge,
   ActionDot,
-  AuditFeedFooter,
   DateGroupHeader,
   FacetSelect,
 } from "@/components/auditlogs/feed";
+import { LoadMoreFooter } from "@/components/ui/load-more-footer";
 import {
   formatDateHeader,
   formatTimeOnly,
@@ -889,44 +890,26 @@ function OrgAuditLogsInner() {
               {searchQuery ? (
                 <>
                   <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      N
-                    </kbd>
-                    <span>/</span>
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      ⇧N
-                    </kbd>
+                    <KbdSequence keys={["N", "⇧N"]} separator="/" />
                     <span className="ml-0.5">results</span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      ESC
-                    </kbd>
+                    <Kbd>ESC</Kbd>
                     <span>clear</span>
                   </span>
                 </>
               ) : (
                 <>
                   <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      J
-                    </kbd>
-                    <span>/</span>
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      K
-                    </kbd>
+                    <KbdSequence keys={["J", "K"]} separator="/" />
                     <span className="ml-0.5">navigate</span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      G
-                    </kbd>
+                    <Kbd>G</Kbd>
                     <span>first</span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
-                      ⇧G
-                    </kbd>
+                    <Kbd>⇧G</Kbd>
                     <span>last</span>
                   </span>
                 </>
@@ -1046,15 +1029,19 @@ function OrgAuditLogsInner() {
           )}
         </div>
 
-        <AuditFeedFooter
-          count={logs.length}
-          hasNextPage={hasNextPage ?? false}
-          isFetching={isFetching}
-          isFetchingNextPage={isFetchingNextPage}
-          onLoadMore={() => {
-            void fetchNextPage();
-          }}
-        />
+        {(logs.length > 0 || isFetchingNextPage) && (
+          <LoadMoreFooter
+            shown={logs.length}
+            noun="audit logs"
+            hasMore={hasNextPage ?? false}
+            isLoading={isFetchingNextPage}
+            isRefreshing={isFetching}
+            endLabel="End of audit log history"
+            onLoadMore={() => {
+              void fetchNextPage();
+            }}
+          />
+        )}
       </div>
     </div>
   );

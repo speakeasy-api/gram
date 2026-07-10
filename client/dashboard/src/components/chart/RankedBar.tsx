@@ -12,6 +12,9 @@ export type RankedBarItem = {
   value: number;
   href?: string;
   sublabel?: string;
+  /** Row click handler for drill-throughs that update in-page state rather
+   * than navigate (e.g. a query-param filter) — ignored when `href` is set. */
+  onSelect?: () => void;
 };
 
 export type RankedBarColorMode = "single" | "rank-gradient";
@@ -98,6 +101,14 @@ export function RankedBar({
               >
                 {content}
               </Link>
+            ) : item.onSelect ? (
+              <button
+                type="button"
+                onClick={item.onSelect}
+                className="flex min-w-0 flex-1 cursor-pointer bg-transparent p-0 text-left hover:opacity-80"
+              >
+                {content}
+              </button>
             ) : (
               content
             )}

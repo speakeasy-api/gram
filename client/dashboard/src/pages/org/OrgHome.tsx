@@ -19,12 +19,10 @@ import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { useProjectFavorites } from "@/hooks/useProjectFavorites";
 import { useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters } from "@/lib/dates";
+import { getInitials } from "@/lib/initials";
 import { cn } from "@/lib/utils";
 import { ChallengesEmptyState } from "@/pages/access/ChallengesTab";
-import {
-  getInitials,
-  isDisplayableBucket,
-} from "@/pages/access/challengeHelpers";
+import { isDisplayableBucket } from "@/pages/access/challengeHelpers";
 import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";

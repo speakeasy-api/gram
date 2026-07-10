@@ -12,6 +12,7 @@ import {
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { useSlugs } from "@/contexts/Sdk";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { toast } from "sonner";
 import { codeToHtml, type BundledLanguage } from "shiki";
 import {
@@ -116,7 +117,8 @@ export function InstrumentAgentsStep({
   const [activeStepIndex, setActiveStepIndex] = useState<
     Record<string, number>
   >(() => Object.fromEntries(AGENT_PLATFORMS.map((p) => [p.id, 0])));
-  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const { copied: codeCopied, copy: copyCodeToClipboard } =
+    useCopyToClipboard(2000);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [apiKeyPending, setApiKeyPending] = useState<Record<string, boolean>>(
     {},
@@ -256,12 +258,6 @@ export function InstrumentAgentsStep({
         [platformId]: currentIdx - 1,
       }));
     }
-  };
-
-  const copyToClipboard = async (text: string, field: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 2000);
   };
 
   const statusBadge = (status: PlatformSetupStatus) => {
@@ -538,21 +534,16 @@ export function InstrumentAgentsStep({
                         <button
                           type="button"
                           onClick={() => {
-                            void copyToClipboard(
-                              displayCode,
-                              `${activePlatform.id}-${idx}`,
-                            );
+                            void copyCodeToClipboard(displayCode);
                           }}
                           className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium tracking-wider text-zinc-300 uppercase transition-colors hover:bg-zinc-800 hover:text-zinc-100"
                         >
-                          {copiedField === `${activePlatform.id}-${idx}` ? (
+                          {codeCopied ? (
                             <Check className="h-3 w-3" />
                           ) : (
                             <Copy className="h-3 w-3" />
                           )}
-                          {copiedField === `${activePlatform.id}-${idx}`
-                            ? "Copied"
-                            : "Copy"}
+                          {codeCopied ? "Copied" : "Copy"}
                         </button>
                       </div>
                       <HighlightedCode

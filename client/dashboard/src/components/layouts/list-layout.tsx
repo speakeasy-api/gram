@@ -25,7 +25,7 @@ function ListLayoutRoot({
 }: {
   children: React.ReactNode;
   className?: string;
-}) {
+}): JSX.Element {
   return <Layout className={className}>{children}</Layout>;
 }
 
@@ -36,7 +36,7 @@ function ListLayoutList({
 }: {
   children: React.ReactNode;
   className?: string;
-}) {
+}): JSX.Element {
   return (
     <Layout.Body className={cn("gap-4", className)}>{children}</Layout.Body>
   );
@@ -49,7 +49,7 @@ function ListLayoutFooter({
 }: {
   children: React.ReactNode;
   className?: string;
-}) {
+}): JSX.Element {
   return <div className={cn("mt-2", className)}>{children}</div>;
 }
 

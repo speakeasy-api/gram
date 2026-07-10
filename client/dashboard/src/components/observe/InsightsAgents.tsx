@@ -2,8 +2,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
-import { useChartZoom } from "@/components/chart/useChartZoom";
-import { buildAgentTokenTimeSeriesChartData } from "@/components/observe/agentTokenTimeSeriesChartData";
+import { StackedBarChart } from "@/components/chart/StackedBarChart";
+import { Timeseries } from "@/components/chart/Timeseries";
+import { RankedBar, type RankedBarItem } from "@/components/chart/RankedBar";
+import { buildAgentTokenTimeSeries } from "@/components/observe/agentTokenTimeSeriesChartData";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { formatCompact } from "@/lib/format";
 import { MetricCard } from "@/components/chart/MetricCard";
@@ -42,19 +44,6 @@ import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstant
 import { Page } from "@/components/page-layout";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
-  BarElement,
-  CategoryScale,
-  Chart as ChartJS,
-  Filler,
-  Legend,
-  LineElement,
-  LinearScale,
-  PointElement,
-  Tooltip,
-  type ChartOptions,
-} from "chart.js";
-import ZoomPlugin from "chartjs-plugin-zoom";
-import {
   Alert,
   Button,
   type Column,
@@ -63,22 +52,9 @@ import {
   sortTableData,
 } from "@/components/ui/moonshine";
 import { ArrowRight } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bar, Chart } from "react-chartjs-2";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  Filler,
-  Tooltip,
-  Legend,
-  ZoomPlugin,
-);
 
 type ValueMode = "tokens" | "cost";
 
@@ -94,19 +70,6 @@ const PRESET_RANGE_LABELS: Record<DateRangePreset, string> = {
   "30d": "the last 30 days",
   "90d": "the last 90 days",
 };
-
-const CHART_COLORS = [
-  "#60a5fa", // blue
-  "#34d399", // emerald
-  "#f97316", // orange
-  "#a78bfa", // violet
-  "#fb7185", // rose
-  "#facc15", // yellow
-  "#38bdf8", // sky
-  "#c084fc", // purple
-  "#4ade80", // green
-  "#f472b6", // pink
-];
 
 function formatCost(value: number): string {
   if (value >= 1) return `$${value.toFixed(2)}`;
@@ -198,13 +161,9 @@ export function InsightsAgentsContent(): JSX.Element {
     "employee",
   );
 
-  const { from, to, timeRangeMs } = useMemo(() => {
+  const { from, to } = useMemo(() => {
     const range = customRange ?? getPresetRange(dateRange);
-    return {
-      from: range.from,
-      to: range.to,
-      timeRangeMs: range.to.getTime() - range.from.getTime(),
-    };
+    return { from: range.from, to: range.to };
   }, [customRange, dateRange]);
 
   const rangeLabel = useMemo(() => {
@@ -611,7 +570,6 @@ export function InsightsAgentsContent(): JSX.Element {
                   }
                   chartId="tokens-over-time"
                   timeSeries={timeSeries}
-                  timeRangeMs={timeRangeMs}
                   valueMode={valueMode}
                   expandedChart={expandedChart}
                   onExpand={setExpandedChart}
@@ -633,10 +591,7 @@ export function InsightsAgentsContent(): JSX.Element {
                 />
               </section>
 
-              <ModelBreakdownCard
-                models={modelBreakdown}
-                valueMode={valueMode}
-              />
+              <ModelBreakdownCard models={modelBreakdown} />
 
               <EmployeeCostTable
                 users={filteredUserRows}
@@ -662,7 +617,6 @@ function TokenTimeSeriesChart({
   subtitle,
   chartId,
   timeSeries,
-  timeRangeMs,
   valueMode,
   expandedChart,
   onExpand,
@@ -674,7 +628,6 @@ function TokenTimeSeriesChart({
   subtitle?: string;
   chartId: string;
   timeSeries: TimeSeriesBucket[];
-  timeRangeMs: number;
   valueMode: ValueMode;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
@@ -684,94 +637,12 @@ function TokenTimeSeriesChart({
 }) {
   const isExpanded = expandedChart === chartId;
   const height = isExpanded ? 420 : 260;
-  const hasData = timeSeries.some(
-    (b) =>
-      (valueMode === "cost"
-        ? b.totalCost
-        : b.totalInputTokens + b.totalOutputTokens) > 0,
-  );
 
-  const { timestamps, chartData } = useMemo(
-    () =>
-      buildAgentTokenTimeSeriesChartData(timeSeries, timeRangeMs, valueMode),
-    [timeSeries, timeRangeMs, valueMode],
+  const series = useMemo(
+    () => buildAgentTokenTimeSeries(timeSeries, valueMode),
+    [timeSeries, valueMode],
   );
-  const resolveZoomRange = useCallback(
-    (min: number, max: number) => {
-      if (timestamps.length === 0) return null;
-      const fromIndex = Math.max(0, Math.floor(min));
-      const toIndex = Math.min(timestamps.length - 1, Math.ceil(max));
-      const from = timestamps[fromIndex];
-      const to = timestamps[toIndex];
-      if (from == null || to == null) return null;
-      return { from: new Date(from), to: new Date(to) };
-    },
-    [timestamps],
-  );
-  const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom<
-    "bar" | "line",
-    number[],
-    string
-  >({
-    onRangeSelect,
-    resolveRange: resolveZoomRange,
-  });
-
-  useEffect(() => {
-    resetZoom();
-  }, [chartData, resetZoom]);
-
-  const options = useMemo<ChartOptions<"bar">>(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        legend: {
-          position: "bottom",
-          labels: {
-            boxWidth: 12,
-            usePointStyle: true,
-            padding: 16,
-            font: { size: 11 },
-          },
-        },
-        tooltip: {
-          backgroundColor: "rgba(0, 0, 0, 0.85)",
-          titleColor: "#fff",
-          bodyColor: "#e5e7eb",
-          borderColor: "rgba(255, 255, 255, 0.1)",
-          borderWidth: 1,
-          padding: 12,
-          boxPadding: 4,
-          usePointStyle: true,
-          callbacks: {
-            label: (item) => {
-              const val = Number(item.parsed.y ?? 0);
-              return ` ${item.dataset.label}: ${formatValue(val, valueMode)}`;
-            },
-          },
-        },
-        zoom: zoomPluginOptions,
-      },
-      scales: {
-        x: {
-          stacked: true,
-          grid: { display: true, color: "rgba(128, 128, 128, 0.08)" },
-          ticks: { maxTicksLimit: 8 },
-        },
-        y: {
-          stacked: true,
-          beginAtZero: true,
-          grid: { color: "rgba(128, 128, 128, 0.15)" },
-          ticks: {
-            callback: (value) => formatValue(Number(value), valueMode),
-          },
-        },
-      },
-    }),
-    [valueMode, zoomPluginOptions],
-  );
+  const hasData = series.some((s) => s.data.some((p) => p.y > 0));
 
   return (
     <ChartCard
@@ -786,25 +657,15 @@ function TokenTimeSeriesChart({
       {subtitle && (
         <p className="text-muted-foreground -mt-3 mb-2 text-xs">{subtitle}</p>
       )}
-      {!hasData ? (
-        <div className="text-muted-foreground flex h-[260px] items-center justify-center text-sm">
-          No data for selected time range
-        </div>
-      ) : (
-        <div style={{ height }}>
-          {/* `<Chart>` (rather than `<Bar>`) is used here because react-chartjs-2's
-              typed `<Bar>` only accepts `ChartData<"bar">` datasets, but this
-              chart mixes a bar stack with a line trend overlay. Passing the
-              `"bar" | "line"` generic explicitly widens `<Chart>` to accept
-              the union dataset shape. */}
-          <Chart<"bar" | "line", number[], string>
-            ref={chartRef}
-            type="bar"
-            data={chartData}
-            options={options}
-          />
-        </div>
-      )}
+      <Timeseries
+        series={hasData ? series : []}
+        mode="bar-with-trend"
+        height={height}
+        valueFormatter={(v) => formatValue(v, valueMode)}
+        enableZoom
+        onZoomRange={onRangeSelect}
+        emptyMessage="No data for selected time range"
+      />
     </ChartCard>
   );
 }
@@ -833,54 +694,6 @@ function ClientBreakdownChart({
   const height = isExpanded ? 420 : 260;
   const hasData = data.length > 0;
 
-  const chartData = useMemo(
-    () => ({
-      labels: data.map((d) => d.label),
-      datasets: [
-        {
-          label: valueMode === "cost" ? "Cost" : "Events",
-          data: data.map((d) => (valueMode === "cost" ? d.cost : d.tokens)),
-          backgroundColor: data.map(
-            (_, i) => CHART_COLORS[i % CHART_COLORS.length]!,
-          ),
-        },
-      ],
-    }),
-    [data, valueMode],
-  );
-
-  const options = useMemo<ChartOptions<"bar">>(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      indexAxis: "y",
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            afterLabel: (item) => {
-              const entry = data[item.dataIndex];
-              return entry
-                ? `${entry.userCount} user${entry.userCount !== 1 ? "s" : ""}`
-                : "";
-            },
-          },
-        },
-      },
-      scales: {
-        x: {
-          beginAtZero: true,
-          grid: { color: "rgba(128, 128, 128, 0.15)" },
-          ticks: {
-            callback: (value) => formatValue(Number(value), valueMode),
-          },
-        },
-        y: { grid: { display: false } },
-      },
-    }),
-    [data, valueMode],
-  );
-
   return (
     <ChartCard
       title={title}
@@ -889,58 +702,46 @@ function ClientBreakdownChart({
       onExpand={onExpand}
       hasData={hasData}
     >
-      {!hasData ? (
-        <div className="text-muted-foreground flex h-[260px] items-center justify-center text-sm">
-          No client data available
-        </div>
-      ) : (
-        <div style={{ height }}>
-          <Bar data={chartData} options={options} />
-        </div>
-      )}
+      <StackedBarChart
+        labels={data.map((d) => d.label)}
+        series={[
+          {
+            label: valueMode === "cost" ? "Cost" : "Events",
+            values: data.map((d) => (valueMode === "cost" ? d.cost : d.tokens)),
+          },
+        ]}
+        valueFormatter={(v) => formatValue(v, valueMode)}
+        height={height}
+        emptyMessage="No client data available"
+      />
     </ChartCard>
   );
 }
 
-function ModelBreakdownCard({
-  models,
-  valueMode,
-}: {
-  models: ModelUsage[];
-  valueMode: ValueMode;
-}) {
+function ModelBreakdownCard({ models }: { models: ModelUsage[] }) {
   const total = models.reduce((s, m) => s + m.count, 0);
+  const items = useMemo<RankedBarItem[]>(
+    () => models.map((model) => ({ label: model.name, value: model.count })),
+    [models],
+  );
 
   return (
     <section className="rounded-lg border p-4">
-      <h3 className="font-semibold">
-        {valueMode === "cost" ? "Requests by Model" : "Requests by Model"}
-      </h3>
-      <div className="mt-4 space-y-3">
-        {models.length > 0 ? (
-          models.map((model) => (
-            <div key={model.name} className="space-y-1.5">
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="truncate font-mono text-xs">{model.name}</span>
-                <span className="text-muted-foreground shrink-0">
-                  {model.count.toLocaleString()} requests (
-                  {total > 0 ? ((model.count / total) * 100).toFixed(1) : 0}%)
-                </span>
-              </div>
-              <div className="bg-muted h-2 overflow-hidden rounded-full">
-                <div
-                  className="bg-primary h-full rounded-full"
-                  style={{
-                    width: `${total > 0 ? Math.max((model.count / total) * 100, 4) : 0}%`,
-                  }}
-                />
-              </div>
-            </div>
-          ))
-        ) : (
-          <p className="text-muted-foreground text-sm">No model usage data</p>
-        )}
-      </div>
+      <h3 className="font-semibold">Requests by Model</h3>
+      {items.length > 0 ? (
+        <RankedBar
+          items={items}
+          formatValue={(value) =>
+            `${value.toLocaleString()} requests (${
+              total > 0 ? ((value / total) * 100).toFixed(1) : 0
+            }%)`
+          }
+        />
+      ) : (
+        <p className="text-muted-foreground mt-4 text-sm">
+          No model usage data
+        </p>
+      )}
     </section>
   );
 }

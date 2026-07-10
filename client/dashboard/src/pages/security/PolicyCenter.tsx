@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchBar } from "@/components/ui/search-bar";
+import { StatusDot, type StatusDotTone } from "@/components/ui/status-dot";
 import { Switch } from "@/components/ui/switch";
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -71,6 +72,7 @@ import {
   invalidateAllRiskPoliciesStatus,
 } from "@gram/client/react-query/riskPoliciesStatus.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { WorkflowStatus } from "@gram/client/models/components/riskpolicystatus.js";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import {
@@ -1487,6 +1489,15 @@ function AudiencePrincipalRow({
 /*  RunPanel                                                                  */
 /* -------------------------------------------------------------------------- */
 
+const WORKFLOW_STATUS_PRESENTATION: Record<
+  WorkflowStatus,
+  { tone: StatusDotTone; pulse: boolean }
+> = {
+  running: { tone: "success", pulse: true },
+  sleeping: { tone: "warning", pulse: false },
+  not_started: { tone: "neutral", pulse: false },
+};
+
 function RunPanel({ policy }: { policy: RiskPolicy }) {
   const {
     data: status,
@@ -1524,23 +1535,16 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
                 <p className="text-muted-foreground mb-1 font-mono text-xs tracking-[0.08em] uppercase">
                   Status
                 </p>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "inline-block h-2.5 w-2.5 rounded-full",
-                      status.workflowStatus === "running" &&
-                        "animate-pulse bg-green-500",
-                      status.workflowStatus === "sleeping" && "bg-yellow-500",
-                      status.workflowStatus === "not_started" &&
-                        "bg-muted-foreground",
-                    )}
-                  />
-                  <span className="text-sm font-medium capitalize">
-                    {status.workflowStatus === "not_started"
-                      ? "Idle"
-                      : status.workflowStatus}
-                  </span>
-                </div>
+                <StatusDot
+                  {...WORKFLOW_STATUS_PRESENTATION[status.workflowStatus]}
+                  label={
+                    <span className="font-medium capitalize">
+                      {status.workflowStatus === "not_started"
+                        ? "Idle"
+                        : status.workflowStatus}
+                    </span>
+                  }
+                />
               </div>
               <div className="border-border rounded-lg border p-3">
                 <p className="text-muted-foreground mb-1 font-mono text-xs tracking-[0.08em] uppercase">

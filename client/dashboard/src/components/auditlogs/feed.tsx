@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/moonshine";
 import {
   Select,
   SelectContent,
@@ -18,7 +17,6 @@ import {
 } from "@/lib/audit-log-feed";
 import { formatAuditAction } from "@/lib/audit-log-format";
 import { cn } from "@/lib/utils";
-import { LoaderCircle } from "lucide-react";
 import React from "react";
 
 export function DateGroupHeader({
@@ -108,63 +106,6 @@ export function FacetSelect({
           ))}
         </SelectContent>
       </Select>
-    </div>
-  );
-}
-
-/**
- * Footer bar shared by audit log feeds: entry count on the left, cursor
- * pagination on the right. Render it inside the feed's bordered container.
- */
-export function AuditFeedFooter({
-  count,
-  noun = "audit log",
-  hasNextPage,
-  isFetching,
-  isFetchingNextPage,
-  onLoadMore,
-  endLabel = "End of audit log history",
-}: {
-  count: number;
-  noun?: string;
-  hasNextPage: boolean;
-  isFetching: boolean;
-  isFetchingNextPage: boolean;
-  onLoadMore: () => void;
-  endLabel?: string;
-}): React.JSX.Element | null {
-  if (count === 0 && !isFetchingNextPage) return null;
-
-  return (
-    <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
-      <Type muted small>
-        {count.toLocaleString()} {noun}
-        {count === 1 ? "" : "s"}
-      </Type>
-
-      {hasNextPage ? (
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onLoadMore}
-          disabled={isFetchingNextPage}
-        >
-          {isFetchingNextPage ? (
-            <>
-              <Button.LeftIcon>
-                <LoaderCircle className="size-4 animate-spin" />
-              </Button.LeftIcon>
-              <Button.Text>Loading...</Button.Text>
-            </>
-          ) : (
-            "Load more"
-          )}
-        </Button>
-      ) : (
-        <Type muted small>
-          {isFetching ? "Refreshing..." : endLabel}
-        </Type>
-      )}
     </div>
   );
 }

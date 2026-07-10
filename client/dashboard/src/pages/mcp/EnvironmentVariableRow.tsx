@@ -5,6 +5,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { StatusDot, type StatusDotTone } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Pencil } from "lucide-react";
@@ -16,6 +17,25 @@ import {
   getHeaderDisplayName,
   hasHeaderOverride,
 } from "./environmentVariableUtils";
+
+type EnvVarIndicatorStatus = "omitted" | "set" | "missing" | "unset";
+
+const ENV_VAR_INDICATOR_TONE: Record<EnvVarIndicatorStatus, StatusDotTone> = {
+  omitted: "neutral",
+  set: "success",
+  missing: "warning",
+  unset: "neutral",
+};
+
+function envVarIndicatorStatus(
+  envVar: EnvironmentVariable,
+  hasValue: boolean,
+): EnvVarIndicatorStatus {
+  if (envVar.state === "omitted") return "omitted";
+  if (hasValue) return "set";
+  if (envVar.isRequired) return "missing";
+  return "unset";
+}
 
 interface EnvironmentVariableRowProps {
   envVar: EnvironmentVariable;
@@ -127,15 +147,11 @@ export function EnvironmentVariableRow({
             !envVar.isRequired && "transition-opacity group-hover:opacity-0",
           )}
         >
-          {envVar.state === "omitted" ? (
-            <div className="bg-muted-foreground/30 h-2 w-2 rounded-full" />
-          ) : hasValue ? (
-            <div className="h-2 w-2 rounded-full bg-green-500" />
-          ) : envVar.isRequired ? (
-            <div className="h-2 w-2 rounded-full bg-yellow-500" />
-          ) : (
-            <div className="bg-muted-foreground/30 h-2 w-2 rounded-full" />
-          )}
+          <StatusDot
+            tone={
+              ENV_VAR_INDICATOR_TONE[envVarIndicatorStatus(envVar, hasValue)]
+            }
+          />
         </div>
       </div>
 

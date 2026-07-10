@@ -3,11 +3,11 @@ import { describe, expect, it } from "vitest";
 import { buildToolUsageTimeSeries } from "./toolUsageTimeSeriesChartData";
 
 describe("buildToolUsageTimeSeries", () => {
-  it("preserves bucketed chart data and returns timestamps for zoom", () => {
+  it("buckets events into one series per key", () => {
     const first = Date.UTC(2026, 0, 1, 12, 0);
     const second = Date.UTC(2026, 0, 1, 13, 0);
 
-    const result = buildToolUsageTimeSeries(
+    const series = buildToolUsageTimeSeries(
       [
         {
           bucketStartNs: `${BigInt(first) * BigInt(1_000_000)}`,
@@ -21,17 +21,20 @@ describe("buildToolUsageTimeSeries", () => {
         },
       ],
       (point) => point.targetLabel,
-      second - first,
     );
 
-    expect(result.timestamps).toEqual([first, second]);
-    expect(result.datasets[0]?.data).toEqual([3, 5]);
+    expect(series).toHaveLength(1);
+    expect(series[0]?.label).toBe("Server A");
+    expect(series[0]?.data).toEqual([
+      { x: first, y: 3 },
+      { x: second, y: 5 },
+    ]);
   });
 
   it("skips malformed bucket timestamps instead of throwing", () => {
     const valid = Date.UTC(2026, 0, 1, 12, 0);
 
-    const result = buildToolUsageTimeSeries(
+    const series = buildToolUsageTimeSeries(
       [
         {
           bucketStartNs: "not-a-nanosecond-timestamp",
@@ -45,11 +48,9 @@ describe("buildToolUsageTimeSeries", () => {
         },
       ],
       (point) => point.targetLabel,
-      60 * 60 * 1000,
     );
 
-    expect(result.timestamps).toEqual([valid]);
-    expect(result.datasets[0]?.data).toEqual([5]);
+    expect(series[0]?.data).toEqual([{ x: valid, y: 5 }]);
   });
 });
 

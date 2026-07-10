@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { ViewToggle } from "@/components/ui/view-toggle";
 import type { ViewMode } from "@/components/ui/use-view-mode";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { cn } from "@/lib/utils";
 import type { Operator } from "@gram/client/models/components/logfilter";
 import type { ActiveLogFilter } from "@/pages/logs/log-filter-types";
@@ -125,15 +126,15 @@ function ToolbarSearch({
   className,
 }: ToolbarSearchProps): JSX.Element {
   const [local, setLocal] = useState(value);
+  const debouncedLocal = useDebouncedValue(local, debounceMs);
 
   // Sync when value changes externally (back/forward, clear-all).
   useEffect(() => setLocal(value), [value]);
 
   useEffect(() => {
-    if (local === value) return;
-    const timer = setTimeout(() => onChange(local), debounceMs);
-    return () => clearTimeout(timer);
-  }, [local, value, debounceMs, onChange]);
+    if (debouncedLocal === value) return;
+    onChange(debouncedLocal);
+  }, [debouncedLocal, value, onChange]);
 
   return (
     <div

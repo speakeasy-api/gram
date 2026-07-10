@@ -1,35 +1,12 @@
+import { Card } from "@/components/ui/card";
+import { UsageMeter } from "@/components/ui/progress";
+import { StatTile } from "@/components/ui/stat-tile";
 import { cn } from "@/lib/utils";
 
-// One headline figure in the TUM usage card. The tone ties the number to its
-// meter segment: green for the included allowance, amber for overage.
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "success" | "warning";
-}): JSX.Element {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-muted-foreground text-xs">{label}</span>
-      <span
-        className={cn(
-          "font-display text-2xl font-thin tracking-[-0.015em] tabular-nums",
-          // The success text tokens wash out here: near-white in dark mode,
-          // muted olive in light. Pin the palette steps that read as green in
-          // each mode.
-          tone === "success" &&
-            "text-[var(--color-feedback-green-600)] dark:text-[var(--color-feedback-green-400)]",
-          tone === "warning" && "text-warning",
-        )}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
+// Headline figures render at a compact size (not StatTile's default huge
+// serif) so three stats fit comfortably in one row without wrapping or
+// clipping at extreme overage ratios.
+const STAT_VALUE_CLASS = "text-2xl sm:text-2xl";
 
 /**
  * The billed tokens-under-management position for one billing cycle: headline
@@ -52,32 +29,29 @@ export function TumUsageCard({
   label: string;
 }): JSX.Element {
   const overage = limit != null ? Math.max(0, tokens - limit) : 0;
-  // The meter spans max(usage, allowance): under the cap it reads as a
-  // fill-toward-the-limit bar; over it, the amber overage segment grows.
-  const scale = limit != null ? Math.max(tokens, limit) : 0;
-  const includedShare =
-    scale > 0 ? (Math.min(tokens, limit ?? 0) / scale) * 100 : 0;
-  const overageShare = scale > 0 ? (overage / scale) * 100 : 0;
   const usedPercent =
     limit != null && limit > 0 ? (tokens / limit) * 100 : null;
 
   return (
-    <div className="border-border rounded-lg border p-4">
-      <div className="text-muted-foreground mb-3 text-sm font-medium">
-        {label}
-      </div>
+    <Card>
+      <div className="text-muted-foreground text-sm font-medium">{label}</div>
       <div className="flex flex-wrap items-start gap-x-10 gap-y-3">
-        <Stat label="Tokens consumed" value={tokens.toLocaleString()} />
-        <Stat
+        <StatTile
+          label="Tokens consumed"
+          value={tokens.toLocaleString()}
+          valueClassName={STAT_VALUE_CLASS}
+        />
+        <StatTile
           label="Included allowance"
           value={limit != null ? limit.toLocaleString() : "No limit"}
-          tone={limit != null ? "success" : undefined}
+          valueClassName={STAT_VALUE_CLASS}
         />
         {limit != null && (
-          <Stat
+          <StatTile
             label="Overage"
             value={overage.toLocaleString()}
-            tone={overage > 0 ? "warning" : undefined}
+            tone={overage > 0 ? "warning" : "default"}
+            valueClassName={STAT_VALUE_CLASS}
           />
         )}
         {usedPercent != null && (
@@ -93,19 +67,8 @@ export function TumUsageCard({
       </div>
 
       {limit != null && (
-        <div className="bg-muted mt-4 flex h-2 w-full gap-0.5 overflow-hidden rounded-full">
-          <div
-            className="bg-success-default h-full rounded-full transition-all duration-300"
-            style={{ width: `${includedShare}%` }}
-          />
-          {overage > 0 && (
-            <div
-              className="bg-warning-default h-full rounded-full transition-all duration-300"
-              style={{ width: `${overageShare}%` }}
-            />
-          )}
-        </div>
+        <UsageMeter used={tokens} included={limit} overageUsed={overage} />
       )}
-    </div>
+    </Card>
   );
 }

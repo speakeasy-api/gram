@@ -24,7 +24,7 @@ function DetailLayoutRoot({
 }: {
   children: React.ReactNode;
   className?: string;
-}) {
+}): JSX.Element {
   return <Layout className={className}>{children}</Layout>;
 }
 
@@ -35,7 +35,7 @@ function DetailLayoutTabs({
 }: {
   children: React.ReactNode;
   className?: string;
-}) {
+}): JSX.Element {
   return (
     <div className={cn("border-neutral-softest -mt-px border-b", className)}>
       {children}
@@ -50,7 +50,7 @@ function DetailLayoutContent({
 }: {
   children: React.ReactNode;
   className?: string;
-}) {
+}): JSX.Element {
   return (
     <Layout.Body
       className={cn("gap-8 lg:flex-row lg:items-start lg:gap-12", className)}
@@ -66,7 +66,7 @@ function DetailLayoutMain({
 }: {
   children: React.ReactNode;
   className?: string;
-}) {
+}): JSX.Element {
   return (
     <div className={cn("flex min-w-0 flex-1 flex-col gap-8", className)}>
       {children}
@@ -81,7 +81,7 @@ function DetailLayoutAside({
 }: {
   children: React.ReactNode;
   className?: string;
-}) {
+}): JSX.Element {
   return (
     <aside
       className={cn("flex w-full shrink-0 flex-col gap-6 lg:w-72", className)}

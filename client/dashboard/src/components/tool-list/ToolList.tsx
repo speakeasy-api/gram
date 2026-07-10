@@ -1,5 +1,6 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
+import { Kbd } from "@/components/ui/kbd";
 import { MoreActions } from "@/components/ui/more-actions";
 import { TextArea } from "@/components/ui/textarea";
 import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
@@ -1140,9 +1141,9 @@ export function ToolList({
               {selectedForRemoval.size} tool(s) selected
             </p>
             <div className="flex items-center gap-2">
-              <kbd className="border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium opacity-100 select-none">
+              <Kbd className="pointer-events-none gap-1 px-1.5 select-none">
                 <span className="text-xs">⌘</span>K
-              </kbd>
+              </Kbd>
               <span className="text-muted-foreground text-sm">for actions</span>
             </div>
             <Button variant="secondary" onClick={handleCancel}>

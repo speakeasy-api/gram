@@ -1,16 +1,10 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { IdentityCell } from "@/components/ui/identity-cell";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { getInitials } from "@/lib/initials";
 import { cn } from "@/lib/utils";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { User, UserX } from "lucide-react";
 import { useMemo } from "react";
-
-/** Two-letter initials from a display name or email handle. */
-function initialsOf(identifier: string): string {
-  const handle = identifier.split("@")[0] ?? identifier;
-  return handle.slice(0, 2).toUpperCase();
-}
 
 type OwnerVariant = "card" | "row";
 
@@ -42,32 +36,22 @@ export function AssistantOwner({
     return (membersData?.members ?? []).find((m) => m.id === createdByUserId);
   }, [membersData, createdByUserId]);
 
-  const container = cn("flex items-center gap-1.5", className);
-
   // Resolved owner: avatar + name, full name on hover.
   if (member) {
     const display = member.name || member.email;
     return (
-      <div className={container}>
-        <SimpleTooltip tooltip={display}>
-          <Avatar className="size-5">
-            {member.photoUrl ? (
-              <AvatarImage src={member.photoUrl} alt={display} />
-            ) : null}
-            <AvatarFallback className="bg-muted text-muted-foreground text-[9px] font-medium">
-              {initialsOf(member.email)}
-            </AvatarFallback>
-          </Avatar>
-        </SimpleTooltip>
-        <Type
-          muted={variant === "card"}
-          small
-          className="truncate"
-          title={display}
-        >
-          {variant === "card" ? `Created by ${display}` : display}
-        </Type>
-      </div>
+      <SimpleTooltip tooltip={display}>
+        <IdentityCell
+          name={variant === "card" ? `Created by ${display}` : display}
+          imageUrl={member.photoUrl}
+          fallbackIcon={getInitials(member.email, "email")}
+          size="sm"
+          className={cn(
+            variant === "card" && "text-muted-foreground",
+            className,
+          )}
+        />
+      </SimpleTooltip>
     );
   }
 
@@ -89,15 +73,11 @@ export function AssistantOwner({
       : "No owner";
 
   return (
-    <div className={container}>
-      <Avatar className="size-5">
-        <AvatarFallback className="bg-muted text-muted-foreground/60">
-          <Icon className="size-3" />
-        </AvatarFallback>
-      </Avatar>
-      <Type muted small className="truncate" title={label}>
-        {label}
-      </Type>
-    </div>
+    <IdentityCell
+      name={label}
+      fallbackIcon={<Icon className="size-3" />}
+      size="sm"
+      className={cn("text-muted-foreground", className)}
+    />
   );
 }

@@ -1,7 +1,6 @@
 import {
   ActionBadge,
   ActionDot,
-  AuditFeedFooter,
   DateGroupHeader,
   FacetSelect,
 } from "@/components/auditlogs/feed";
@@ -11,6 +10,7 @@ import {
   type TimestampMode,
 } from "@/lib/audit-log-feed";
 import { Heading } from "@/components/ui/heading";
+import { LoadMoreFooter } from "@/components/ui/load-more-footer";
 import { Type } from "@/components/ui/type";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
@@ -257,17 +257,19 @@ export function AssistantsAuditLog(): React.JSX.Element {
           </div>
         )}
 
-        <AuditFeedFooter
-          count={logs.length}
-          noun="tool call"
-          hasNextPage={hasNextPage ?? false}
-          isFetching={isFetching}
-          isFetchingNextPage={isFetchingNextPage}
-          onLoadMore={() => {
-            void fetchNextPage();
-          }}
-          endLabel="End of assistant activity"
-        />
+        {(logs.length > 0 || isFetchingNextPage) && (
+          <LoadMoreFooter
+            shown={logs.length}
+            noun="tool calls"
+            hasMore={hasNextPage ?? false}
+            isLoading={isFetchingNextPage}
+            isRefreshing={isFetching}
+            onLoadMore={() => {
+              void fetchNextPage();
+            }}
+            endLabel="End of assistant activity"
+          />
+        )}
       </div>
     </div>
   );

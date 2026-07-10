@@ -3,6 +3,7 @@ import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/opera
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
 import { SessionRow } from "@/components/sessions/SessionRow";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadMoreButton } from "@/components/ui/load-more-footer";
 import { Button } from "@/components/ui/moonshine";
 import { SettingsSection } from "../../SettingsSection";
 
@@ -60,18 +61,12 @@ export function UserSessionsList({
           ))}
         </ul>
       )}
-      {hasNextPage && (
-        <div className="flex justify-center pt-2">
-          <Button
-            variant="tertiary"
-            size="sm"
-            disabled={isFetchingNextPage}
-            onClick={() => void fetchNextPage()}
-          >
-            {isFetchingNextPage ? "Loading…" : "Load more"}
-          </Button>
-        </div>
-      )}
+      <LoadMoreButton
+        hasMore={hasNextPage}
+        isLoading={isFetchingNextPage}
+        onLoadMore={() => void fetchNextPage()}
+        className="pt-2"
+      />
     </>
   );
 }

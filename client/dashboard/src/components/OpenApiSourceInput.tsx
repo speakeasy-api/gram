@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { toastError } from "@/lib/toast-error";
 import { Button, Stack } from "@/components/ui/moonshine";
 import { LinkIcon, TerminalIcon, UploadIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -51,9 +52,7 @@ export function OpenApiSourceInput({
       }
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to fetch URL",
-      );
+      toastError(error, "Failed to fetch URL");
     },
   });
 

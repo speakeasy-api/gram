@@ -1,4 +1,4 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { IdentityCell } from "@/components/ui/identity-cell";
 import {
   Sheet,
   SheetContent,
@@ -17,15 +17,6 @@ import { useRoles } from "@gram/client/react-query/roles.js";
 import { Badge, Button, Column, Table } from "@/components/ui/moonshine";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { useMemo, useState, ReactElement } from "react";
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
 
 type AccessLevel = "full" | "server" | "tools" | "none";
 
@@ -311,27 +302,11 @@ export function MCPTeamAccessTab({
       header: "Member",
       width: "280px",
       render: (row) => (
-        <div className="flex items-center gap-3">
-          <Avatar className="h-8 w-8">
-            {row.member.photoUrl && (
-              <AvatarImage src={row.member.photoUrl} alt={row.member.name} />
-            )}
-            <AvatarFallback className="text-xs">
-              {getInitials(row.member.name)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <Type variant="body" className="truncate font-medium">
-              {row.member.name}
-            </Type>
-            <Type
-              variant="body"
-              className="text-muted-foreground truncate text-xs"
-            >
-              {row.member.email}
-            </Type>
-          </div>
-        </div>
+        <IdentityCell
+          name={row.member.name}
+          subtitle={row.member.email}
+          imageUrl={row.member.photoUrl}
+        />
       ),
     },
     {

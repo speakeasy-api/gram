@@ -26,7 +26,7 @@ function SettingsLayoutRoot({
 }: {
   children: React.ReactNode;
   className?: string;
-}) {
+}): JSX.Element {
   return <Layout className={className}>{children}</Layout>;
 }
 

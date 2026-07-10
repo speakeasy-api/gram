@@ -16,9 +16,13 @@ import {
   GeminiIcon,
   HookSourceIcon,
 } from "../hooks/HookSourceIcon";
+import { Sparkline } from "@/components/chart/Sparkline";
+import {
+  trendDirection,
+  trendOf,
+  TREND_COLOR,
+} from "@/components/chart/sparkline-math";
 import { Gutter, SortHeader, SUBGRID_ROW_CLASS } from "./gridTable";
-import { Sparkline } from "./Sparkline";
-import { trendDirection, trendOf } from "./sparkline-math";
 import {
   costMeasureLabel,
   ESTIMATED_COST_TOOLTIP,
@@ -97,10 +101,6 @@ function InfoTooltip({ text }: { text: string }): JSX.Element {
     </Tooltip>
   );
 }
-
-const GREEN = "#10b981";
-const RED = "#f43f5e";
-const GREY = "#94a3b8";
 
 function displayValue(groupValue: string): string {
   return groupValue === "" ? "(unset)" : groupValue;
@@ -389,9 +389,9 @@ export function CostTable({
           <LegendTooltip
             intro="over the selected range"
             items={[
-              { key: "Green", label: "trending down", color: GREEN },
-              { key: "Red", label: "trending up", color: RED },
-              { key: "Grey", label: "no clear trend", color: GREY },
+              { key: "Green", label: "trending down", color: TREND_COLOR.down },
+              { key: "Red", label: "trending up", color: TREND_COLOR.up },
+              { key: "Grey", label: "no clear trend", color: TREND_COLOR.flat },
             ]}
           />
         </span>
@@ -483,7 +483,12 @@ export function CostTable({
                 {(row.measures.totalTokens ?? 0).toLocaleString()}
               </span>
               <span className="flex">
-                <Sparkline values={seriesByGroup.get(row.groupValue) ?? []} />
+                <Sparkline
+                  data={seriesByGroup.get(row.groupValue) ?? []}
+                  trendColor
+                  width={96}
+                  height={28}
+                />
               </span>
               <Gutter />
             </button>

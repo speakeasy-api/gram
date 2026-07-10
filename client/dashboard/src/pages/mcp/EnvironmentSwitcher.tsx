@@ -11,6 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { StatusDot } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/moonshine";
@@ -191,10 +192,7 @@ export function EnvironmentSwitcher({
         {hasAnyUserEdits ? (
           <>
             {/* Unsaved changes indicator */}
-            <span className="flex items-center gap-1.5 text-xs font-medium text-amber-600">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
-              Unsaved changes
-            </span>
+            <StatusDot tone="warning" pulse size="sm" label="Unsaved changes" />
 
             {/* Cancel button - only for existing configs */}
             {hasExistingConfigs && (

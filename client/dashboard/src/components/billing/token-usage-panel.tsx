@@ -10,6 +10,7 @@ import {
   Legend,
   LinearScale,
 } from "chart.js";
+import { seriesPalette, withAlpha } from "@/components/chart/chart-theme";
 import { useTheme } from "@/components/ui/moonshine";
 import { Info } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -18,7 +19,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
-  CHART_COLORS,
   CLEAN_COLOR,
   OTHER_COLOR,
   RISKY_COLOR,
@@ -287,18 +287,24 @@ function seriesStacks(
 }
 
 // The bar color for a stack: risk mode uses a fixed risky/clean pair, the
-// client-side "Other" roll-up stays neutral, everything else walks the palette.
-function stackColor(label: string, index: number, stackBy: StackMode): string {
+// client-side "Other" roll-up stays neutral, everything else walks the
+// shared chart series palette.
+function stackColor(
+  label: string,
+  index: number,
+  stackBy: StackMode,
+  palette: string[],
+): string {
   if (stackBy === "risk") {
     return index === 0 ? RISKY_COLOR : CLEAN_COLOR;
   }
   if (label === "Other") return OTHER_COLOR;
-  return CHART_COLORS[index % CHART_COLORS.length]!;
+  return palette[index % palette.length]!;
 }
 
-// A 6-digit hex color with ~13% alpha, for de-emphasizing non-hovered series.
-function dimmed(hex: string): string {
-  return `${hex}22`;
+// ~13% alpha, for de-emphasizing non-hovered series.
+function dimmed(color: string): string {
+  return withAlpha(color, 0.13);
 }
 
 export function TokenUsagePanel({
@@ -324,6 +330,9 @@ export function TokenUsagePanel({
   // without it.
   onSelectRange?: (start: Date, end: Date) => void;
 }): JSX.Element {
+  // Identity colors, resolved once — theme-invariant like the rest of the
+  // chart system's series palette.
+  const palette = useMemo(() => seriesPalette(), []);
   const [granularity, setGranularity] = useState<Granularity>("day");
   const [cumulative, setCumulative] = useState(false);
   // Series hidden via the legend, keyed by label so toggles survive
@@ -373,7 +382,7 @@ export function TokenUsagePanel({
           values[j] = values[j]! + values[j - 1]!;
         }
       }
-      const base = stackColor(s.label, i, effectiveStackBy);
+      const base = stackColor(s.label, i, effectiveStackBy, palette);
       return {
         label: s.label,
         data: values,
@@ -398,6 +407,7 @@ export function TokenUsagePanel({
     cumulative,
     focusLabel,
     hiddenLabels,
+    palette,
   ]);
 
   const hasData = chart.data.datasets.length > 0;
@@ -616,6 +626,7 @@ export function TokenUsagePanel({
                           d.label,
                           i,
                           effectiveStackBy,
+                          palette,
                         ),
                       }}
                     />

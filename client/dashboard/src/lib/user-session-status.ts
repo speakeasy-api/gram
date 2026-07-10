@@ -29,22 +29,19 @@ export function sessionStatus(session: UserSession): SessionStatus {
 
 export const STATUS_PRESENTATION: Record<
   SessionStatus,
-  { label: string; badgeVariant: BadgeVariant; dotClass: string }
+  { label: string; badgeVariant: BadgeVariant }
 > = {
   active: {
     label: "Active",
     badgeVariant: "success",
-    dotClass: "bg-emerald-500",
   },
   expired: {
     label: "Expired",
     badgeVariant: "neutral",
-    dotClass: "bg-muted-foreground",
   },
   revoked: {
     label: "Revoked",
     badgeVariant: "destructive",
-    dotClass: "bg-destructive",
   },
 };
 

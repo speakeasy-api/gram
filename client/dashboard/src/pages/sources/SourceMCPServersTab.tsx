@@ -1,9 +1,26 @@
 import { Card } from "@/components/ui/card";
+import { StatusDot, type StatusDotTone } from "@/components/ui/status-dot";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { Badge, Button } from "@/components/ui/moonshine";
 import { ArrowRight, Network, Server } from "lucide-react";
+
+type McpServerCardStatus = "public" | "private" | "disabled";
+
+const MCP_SERVER_STATUS_PRESENTATION: Record<
+  McpServerCardStatus,
+  { label: string; tone: StatusDotTone; pulse: boolean }
+> = {
+  public: { label: "Public", tone: "success", pulse: true },
+  private: { label: "Private", tone: "success", pulse: true },
+  disabled: { label: "Disabled", tone: "destructive", pulse: false },
+};
+
+function mcpServerCardStatus(toolset: ToolsetEntry): McpServerCardStatus {
+  if (!toolset.mcpEnabled) return "disabled";
+  return toolset.mcpIsPublic ? "public" : "private";
+}
 
 function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
@@ -35,23 +52,9 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
           </Type>
         )}
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <div className="flex items-center gap-2">
-            <div className="relative flex h-2.5 w-2.5">
-              {toolset.mcpEnabled && (
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-              )}
-              <span
-                className={`relative inline-flex h-2.5 w-2.5 rounded-full ${toolset.mcpEnabled ? "bg-green-500" : "bg-red-500"}`}
-              />
-            </div>
-            <Type variant="small" muted>
-              {toolset.mcpEnabled
-                ? toolset.mcpIsPublic
-                  ? "Public"
-                  : "Private"
-                : "Disabled"}
-            </Type>
-          </div>
+          <StatusDot
+            {...MCP_SERVER_STATUS_PRESENTATION[mcpServerCardStatus(toolset)]}
+          />
           <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
             <span>Open</span>
             <ArrowRight className="h-3.5 w-3.5" />

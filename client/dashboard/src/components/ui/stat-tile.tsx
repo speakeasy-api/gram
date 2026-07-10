@@ -26,6 +26,10 @@ export interface StatTileProps {
   className?: string;
   /** Escape hatch for callers that need a different value size/weight. */
   valueClassName?: string;
+  /** Optional inline graphic (typically a chart/Sparkline) rendered beside
+   * the value/delta row — e.g. a trend line backing up the headline number.
+   * Hidden while `isLoading`. */
+  sparkline?: React.ReactNode;
 }
 
 // `text-default-{success,warning}` (not the bare `text-success`/`text-warning`
@@ -61,6 +65,7 @@ export function StatTile({
   isLoading = false,
   className,
   valueClassName,
+  sparkline,
 }: StatTileProps): React.JSX.Element {
   let captionNode: React.ReactNode = null;
   if (isLoading) {
@@ -78,30 +83,33 @@ export function StatTile({
       <div className="font-mono text-xs uppercase tracking-[0.08em] text-muted">
         {isLoading ? <Skeleton className="h-3 w-20" /> : label}
       </div>
-      <div className="flex items-baseline gap-2">
-        {isLoading ? (
-          <Skeleton className="h-10 w-24" />
-        ) : (
-          <span
-            className={cn(
-              "font-display text-4xl font-thin tabular-nums sm:text-5xl",
-              valueToneClasses[tone],
-              valueClassName,
-            )}
-          >
-            {value}
-          </span>
-        )}
-        {!isLoading && delta && (
-          <span
-            className={cn(
-              "font-sans text-sm font-light",
-              deltaToneClasses[delta.tone ?? "neutral"],
-            )}
-          >
-            {delta.value}
-          </span>
-        )}
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="flex items-baseline gap-2">
+          {isLoading ? (
+            <Skeleton className="h-10 w-24" />
+          ) : (
+            <span
+              className={cn(
+                "font-display text-4xl font-thin tabular-nums sm:text-5xl",
+                valueToneClasses[tone],
+                valueClassName,
+              )}
+            >
+              {value}
+            </span>
+          )}
+          {!isLoading && delta && (
+            <span
+              className={cn(
+                "font-sans text-sm font-light",
+                deltaToneClasses[delta.tone ?? "neutral"],
+              )}
+            >
+              {delta.value}
+            </span>
+          )}
+        </div>
+        {!isLoading && sparkline && <div className="shrink-0">{sparkline}</div>}
       </div>
       {captionNode}
     </div>

@@ -28,7 +28,6 @@ import {
   PointElement,
   Tooltip,
   type ChartOptions,
-  type ChartType,
   type TooltipItem,
 } from "chart.js";
 import ZoomPlugin from "chartjs-plugin-zoom";
@@ -227,10 +226,16 @@ export function chartTicks(): _SharedScale["ticks"] {
  * hovered point's x value (expected to be a millisecond timestamp on a
  * linear/time x scale) as "Jan 5, 2:00 PM", mirroring the
  * `formatChartZoomRangeLabel` date format already used for the zoom-range
- * label in chartUtils.ts.
+ * label in chartUtils.ts. Typed against `"line"` (rather than the broad
+ * `ChartType` union) because Chart.js's `TooltipItem<T>["parsed"]` collapses
+ * to an intersection — not a union — when `T` is a multi-member union,
+ * which breaks assignability into a concrete `ChartOptions<"line">` tooltip
+ * config. `<Timeseries>` always renders via `<Chart type="line" .../>`
+ * (bar/stacked-bar datasets override their own `type` per-dataset), so
+ * `"line"` covers every real call site.
  */
 export function timeTitleFormatter(
-  items: readonly TooltipItem<ChartType>[],
+  items: readonly TooltipItem<"line">[],
 ): string {
   const first = items[0];
   if (!first) return "";

@@ -57,6 +57,20 @@ export const WithLinks: Story = {
   ),
 };
 
+export const WithSelectHandler: Story = {
+  render: () => (
+    <div className="max-w-md">
+      <RankedBar
+        items={buildItems().map((item) => ({
+          ...item,
+          onSelect: () => alert(item.label),
+        }))}
+        colorMode="rank-gradient"
+      />
+    </div>
+  ),
+};
+
 export const CustomValueFormat: Story = {
   render: () => (
     <div className="max-w-md">

@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadMoreButton } from "@/components/ui/load-more-footer";
 import { Type } from "@/components/ui/type";
 import { Button } from "@/components/ui/moonshine";
 import { useOrganization, useProject } from "@/contexts/Auth";
@@ -335,18 +336,11 @@ function UserSessionsInner(): JSX.Element {
 
           {listBody}
 
-          {hasNextPage && (
-            <div className="flex justify-center">
-              <Button
-                variant="tertiary"
-                size="sm"
-                disabled={isFetchingNextPage}
-                onClick={() => void fetchNextPage()}
-              >
-                {isFetchingNextPage ? "Loading…" : "Load more"}
-              </Button>
-            </div>
-          )}
+          <LoadMoreButton
+            hasMore={hasNextPage}
+            isLoading={isFetchingNextPage}
+            onLoadMore={() => void fetchNextPage()}
+          />
         </div>
 
         <RevokeSessionsDialog

@@ -1,5 +1,6 @@
 import { CopyButton } from "@/components/ui/copy-button";
 import { DotRow } from "@/components/ui/dot-row";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
@@ -162,19 +163,19 @@ export function MCPTableRowSkeleton(): JSX.Element {
   return (
     <DotRow>
       <td className="px-3 py-3">
-        <div className="bg-muted h-4 w-2/3 animate-pulse rounded" />
+        <Skeleton className="h-4 w-2/3" />
       </td>
       <td className="px-3 py-3">
         <div className="flex items-center gap-2">
-          <div className="bg-muted h-2 w-2 animate-pulse rounded-full" />
-          <div className="bg-muted h-3.5 w-12 animate-pulse rounded" />
+          <Skeleton className="h-2 w-2 rounded-full" />
+          <Skeleton className="h-3.5 w-12" />
         </div>
       </td>
       <td className="px-3 py-3">
-        <div className="bg-muted h-3.5 w-40 animate-pulse rounded" />
+        <Skeleton className="h-3.5 w-40" />
       </td>
       <td className="px-3 py-3">
-        <div className="bg-muted h-5 w-10 animate-pulse rounded-full" />
+        <Skeleton className="h-5 w-10" />
       </td>
     </DotRow>
   );

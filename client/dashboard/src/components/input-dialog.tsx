@@ -1,7 +1,7 @@
 import { Button, Input, Stack } from "@/components/ui/moonshine";
 import { Type } from "@/components/ui/type";
 import { useState } from "react";
-import { toast } from "sonner";
+import { toastError } from "@/lib/toast-error";
 import { Dialog } from "./ui/dialog";
 import { Label } from "./ui/label";
 import { ImageUpload } from "./upload";
@@ -81,7 +81,7 @@ export function InputDialog({
       await onSubmit?.();
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong");
+      toastError(err, "Something went wrong");
     } finally {
       setPending(false);
     }

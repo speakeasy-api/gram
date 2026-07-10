@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import {
   Collapsible,
   CollapsibleContent,
@@ -137,13 +138,11 @@ function KindBadge({ kind }: { kind: string }) {
 }
 
 function WebhookUrlPill({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyToClipboard();
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    void navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    void copy(url);
   };
   return (
     <button

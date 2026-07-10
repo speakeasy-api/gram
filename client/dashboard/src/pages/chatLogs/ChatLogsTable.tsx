@@ -2,6 +2,7 @@ import { AccountTypeIcon } from "@/components/account-type-icon";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useSession } from "@/contexts/Auth";
@@ -108,16 +109,14 @@ function CopyButton({
   label: string;
   className?: string;
 }) {
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyToClipboard();
 
   const handleCopy = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation(); // Don't trigger row selection
-      void navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      void copy(value);
     },
-    [value],
+    [value, copy],
   );
 
   return (

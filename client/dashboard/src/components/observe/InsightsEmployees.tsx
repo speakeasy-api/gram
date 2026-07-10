@@ -9,7 +9,7 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { IdentityCell } from "@/components/ui/identity-cell";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Page } from "@/components/page-layout";
@@ -537,20 +537,11 @@ function EmployeeTable({
         sortValue: (item) => item.name.toLowerCase(),
         width: "2fr",
         render: (item) => (
-          <div className="flex items-center gap-3">
-            <Avatar className="size-9">
-              {item.photoUrl && (
-                <AvatarImage src={item.photoUrl} alt={item.name} />
-              )}
-              <AvatarFallback className="text-sm font-semibold">
-                {getInitials(item.name)}
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              <p className="font-medium">{item.name}</p>
-              <p className="text-muted-foreground text-xs">{item.email}</p>
-            </div>
-          </div>
+          <IdentityCell
+            name={item.name}
+            subtitle={item.email}
+            imageUrl={item.photoUrl ?? undefined}
+          />
         ),
       },
       {
@@ -890,15 +881,6 @@ function LastActivityCell({ employee }: { employee: Employee }) {
       accounts={[employee.mostRecentAccount]}
     />
   );
-}
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 }
 
 async function fetchEmployeeUsage(

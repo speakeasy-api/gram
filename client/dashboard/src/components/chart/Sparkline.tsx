@@ -2,6 +2,7 @@
 // table cells where a full canvas chart would be overkill. Colored by trend
 // (red/green/neutral, first-vs-last) when `trendColor` is set; otherwise a
 // fixed `color` or `currentColor`. Series math lives in ./sparkline-math.
+import { cn } from "@/components/ui/moonshine";
 import {
   DRAW_POINTS,
   movingAverage,
@@ -24,6 +25,10 @@ export type SparklineProps = {
   width?: number;
   height?: number;
   strokeWidth?: number;
+  /** Extra classes on the `<svg>` — e.g. `"h-20 w-full"` to stretch a hero
+   * chart to fill its container. `preserveAspectRatio="none"` (always set)
+   * makes that stretch fill the box exactly rather than letterbox. */
+  className?: string;
 };
 
 export function Sparkline({
@@ -34,6 +39,7 @@ export function Sparkline({
   width = 120,
   height = 32,
   strokeWidth = 1.5,
+  className,
 }: SparklineProps): JSX.Element | null {
   const usable = data.filter((v) => Number.isFinite(v));
   if (usable.length < 2 || usable.every((v) => v === 0)) {
@@ -73,9 +79,10 @@ export function Sparkline({
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
       fill="none"
       aria-hidden="true"
-      className="overflow-visible"
+      className={cn("overflow-visible", className)}
     >
       {areaPath && (
         <path d={areaPath} fill={lineColor} fillOpacity={0.16} stroke="none" />

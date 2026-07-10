@@ -92,6 +92,44 @@ export const EndOfList: Story = {
   },
 };
 
+export const CustomEndLabel: Story = {
+  render: () => {
+    const rows = Array.from({ length: 3 }, () => faker.commerce.productName());
+    return (
+      <div className="max-w-md">
+        <DemoList rows={rows} />
+        <LoadMoreFooter
+          shown={3}
+          total={3}
+          noun="findings"
+          hasMore={false}
+          endLabel="All results loaded"
+          onLoadMore={() => {}}
+        />
+      </div>
+    );
+  },
+};
+
+export const Refreshing: Story = {
+  render: () => {
+    const rows = Array.from({ length: 3 }, () => faker.commerce.productName());
+    return (
+      <div className="max-w-md">
+        <DemoList rows={rows} />
+        <LoadMoreFooter
+          shown={3}
+          total={3}
+          noun="audit logs"
+          hasMore={false}
+          isRefreshing
+          onLoadMore={() => {}}
+        />
+      </div>
+    );
+  },
+};
+
 export const UnknownTotal: Story = {
   render: () => {
     const rows = Array.from({ length: 4 }, () => faker.commerce.productName());
