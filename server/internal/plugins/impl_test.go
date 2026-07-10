@@ -97,6 +97,25 @@ func TestPluginsService_CreatePlugin(t *testing.T) {
 	require.Equal(t, "engineering-tools", result.Slug)
 }
 
+// A new plugin defaults to the org wildcard so it delivers to every member
+// (agent.getPlugins scopes delivery by assignment; without a default an
+// unassigned plugin would reach no one).
+func TestPluginsService_CreatePlugin_DefaultsToWildcardAssignment(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	created, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{
+		Name: "Defaulted Plugin",
+	})
+	require.NoError(t, err)
+
+	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.Len(t, fetched.Assignments, 1)
+	require.Equal(t, "*", fetched.Assignments[0].PrincipalUrn)
+}
+
 func TestPluginsService_CreatePlugin_DuplicateSlugReturnsConflict(t *testing.T) {
 	t.Parallel()
 

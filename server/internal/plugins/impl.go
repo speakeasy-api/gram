@@ -417,6 +417,19 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "create plugin").LogError(ctx, s.logger)
 	}
 
+	// Default a new plugin to the org wildcard so it delivers to every member,
+	// mirroring the pre-scoping behavior (agent.getPlugins scopes delivery by
+	// assignment; an unassigned plugin reaches no one). Admins narrow the
+	// audience from the assignment UI. Gram has no project-scoped membership, so
+	// "*" (all org members) is the closest "everyone on this project" primitive.
+	if _, err := s.repo.WithTx(tx).AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
+		PluginID:       plugin.ID,
+		OrganizationID: ac.ActiveOrganizationID,
+		PrincipalUrn:   urn.PrincipalWildcard,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "assign new plugin to org").LogError(ctx, s.logger)
+	}
+
 	if err := s.audit.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        *ac.ProjectID,
