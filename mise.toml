@@ -274,6 +274,11 @@ GRAM_ADMIN_ENCRYPTION_KEY = "unset"
 GRAM_ADMIN_OIDC_EMULATOR_HOST = "localhost"
 GRAM_ADMIN_OIDC_EMULATOR_PORT = "4000"
 GRAM_ADMIN_OIDC_EMULATOR_URL = "http://{{env.GRAM_ADMIN_OIDC_EMULATOR_HOST}}:{{env.GRAM_ADMIN_OIDC_EMULATOR_PORT}}"
+# The mock OIDC emulator (start:mock-oidc) derives its listen address and issuer
+# from the admin OIDC emulator port/URL so `zero:remap-ports` remaps them per
+# worktree. Keep these as dependents of the two variables above.
+MOCK_OIDC_ADDRESS = ":{{env.GRAM_ADMIN_OIDC_EMULATOR_PORT}}"
+MOCK_OIDC_ISSUER = "{{env.GRAM_ADMIN_OIDC_EMULATOR_URL}}"
 GRAM_ADMIN_OIDC_CLIENT_ID = "gram-local.apps.googleusercontent.com"
 GRAM_ADMIN_OIDC_CLIENT_SECRET = "GOCSPX-example_secret"
 GRAM_ADMIN_ALLOWED_HDS = "speakeasyapi.dev,speakeasy.com"

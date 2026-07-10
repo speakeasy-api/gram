@@ -22,4 +22,7 @@ provider:
       client_secret: GOCSPX-example_secret
       name: Gram (Google)
       redirect_uris:
-        - "https://localhost:8083/admin/auth.callback"
+        # GRAM_ADMIN_SERVER_URL defaults to https://localhost:8083 and is
+        # remapped per worktree by zero:remap-ports. Falls back to the bare
+        # path if the variable is unset.
+        - "${GRAM_ADMIN_SERVER_URL}/admin/auth.callback"

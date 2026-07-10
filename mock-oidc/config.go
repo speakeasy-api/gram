@@ -50,6 +50,15 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 
+	// Redirect URIs may reference environment variables (e.g.
+	// "${GRAM_ADMIN_SERVER_URL}/admin/auth.callback") so they track the
+	// consumer's port when it is remapped per worktree by zero:remap-ports.
+	for i := range cfg.Provider.OAuthClients {
+		for j, uri := range cfg.Provider.OAuthClients[i].RedirectURIs {
+			cfg.Provider.OAuthClients[i].RedirectURIs[j] = os.ExpandEnv(uri)
+		}
+	}
+
 	if len(cfg.Provider.Users) == 0 {
 		return nil, fmt.Errorf("config has no users")
 	}
