@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
@@ -1358,48 +1359,71 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 	}
 
 	window := riskOverviewWindowParams(from, to)
-	counts, err := s.repo.GetRiskOverviewCounts(ctx, repo.GetRiskOverviewCountsParams{
-		ProjectID: *authCtx.ProjectID,
-		FromTime:  window.from,
-		ToTime:    window.to,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview counts").LogError(ctx, s.logger)
-	}
+	// Keep the production-dominant counts query off the critical path of the
+	// findings queries while capping each request at three database connections.
+	var (
+		counts         repo.GetRiskOverviewCountsRow
+		countsErr      error
+		userRows       []repo.ListRiskOverviewTopUsersRow
+		usersErr       error
+		timeSeriesRows []repo.ListRiskOverviewTimeSeriesFindingsRow
+		timeSeriesErr  error
+		ruleRows       []repo.ListRiskOverviewTopRulesRow
+		rulesErr       error
+		queries        sync.WaitGroup
+	)
 
-	userRows, err := s.repo.ListRiskOverviewTopUsers(ctx, repo.ListRiskOverviewTopUsersParams{
-		ProjectID: *authCtx.ProjectID,
-		FromTime:  window.from,
-		ToTime:    window.to,
-		// Returns enough rows for the "view all users" page to show the full
-		// long-tail without pagination. The main /risk-overview widget only
-		// renders the top 10 of these.
-		RowLimit: 200,
+	queries.Go(func() {
+		counts, countsErr = s.repo.GetRiskOverviewCounts(ctx, repo.GetRiskOverviewCountsParams{
+			ProjectID: *authCtx.ProjectID,
+			FromTime:  window.from,
+			ToTime:    window.to,
+		})
 	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top users").LogError(ctx, s.logger)
-	}
+	queries.Go(func() {
+		userRows, usersErr = s.repo.ListRiskOverviewTopUsers(ctx, repo.ListRiskOverviewTopUsersParams{
+			ProjectID: *authCtx.ProjectID,
+			FromTime:  window.from,
+			ToTime:    window.to,
+			// Returns enough rows for the "view all users" page to show the full
+			// long-tail without pagination. The main /risk-overview widget only
+			// renders the top 10 of these.
+			RowLimit: 200,
+		})
+	})
+	queries.Go(func() {
+		timeSeriesRows, timeSeriesErr = s.repo.ListRiskOverviewTimeSeriesFindings(ctx, repo.ListRiskOverviewTimeSeriesFindingsParams{
+			ProjectID: *authCtx.ProjectID,
+			FromTime:  window.from,
+			ToTime:    window.to,
+		})
+		if timeSeriesErr != nil {
+			return
+		}
 
-	timeSeriesRows, err := s.repo.ListRiskOverviewTimeSeriesFindings(ctx, repo.ListRiskOverviewTimeSeriesFindingsParams{
-		ProjectID: *authCtx.ProjectID,
-		FromTime:  window.from,
-		ToTime:    window.to,
+		ruleRows, rulesErr = s.repo.ListRiskOverviewTopRules(ctx, repo.ListRiskOverviewTopRulesParams{
+			ProjectID: *authCtx.ProjectID,
+			FromTime:  window.from,
+			ToTime:    window.to,
+			// Returns enough rows for the "view all rules" page to show the long
+			// tail without pagination. The main /risk-overview widget only renders
+			// the top 10 of these.
+			RowLimit: 200,
+		})
 	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview time series findings").LogError(ctx, s.logger)
-	}
+	queries.Wait()
 
-	ruleRows, err := s.repo.ListRiskOverviewTopRules(ctx, repo.ListRiskOverviewTopRulesParams{
-		ProjectID: *authCtx.ProjectID,
-		FromTime:  window.from,
-		ToTime:    window.to,
-		// Returns enough rows for the "view all rules" page to show the long
-		// tail without pagination. The main /risk-overview widget only renders
-		// the top 10 of these.
-		RowLimit: 200,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top rules").LogError(ctx, s.logger)
+	if countsErr != nil {
+		return nil, oops.E(oops.CodeUnexpected, countsErr, "get risk overview counts").LogError(ctx, s.logger)
+	}
+	if usersErr != nil {
+		return nil, oops.E(oops.CodeUnexpected, usersErr, "list risk overview top users").LogError(ctx, s.logger)
+	}
+	if timeSeriesErr != nil {
+		return nil, oops.E(oops.CodeUnexpected, timeSeriesErr, "list risk overview time series findings").LogError(ctx, s.logger)
+	}
+	if rulesErr != nil {
+		return nil, oops.E(oops.CodeUnexpected, rulesErr, "list risk overview top rules").LogError(ctx, s.logger)
 	}
 
 	topCategories := riskOverviewTopCategories(timeSeriesRows, 10)
