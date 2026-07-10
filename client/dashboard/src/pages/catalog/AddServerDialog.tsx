@@ -1332,7 +1332,7 @@ function SingleServerNextSteps({
             </div>
             <div className="flex-1">
               <Type className="text-sm font-medium no-underline">
-                Connect via Claude, Cursor
+                Connect via Claude, Cursor, Codex
               </Type>
             </div>
             <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
