@@ -731,16 +731,10 @@ func (q *Queries) GetChatMessageStats(ctx context.Context, arg GetChatMessageSta
 }
 
 const getChatMetricsSummary = `-- name: GetChatMetricsSummary :one
-WITH chat_stats AS (
+WITH chat_stats AS MATERIALIZED (
   SELECT
     c.id as chat_id,
-    MIN(m.created_at) as first_message_at,
-    MAX(m.created_at) as last_message_at,
-    EXTRACT(EPOCH FROM (MAX(m.created_at) - MIN(m.created_at))) * 1000 as duration_ms,
-    COALESCE(
-      (SELECT resolution FROM chat_resolutions WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1),
-      ''
-    ) as resolution_status
+    EXTRACT(EPOCH FROM (MAX(m.created_at) - MIN(m.created_at))) * 1000 as duration_ms
   FROM chats c
   INNER JOIN chat_messages m ON m.chat_id = c.id
   WHERE c.project_id = $1
@@ -748,14 +742,24 @@ WITH chat_stats AS (
     AND m.created_at >= $2
     AND m.created_at <= $3
   GROUP BY c.id
+),
+latest_resolutions AS (
+  SELECT DISTINCT ON (cr.chat_id)
+    cr.chat_id,
+    cr.resolution
+  FROM chat_resolutions cr
+  INNER JOIN chat_stats cs ON cs.chat_id = cr.chat_id
+  WHERE cr.project_id = $1
+  ORDER BY cr.chat_id, cr.created_at DESC
 )
 SELECT
   COUNT(*)::bigint as total_chats,
-  COALESCE(SUM(CASE WHEN resolution_status = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
-  COALESCE(SUM(CASE WHEN resolution_status = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
-  COALESCE(AVG(duration_ms), 0)::double precision as avg_session_duration_ms,
-  COALESCE(AVG(CASE WHEN resolution_status != '' THEN duration_ms END), 0)::double precision as avg_resolution_time_ms
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolutions.resolution, '') = 'success' THEN 1 ELSE 0 END), 0)::bigint as resolved_chats,
+  COALESCE(SUM(CASE WHEN COALESCE(latest_resolutions.resolution, '') = 'failure' THEN 1 ELSE 0 END), 0)::bigint as failed_chats,
+  COALESCE(AVG(chat_stats.duration_ms), 0)::double precision as avg_session_duration_ms,
+  COALESCE(AVG(CASE WHEN COALESCE(latest_resolutions.resolution, '') != '' THEN chat_stats.duration_ms END), 0)::double precision as avg_resolution_time_ms
 FROM chat_stats
+LEFT JOIN latest_resolutions ON latest_resolutions.chat_id = chat_stats.chat_id
 `
 
 type GetChatMetricsSummaryParams struct {
@@ -772,6 +776,8 @@ type GetChatMetricsSummaryRow struct {
 	AvgResolutionTimeMs  float64
 }
 
+// Aggregate the requested chat window first so resolution selection does not
+// sort unrelated project history for empty or narrow windows.
 func (q *Queries) GetChatMetricsSummary(ctx context.Context, arg GetChatMetricsSummaryParams) (GetChatMetricsSummaryRow, error) {
 	row := q.db.QueryRow(ctx, getChatMetricsSummary, arg.ProjectID, arg.TimeStart, arg.TimeEnd)
 	var i GetChatMetricsSummaryRow
