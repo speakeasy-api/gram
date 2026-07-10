@@ -13,6 +13,7 @@ import (
 	"github.com/ettle/strcase"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/lo"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -57,6 +58,75 @@ type externalMCPHeaderDefinition struct {
 	Placeholder *string `json:"placeholder,omitempty"`
 }
 
+func groupDefinitionsByToolsetURN[T any](
+	urnsByToolsetID map[uuid.UUID][]string,
+	definitions []T,
+	urnOf func(T) string,
+) map[uuid.UUID][]T {
+	toolsetIDsByURN := make(map[string][]uuid.UUID)
+	for toolsetID, urns := range urnsByToolsetID {
+		for _, urn := range urns {
+			toolsetIDsByURN[urn] = append(toolsetIDsByURN[urn], toolsetID)
+		}
+	}
+
+	result := make(map[uuid.UUID][]T, len(urnsByToolsetID))
+	for _, definition := range definitions {
+		for _, toolsetID := range toolsetIDsByURN[urnOf(definition)] {
+			result[toolsetID] = append(result[toolsetID], definition)
+		}
+	}
+
+	return result
+}
+
+func selectHTTPDefinitionsByToolset(
+	toolUrnsByToolsetID map[uuid.UUID][]string,
+	definitions []tr.FindHttpToolEntriesByUrnRow,
+) map[uuid.UUID][]tr.FindHttpToolEntriesByUrnRow {
+	grouped := groupDefinitionsByToolsetURN(
+		toolUrnsByToolsetID,
+		definitions,
+		func(definition tr.FindHttpToolEntriesByUrnRow) string { return definition.ToolUrn.String() },
+	)
+
+	result := make(map[uuid.UUID][]tr.FindHttpToolEntriesByUrnRow, len(grouped))
+	for toolsetID, toolsetDefinitions := range grouped {
+		seenNames := make(map[string]struct{}, len(toolsetDefinitions))
+		for _, definition := range toolsetDefinitions {
+			if _, ok := seenNames[definition.Name]; ok {
+				continue
+			}
+			seenNames[definition.Name] = struct{}{}
+			result[toolsetID] = append(result[toolsetID], definition)
+		}
+	}
+
+	return result
+}
+
+func validateToolsetEntriesInputs(projectID ProjectID, toolsets []tsr.Toolset) error {
+	pid := uuid.UUID(projectID)
+	if pid == uuid.Nil {
+		return errors.New("project ID must be set")
+	}
+	if len(toolsets) == 0 {
+		return nil
+	}
+
+	organizationID := toolsets[0].OrganizationID
+	for _, toolset := range toolsets {
+		if toolset.ProjectID != pid {
+			return errors.New("DescribeToolsetEntries requires all toolsets to belong to the same project")
+		}
+		if toolset.OrganizationID != organizationID {
+			return errors.New("DescribeToolsetEntries requires all toolsets to belong to the same organization")
+		}
+	}
+
+	return nil
+}
+
 // DescribeToolsetEntries builds the full ToolsetEntry view for every given
 // toolset in a fixed number of DB round trips, regardless of toolset count.
 // It replicates DescribeToolsetEntry's per-field logic exactly, but fetches
@@ -67,34 +137,32 @@ type externalMCPHeaderDefinition struct {
 func DescribeToolsetEntries(
 	ctx context.Context,
 	logger *slog.Logger,
-	tx DBTX,
+	db *pgxpool.Pool,
 	projectID ProjectID,
 	toolsets []tsr.Toolset,
 	platformExtras ...platformtools.ExternalTool,
 ) ([]*types.ToolsetEntry, error) {
 	pid := uuid.UUID(projectID)
+	if err := validateToolsetEntriesInputs(projectID, toolsets); err != nil {
+		return nil, oops.E(oops.CodeInvariantViolation, err, "invalid DescribeToolsetEntries inputs").LogError(ctx, logger)
+	}
 	if len(toolsets) == 0 {
 		return []*types.ToolsetEntry{}, nil
 	}
 
-	toolsetRepo := tsr.New(tx)
-	toolsRepo := tr.New(tx)
-	variationsRepo := vr.New(tx)
-	templatesRepo := templatesR.New(tx)
-	externalmcpRepo := externalmcpR.New(tx)
-	resourcesRepo := resourcesR.New(tx)
-	mcpmetadataRepo := mcpmetadataR.New(tx)
+	toolsetRepo := tsr.New(db)
+	toolsRepo := tr.New(db)
+	variationsRepo := vr.New(db)
+	templatesRepo := templatesR.New(db)
+	externalmcpRepo := externalmcpR.New(db)
+	resourcesRepo := resourcesR.New(db)
+	mcpmetadataRepo := mcpmetadataR.New(db)
 
 	toolsetIDs := make([]uuid.UUID, len(toolsets))
 	for i, ts := range toolsets {
 		toolsetIDs[i] = ts.ID
 	}
 	organizationID := toolsets[0].OrganizationID
-	for _, ts := range toolsets[1:] {
-		if ts.OrganizationID != organizationID {
-			return nil, oops.E(oops.CodeInvariantViolation, nil, "DescribeToolsetEntries requires all toolsets to belong to the same organization").LogError(ctx, logger)
-		}
-	}
 
 	// Wave 0: every query that needs nothing but toolsetIDs/projectID/
 	// organizationID — none of these depend on each other's results, so run
@@ -315,22 +383,29 @@ func DescribeToolsetEntries(
 		urnToVariedName[variation.SrcToolUrn.String()] = *n
 	}
 
-	httpDefByUrn := make(map[string]tr.FindHttpToolEntriesByUrnRow, len(httpDefs))
-	for _, def := range httpDefs {
-		httpDefByUrn[def.ToolUrn.String()] = def
-	}
+	httpDefsByToolsetID := selectHTTPDefinitionsByToolset(toolUrnsByToolsetID, httpDefs)
 	funcDefByUrn := make(map[string]tr.FindFunctionToolEntriesByUrnRow, len(funcToolDefs))
 	for _, def := range funcToolDefs {
 		funcDefByUrn[def.ToolUrn.String()] = def
 	}
+	funcDefsByToolsetID := groupDefinitionsByToolsetURN(
+		toolUrnsByToolsetID,
+		funcToolDefs,
+		func(definition tr.FindFunctionToolEntriesByUrnRow) string {
+			return definition.ToolUrn.String()
+		},
+	)
 	promptDefByUrn := make(map[string]templatesR.PeekTemplatesByUrnsRow, len(promptToolDefs))
 	for _, pt := range promptToolDefs {
 		promptDefByUrn[pt.ToolUrn.String()] = pt
 	}
-	resourceDefByUrn := make(map[string]resourcesR.FindFunctionResourceEntriesByUrnRow, len(resourceDefs))
-	for _, r := range resourceDefs {
-		resourceDefByUrn[r.ResourceUrn.String()] = r
-	}
+	resourceDefsByToolsetID := groupDefinitionsByToolsetURN(
+		resourceUrnsByToolsetID,
+		resourceDefs,
+		func(definition resourcesR.FindFunctionResourceEntriesByUrnRow) string {
+			return definition.ResourceUrn.String()
+		},
+	)
 	externalMCPDefByUrn := make(map[string]externalmcpR.GetExternalMCPToolDefinitionsByURNsRow, len(externalMCPDefs))
 	for _, d := range externalMCPDefs {
 		externalMCPDefByUrn[d.ToolUrn] = d
@@ -348,7 +423,7 @@ func DescribeToolsetEntries(
 			ServerEnvVar:        def.ServerEnvVar,
 		})
 	}
-	securityEntriesByKey, err := fetchHTTPSecurityDefinitions(ctx, tx, allEnvLookups)
+	securityEntriesByKey, err := fetchHTTPSecurityDefinitions(ctx, db, allEnvLookups)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolsets").LogError(ctx, logger)
 	}
@@ -367,33 +442,33 @@ func DescribeToolsetEntries(
 		var functionEnvVars []*types.FunctionEnvironmentVariable
 		var externalMCPHeaderDefinitions []*types.ExternalMCPHeaderDefinition
 		toolsetEnvLookups := make([]ToolEnvLookupParams, 0, len(toolUrns))
-		seen := make(map[string]bool, len(toolUrns))
+		for _, def := range funcDefsByToolsetID[toolset.ID] {
+			envVars, err := extractFunctionEnvVars(ctx, logger, def.Variables, def.AuthInput)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").LogError(ctx, logger)
+			}
+			functionEnvVars = append(functionEnvVars, envVars...)
+		}
+
+		for _, def := range httpDefsByToolsetID[toolset.ID] {
+			name := conv.Default(urnToVariedName[def.ToolUrn.String()], def.Name)
+			tools = append(tools, &types.ToolEntry{
+				Type:        types.ToolType(urn.ToolKindHTTP),
+				ID:          def.ID.String(),
+				Name:        name,
+				ToolUrn:     def.ToolUrn.String(),
+				Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
+				HTTPMethod:  &def.HttpMethod,
+			})
+			toolsetEnvLookups = append(toolsetEnvLookups, ToolEnvLookupParams{
+				DeploymentID:        def.DeploymentID,
+				OpenAPIv3DocumentID: def.Openapiv3DocumentID,
+				Security:            def.Security,
+				ServerEnvVar:        def.ServerEnvVar,
+			})
+		}
 
 		for _, toolUrn := range toolUrns {
-			if def, ok := httpDefByUrn[toolUrn]; ok {
-				if seen[def.Name] {
-					continue
-				}
-				seen[def.Name] = true
-
-				name := conv.Default(urnToVariedName[def.ToolUrn.String()], def.Name)
-				tools = append(tools, &types.ToolEntry{
-					Type:        types.ToolType(urn.ToolKindHTTP),
-					ID:          def.ID.String(),
-					Name:        name,
-					ToolUrn:     def.ToolUrn.String(),
-					Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
-					HTTPMethod:  &def.HttpMethod,
-				})
-				toolsetEnvLookups = append(toolsetEnvLookups, ToolEnvLookupParams{
-					DeploymentID:        def.DeploymentID,
-					OpenAPIv3DocumentID: def.Openapiv3DocumentID,
-					Security:            def.Security,
-					ServerEnvVar:        def.ServerEnvVar,
-				})
-				continue
-			}
-
 			if def, ok := funcDefByUrn[toolUrn]; ok {
 				tools = append(tools, &types.ToolEntry{
 					Type:        types.ToolType(urn.ToolKindFunction),
@@ -403,11 +478,6 @@ func DescribeToolsetEntries(
 					Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
 					HTTPMethod:  nil,
 				})
-				envVars, err := extractFunctionEnvVars(ctx, logger, def.Variables, def.AuthInput)
-				if err != nil {
-					return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").LogError(ctx, logger)
-				}
-				functionEnvVars = append(functionEnvVars, envVars...)
 				continue
 			}
 
@@ -447,11 +517,7 @@ func DescribeToolsetEntries(
 		if len(resourceUrns) > 0 {
 			resources = make([]*types.ResourceEntry, 0, len(resourceUrns))
 		}
-		for _, resourceUrn := range resourceUrns {
-			resource, ok := resourceDefByUrn[resourceUrn]
-			if !ok {
-				continue
-			}
+		for _, resource := range resourceDefsByToolsetID[toolset.ID] {
 			resources = append(resources, &types.ResourceEntry{
 				Type:        string(urn.ResourceKindFunction),
 				ID:          resource.ID.String(),

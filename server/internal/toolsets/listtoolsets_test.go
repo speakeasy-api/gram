@@ -1,6 +1,7 @@
 package toolsets_test
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"testing"
@@ -552,6 +553,67 @@ func TestToolsetsService_ListToolsets_SecurityVariablesNotMixedAcrossDocuments(t
 	require.Contains(t, envVarsB, "TODO_DOC_B_BEARER_AUTH", "toolset B should surface its own document's bearer env var")
 	require.NotContains(t, envVarsB, "TODO_DOC_A_API_KEY_AUTH", "toolset B must not surface document A's env var")
 	require.NotContains(t, envVarsB, "TODO_DOC_A_BEARER_AUTH", "toolset B must not surface document A's env var")
+}
+
+func TestToolsetsService_ListToolsets_FunctionEnvVarsPreserveDefinitionOrder(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	dep := createFunctionsDeployment(t, ctx, ti)
+
+	repo := testrepo.New(ti.conn)
+	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment function tools")
+	require.GreaterOrEqual(t, len(functionTools), 2, "expected at least two function tools")
+
+	newer, older := functionTools[0], functionTools[1]
+	if bytes.Compare(newer.ID[:], older.ID[:]) < 0 {
+		newer, older = older, newer
+	}
+
+	err = repo.SetFunctionToolVariables(ctx, testrepo.SetFunctionToolVariablesParams{
+		Variables: []byte(`{"SHARED_API_KEY":{"description":"newer definition"}}`),
+		ID:        newer.ID,
+		ProjectID: newer.ProjectID,
+	})
+	require.NoError(t, err, "set newer function environment variable")
+
+	err = repo.SetFunctionToolVariables(ctx, testrepo.SetFunctionToolVariablesParams{
+		Variables: []byte(`{"SHARED_API_KEY":{"description":"older definition"}}`),
+		ID:        older.ID,
+		ProjectID: older.ProjectID,
+	})
+	require.NoError(t, err, "set older function environment variable")
+
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Function Environment Variable Order",
+		Description:            nil,
+		ToolUrns:               []string{older.ToolUrn.String(), newer.ToolUrn.String()},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Toolsets, 1)
+	require.Equal(t, created.ID, result.Toolsets[0].ID)
+
+	var sharedVariable *types.FunctionEnvironmentVariable
+	for _, variable := range result.Toolsets[0].FunctionEnvironmentVariables {
+		if variable.Name == "SHARED_API_KEY" {
+			sharedVariable = variable
+			break
+		}
+	}
+	require.NotNil(t, sharedVariable)
+	require.NotNil(t, sharedVariable.Description)
+	require.Equal(t, "newer definition", *sharedVariable.Description)
 }
 
 // TestToolsetsService_ListToolsets_DanglingToolURN covers the empty-slice-vs-nil

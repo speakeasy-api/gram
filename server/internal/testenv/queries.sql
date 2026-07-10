@@ -31,6 +31,12 @@ SELECT *
 FROM function_tool_definitions
 WHERE deployment_id = @deployment_id;
 
+-- name: SetFunctionToolVariables :exec
+UPDATE function_tool_definitions
+SET variables = @variables
+WHERE id = @id
+  AND project_id = @project_id;
+
 -- name: CountFunctionsAccess :one
 SELECT count(id)
 FROM functions_access
