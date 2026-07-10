@@ -189,6 +189,19 @@ function TopUsersTable({
     },
   ];
 
+  if (users.length === 0) {
+    return (
+      <div className="bg-muted/20 flex min-h-32 flex-col items-center justify-center rounded-md border border-dashed px-6 py-8 text-center">
+        <Type variant="body" className="font-medium">
+          No user activity
+        </Type>
+        <Type muted small className="mt-1 max-w-md">
+          Users will appear here after this Shadow MCP server is called.
+        </Type>
+      </div>
+    );
+  }
+
   return (
     <Table columns={columns}>
       <Table.Header columns={columns} />

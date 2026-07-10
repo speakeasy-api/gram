@@ -57,27 +57,14 @@ function userCountLabel(count: number) {
   return `${count} ${count === 1 ? "user" : "users"}`;
 }
 
-function InventoryServerCell({
-  href,
-  server,
-}: {
-  href?: string;
-  server: ShadowMCPInventoryServer;
-}) {
+function InventoryServerCell({ server }: { server: ShadowMCPInventoryServer }) {
   const label = server.serverName || server.urlHost;
-  const serverName = href ? (
-    <a className="hover:underline" href={href}>
-      {label}
-    </a>
-  ) : (
-    label
-  );
 
   return (
     <div className="min-w-0 space-y-1">
       <div className="flex gap-2 items-center">
         <Type variant="small" className="truncate font-medium">
-          {serverName}
+          {label}
         </Type>
         {server.requestCount > 0 && (
           <Badge variant="warning" size="sm" background={false}>
@@ -150,8 +137,8 @@ function InventoryEmptyState() {
 export function ShadowMCPInventoryTable({
   className,
   enabled = true,
-  getServerHref,
   members,
+  onOpenServer,
   policyState,
   projectID,
   roles,
@@ -159,8 +146,8 @@ export function ShadowMCPInventoryTable({
 }: {
   className?: string;
   enabled?: boolean;
-  getServerHref?: (server: ShadowMCPInventoryServer) => string;
   members: AccessMember[];
+  onOpenServer?: (server: ShadowMCPInventoryServer) => void;
   policyState: ShadowMCPPolicyState;
   projectID: string;
   roles: Role[];
@@ -359,9 +346,7 @@ export function ShadowMCPInventoryTable({
           .trim()
           .toLowerCase(),
       width: "2fr",
-      render: (server) => (
-        <InventoryServerCell href={getServerHref?.(server)} server={server} />
-      ),
+      render: (server) => <InventoryServerCell server={server} />,
     },
     {
       key: "status",
@@ -472,6 +457,7 @@ export function ShadowMCPInventoryTable({
           handleLoadMore={loadMoreServers}
           hasMore={Boolean(nextCursor)}
           isLoading={isLoadingMore}
+          onRowClick={onOpenServer}
           rowKey={(row) => row.canonicalServerUrl}
           className="min-h-0 content-start overflow-y-auto"
         />

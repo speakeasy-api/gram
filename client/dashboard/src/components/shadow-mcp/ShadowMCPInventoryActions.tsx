@@ -146,6 +146,11 @@ function initialPolicyIDsForAction(
   return shadowMCPPolicyIDs;
 }
 
+function openActionFromMenu(event: Event, openAction: () => void) {
+  event.stopPropagation();
+  window.setTimeout(openAction, 0);
+}
+
 export function ShadowMCPInventoryActionMenu({
   disabled,
   onOpenAction,
@@ -167,17 +172,21 @@ export function ShadowMCPInventoryActionMenu({
         <Button
           aria-label={`Open actions for ${server.serverName || server.urlHost}`}
           disabled={disabled}
+          onClick={(event) => event.stopPropagation()}
           size="xs"
           variant="tertiary"
         >
           <Icon name="ellipsis" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        onClick={(event) => event.stopPropagation()}
+      >
         {hasRequest && (
           <DropdownMenuItem
-            onSelect={() => {
-              window.setTimeout(() => onOpenAction("review", server), 0);
+            onSelect={(event) => {
+              openActionFromMenu(event, () => onOpenAction("review", server));
             }}
           >
             Review Request
@@ -185,8 +194,8 @@ export function ShadowMCPInventoryActionMenu({
         )}
         {!hasRequest && !hasAllowDecision && (
           <DropdownMenuItem
-            onSelect={() => {
-              window.setTimeout(() => onOpenAction("add", server), 0);
+            onSelect={(event) => {
+              openActionFromMenu(event, () => onOpenAction("add", server));
             }}
           >
             Add Allow Rule
@@ -195,15 +204,15 @@ export function ShadowMCPInventoryActionMenu({
         {hasAllowDecision && (
           <>
             <DropdownMenuItem
-              onSelect={() => {
-                window.setTimeout(() => onOpenAction("edit", server), 0);
+              onSelect={(event) => {
+                openActionFromMenu(event, () => onOpenAction("edit", server));
               }}
             >
               Edit Rule
             </DropdownMenuItem>
             <DropdownMenuItem
-              onSelect={() => {
-                window.setTimeout(() => onOpenAction("delete", server), 0);
+              onSelect={(event) => {
+                openActionFromMenu(event, () => onOpenAction("delete", server));
               }}
             >
               Delete Rule

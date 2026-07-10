@@ -11,6 +11,7 @@ import {
   cloneElement,
   isValidElement,
   type ReactElement,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -73,12 +74,12 @@ vi.mock("@speakeasy-api/moonshine", () => ({
     }: {
       children: ReactNode;
       disabled?: boolean;
-      onClick?: () => void;
+      onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
       [key: string]: unknown;
     }) => (
       <button
         disabled={disabled}
-        onClick={() => onClick?.()}
+        onClick={(event) => onClick?.(event)}
         type="button"
         {...props}
       >
@@ -99,9 +100,13 @@ vi.mock("@speakeasy-api/moonshine", () => ({
     children: ReactNode;
     modal?: boolean;
   }) => <div data-dropdown-modal={String(modal)}>{children}</div>,
-  DropdownMenuContent: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
+  DropdownMenuContent: ({
+    children,
+    onClick,
+  }: {
+    children: ReactNode;
+    onClick?: (event: { stopPropagation: () => void }) => void;
+  }) => <div onClick={(event) => onClick?.(event)}>{children}</div>,
   DropdownMenuItem: ({
     children,
     disabled,
@@ -111,12 +116,12 @@ vi.mock("@speakeasy-api/moonshine", () => ({
     children: ReactNode;
     disabled?: boolean;
     onClick?: () => void;
-    onSelect?: () => void;
+    onSelect?: (event: { stopPropagation: () => void }) => void;
   }) => (
     <button
       disabled={disabled}
-      onClick={() => {
-        onSelect?.();
+      onClick={(event) => {
+        onSelect?.(event);
         onClick?.();
       }}
     >
@@ -199,6 +204,7 @@ vi.mock("@speakeasy-api/moonshine", () => ({
         handleLoadMore,
         hasMore,
         isLoading,
+        onRowClick,
         rowKey,
       }: {
         columns: Array<{
@@ -209,11 +215,12 @@ vi.mock("@speakeasy-api/moonshine", () => ({
         handleLoadMore?: () => void;
         hasMore?: boolean;
         isLoading?: boolean;
+        onRowClick?: (row: ShadowMCPInventoryServer) => void;
         rowKey: (row: ShadowMCPInventoryServer) => string;
       }) => (
         <tbody>
           {data.map((row) => (
-            <tr key={rowKey(row)}>
+            <tr key={rowKey(row)} onClick={() => onRowClick?.(row)}>
               {columns.map((column) => (
                 <td key={column.key}>{column.render?.(row)}</td>
               ))}
@@ -573,7 +580,7 @@ describe("ShadowMCPInventoryTable", () => {
     expect(screen.queryByText("0 Access Requests")).toBeFalsy();
   });
 
-  it("links inventory rows to a server detail page", async () => {
+  it("opens the server detail page when an inventory row is clicked", async () => {
     mockShadowMCPInventory({
       servers: [
         inventoryServer({
@@ -583,12 +590,13 @@ describe("ShadowMCPInventoryTable", () => {
       ],
     });
     const queryClient = new QueryClient();
+    const onOpenServer = vi.fn();
 
     render(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
-          getServerHref={(server) => `/shadow-mcp/${server.serverSlug}`}
           members={[]}
+          onOpenServer={onOpenServer}
           policyState="blocking"
           projectID="project-id-1"
           roles={[]}
@@ -601,9 +609,52 @@ describe("ShadowMCPInventoryTable", () => {
       expect(screen.getByText("GitHub MCP")).toBeTruthy();
     });
 
-    expect(
-      screen.getByRole("link", { name: "GitHub MCP" }).getAttribute("href"),
-    ).toBe("/shadow-mcp/github-example-com-mcp-d8860eea");
+    fireEvent.click(screen.getByText("GitHub MCP").closest("tr")!);
+
+    expect(onOpenServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        canonicalServerUrl: "https://github.example.com/mcp",
+        serverSlug: "github-example-com-mcp-d8860eea",
+      }),
+    );
+  });
+
+  it("opens row actions without navigating to the server detail page", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "allowed",
+          canonicalServerUrl: "https://github.example.com/mcp",
+          serverName: "GitHub MCP",
+        }),
+      ],
+    });
+    const queryClient = new QueryClient();
+    const onOpenServer = vi.fn();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ShadowMCPInventoryTable
+          members={[]}
+          onOpenServer={onOpenServer}
+          policyState="blocking"
+          projectID="project-id-1"
+          roles={[]}
+          shadowMCPPolicies={[blockingPolicy()]}
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("GitHub MCP")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Rule" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Edit Rule" })).toBeTruthy();
+    });
+    expect(onOpenServer).not.toHaveBeenCalled();
   });
 
   it("sorts inventory columns and uses call count for Usage", async () => {

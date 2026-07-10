@@ -473,6 +473,29 @@ describe("ShadowMCPServerDetail", () => {
     );
   });
 
+  it("shows an empty state when the server has no user activity", () => {
+    mocks.useShadowMCPInventoryUsers.mockReturnValue({
+      data: {
+        nextCursor: undefined,
+        users: [],
+      },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+
+    renderDetailPage();
+
+    expect(screen.getByText("No user activity")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Users will appear here after this Shadow MCP server is called.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("columnheader", { name: "User" })).toBeNull();
+  });
+
   it("adds an allow decision from the detail page action menu", async () => {
     const upsertPolicyBypass = vi.fn().mockResolvedValue({});
     mocks.useShadowMCPInventoryServer.mockReturnValue({

@@ -66,10 +66,10 @@ export default function ShadowMCP(): JSX.Element {
                 <div className="flex flex-col gap-4 pb-8">
                   <ShadowMCPPolicyStatus policyState={policyState} />
                   <ShadowMCPInventoryTable
-                    getServerHref={(server) =>
-                      routes.shadowMCP.detail.href(server.serverSlug)
-                    }
                     members={membersQuery.data?.members ?? []}
+                    onOpenServer={(server) =>
+                      routes.shadowMCP.detail.goTo(server.serverSlug)
+                    }
                     policyState={policyState}
                     projectID={project.id}
                     roles={rolesQuery.data?.roles ?? []}
