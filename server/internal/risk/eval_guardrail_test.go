@@ -18,7 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/scanners/llmjudge"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -66,9 +66,9 @@ func TestEvaluatePromptGuardrail_FlagsAndIsolates(t *testing.T) {
 	)
 
 	// The judge flags any message whose body mentions "delete production".
-	ti.judge.evaluate = func(in llmjudge.Input) (*llmjudge.Verdict, error) {
+	ti.judge.evaluate = func(in promptpolicy.Input) (*promptpolicy.Verdict, error) {
 		if strings.Contains(in.Message.Body, "delete production") {
-			return &llmjudge.Verdict{
+			return &promptpolicy.Verdict{
 				Matched:          true,
 				Confidence:       0.9,
 				Rationale:        "destructive action",
@@ -78,7 +78,7 @@ func TestEvaluatePromptGuardrail_FlagsAndIsolates(t *testing.T) {
 				TotalTokens:      120,
 			}, nil
 		}
-		return &llmjudge.Verdict{
+		return &promptpolicy.Verdict{
 			Matched:          false,
 			Confidence:       0,
 			Rationale:        "",
@@ -150,7 +150,7 @@ func TestEvaluatePromptGuardrail_MessageTypeFilter(t *testing.T) {
 	)
 
 	seen := map[string]int{}
-	ti.judge.evaluate = func(in llmjudge.Input) (*llmjudge.Verdict, error) {
+	ti.judge.evaluate = func(in promptpolicy.Input) (*promptpolicy.Verdict, error) {
 		seen[in.Message.Type]++
 		return nil, nil
 	}
@@ -185,7 +185,7 @@ func TestEvaluatePromptGuardrail_FailClosedFallback(t *testing.T) {
 	chatID, _ := seedChatTranscript(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, [][2]string{
 		{"user", "please delete production database"},
 	})
-	ti.judge.evaluate = func(in llmjudge.Input) (*llmjudge.Verdict, error) {
+	ti.judge.evaluate = func(in promptpolicy.Input) (*promptpolicy.Verdict, error) {
 		return nil, errors.New("judge unavailable")
 	}
 	failOpen := false
@@ -215,9 +215,9 @@ func TestEvaluatePromptGuardrail_CELScopeExemptSkipsToolCall(t *testing.T) {
 	)
 
 	seen := []judgemessage.Message{}
-	ti.judge.evaluate = func(in llmjudge.Input) (*llmjudge.Verdict, error) {
+	ti.judge.evaluate = func(in promptpolicy.Input) (*promptpolicy.Verdict, error) {
 		seen = append(seen, in.Message)
-		return &llmjudge.Verdict{
+		return &promptpolicy.Verdict{
 			Matched:          true,
 			Confidence:       0.9,
 			Rationale:        "matched",

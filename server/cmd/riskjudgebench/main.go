@@ -1,5 +1,5 @@
 // Command riskjudgebench benchmarks OpenRouter models for prompt-based
-// ("LLM-judge") risk policy evaluation in the llmjudge OpenRouter evaluator.
+// ("LLM-judge") risk policy evaluation in the promptpolicy OpenRouter evaluator.
 //
 // Unlike a hand-rolled HTTP client, this drives the REAL production
 // openrouter.ChatClient (NewUnifiedClient to GetObjectCompletion), so every
@@ -48,13 +48,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
-	"github.com/speakeasy-api/gram/server/internal/scanners/llmjudge"
-	ljopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/llmjudge/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
+	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 // The judge system prompt, verdict schema, and user-prompt construction come
-// straight from the llmjudge OpenRouter evaluator. The bench drives the
+// straight from the promptpolicy OpenRouter evaluator. The bench drives the
 // exact production request, with no copy to keep in sync.
 
 // defaultModels are fast/cheap-tier candidates drawn from the production
@@ -143,7 +143,7 @@ func main() {
 		nil,                             // chat title gen   (nil-guarded)
 		nil,                             // telemetry logger (nil-guarded)
 	)
-	_ = metricnoop.NewMeterProvider() // (ljopenrouter.New would need this; we call the client directly)
+	_ = metricnoop.NewMeterProvider() // (ppopenrouter.New would need this; we call the client directly)
 
 	projectID := "00000000-0000-0000-0000-000000000001" // must parse as UUID
 	fmt.Printf("models=%d  cases=%d  runs=%d  -> %d calls (real openrouter client, temp=%.1f, concurrency=%d)\n\n",
@@ -199,23 +199,23 @@ func main() {
 }
 
 // evaluate issues one GetObjectCompletion call shaped exactly like
-// ljopenrouter.Judge.call() and records the outcome.
+// ppopenrouter.Judge.call() and records the outcome.
 func evaluate(client openrouter.CompletionClient, model, orgID, projectID string, tc testCase, temp float64, timeout time.Duration) result {
 	res := result{Model: model, CaseID: tc.ID, Expected: tc.Expected}
 
 	strict := true
 	jsonSchema := or.ChatJSONSchemaConfig{
 		Name:        "risk_policy_judge_verdict",
-		Schema:      ljopenrouter.VerdictSchema(),
+		Schema:      ppopenrouter.VerdictSchema(),
 		Description: nil,
 		Strict:      optionalnullable.From(&strict),
 	}
-	userMessage := ljopenrouter.BuildJudgePrompt(llmjudge.Input{
+	userMessage := ppopenrouter.BuildJudgePrompt(promptpolicy.Input{
 		OrgID:     orgID,
 		ProjectID: projectID,
 		Prompt:    tc.Policy,
 		Message:   judgemessage.New(tc.MessageType, tc.ToolName, tc.Text),
-		Config:    llmjudge.Config{Model: "", Temperature: nil, FailOpen: true},
+		Config:    promptpolicy.Config{Model: "", Temperature: nil, FailOpen: true},
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -226,7 +226,7 @@ func evaluate(client openrouter.CompletionClient, model, orgID, projectID string
 		OrgID:          orgID,
 		ProjectID:      projectID,
 		Model:          model,
-		SystemPrompt:   ljopenrouter.SystemPrompt,
+		SystemPrompt:   ppopenrouter.SystemPrompt,
 		Prompt:         userMessage,
 		Temperature:    &temp,
 		UsageSource:    billing.ModelUsageSourceGram,

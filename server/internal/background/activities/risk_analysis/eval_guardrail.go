@@ -12,7 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
-	"github.com/speakeasy-api/gram/server/internal/scanners/llmjudge"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 )
 
 // EvalMessage is a recorded chat message fed to the guardrail-eval replay. It is
@@ -32,7 +32,7 @@ type MessageVerdict struct {
 	Type      message.Type
 	ToolName  string
 	LatencyMs int64
-	llmjudge.Verdict
+	promptpolicy.Verdict
 }
 
 // EvalPromptGuardrail replays a prompt_based guardrail against a sequence of
@@ -46,10 +46,10 @@ type MessageVerdict struct {
 func EvalPromptGuardrail(
 	ctx context.Context,
 	logger *slog.Logger,
-	judge llmjudge.Evaluator,
+	judge promptpolicy.Evaluator,
 	eng *celenv.Engine,
 	orgID, projectID, prompt string,
-	cfg llmjudge.Config,
+	cfg promptpolicy.Config,
 	messages []EvalMessage,
 	messageTypes []string,
 	includeCEL, exemptCEL string,
@@ -97,7 +97,7 @@ func EvalPromptGuardrail(
 
 	judgeFanout(
 		ctx, judge, orgID, projectID, prompt, cfg, built, inScope,
-		func(pos, idx int, verdict *llmjudge.Verdict, err error, latency time.Duration) {
+		func(pos, idx int, verdict *promptpolicy.Verdict, err error, latency time.Duration) {
 			out := messageVerdictSkeleton(idx, built[idx])
 			out.LatencyMs = latency.Milliseconds()
 			if err != nil && !cfg.FailOpen {
@@ -124,7 +124,7 @@ func messageVerdictSkeleton(idx int, msg batchMessage) MessageVerdict {
 		Type:      msg.Type,
 		ToolName:  toolName,
 		LatencyMs: 0,
-		Verdict: llmjudge.Verdict{
+		Verdict: promptpolicy.Verdict{
 			Matched:          false,
 			Confidence:       0,
 			Rationale:        "",
@@ -137,5 +137,5 @@ func messageVerdictSkeleton(idx int, msg batchMessage) MessageVerdict {
 }
 
 func applyFailClosedFallback(verdict *MessageVerdict, err error) {
-	verdict.Verdict = llmjudge.FailClosedVerdict(err)
+	verdict.Verdict = promptpolicy.FailClosedVerdict(err)
 }

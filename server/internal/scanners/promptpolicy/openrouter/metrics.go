@@ -27,7 +27,7 @@ type judgeMetrics struct {
 
 func newJudgeMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *judgeMetrics {
 	ctx := context.Background()
-	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/scanners/llmjudge/openrouter")
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter")
 
 	evaluations, err := meter.Int64Counter(
 		meterJudgeEvaluations,

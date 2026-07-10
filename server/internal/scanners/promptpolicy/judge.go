@@ -1,4 +1,4 @@
-package llmjudge
+package promptpolicy
 
 import (
 	"context"

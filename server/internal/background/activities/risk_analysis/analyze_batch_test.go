@@ -27,7 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
-	"github.com/speakeasy-api/gram/server/internal/scanners/llmjudge"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -36,12 +36,12 @@ import (
 )
 
 type recordingPromptJudge struct {
-	inputs []llmjudge.Input
+	inputs []promptpolicy.Input
 }
 
-func (j *recordingPromptJudge) Evaluate(_ context.Context, in llmjudge.Input) (*llmjudge.Verdict, error) {
+func (j *recordingPromptJudge) Evaluate(_ context.Context, in promptpolicy.Input) (*promptpolicy.Verdict, error) {
 	j.inputs = append(j.inputs, in)
-	return &llmjudge.Verdict{
+	return &promptpolicy.Verdict{
 		Matched:          true,
 		Confidence:       0.9,
 		Rationale:        "matched tool call",

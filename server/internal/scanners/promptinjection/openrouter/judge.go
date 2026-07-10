@@ -23,8 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
-	ljopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/llmjudge/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -38,7 +38,7 @@ const (
 	// production form factors it had the cleanest false-positive profile of the
 	// models tested — the only one that stops over-flagging the agent's own
 	// tool-call XML, with no flip-flopping — AND the highest recall on the
-	// PromptIntel attack feed. It is also the llmjudge evaluator's default, so both judges
+	// PromptIntel attack feed. It is also the promptpolicy evaluator's default, so both judges
 	// share one model. Paired with the machinery-aware clause in SystemPrompt
 	// below, the adversarial benchmark measured false positives dropping 6.9% ->
 	// 2.6% at unchanged recall. Every error path fails open (SAFE), so this stays
@@ -234,7 +234,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 // hostile body can never spoof a field or instruction line: it is always a
 // quoted value in a known field the system prompt tells the judge to evaluate.
 type judgePayload struct {
-	Message ljopenrouter.MessagePayload `json:"message"`
+	Message ppopenrouter.MessagePayload `json:"message"`
 }
 
 // judgeVerdict is the judge's structured-output response: the model's call plus
@@ -261,7 +261,7 @@ func cachedSystemMessage() or.ChatMessages {
 }
 
 func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judgemessage.Message) (judgeVerdict, error) {
-	payload, err := json.Marshal(judgePayload{Message: ljopenrouter.RenderMessage(msg)})
+	payload, err := json.Marshal(judgePayload{Message: ppopenrouter.RenderMessage(msg)})
 	if err != nil {
 		// Unreachable: the payload is strings, bools, and slices. Fall back to the
 		// raw body so a marshaling regression can't silently drop the event.

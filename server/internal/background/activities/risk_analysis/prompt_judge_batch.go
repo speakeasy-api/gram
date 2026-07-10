@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
-	"github.com/speakeasy-api/gram/server/internal/scanners/llmjudge"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 )
 
 // judgeConcurrency bounds the number of in-flight judge calls per batch.
@@ -29,12 +29,12 @@ const judgeConcurrency = 8
 // identically.
 func judgeFanout(
 	ctx context.Context,
-	judge llmjudge.Evaluator,
+	judge promptpolicy.Evaluator,
 	orgID, projectID, prompt string,
-	cfg llmjudge.Config,
+	cfg promptpolicy.Config,
 	msgs []batchMessage,
 	indices []int,
-	apply func(pos, idx int, verdict *llmjudge.Verdict, err error, latency time.Duration),
+	apply func(pos, idx int, verdict *promptpolicy.Verdict, err error, latency time.Duration),
 	onChunk func(end int),
 ) {
 	for start := 0; start < len(indices); start += judgeConcurrency {
@@ -46,7 +46,7 @@ func judgeFanout(
 				defer wg.Done()
 				idx := indices[pos]
 				started := time.Now()
-				verdict, err := judge.Evaluate(ctx, llmjudge.Input{
+				verdict, err := judge.Evaluate(ctx, promptpolicy.Input{
 					OrgID:     orgID,
 					ProjectID: projectID,
 					Prompt:    prompt,
@@ -65,7 +65,7 @@ func judgeFanout(
 
 func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, outOfPolicyScope []bool) [][]scanners.Finding {
 	out := make([][]scanners.Finding, len(messages))
-	cfg := llmjudge.ParseConfig(policy.ModelConfig)
+	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
 		return out
 	}
@@ -83,7 +83,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 
 	if a.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
 		if !cfg.FailOpen {
-			finding := llmjudge.NewFinding(llmjudge.FailClosedVerdict(nil))
+			finding := promptpolicy.NewFinding(promptpolicy.FailClosedVerdict(nil))
 			for _, idx := range indices {
 				out[idx] = []scanners.Finding{finding}
 			}
@@ -95,16 +95,16 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		ctx, a.judge,
 		args.OrganizationID, args.ProjectID.String(), policy.Prompt.String, cfg,
 		messages, indices,
-		func(_, idx int, verdict *llmjudge.Verdict, err error, _ time.Duration) {
+		func(_, idx int, verdict *promptpolicy.Verdict, err error, _ time.Duration) {
 			if err != nil {
 				if !cfg.FailOpen {
-					out[idx] = []scanners.Finding{llmjudge.NewFinding(llmjudge.FailClosedVerdict(err))}
+					out[idx] = []scanners.Finding{promptpolicy.NewFinding(promptpolicy.FailClosedVerdict(err))}
 				}
 			} else if verdict != nil && verdict.Matched {
-				out[idx] = []scanners.Finding{llmjudge.NewFinding(*verdict)}
+				out[idx] = []scanners.Finding{promptpolicy.NewFinding(*verdict)}
 			}
 		},
-		func(end int) { activity.RecordHeartbeat(ctx, llmjudge.Source, end) },
+		func(end int) { activity.RecordHeartbeat(ctx, promptpolicy.Source, end) },
 	)
 	return out
 }

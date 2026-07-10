@@ -2,7 +2,7 @@
 
 Benchmarks OpenRouter models for **prompt-based ("LLM-judge") risk policy
 evaluation** - the call in
-[`server/internal/scanners/llmjudge/openrouter/judge.go`](../../internal/scanners/llmjudge/openrouter/judge.go).
+[`server/internal/scanners/promptpolicy/openrouter/judge.go`](../../internal/scanners/promptpolicy/openrouter/judge.go).
 
 It drives the **real production `openrouter.ChatClient`**
 (`NewUnifiedClient` to `GetObjectCompletion`), so every model runs under
@@ -38,7 +38,7 @@ Flags: `-models` (must be allowlisted), `-cases`, `-runs`, `-concurrency`,
 `-temperature`, `-timeout`, `-org`, `-out`.
 
 The system prompt, verdict schema, and user-prompt construction are imported
-straight from `internal/scanners/llmjudge/openrouter` (`SystemPrompt`,
+straight from `internal/scanners/promptpolicy/openrouter` (`SystemPrompt`,
 `VerdictSchema`, `BuildJudgePrompt`) - there is no copy to keep in sync, so the
 bench always drives the exact production request.
 

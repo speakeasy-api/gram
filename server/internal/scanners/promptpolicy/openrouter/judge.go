@@ -22,7 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
-	"github.com/speakeasy-api/gram/server/internal/scanners/llmjudge"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -87,7 +87,7 @@ Return a JSON object:
 
 Output ONLY the JSON object, no prose or markdown fences.`
 
-// Judge is the OpenRouter-backed llmjudge.Evaluator. The judge call mirrors the
+// Judge is the OpenRouter-backed promptpolicy.Evaluator. The judge call mirrors the
 // custom-rule suggestion path: strict JSON schema, low temperature, hard
 // timeout, OpenRouter object completion.
 type Judge struct {
@@ -98,7 +98,7 @@ type Judge struct {
 	limiter *ratelimit.Limiter
 }
 
-var _ llmjudge.Evaluator = (*Judge)(nil)
+var _ promptpolicy.Evaluator = (*Judge)(nil)
 
 // New constructs a Judge. A nil client yields a judge whose Evaluate always
 // returns (nil, nil), so callers can wire it unconditionally.
@@ -106,7 +106,7 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 	logger = logger.With(attr.SlogComponent("risk-llm-judge"))
 	return &Judge{
 		logger:  logger,
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/llmjudge/openrouter"),
+		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"),
 		metrics: newJudgeMetrics(meterProvider, logger),
 		client:  client,
 		limiter: limiter,
@@ -117,7 +117,7 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 // violates the policy prompt, or a non-matching verdict when it does not. A nil
 // client or an empty prompt/text yields (nil, nil). On judge error or timeout it
 // returns a non-nil error so callers can apply policy fail-mode.
-func (j *Judge) Evaluate(ctx context.Context, in llmjudge.Input) (*llmjudge.Verdict, error) {
+func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpolicy.Verdict, error) {
 	if j == nil || j.client == nil {
 		return nil, nil
 	}
@@ -154,7 +154,7 @@ func (j *Judge) Evaluate(ctx context.Context, in llmjudge.Input) (*llmjudge.Verd
 		j.logger.WarnContext(ctx, "llm judge rate limited",
 			attr.SlogOrganizationID(in.OrgID),
 		)
-		return nil, fmt.Errorf("allow judge call: %w", llmjudge.ErrRateLimited)
+		return nil, fmt.Errorf("allow judge call: %w", promptpolicy.ErrRateLimited)
 	}
 
 	start := time.Now()
@@ -175,7 +175,7 @@ func (j *Judge) Evaluate(ctx context.Context, in llmjudge.Input) (*llmjudge.Verd
 		attribute.Bool("risk.judge.matched", callResult.matched),
 		attribute.Float64("risk.judge.confidence", callResult.confidence),
 	)
-	return &llmjudge.Verdict{
+	return &promptpolicy.Verdict{
 		Matched:          callResult.matched,
 		Confidence:       callResult.confidence,
 		Rationale:        strings.TrimSpace(callResult.rationale),
@@ -196,7 +196,7 @@ type judgeCallResult struct {
 	totalTokens      int
 }
 
-func (j *Judge) call(ctx context.Context, in llmjudge.Input) (judgeCallResult, error) {
+func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResult, error) {
 	strict := true
 	jsonSchema := or.ChatJSONSchemaConfig{
 		Name:        "risk_policy_judge_verdict",
@@ -332,7 +332,7 @@ type ToolCallPayload struct {
 // JSON user turn the judge reads. Bodies are truncated (see truncateBody) so an
 // oversized payload cannot blow the model's context window. Exported so
 // server/cmd/riskjudgebench drives the exact production user prompt.
-func BuildJudgePrompt(in llmjudge.Input) string {
+func BuildJudgePrompt(in promptpolicy.Input) string {
 	payload := judgePromptPayload{
 		Policy:  in.Prompt,
 		Message: RenderMessage(in.Message),

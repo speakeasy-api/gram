@@ -33,8 +33,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
-	"github.com/speakeasy-api/gram/server/internal/scanners/llmjudge"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 )
 
 // RiskScanner checks text against blocking risk policies.
@@ -175,7 +175,7 @@ type Scanner struct {
 	customRuleScanner *customruleanalyzer.Scanner // required; evaluates custom CEL detection rules
 	piiScanner        ra.PIIScanner               // nil if Presidio is unavailable
 	piScanner         *promptinjection.Scanner    // never nil; stub-classifier when L1 disabled
-	judge             llmjudge.Evaluator          // nil-safe; guarded at the call site
+	judge             promptpolicy.Evaluator      // nil-safe; guarded at the call site
 	flags             feature.Provider            // nil disables prompt_based enforcement
 	metrics           *scannerMetrics
 	celEng            *celenv.Engine
@@ -196,7 +196,7 @@ func NewScanner(
 	customRuleScanner *customruleanalyzer.Scanner,
 	piiScanner ra.PIIScanner,
 	piScanner *promptinjection.Scanner,
-	judge llmjudge.Evaluator,
+	judge promptpolicy.Evaluator,
 	flags feature.Provider,
 	celEng *celenv.Engine,
 ) (*Scanner, error) {
@@ -633,7 +633,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 // judge runs for whatever message types the policy declares. Returns nil when
 // the judge does not match (including fail-open on judge error).
 func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool) *ScanResult {
-	cfg := llmjudge.ParseConfig(policy.ModelConfig)
+	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !promptPoliciesOn {
 		return nil
 	}
@@ -641,7 +641,7 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		return promptPolicyUnavailableResult(policy, messageType, cfg, nil)
 	}
 
-	verdict, err := s.judge.Evaluate(ctx, llmjudge.Input{
+	verdict, err := s.judge.Evaluate(ctx, promptpolicy.Input{
 		OrgID:     policy.OrganizationID,
 		ProjectID: policy.ProjectID.String(),
 		Prompt:    policy.Prompt.String,
@@ -658,12 +658,12 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		return nil
 	}
 
-	finding := llmjudge.NewFinding(*verdict)
+	finding := promptpolicy.NewFinding(*verdict)
 	return &ScanResult{
 		Action:      policy.Action,
 		PolicyID:    policy.ID.String(),
 		PolicyName:  policy.Name,
-		Source:      llmjudge.Source,
+		Source:      promptpolicy.Source,
 		MessageType: messageType,
 		RuleID:      finding.RuleID,
 		Description: finding.Description,
@@ -679,23 +679,23 @@ func (s *Scanner) projectFlagEnabled(ctx context.Context, orgID string, projectI
 	return policyflags.ProjectFlagEnabled(ctx, s.logger, s.repo, s.flags, orgID, projectID, flag)
 }
 
-func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.Type, cfg llmjudge.Config, err error) *ScanResult {
+func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.Type, cfg promptpolicy.Config, err error) *ScanResult {
 	if cfg.FailOpen {
 		return nil
 	}
-	verdict := llmjudge.FailClosedVerdict(err)
+	verdict := promptpolicy.FailClosedVerdict(err)
 	return &ScanResult{
 		Action:      policy.Action,
 		PolicyID:    policy.ID.String(),
 		PolicyName:  policy.Name,
-		Source:      llmjudge.Source,
+		Source:      promptpolicy.Source,
 		MessageType: messageType,
-		RuleID:      llmjudge.Rule,
+		RuleID:      promptpolicy.Rule,
 		Description: verdict.Rationale,
 		UserMessage: conv.FromPGText[string](policy.UserMessage),
 		// No literal match for a fail-closed judge result.
 		MatchedValue:    "",
-		Entity:          llmjudge.Rule,
+		Entity:          promptpolicy.Rule,
 		CallFingerprint: "",
 	}
 }
