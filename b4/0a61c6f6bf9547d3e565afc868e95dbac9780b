@@ -1,0 +1,59 @@
+server/design/shared/risk.go
+  s_a1e983049864ec::t_d130562a3b35e8 128
+server/internal/risk/recommended_scopes_api_test.go
+  s_a1e983049864ec::t_1f7506984ee594 1-150
+server/design/risk/design.go
+  s_a1e983049864ec::t_d130562a3b35e8 38,175,1607-1610,1612,1619,1621
+.changeset/risk-recommended-scopes-api.md
+  s_a1e983049864ec::t_0a839f342f4168 1-5
+server/internal/risk/impl.go
+  s_a1e983049864ec::t_e971ec5727641f 1657,2934-2941,2943-2961,2970-2977,2979-2997
+  s_a1e983049864ec::t_d7855dcb6a904d 2191-2204,2942,2978
+  s_a1e983049864ec::t_060e88fa1ed3a1 54,391-399,630-640,1632-1641,1643-1653,1656,1658-1659
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_a1e983049864ec::t_5c714cfa6c4039 4578
+client/dashboard/src/sdk/src/models/components/createriskpolicyrequestbody.ts
+  s_a1e983049864ec::t_b80b9124632add 76-79,156,185,208
+client/dashboard/src/sdk/src/models/components/riskcategoriesresult.ts
+  s_a1e983049864ec::t_e15d60b2d47bf1 6,23-26,33-43
+client/dashboard/src/sdk/src/models/components/riskcategorydefinition.ts
+  s_a1e983049864ec::t_f2d45f2c4f4168 31-46,71-74,81-84
+client/dashboard/src/sdk/src/models/components/riskpolicy.ts
+  s_a1e983049864ec::t_d97182f6041845 82-85,197,230
+client/dashboard/src/sdk/src/models/components/updateriskpolicyrequestbody.ts
+  s_a1e983049864ec::t_62ead9e264af65 68-71,146,177,200
+server/gen/http/cli/gram/cli.go
+  s_a1e983049864ec::t_1bf87954ed7c18 12567,12659
+server/gen/http/openapi3.yaml
+  s_a1e983049864ec::t_8c709bacd40c19 42050-42054,49931-49934,49938,49954-49965,49986-49989,50272-50276,55127-55131
+server/gen/http/risk/client/cli.go
+  s_a1e983049864ec::t_9bb7fbaac1192c 28,92-97,249,331-336
+server/gen/http/risk/client/encode_decode.go
+  s_a1e983049864ec::t_eafd05c214dce0 10244-10249,10504-10513
+server/gen/http/risk/client/types.go
+  s_a1e983049864ec::t_5cd794c2d18827 38-40,97-99,383-385,481-483,563-565,691-693,9080-9082,9362-9372,9585-9590,9673-9678,10028-10033,10592-10597,10822-10827,12024-12026,17641-17643,28996-29007
+server/gen/http/risk/server/encode_decode.go
+  s_a1e983049864ec::t_da24fa21a80e8a 9892-9897,10160-10169
+server/gen/http/risk/server/types.go
+  s_a1e983049864ec::t_992ebcddb8951c 40-42,99-101,385-387,483-485,565-567,693-695,9068-9070,9350-9360,9590-9595,9717-9722,9804-9809,9982-9984,16705-16710,16824-16829
+server/gen/risk/service.go
+  s_a1e983049864ec::t_0d1e50ba99acbd 315-317,857-859,881-891,1228-1230
+server/gen/types/risk_policy.go
+  s_a1e983049864ec::t_212282979ed7e0 35-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b40a61c6f6bf9547d3e565afc868e95dbac9780b",
+  "prompts": {},
+  "sessions": {
+    "s_a1e983049864ec": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4a4c-8a3b-73d2-8970-e371e2d28932",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
