@@ -9,8 +9,7 @@ import (
 )
 
 // headerOptsIntoAttachedEnv reports whether a remote MCP header should take
-// its upstream value from the fronting server's attached environment. Per
-// ADR-0002 (revised): empty static value with no request-header source.
+// its upstream value from the fronting server's attached environment.
 func headerOptsIntoAttachedEnv(h remotemcprepo.RemoteMcpServerHeader) bool {
 	return h.Value.Valid && h.Value.String == "" && !h.ValueFromRequestHeader.Valid
 }

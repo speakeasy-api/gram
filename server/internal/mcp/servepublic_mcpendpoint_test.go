@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	remotemcpgen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -32,12 +33,14 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -1009,4 +1012,87 @@ func TestServePublic_McpEndpoint_RemoteBacked_RequiredEnvHeaderNoEnvironment_Fai
 		t.Fatal("upstream must not be reached when no environment is attached")
 	default:
 	}
+}
+
+// newRemoteMCPManagementService builds a real remotemcp.Service wired to the
+// same DB/auth/encryption as the serve path, so a test can drive the
+// management API (CreateServerHeader) instead of seeding header rows directly
+// through the repo. This closes the seam the other env-sourced tests leave
+// open: they prove the serve path fills from the repo shape, but never prove
+// the management API produces that shape.
+func newRemoteMCPManagementService(t *testing.T, ti *testInstance) *remotemcp.Service {
+	t.Helper()
+
+	policy, err := guardian.NewUnsafePolicy(ti.tracerProvider, []string{})
+	require.NoError(t, err)
+
+	return remotemcp.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, ti.enc, ti.authzEngine, policy, ti.audit)
+}
+
+// TestServePublic_McpEndpoint_RemoteBacked_EnvSourcedHeaderViaManagementAPI_FillsFromAttachedEnvironment
+// is the end-to-end proof that header resolution consumes what the management
+// API writes: the env-sourced header is created through
+// remotemcp.Service.CreateServerHeader (value + value_from_request_header both
+// omitted, non-secret), NOT seeded through the repo. If the management API's
+// empty-value sentinel logic (headerValuePGText) diverged from what the serve
+// path's opt-in detector (headerOptsIntoAttachedEnv) expects, the upstream
+// would not receive the value and this test would fail.
+func TestServePublic_McpEndpoint_RemoteBacked_EnvSourcedHeaderViaManagementAPI_FillsFromAttachedEnvironment(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	var gotAPIKey string
+	done := make(chan struct{}, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAPIKey = r.Header.Get(envSourcedUpstreamHeader)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+		done <- struct{}{}
+	}))
+	t.Cleanup(upstream.Close)
+
+	endpointSlug := "endpoint-" + uuid.NewString()
+	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", uuid.Nil)
+
+	// Create the env-sourced header through the management API. Neither Value
+	// nor ValueFromRequestHeader is set and IsSecret is false, so the impl
+	// persists the empty-value sentinel that marks environment sourcing.
+	mgmt := newRemoteMCPManagementService(t, ti)
+	required := true
+	header, err := mgmt.CreateServerHeader(ctx, &remotemcpgen.CreateServerHeaderPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		ProjectSlugInput:       nil,
+		RemoteMcpServerID:      remoteServer.ID.String(),
+		Name:                   envSourcedUpstreamHeader,
+		Description:            nil,
+		IsRequired:             &required,
+		IsSecret:               nil,
+		Value:                  nil,
+		ValueFromRequestHeader: nil,
+	})
+	require.NoError(t, err)
+	require.False(t, header.IsSecret)
+	require.True(t, header.IsRequired)
+	// The management API surfaces the env-sourced sentinel as a non-nil,
+	// empty value (non-null empty string in the DB), never a pass-through.
+	require.NotNil(t, header.Value, "env-sourced header carries the empty-value sentinel")
+	require.Empty(t, *header.Value)
+	require.Nil(t, header.ValueFromRequestHeader)
+
+	envID := seedEnvironmentWithEntries(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, map[string]string{
+		"X_UPSTREAM_API_KEY": "from-attached-env",
+	})
+	attachEnvironmentToMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, mcpServer, envID)
+
+	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
+	<-done
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	require.Equal(t, "from-attached-env", gotAPIKey, "header created via the management API must be filled from the attached environment at serve time")
 }
