@@ -27,6 +27,8 @@ import { useRemovePluginServerMutation } from "@gram/client/react-query/removePl
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
+import { useMembers } from "@gram/client/react-query/members";
+import { useRoles } from "@gram/client/react-query/roles";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import {
   Badge,
@@ -52,6 +54,9 @@ import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
 import { downloadPluginPackage } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
+import { PluginAssignmentsSheet } from "./PluginAssignmentsSheet";
+import { PrincipalBadge } from "./PrincipalBadge";
+import { memberMapByUrn, roleMapByUrn } from "./principals";
 import { PublishDialog } from "./PublishDialog";
 
 // A selectable server for a plugin, sourced from either a toolset (Hosted) or
@@ -79,6 +84,7 @@ export default function PluginDetail(): JSX.Element | null {
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isAssignmentsOpen, setIsAssignmentsOpen] = useState(false);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
   // Polled so the publish-freshness badges/banner pick up the Temporal
@@ -122,6 +128,20 @@ export default function PluginDetail(): JSX.Element | null {
 
   const isLoadingServers =
     isLoadingToolsets || isLoadingMcpServers || isLoadingMcpEndpoints;
+
+  // Roles and members resolve the plugin's assignment principal URNs to human
+  // names in the summary below (and seed the assignment sheet). React Query
+  // dedupes these with the sheet's own calls.
+  const { data: rolesData } = useRoles();
+  const { data: membersData } = useMembers();
+  const roleByUrn = useMemo(
+    () => roleMapByUrn(rolesData?.roles ?? []),
+    [rolesData?.roles],
+  );
+  const memberByUrn = useMemo(
+    () => memberMapByUrn(membersData?.members ?? []),
+    [membersData?.members],
+  );
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.
@@ -330,6 +350,7 @@ export default function PluginDetail(): JSX.Element | null {
     (isDefaultPlugin ? DEFAULT_PLUGIN_DESCRIPTION : "No description");
 
   const servers = plugin.servers ?? [];
+  const assignments = plugin.assignments ?? [];
 
   // Exclude servers already added to the plugin, keyed per backend.
   const addedToolsetIds = new Set(
@@ -542,6 +563,60 @@ export default function PluginDetail(): JSX.Element | null {
           )}
         </div>
 
+        {/* Assignments section */}
+        <div className="mb-3 flex items-center gap-3">
+          <div className="border-border flex-1 border-t" />
+          <Type
+            small
+            muted
+            className="shrink-0 font-mono text-xs tracking-wide uppercase"
+          >
+            Assignments
+          </Type>
+          <div className="border-border flex-1 border-t" />
+        </div>
+        <div className="mb-3 flex justify-end">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsAssignmentsOpen(true)}
+          >
+            <Button.LeftIcon>
+              <Icon name="users" className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Manage assignments</Button.Text>
+          </Button>
+        </div>
+        <div className="mb-8">
+          {assignments.length === 0 ? (
+            <Stack
+              gap={2}
+              className="border-border rounded-xl border py-8"
+              align="center"
+              justify="center"
+            >
+              <Type variant="body" muted>
+                Not assigned to anyone yet
+              </Type>
+              <Type small muted>
+                Assign this plugin to roles, users, or emails to deliver it to
+                their devices.
+              </Type>
+            </Stack>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {assignments.map((assignment) => (
+                <PrincipalBadge
+                  key={assignment.id}
+                  urn={assignment.principalUrn}
+                  roleByUrn={roleByUrn}
+                  memberByUrn={memberByUrn}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Skills section — no plugin support yet, coming soon */}
         <div className="mb-3 flex items-center gap-3">
           <div className="border-border flex-1 border-t" />
@@ -714,6 +789,17 @@ export default function PluginDetail(): JSX.Element | null {
           onOpenChange={setIsPublishDialogOpen}
           onPublish={handlePublish}
           isPending={publishMutation.isPending}
+        />
+        <PluginAssignmentsSheet
+          pluginId={pluginId!}
+          pluginName={plugin.name}
+          assignments={assignments}
+          open={isAssignmentsOpen}
+          onOpenChange={setIsAssignmentsOpen}
+          onSaved={() => {
+            void invalidateAll();
+            offerPublish("Assignments updated");
+          }}
         />
       </Page.Body>
     </Page>
