@@ -327,6 +327,7 @@ If there are no tool calls, return an empty array.`, userPromptText)
 			UsageSource:    billing.ModelUsageSourceGram,
 			UserID:         "",
 			ExternalUserID: "",
+			UserEmail:      "",
 			HTTPMetadata:   nil,
 		},
 	)

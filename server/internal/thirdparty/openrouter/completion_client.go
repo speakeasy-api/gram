@@ -100,6 +100,7 @@ type ObjectCompletionRequest struct {
 	UsageSource    billing.ModelUsageSource
 	UserID         string
 	ExternalUserID string
+	UserEmail      string
 	HTTPMetadata   *HTTPMetadata
 	JSONSchema     *or.ChatJSONSchemaConfig // For structured output mode
 }

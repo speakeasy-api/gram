@@ -2046,7 +2046,7 @@ func (s *Service) SuggestCustomDetectionRule(ctx context.Context, payload *gen.S
 		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
 	}
 
-	suggestion, err := s.suggestCustomRuleViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt, payload.ExistingRuleIds)
+	suggestion, err := s.suggestCustomRuleViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, payload.ExistingRuleIds)
 	if err != nil {
 		s.logger.WarnContext(ctx, "openrouter suggestion failed; returning heuristic suggestion", attr.SlogError(err))
 		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
@@ -2198,7 +2198,7 @@ func validateScopeExpr(eng *celenv.Engine, expr *string) error {
 	return validateExpr(eng, *expr)
 }
 
-func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
+func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
 	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
 
 Given a single natural-language description of what an operator wants to detect, return a JSON object the dashboard uses to prefill a "create custom detection rule" form. The rule matches an agent message via a CEL (Common Expression Language) boolean expression in "detection_expr".
@@ -2272,15 +2272,18 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 
 	temperature := 0.2
 	response, err := s.completionClient.GetObjectCompletion(suggestCtx, openrouter.ObjectCompletionRequest{
-		OrgID:          orgID,
-		ProjectID:      projectID,
-		Model:          "",
-		SystemPrompt:   systemPrompt,
-		Prompt:         userMessage,
-		Temperature:    &temperature,
-		UsageSource:    billing.ModelUsageSourceGram,
-		UserID:         "",
+		OrgID:        orgID,
+		ProjectID:    projectID,
+		Model:        "",
+		SystemPrompt: systemPrompt,
+		Prompt:       userMessage,
+		Temperature:  &temperature,
+		UsageSource:  billing.ModelUsageSourceGram,
+		// The admin who asked for the suggestion — this completion is
+		// user-initiated, so usage attributes to them, not "(unset)". (cubic)
+		UserID:         userID,
 		ExternalUserID: "",
+		UserEmail:      userEmail,
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
 	})
@@ -2785,7 +2788,7 @@ func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID,
 	// A rule-test preview runs the deterministic, free L0 heuristics only; the
 	// billable LLM-judge L1 engine is not invoked on a test click (l1Enabled=false),
 	// so the structured message is unused here and carries just the sample text.
-	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, judgemessage.New(message.User, "", text), false)
+	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, "", judgemessage.New(message.User, "", text), false)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run prompt-injection scanner").LogError(ctx, s.logger)
 	}

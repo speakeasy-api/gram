@@ -4995,10 +4995,6 @@ type TumDetailsPointResponseBody struct {
 	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
 	// Billed tokens under management
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens int64 `form:"risky_message_tokens" json:"risky_message_tokens" xml:"risky_message_tokens"`
-	// Tokens in tool-call messages
-	ToolMessageTokens int64 `form:"tool_message_tokens" json:"tool_message_tokens" xml:"tool_message_tokens"`
 }
 
 // TumDetailsTotalsResponseBody is used to define fields on response body types.
@@ -5009,16 +5005,15 @@ type TumDetailsTotalsResponseBody struct {
 	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
 	// Billed tokens under management
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens int64 `form:"risky_message_tokens" json:"risky_message_tokens" xml:"risky_message_tokens"`
-	// Tokens in tool-call messages
-	ToolMessageTokens int64 `form:"tool_message_tokens" json:"tool_message_tokens" xml:"tool_message_tokens"`
 }
 
 // TumDetailsBreakdownResponseBody is used to define fields on response body
 // types.
 type TumDetailsBreakdownResponseBody struct {
-	// The breakdown dimension key (hook_source, model, email, division_name, role)
+	// The breakdown dimension key (hook_source, risk_analysis_model,
+	// completion_model, division_name, role). The two model keys partition the
+	// billed population: risk_analysis_model covers the platform's risk-policy
+	// scanning inference, completion_model covers user-facing completion surfaces.
 	Key string `form:"key" json:"key" xml:"key"`
 	// Top values by tokens in descending order, with the remainder rolled into
 	// 'Other'

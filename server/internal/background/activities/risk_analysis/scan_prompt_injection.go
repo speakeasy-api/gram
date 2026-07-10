@@ -15,14 +15,17 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 	out := make([][]scanners.Finding, len(messages))
 	l1Enabled := a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptInjectionUseClassifier)
 	var judgeMessages []judgemessage.Message
+	var judgeUserIDs []string
 	if l1Enabled {
 		judgeMessages = make([]judgemessage.Message, len(messages))
+		judgeUserIDs = make([]string, len(messages))
 		for i := range messages {
 			judgeMessages[i] = batchJudgeMessage(messages[i])
+			judgeUserIDs[i] = messages[i].UserID
 		}
 	}
 
-	results, err := a.promptInjectionScanner.ScanBatch(ctx, contents, args.OrganizationID, args.ProjectID.String(), judgeMessages, l1Enabled)
+	results, err := a.promptInjectionScanner.ScanBatch(ctx, contents, args.OrganizationID, args.ProjectID.String(), judgeUserIDs, judgeMessages, l1Enabled)
 	if err != nil {
 		a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
 		return out

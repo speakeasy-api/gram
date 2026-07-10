@@ -25,14 +25,6 @@ export type TumDetailsPoint = {
    */
   outputTokens: number;
   /**
-   * Tokens in messages carrying at least one active risk finding
-   */
-  riskyMessageTokens: number;
-  /**
-   * Tokens in tool-call messages
-   */
-  toolMessageTokens: number;
-  /**
    * Billed tokens under management
    */
   totalTokens: number;
@@ -47,8 +39,6 @@ export const TumDetailsPoint$inboundSchema: z.ZodMiniType<
     bucket_time_unix_nano: z.string(),
     input_tokens: z.int(),
     output_tokens: z.int(),
-    risky_message_tokens: z.int(),
-    tool_message_tokens: z.int(),
     total_tokens: z.int(),
   }),
   z.transform((v) => {
@@ -56,8 +46,6 @@ export const TumDetailsPoint$inboundSchema: z.ZodMiniType<
       "bucket_time_unix_nano": "bucketTimeUnixNano",
       "input_tokens": "inputTokens",
       "output_tokens": "outputTokens",
-      "risky_message_tokens": "riskyMessageTokens",
-      "tool_message_tokens": "toolMessageTokens",
       "total_tokens": "totalTokens",
     });
   }),
