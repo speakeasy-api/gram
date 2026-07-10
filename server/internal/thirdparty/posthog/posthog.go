@@ -129,6 +129,69 @@ func (p *Posthog) IdentifyUser(ctx context.Context, distinctID string, personPro
 	return nil
 }
 
+// GroupIdentify sets properties on a PostHog group (e.g. the "organization"
+// group), enabling group-based cohorts and dashboards. Last write wins per
+// property, so callers can refresh values idempotently. The group key must
+// match the convention the capture paths use — the organization group is
+// keyed by org SLUG (see CaptureEvent), so a mismatched key would fork the
+// group into two identities.
+func (p *Posthog) GroupIdentify(ctx context.Context, groupType string, groupKey string, groupProperties map[string]any) error {
+	if p.disabled {
+		p.logger.InfoContext(ctx, "posthog is disabled, dropping group identify")
+		return nil
+	}
+
+	properties := posthog.NewProperties()
+	for k, v := range groupProperties {
+		properties.Set(k, v)
+	}
+
+	if err := p.client.Enqueue(posthog.GroupIdentify{
+		Type:       groupType,
+		Key:        groupKey,
+		Properties: properties,
+	}); err != nil {
+		return fmt.Errorf("failed to enqueue group identify: %w", err)
+	}
+
+	return nil
+}
+
+// CaptureGroupEvent captures an event with explicit group memberships, for
+// server-initiated events emitted outside any request auth context (e.g.
+// background workers reporting per-organization metrics). No person profile
+// is created for the distinct id — these events describe the group, not a
+// user.
+func (p *Posthog) CaptureGroupEvent(ctx context.Context, eventName string, distinctID string, groups map[string]string, eventProperties map[string]any) error {
+	if p.disabled {
+		p.logger.InfoContext(ctx, "posthog is disabled, dropping event")
+		return nil
+	}
+
+	phGroups := map[string]any{}
+	for groupType, groupKey := range groups {
+		phGroups[groupType] = groupKey
+	}
+
+	properties := posthog.NewProperties().
+		Set("is_gram", true).
+		Set("$process_person_profile", false)
+	for k, v := range eventProperties {
+		properties.Set(k, v)
+	}
+
+	if err := p.client.Enqueue(posthog.Capture{
+		DistinctId: distinctID,
+		Event:      eventName,
+		Properties: properties,
+		Groups:     phGroups,
+	}); err != nil {
+		return fmt.Errorf("failed to enqueue event: %w", err)
+	}
+
+	return nil
+}
+
 func (p *Posthog) CaptureEvent(ctx context.Context, eventName string, distinctID string, eventProperties map[string]any) error {
 	// If posthog is disabled, we return true so we don't block the user from using the product
 	if p.disabled {

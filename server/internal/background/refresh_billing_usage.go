@@ -23,9 +23,10 @@ const (
 	snapshotBillingCycleUsageStartToCloseTimeout = 5 * time.Minute
 	refreshBillingUsageActivityMaximumAttempts   = 3
 	// Reserve more than the worst-case retry path for one batch: the Polar
-	// refresh (3 attempts × 60s) plus the cycle snapshot (3 attempts × 5m),
-	// each with 10s/15s retry backoffs and Temporal jitter.
-	refreshBillingUsageBatchWorstCaseRetryWindow = 20 * time.Minute
+	// refresh (3 attempts × 60s), the cycle snapshot (3 attempts × 5m), and
+	// the PostHog usage forward (3 attempts × 60s), each with 10s/15s retry
+	// backoffs and Temporal jitter.
+	refreshBillingUsageBatchWorstCaseRetryWindow = 24 * time.Minute
 	refreshBillingUsageWorkflowRunTimeout        = 30 * time.Minute
 	refreshBillingUsagesWaitInterval             = 10 * time.Second
 )
@@ -131,6 +132,16 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 		snapshotCtx := workflow.WithStartToCloseTimeout(ctx, snapshotBillingCycleUsageStartToCloseTimeout)
 		if err := workflow.ExecuteActivity(snapshotCtx, a.SnapshotBillingCycleUsage, batch).Get(ctx, nil); err != nil {
 			logger.Error("Failed to snapshot billing cycle usage batch", "error", err, "batch_start", i)
+			failedBatchCount++
+			failedOrgCount += len(batch)
+		}
+
+		// Forward the freshly snapshotted TUM usage to PostHog for GTM
+		// pricing analysis (AGE-2289). Reads only the durable snapshots, so
+		// it is cheap and safe even when the snapshot batch above partially
+		// failed — stale rows just re-forward the last known usage.
+		if err := workflow.ExecuteActivity(ctx, a.ForwardTokenUsageToPostHog, batch).Get(ctx, nil); err != nil {
+			logger.Error("Failed to forward token usage batch to posthog", "error", err, "batch_start", i)
 			failedBatchCount++
 			failedOrgCount += len(batch)
 		}

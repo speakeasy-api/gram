@@ -78,6 +78,7 @@ type Activities struct {
 	reapFlyApps                     *activities.ReapFlyApps
 	refreshBillingUsage             *activities.RefreshBillingUsage
 	snapshotBillingCycleUsage       *activities.SnapshotBillingCycleUsage
+	forwardTokenUsageToPostHog      *activities.ForwardTokenUsageToPostHog
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
 	transitionDeployment            *activities.TransitionDeployment
 	validateDeployment              *activities.ValidateDeployment
@@ -180,6 +181,7 @@ func NewActivities(
 		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		snapshotBillingCycleUsage:       activities.NewSnapshotBillingCycleUsage(logger, db, chConn, cacheAdapter, emailService),
+		forwardTokenUsageToPostHog:      activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
@@ -298,6 +300,10 @@ func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) e
 
 func (a *Activities) SnapshotBillingCycleUsage(ctx context.Context, orgIDs []string) error {
 	return a.snapshotBillingCycleUsage.Do(ctx, orgIDs)
+}
+
+func (a *Activities) ForwardTokenUsageToPostHog(ctx context.Context, orgIDs []string) error {
+	return a.forwardTokenUsageToPostHog.Do(ctx, orgIDs)
 }
 
 func (a *Activities) GetAllOrganizations(ctx context.Context) ([]string, error) {
