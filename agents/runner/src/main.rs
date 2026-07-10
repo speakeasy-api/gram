@@ -48,6 +48,12 @@ enum Mode {
         #[arg(long, env = "GRAM_ASSISTANT_ID")]
         assistant_id: Option<String>,
 
+        /// The project the assistant belongs to, used only to tag exported
+        /// trace spans. Optional like --assistant-id: a warm-pool sandbox
+        /// learns it from the first turn instead.
+        #[arg(long, env = "GRAM_ASSISTANT_PROJECT_ID")]
+        assistant_project_id: Option<String>,
+
         /// Base URL of the management API the runner calls back into for
         /// bootstrap, completions, and MCP traffic.
         #[arg(long, env = "GRAM_SERVER_URL")]
@@ -94,6 +100,7 @@ async fn main() -> ExitCode {
         Mode::Serve {
             addr,
             assistant_id,
+            assistant_project_id,
             server_url,
             initial_token,
             with_otel_tracing,
@@ -101,6 +108,7 @@ async fn main() -> ExitCode {
         } => {
             let identity = Arc::new(SpanIdentity::default());
             SpanIdentity::bind(&identity.assistant_id, assistant_id.as_deref());
+            SpanIdentity::bind(&identity.project_id, assistant_project_id.as_deref());
             let tracer_provider = init_tracing(
                 with_otel_tracing.then_some(otel_protocol),
                 Arc::clone(&identity),

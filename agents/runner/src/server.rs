@@ -87,12 +87,12 @@ async fn thread_turn(
 ) -> Result<Json<ThreadTurnResponse>, (StatusCode, String)> {
     // Bind identity from the request before opening the span so the span
     // processor stamps this turn's own spans too — a warm-pool sandbox
-    // learns its identity from the first turn that carries it. Binding
-    // before validation and bootstrap is safe: the backend routes a pod to
-    // exactly one assistant, so even a turn that goes on to fail carries
-    // this pod's real identity.
-    SpanIdentity::bind(&host.identity.assistant_id, request.assistant_id.as_deref());
-    SpanIdentity::bind(&host.identity.project_id, request.project_id.as_deref());
+    // learns its identity from the first turn that carries it. Nothing is
+    // authenticated yet, so bind_request commits only well-formed UUIDs to
+    // the permanent cells; a stray malformed POST leaves them open for the
+    // real first turn.
+    SpanIdentity::bind_request(&host.identity.assistant_id, request.assistant_id.as_deref());
+    SpanIdentity::bind_request(&host.identity.project_id, request.project_id.as_deref());
     let span = tracing::info_span!("thread_turn", thread_id = %thread_id);
     thread_turn_inner(host, thread_id, headers, request)
         .instrument(span)
