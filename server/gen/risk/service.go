@@ -312,6 +312,9 @@ type CreateRiskPolicyPayload struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty/omitted leaves the domain rule inert.
 	ApprovedEmailDomains []string
+	// Category keys whose centrally recommended detection scope is NOT applied for
+	// this policy. Empty/omitted = all recommendations apply.
+	DisabledRecommendedScopes []string
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
@@ -851,6 +854,9 @@ type RiskCategoriesResult struct {
 	// Categories in classification-priority order. The last entry is the 'custom'
 	// fallback for findings that match none of the others.
 	Categories []*RiskCategoryDefinition
+	// Version of the recommended-scope registry; bumps when any recommendation
+	// changes.
+	RecommendedScopesVersion int64
 }
 
 // One canonical risk category and how findings are classified into it.
@@ -872,6 +878,17 @@ type RiskCategoryDefinition struct {
 	// When non-empty, findings whose rule_id starts with this prefix belong to
 	// this category. The catch-all for a family (e.g. 'pii.').
 	RuleIDPrefix string
+	// Centrally recommended CEL scope predicate for this category; empty = no
+	// include restriction.
+	RecommendedScopeInclude string
+	// Centrally recommended CEL exemption predicate; empty = no exemption.
+	RecommendedScopeExempt string
+	// User-facing explanation of the recommended scope and the consequences of
+	// disabling it. Empty when the category has no recommendation.
+	RecommendedScopeRationale string
+	// False when the category is session-scoped and message scoping does not apply
+	// (e.g. account_identity).
+	RecommendedScopeApplicable bool
 }
 
 type RiskOverviewCategory struct {
@@ -1208,6 +1225,9 @@ type UpdateRiskPolicyPayload struct {
 	// For the account_identity source: corporate email domains considered
 	// approved. Omit to preserve the current list; send an empty array to clear it.
 	ApprovedEmailDomains []string
+	// Category keys whose centrally recommended detection scope is NOT applied for
+	// this policy. Omit to preserve the current value; send empty to clear.
+	DisabledRecommendedScopes []string
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string

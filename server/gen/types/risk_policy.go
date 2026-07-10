@@ -32,6 +32,9 @@ type RiskPolicy struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty means the domain rule is inert.
 	ApprovedEmailDomains []string
+	// Category keys whose centrally recommended detection scope is not applied for
+	// this policy. Empty means every recommendation applies.
+	DisabledRecommendedScopes []string
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are

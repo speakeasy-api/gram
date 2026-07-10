@@ -42047,6 +42047,11 @@ components:
                     items:
                         type: string
                     description: 'Custom detection rule ids to attach as detectors: a match produces a finding.'
+                disabled_recommended_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: Category keys whose centrally recommended detection scope is NOT applied for this policy. Empty/omitted = all recommendations apply.
                 disabled_rules:
                     type: array
                     items:
@@ -49923,9 +49928,14 @@ components:
                     items:
                         $ref: '#/components/schemas/RiskCategoryDefinition'
                     description: Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.
+                recommended_scopes_version:
+                    type: integer
+                    description: Version of the recommended-scope registry; bumps when any recommendation changes.
+                    format: int64
             description: Canonical risk category definitions used to classify findings, in classification-priority order. Consumers should iterate in order and pick the first match.
             required:
                 - categories
+                - recommended_scopes_version
         RiskCategoryDefinition:
             type: object
             properties:
@@ -49941,6 +49951,18 @@ components:
                 label:
                     type: string
                     description: Human-readable category label for UI rendering.
+                recommended_scope_applicable:
+                    type: boolean
+                    description: False when the category is session-scoped and message scoping does not apply (e.g. account_identity).
+                recommended_scope_exempt:
+                    type: string
+                    description: Centrally recommended CEL exemption predicate; empty = no exemption.
+                recommended_scope_include:
+                    type: string
+                    description: Centrally recommended CEL scope predicate for this category; empty = no include restriction.
+                recommended_scope_rationale:
+                    type: string
+                    description: User-facing explanation of the recommended scope and the consequences of disabling it. Empty when the category has no recommendation.
                 rule_id_prefix:
                     type: string
                     description: When non-empty, findings whose rule_id starts with this prefix belong to this category. The catch-all for a family (e.g. 'pii.').
@@ -49961,6 +49983,10 @@ components:
                 - source
                 - rule_ids
                 - rule_id_prefix
+                - recommended_scope_include
+                - recommended_scope_exempt
+                - recommended_scope_rationale
+                - recommended_scope_applicable
         RiskChatSummary:
             type: object
             properties:
@@ -50243,6 +50269,11 @@ components:
                     items:
                         type: string
                     description: 'Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.'
+                disabled_recommended_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: Category keys whose centrally recommended detection scope is not applied for this policy. Empty means every recommendation applies.
                 disabled_rules:
                     type: array
                     items:
@@ -55093,6 +55124,11 @@ components:
                     items:
                         type: string
                     description: 'Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.'
+                disabled_recommended_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: Category keys whose centrally recommended detection scope is NOT applied for this policy. Omit to preserve the current value; send empty to clear.
                 disabled_rules:
                     type: array
                     items:

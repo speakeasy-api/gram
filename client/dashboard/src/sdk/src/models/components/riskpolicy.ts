@@ -80,6 +80,10 @@ export type RiskPolicy = {
    */
   customRuleIds?: Array<string> | undefined;
   /**
+   * Category keys whose centrally recommended detection scope is not applied for this policy. Empty means every recommendation applies.
+   */
+  disabledRecommendedScopes?: Array<string> | undefined;
+  /**
    * Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.
    */
   disabledRules?: Array<string> | undefined;
@@ -190,6 +194,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         z.transform(v => new Date(v)),
       ),
       custom_rule_ids: z.optional(z.array(z.string())),
+      disabled_recommended_scopes: z.optional(z.array(z.string())),
       disabled_rules: z.optional(z.array(z.string())),
       enabled: z.boolean(),
       id: z.string(),
@@ -222,6 +227,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "auto_name": "autoName",
         "created_at": "createdAt",
         "custom_rule_ids": "customRuleIds",
+        "disabled_recommended_scopes": "disabledRecommendedScopes",
         "disabled_rules": "disabledRules",
         "message_types": "messageTypes",
         "model_config": "modelConfig",

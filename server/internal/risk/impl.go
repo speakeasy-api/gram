@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
@@ -387,6 +388,15 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
 		}
 	}
+	if len(payload.DisabledRecommendedScopes) > 0 {
+		if err := validateRecommendedScopeCategories(payload.DisabledRecommendedScopes); err != nil {
+			return nil, err
+		}
+		analyzerConfig, err = ra.WithDisabledRecommendedScopes(analyzerConfig, payload.DisabledRecommendedScopes)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
+		}
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -612,6 +622,17 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			return nil, err
 		}
 		updated, err := ra.WithApprovedEmailDomains(analyzerConfig, domains)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
+		}
+		analyzerConfig = updated
+	}
+	// Omit to preserve; send (possibly empty, to clear) to replace.
+	if payload.DisabledRecommendedScopes != nil {
+		if err := validateRecommendedScopeCategories(payload.DisabledRecommendedScopes); err != nil {
+			return nil, err
+		}
+		updated, err := ra.WithDisabledRecommendedScopes(analyzerConfig, payload.DisabledRecommendedScopes)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
 		}
@@ -1608,17 +1629,34 @@ func (s *Service) ListRiskCategories(ctx context.Context, payload *gen.ListRiskC
 		if ruleIDs == nil {
 			ruleIDs = []string{}
 		}
+		rec, ok := recommendedscopes.For(def.Category)
+		if !ok {
+			rec = recommendedscopes.Recommendation{
+				Category:     def.Category,
+				ScopeInclude: "",
+				ScopeExempt:  "",
+				Rationale:    "",
+				Applicable:   true,
+			}
+		}
 		out = append(out, &gen.RiskCategoryDefinition{
-			Key:          string(def.Category),
-			Label:        def.Label,
-			Description:  def.Description,
-			Icon:         def.Icon,
-			Source:       def.Source,
-			RuleIds:      ruleIDs,
-			RuleIDPrefix: def.RulePrefix,
+			Key:                        string(def.Category),
+			Label:                      def.Label,
+			Description:                def.Description,
+			Icon:                       def.Icon,
+			Source:                     def.Source,
+			RuleIds:                    ruleIDs,
+			RuleIDPrefix:               def.RulePrefix,
+			RecommendedScopeInclude:    rec.ScopeInclude,
+			RecommendedScopeExempt:     rec.ScopeExempt,
+			RecommendedScopeRationale:  rec.Rationale,
+			RecommendedScopeApplicable: rec.Applicable,
 		})
 	}
-	return &gen.RiskCategoriesResult{Categories: out}, nil
+	return &gen.RiskCategoriesResult{
+		Categories:               out,
+		RecommendedScopesVersion: recommendedscopes.Version,
+	}, nil
 }
 
 // CompileExpr compiles a single CEL expression without evaluating it, so the
@@ -2146,6 +2184,20 @@ func validateMessageTypes(messageTypes []string) error {
 			messageType,
 			strings.Join(message.AllTypes(), ", "),
 		)
+	}
+	return nil
+}
+
+func validateRecommendedScopeCategories(keys []string) error {
+	known := make(map[categories.Category]struct{}, len(categories.All()))
+	for _, def := range categories.All() {
+		known[def.Category] = struct{}{}
+	}
+	for _, key := range keys {
+		if _, ok := known[categories.Category(key)]; ok {
+			continue
+		}
+		return oops.E(oops.CodeInvalid, nil, "recommended scope category %q is not recognized", key)
 	}
 	return nil
 }
@@ -2879,33 +2931,34 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	}
 
 	return &types.RiskPolicy{
-		ID:                     row.ID.String(),
-		ProjectID:              row.ProjectID.String(),
-		Name:                   row.Name,
-		PolicyType:             row.PolicyType,
-		Sources:                row.Sources,
-		PresidioEntities:       row.PresidioEntities,
-		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
-		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
-		PromptInjectionRules:   row.PromptInjectionRules,
-		DisabledRules:          row.DisabledRules,
-		CustomRuleIds:          row.CustomRuleIds,
-		MessageTypes:           row.MessageTypes,
-		ScopeInclude:           conv.FromPGText[string](row.ScopeInclude),
-		ScopeExempt:            conv.FromPGText[string](row.ScopeExempt),
-		Enabled:                row.Enabled,
-		Action:                 row.Action,
-		AudienceType:           row.AudienceType,
-		AudiencePrincipalUrns:  audiencePrincipalURNs,
-		AutoName:               row.AutoName,
-		UserMessage:            conv.FromPGText[string](row.UserMessage),
-		Prompt:                 conv.FromPGText[string](row.Prompt),
-		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
-		Version:                row.Version,
-		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:        pendingMessages,
-		TotalMessages:          totalMessages,
+		ID:                        row.ID.String(),
+		ProjectID:                 row.ProjectID.String(),
+		Name:                      row.Name,
+		PolicyType:                row.PolicyType,
+		Sources:                   row.Sources,
+		PresidioEntities:          row.PresidioEntities,
+		PresidioScoreThreshold:    ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
+		ApprovedEmailDomains:      ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
+		DisabledRecommendedScopes: ra.DisabledRecommendedScopesFromConfig(row.AnalyzerConfig),
+		PromptInjectionRules:      row.PromptInjectionRules,
+		DisabledRules:             row.DisabledRules,
+		CustomRuleIds:             row.CustomRuleIds,
+		MessageTypes:              row.MessageTypes,
+		ScopeInclude:              conv.FromPGText[string](row.ScopeInclude),
+		ScopeExempt:               conv.FromPGText[string](row.ScopeExempt),
+		Enabled:                   row.Enabled,
+		Action:                    row.Action,
+		AudienceType:              row.AudienceType,
+		AudiencePrincipalUrns:     audiencePrincipalURNs,
+		AutoName:                  row.AutoName,
+		UserMessage:               conv.FromPGText[string](row.UserMessage),
+		Prompt:                    conv.FromPGText[string](row.Prompt),
+		ModelConfig:               unmarshalModelConfig(row.ModelConfig),
+		Version:                   row.Version,
+		CreatedAt:                 row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                 row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:           pendingMessages,
+		TotalMessages:             totalMessages,
 	}, nil
 }
 
@@ -2914,33 +2967,34 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		audiencePrincipalURNs = []string{}
 	}
 	return &types.RiskPolicy{
-		ID:                     row.ID.String(),
-		ProjectID:              row.ProjectID.String(),
-		Name:                   row.Name,
-		PolicyType:             row.PolicyType,
-		Sources:                row.Sources,
-		PresidioEntities:       row.PresidioEntities,
-		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
-		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
-		PromptInjectionRules:   row.PromptInjectionRules,
-		DisabledRules:          row.DisabledRules,
-		CustomRuleIds:          row.CustomRuleIds,
-		MessageTypes:           row.MessageTypes,
-		ScopeInclude:           conv.FromPGText[string](row.ScopeInclude),
-		ScopeExempt:            conv.FromPGText[string](row.ScopeExempt),
-		Enabled:                row.Enabled,
-		Action:                 row.Action,
-		AudienceType:           row.AudienceType,
-		AudiencePrincipalUrns:  audiencePrincipalURNs,
-		AutoName:               row.AutoName,
-		UserMessage:            conv.FromPGText[string](row.UserMessage),
-		Prompt:                 conv.FromPGText[string](row.Prompt),
-		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
-		Version:                row.Version,
-		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:        -1,
-		TotalMessages:          -1,
+		ID:                        row.ID.String(),
+		ProjectID:                 row.ProjectID.String(),
+		Name:                      row.Name,
+		PolicyType:                row.PolicyType,
+		Sources:                   row.Sources,
+		PresidioEntities:          row.PresidioEntities,
+		PresidioScoreThreshold:    ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
+		ApprovedEmailDomains:      ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
+		DisabledRecommendedScopes: ra.DisabledRecommendedScopesFromConfig(row.AnalyzerConfig),
+		PromptInjectionRules:      row.PromptInjectionRules,
+		DisabledRules:             row.DisabledRules,
+		CustomRuleIds:             row.CustomRuleIds,
+		MessageTypes:              row.MessageTypes,
+		ScopeInclude:              conv.FromPGText[string](row.ScopeInclude),
+		ScopeExempt:               conv.FromPGText[string](row.ScopeExempt),
+		Enabled:                   row.Enabled,
+		Action:                    row.Action,
+		AudienceType:              row.AudienceType,
+		AudiencePrincipalUrns:     audiencePrincipalURNs,
+		AutoName:                  row.AutoName,
+		UserMessage:               conv.FromPGText[string](row.UserMessage),
+		Prompt:                    conv.FromPGText[string](row.Prompt),
+		ModelConfig:               unmarshalModelConfig(row.ModelConfig),
+		Version:                   row.Version,
+		CreatedAt:                 row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                 row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:           -1,
+		TotalMessages:             -1,
 	}
 }
 

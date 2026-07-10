@@ -74,6 +74,10 @@ export type CreateRiskPolicyRequestBody = {
    */
   customRuleIds?: Array<string> | undefined;
   /**
+   * Category keys whose centrally recommended detection scope is NOT applied for this policy. Empty/omitted = all recommendations apply.
+   */
+  disabledRecommendedScopes?: Array<string> | undefined;
+  /**
    * Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.
    */
   disabledRules?: Array<string> | undefined;
@@ -149,6 +153,7 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   audience_type: string;
   auto_name?: boolean | undefined;
   custom_rule_ids?: Array<string> | undefined;
+  disabled_recommended_scopes?: Array<string> | undefined;
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
   message_types?: Array<string> | undefined;
@@ -177,6 +182,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     audienceType: z._default(AudienceType$outboundSchema, "everyone"),
     autoName: z.optional(z.boolean()),
     customRuleIds: z.optional(z.array(z.string())),
+    disabledRecommendedScopes: z.optional(z.array(z.string())),
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
     messageTypes: z.optional(z.array(z.string())),
@@ -199,6 +205,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       audienceType: "audience_type",
       autoName: "auto_name",
       customRuleIds: "custom_rule_ids",
+      disabledRecommendedScopes: "disabled_recommended_scopes",
       disabledRules: "disabled_rules",
       messageTypes: "message_types",
       modelConfig: "model_config",

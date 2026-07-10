@@ -35,6 +35,9 @@ type CreateRiskPolicyRequestBody struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty/omitted leaves the domain rule inert.
 	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
+	// Category keys whose centrally recommended detection scope is NOT applied for
+	// this policy. Empty/omitted = all recommendations apply.
+	DisabledRecommendedScopes []string `form:"disabled_recommended_scopes,omitempty" json:"disabled_recommended_scopes,omitempty" xml:"disabled_recommended_scopes,omitempty"`
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
@@ -91,6 +94,9 @@ type UpdateRiskPolicyRequestBody struct {
 	// For the account_identity source: corporate email domains considered
 	// approved. Omit to preserve the current list; send an empty array to clear it.
 	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
+	// Category keys whose centrally recommended detection scope is NOT applied for
+	// this policy. Omit to preserve the current value; send empty to clear.
+	DisabledRecommendedScopes []string `form:"disabled_recommended_scopes,omitempty" json:"disabled_recommended_scopes,omitempty" xml:"disabled_recommended_scopes,omitempty"`
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
@@ -374,6 +380,9 @@ type CreateRiskPolicyResponseBody struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty means the domain rule is inert.
 	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
+	// Category keys whose centrally recommended detection scope is not applied for
+	// this policy. Empty means every recommendation applies.
+	DisabledRecommendedScopes []string `form:"disabled_recommended_scopes,omitempty" json:"disabled_recommended_scopes,omitempty" xml:"disabled_recommended_scopes,omitempty"`
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
@@ -469,6 +478,9 @@ type GetRiskPolicyResponseBody struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty means the domain rule is inert.
 	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
+	// Category keys whose centrally recommended detection scope is not applied for
+	// this policy. Empty means every recommendation applies.
+	DisabledRecommendedScopes []string `form:"disabled_recommended_scopes,omitempty" json:"disabled_recommended_scopes,omitempty" xml:"disabled_recommended_scopes,omitempty"`
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
@@ -548,6 +560,9 @@ type UpdateRiskPolicyResponseBody struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty means the domain rule is inert.
 	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
+	// Category keys whose centrally recommended detection scope is not applied for
+	// this policy. Empty means every recommendation applies.
+	DisabledRecommendedScopes []string `form:"disabled_recommended_scopes,omitempty" json:"disabled_recommended_scopes,omitempty" xml:"disabled_recommended_scopes,omitempty"`
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
@@ -673,6 +688,9 @@ type ListRiskCategoriesResponseBody struct {
 	// Categories in classification-priority order. The last entry is the 'custom'
 	// fallback for findings that match none of the others.
 	Categories []*RiskCategoryDefinitionResponseBody `form:"categories,omitempty" json:"categories,omitempty" xml:"categories,omitempty"`
+	// Version of the recommended-scope registry; bumps when any recommendation
+	// changes.
+	RecommendedScopesVersion *int64 `form:"recommended_scopes_version,omitempty" json:"recommended_scopes_version,omitempty" xml:"recommended_scopes_version,omitempty"`
 }
 
 // CompileExprResponseBody is the type of the "risk" service "compileExpr"
@@ -9059,6 +9077,9 @@ type RiskPolicyResponseBody struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty means the domain rule is inert.
 	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
+	// Category keys whose centrally recommended detection scope is not applied for
+	// this policy. Empty means every recommendation applies.
+	DisabledRecommendedScopes []string `form:"disabled_recommended_scopes,omitempty" json:"disabled_recommended_scopes,omitempty" xml:"disabled_recommended_scopes,omitempty"`
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
@@ -9338,6 +9359,17 @@ type RiskCategoryDefinitionResponseBody struct {
 	// When non-empty, findings whose rule_id starts with this prefix belong to
 	// this category. The catch-all for a family (e.g. 'pii.').
 	RuleIDPrefix *string `form:"rule_id_prefix,omitempty" json:"rule_id_prefix,omitempty" xml:"rule_id_prefix,omitempty"`
+	// Centrally recommended CEL scope predicate for this category; empty = no
+	// include restriction.
+	RecommendedScopeInclude *string `form:"recommended_scope_include,omitempty" json:"recommended_scope_include,omitempty" xml:"recommended_scope_include,omitempty"`
+	// Centrally recommended CEL exemption predicate; empty = no exemption.
+	RecommendedScopeExempt *string `form:"recommended_scope_exempt,omitempty" json:"recommended_scope_exempt,omitempty" xml:"recommended_scope_exempt,omitempty"`
+	// User-facing explanation of the recommended scope and the consequences of
+	// disabling it. Empty when the category has no recommendation.
+	RecommendedScopeRationale *string `form:"recommended_scope_rationale,omitempty" json:"recommended_scope_rationale,omitempty" xml:"recommended_scope_rationale,omitempty"`
+	// False when the category is session-scoped and message scoping does not apply
+	// (e.g. account_identity).
+	RecommendedScopeApplicable *bool `form:"recommended_scope_applicable,omitempty" json:"recommended_scope_applicable,omitempty" xml:"recommended_scope_applicable,omitempty"`
 }
 
 // RiskPolicyBypassRequestResponseBody is used to define fields on response
@@ -9550,6 +9582,12 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 			body.ApprovedEmailDomains[i] = val
 		}
 	}
+	if p.DisabledRecommendedScopes != nil {
+		body.DisabledRecommendedScopes = make([]string, len(p.DisabledRecommendedScopes))
+		for i, val := range p.DisabledRecommendedScopes {
+			body.DisabledRecommendedScopes[i] = val
+		}
+	}
 	if p.DisabledRules != nil {
 		body.DisabledRules = make([]string, len(p.DisabledRules))
 		for i, val := range p.DisabledRules {
@@ -9630,6 +9668,12 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		body.ApprovedEmailDomains = make([]string, len(p.ApprovedEmailDomains))
 		for i, val := range p.ApprovedEmailDomains {
 			body.ApprovedEmailDomains[i] = val
+		}
+	}
+	if p.DisabledRecommendedScopes != nil {
+		body.DisabledRecommendedScopes = make([]string, len(p.DisabledRecommendedScopes))
+		for i, val := range p.DisabledRecommendedScopes {
+			body.DisabledRecommendedScopes[i] = val
 		}
 	}
 	if p.DisabledRules != nil {
@@ -9979,6 +10023,12 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		v.ApprovedEmailDomains = make([]string, len(body.ApprovedEmailDomains))
 		for i, val := range body.ApprovedEmailDomains {
 			v.ApprovedEmailDomains[i] = val
+		}
+	}
+	if body.DisabledRecommendedScopes != nil {
+		v.DisabledRecommendedScopes = make([]string, len(body.DisabledRecommendedScopes))
+		for i, val := range body.DisabledRecommendedScopes {
+			v.DisabledRecommendedScopes[i] = val
 		}
 	}
 	if body.DisabledRules != nil {
@@ -10539,6 +10589,12 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 			v.ApprovedEmailDomains[i] = val
 		}
 	}
+	if body.DisabledRecommendedScopes != nil {
+		v.DisabledRecommendedScopes = make([]string, len(body.DisabledRecommendedScopes))
+		for i, val := range body.DisabledRecommendedScopes {
+			v.DisabledRecommendedScopes[i] = val
+		}
+	}
 	if body.DisabledRules != nil {
 		v.DisabledRules = make([]string, len(body.DisabledRules))
 		for i, val := range body.DisabledRules {
@@ -10761,6 +10817,12 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		v.ApprovedEmailDomains = make([]string, len(body.ApprovedEmailDomains))
 		for i, val := range body.ApprovedEmailDomains {
 			v.ApprovedEmailDomains[i] = val
+		}
+	}
+	if body.DisabledRecommendedScopes != nil {
+		v.DisabledRecommendedScopes = make([]string, len(body.DisabledRecommendedScopes))
+		for i, val := range body.DisabledRecommendedScopes {
+			v.DisabledRecommendedScopes[i] = val
 		}
 	}
 	if body.DisabledRules != nil {
@@ -11959,7 +12021,9 @@ func NewGetRiskOverviewGatewayError(body *GetRiskOverviewGatewayErrorResponseBod
 // NewListRiskCategoriesRiskCategoriesResultOK builds a "risk" service
 // "listRiskCategories" endpoint result from a HTTP "OK" response.
 func NewListRiskCategoriesRiskCategoriesResultOK(body *ListRiskCategoriesResponseBody) *risk.RiskCategoriesResult {
-	v := &risk.RiskCategoriesResult{}
+	v := &risk.RiskCategoriesResult{
+		RecommendedScopesVersion: *body.RecommendedScopesVersion,
+	}
 	v.Categories = make([]*risk.RiskCategoryDefinition, len(body.Categories))
 	for i, val := range body.Categories {
 		if val == nil {
@@ -17573,6 +17637,9 @@ func ValidateGetRiskOverviewResponseBody(body *GetRiskOverviewResponseBody) (err
 func ValidateListRiskCategoriesResponseBody(body *ListRiskCategoriesResponseBody) (err error) {
 	if body.Categories == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("categories", "body"))
+	}
+	if body.RecommendedScopesVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recommended_scopes_version", "body"))
 	}
 	for _, e := range body.Categories {
 		if e != nil {
@@ -28925,6 +28992,18 @@ func ValidateRiskCategoryDefinitionResponseBody(body *RiskCategoryDefinitionResp
 	}
 	if body.RuleIDPrefix == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("rule_id_prefix", "body"))
+	}
+	if body.RecommendedScopeInclude == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recommended_scope_include", "body"))
+	}
+	if body.RecommendedScopeExempt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recommended_scope_exempt", "body"))
+	}
+	if body.RecommendedScopeRationale == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recommended_scope_rationale", "body"))
+	}
+	if body.RecommendedScopeApplicable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recommended_scope_applicable", "body"))
 	}
 	return
 }

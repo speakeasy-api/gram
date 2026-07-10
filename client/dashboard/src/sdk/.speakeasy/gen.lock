@@ -4575,7 +4575,7 @@ examples:
     speakeasy-default-list-risk-categories:
       responses:
         "200":
-          application/json: {"categories": []}
+          application/json: {"categories": [], "recommended_scopes_version": 419162}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

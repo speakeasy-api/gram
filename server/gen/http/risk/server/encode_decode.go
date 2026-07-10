@@ -9889,6 +9889,12 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 			res.ApprovedEmailDomains[i] = val
 		}
 	}
+	if v.DisabledRecommendedScopes != nil {
+		res.DisabledRecommendedScopes = make([]string, len(v.DisabledRecommendedScopes))
+		for i, val := range v.DisabledRecommendedScopes {
+			res.DisabledRecommendedScopes[i] = val
+		}
+	}
 	if v.DisabledRules != nil {
 		res.DisabledRules = make([]string, len(v.DisabledRules))
 		for i, val := range v.DisabledRules {
@@ -10151,12 +10157,16 @@ func marshalRiskRiskOverviewTimeSeriesFindingToRiskOverviewTimeSeriesFindingResp
 // *risk.RiskCategoryDefinition.
 func marshalRiskRiskCategoryDefinitionToRiskCategoryDefinitionResponseBody(v *risk.RiskCategoryDefinition) *RiskCategoryDefinitionResponseBody {
 	res := &RiskCategoryDefinitionResponseBody{
-		Key:          v.Key,
-		Label:        v.Label,
-		Description:  v.Description,
-		Icon:         v.Icon,
-		Source:       v.Source,
-		RuleIDPrefix: v.RuleIDPrefix,
+		Key:                        v.Key,
+		Label:                      v.Label,
+		Description:                v.Description,
+		Icon:                       v.Icon,
+		Source:                     v.Source,
+		RuleIDPrefix:               v.RuleIDPrefix,
+		RecommendedScopeInclude:    v.RecommendedScopeInclude,
+		RecommendedScopeExempt:     v.RecommendedScopeExempt,
+		RecommendedScopeRationale:  v.RecommendedScopeRationale,
+		RecommendedScopeApplicable: v.RecommendedScopeApplicable,
 	}
 	if v.RuleIds != nil {
 		res.RuleIds = make([]string, len(v.RuleIds))
