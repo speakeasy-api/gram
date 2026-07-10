@@ -3,12 +3,11 @@ name: Plugin Generate Check
 on:
   pull_request:
     paths:
-      - "server/internal/plugins/generate.go"
-      - "server/internal/plugins/hook_adapters.go"
-      - "server/internal/plugins/naming/**"
+      - "server/internal/plugins/**"
+      - "server/cmd/export-hook-plugin/**"
 
 jobs:
-  generator-version-nudge:
+  check-generator-versions:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR branch
@@ -16,23 +15,71 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Remind to consider a generator version bump
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: "go.mod"
+          # Reference: https://github.com/actions/setup-go/issues/495
+          cache: false
+
+      - name: Require a hooksGeneratorVersion bump when hook plugin output changes
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          # The plugin generator sources drive the plugin fingerprint that the
-          # automated rollout uses to skip unchanged projects. Output-affecting
-          # changes are caught automatically by the content hash, so we do NOT
-          # force a bump on every edit — that would invalidate every project's
-          # fingerprint and trigger a full republish (fresh keys + commits) for
-          # no reason. This is a non-blocking nudge for the rare case where
-          # generation BEHAVIOUR changes in a way the placeholder fingerprint
-          # pass can't observe.
+          # The observability (hooks) plugin has no content fingerprint: the
+          # rollout republishes it ONLY when hooksGeneratorVersion is bumped.
+          # Nothing is checked in to diff anymore, so render the hook plugins
+          # from both the merge base and this PR and compare the trees — any
+          # output change MUST come with a bump or it would never roll out to
+          # connected repos. Blocking.
           git fetch origin "$BASE_REF"
           BASE=$(git merge-base "origin/$BASE_REF" HEAD)
 
-          # Hash the generation-input objects directly instead of diffing file
-          # lists. A vanished path hashes to a distinct sentinel so renames and
+          HEAD_OUT=$(mktemp -d)
+          (cd server && go run ./cmd/export-hook-plugin -out "$HEAD_OUT")
+
+          BASE_TREE=$(mktemp -d)
+          git worktree add --detach "$BASE_TREE" "$BASE"
+          BASE_OUT=$(mktemp -d)
+          (cd "$BASE_TREE/server" && go run ./cmd/export-hook-plugin -out "$BASE_OUT")
+          git worktree remove --force "$BASE_TREE"
+
+          hooks_version() {
+            git show "${1}:server/internal/plugins/generate.go" 2>/dev/null \
+              | grep -E '^[[:space:]]*const hooksGeneratorVersion' || true
+          }
+
+          if diff -r "$BASE_OUT" "$HEAD_OUT" > /dev/null; then
+            echo "Rendered hook plugins are unchanged; no bump needed."
+            exit 0
+          fi
+
+          if [ "$(hooks_version "$BASE")" = "$(hooks_version HEAD)" ]; then
+            echo "❌ Error: the rendered hook plugins changed but hooksGeneratorVersion was not bumped."
+            echo "The hooks plugin only republishes on a hooksGeneratorVersion bump, so this change would never reach users."
+            echo ""
+            echo "Changed rendered files:"
+            diff -rq "$BASE_OUT" "$HEAD_OUT" || true
+            echo ""
+            echo "Bump hooksGeneratorVersion in server/internal/plugins/generate.go."
+            exit 1
+          fi
+
+          echo "✅ Rendered hook plugins changed and hooksGeneratorVersion was bumped."
+
+      - name: Remind to consider an mcpGeneratorVersion bump
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # The MCP fingerprint catches output-visible MCP changes
+          # automatically, so we do NOT force an mcpGeneratorVersion bump on
+          # every edit — that would invalidate every project's fingerprint and
+          # trigger a full MCP republish (fresh keys + commits) for no reason.
+          # Non-blocking nudge, keyed on the git hashes of the generator
+          # sources, for MCP behaviour changes the placeholder fingerprint
+          # pass can't observe.
+          BASE=$(git merge-base "origin/$BASE_REF" HEAD)
+
+          # A vanished path hashes to a distinct sentinel so renames and
           # deletions register as a change rather than an error.
           generator_tree_hash() {
             git rev-parse \
@@ -47,14 +94,14 @@ jobs:
             exit 0
           fi
 
-          generator_version() {
+          mcp_version() {
             git show "${1}:server/internal/plugins/generate.go" 2>/dev/null \
-              | grep -E '^[[:space:]]*const pluginGeneratorVersion' || true
+              | grep -E '^[[:space:]]*const mcpGeneratorVersion' || true
           }
 
-          if [ "$(generator_version "$BASE")" != "$(generator_version HEAD)" ]; then
-            echo "✅ pluginGeneratorVersion was bumped."
+          if [ "$(mcp_version "$BASE")" != "$(mcp_version HEAD)" ]; then
+            echo "✅ mcpGeneratorVersion was bumped."
             exit 0
           fi
 
-          echo "::notice file=server/internal/plugins/generate.go::Plugin generator sources changed without bumping pluginGeneratorVersion. If this change alters generation behaviour in a way the fingerprint's placeholder pass can't observe (and you want every project republished on the next rollout), bump the const. Output-visible changes are detected automatically and need no bump."
+          echo "::notice file=server/internal/plugins/generate.go::Plugin generator sources changed without bumping mcpGeneratorVersion. If this alters MCP generation behaviour in a way the fingerprint's placeholder pass can't observe (and you want every project's MCP plugins republished on the next rollout), bump mcpGeneratorVersion. Output-visible MCP changes are detected automatically and need no bump."

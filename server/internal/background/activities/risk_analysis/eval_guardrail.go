@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 )
 
 // EvalMessage is a recorded chat message fed to the guardrail-eval replay. It is
@@ -25,34 +26,30 @@ type EvalMessage struct {
 }
 
 // MessageVerdict is the judge's verdict for one in-scope EvalMessage. Index
-// points back into the input slice so callers can attach message metadata (id,
-// seq) they own. The embedded JudgeVerdict carries the judge outcome (Matched,
-// confidence, rationale, cost, tokens); the outer fields add replay metadata the
-// judge itself doesn't produce.
+// points back into the input slice so callers can attach message metadata.
 type MessageVerdict struct {
 	Index     int
 	Type      message.Type
 	ToolName  string
 	LatencyMs int64
-	JudgeVerdict
+	promptpolicy.Verdict
 }
 
 // EvalPromptGuardrail replays a prompt_based guardrail against a sequence of
 // chat messages and returns one verdict per in-scope message, ordered by input
-// index. It reuses the exact role→type mapping, tool-call flattening, and judge
+// index. It reuses the exact role-to-type mapping, tool-call flattening, and judge
 // prompt the batch analyzer runs, so a workbench replay matches production
-// judging. It performs NO writes, enforcement, or outbox side-effects — it is a
-// read-only tuning aid for an unsaved guardrail.
+// judging. It performs no writes, enforcement, or outbox side effects.
 //
 // Scoping is by message_types and CEL scope predicates; when both are empty
 // every supported message is judged.
 func EvalPromptGuardrail(
 	ctx context.Context,
 	logger *slog.Logger,
-	judge PromptJudge,
+	judge promptpolicy.Evaluator,
 	eng *celenv.Engine,
 	orgID, projectID, prompt string,
-	cfg JudgeConfig,
+	cfg promptpolicy.Config,
 	messages []EvalMessage,
 	messageTypes []string,
 	includeCEL, exemptCEL string,
@@ -92,7 +89,7 @@ func EvalPromptGuardrail(
 		for vi, idx := range inScope {
 			verdicts[vi] = messageVerdictSkeleton(idx, built[idx])
 			if !cfg.FailOpen {
-				applyFailClosedFallback(&verdicts[vi])
+				applyFailClosedFallback(&verdicts[vi], nil)
 			}
 		}
 		return verdicts, nil
@@ -100,13 +97,13 @@ func EvalPromptGuardrail(
 
 	judgeFanout(
 		ctx, judge, orgID, projectID, prompt, cfg, built, inScope,
-		func(pos, idx int, verdict *JudgeVerdict, latency time.Duration) {
+		func(pos, idx int, verdict *promptpolicy.Verdict, err error, latency time.Duration) {
 			out := messageVerdictSkeleton(idx, built[idx])
 			out.LatencyMs = latency.Milliseconds()
-			if verdict != nil {
-				out.JudgeVerdict = *verdict
-			} else if !cfg.FailOpen {
-				applyFailClosedFallback(&out)
+			if err != nil && !cfg.FailOpen {
+				applyFailClosedFallback(&out, err)
+			} else if verdict != nil {
+				out.Verdict = *verdict
 			}
 			verdicts[pos] = out
 		},
@@ -127,7 +124,7 @@ func messageVerdictSkeleton(idx int, msg batchMessage) MessageVerdict {
 		Type:      msg.Type,
 		ToolName:  toolName,
 		LatencyMs: 0,
-		JudgeVerdict: JudgeVerdict{
+		Verdict: promptpolicy.Verdict{
 			Matched:          false,
 			Confidence:       0,
 			Rationale:        "",
@@ -139,8 +136,6 @@ func messageVerdictSkeleton(idx int, msg batchMessage) MessageVerdict {
 	}
 }
 
-func applyFailClosedFallback(verdict *MessageVerdict) {
-	verdict.Matched = true
-	verdict.Confidence = 0
-	verdict.Rationale = "Policy judge was unavailable; flagged by fail-closed policy."
+func applyFailClosedFallback(verdict *MessageVerdict, err error) {
+	verdict.Verdict = promptpolicy.FailClosedVerdict(err)
 }

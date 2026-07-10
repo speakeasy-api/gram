@@ -32,6 +32,7 @@ const (
 	subjectTypeProject                  subjectType = "project"
 	subjectTypeTemplate                 subjectType = "template"
 	subjectTypeRemoteMcpServer          subjectType = "remote_mcp_server"
+	subjectTypeRemoteMcpServerHeader    subjectType = "remote_mcp_server_header"
 	subjectTypeToolset                  subjectType = "toolset"
 	subjectTypeTunneledMcpServer        subjectType = "tunneled_mcp_server"
 	subjectTypeTriggerInstance          subjectType = "trigger_instance"

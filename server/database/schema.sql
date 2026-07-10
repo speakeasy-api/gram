@@ -1254,6 +1254,14 @@ ON http_security (type, scheme);
 CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   organization_id TEXT NOT NULL,
 
+  -- Which upstream OpenRouter key this row provisions: 'chat' pays for
+  -- customer-facing completion surfaces (playground, elements, assistants,
+  -- /chat/completions proxy); 'internal' pays for platform-initiated LLM
+  -- usage (risk judges, title generation, chat resolutions, memory), so a
+  -- burst of scanning inference can never exhaust the chat key's monthly cap
+  -- and 402 the customer's chat surface.
+  key_type TEXT NOT NULL DEFAULT 'chat',
+
   key TEXT NOT NULL,
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
@@ -1264,7 +1272,7 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id)
+  CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id, key_type)
 );
 
 
@@ -3266,13 +3274,27 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   -- existing connections (and any future connection without the marketplace
   -- surface enabled) are unconstrained.
   marketplace_token TEXT,
-  -- Stable content hash of the plugin packages last published to this repo,
-  -- independent of per-publish values (manifest version, injected API keys).
-  -- The automated generator rollout compares the current fingerprint against
-  -- this value and skips republishing when nothing has changed. Nullable so
-  -- connections published before fingerprinting existed re-publish once to
-  -- backfill it.
+  -- DEPRECATED: superseded by published_mcp_fingerprint + published_hooks_version
+  -- when hooks and MCP plugin generation were decoupled. No longer written or
+  -- read; retained per expand-contract and dropped in a later contract migration.
   published_fingerprint TEXT,
+  -- Per-plugin content fingerprints of the MCP (feature) plugins last published
+  -- to this repo: a JSON object mapping plugin slug -> stable hash (plus a
+  -- reserved "__shared__" key for the marketplace/README files), independent of
+  -- per-publish values (manifest version, injected API key). The automated
+  -- rollout compares the current fingerprints against this value to skip no-op
+  -- MCP republishes. JSON (rather than a single hash) so a future per-plugin
+  -- publish flow can decide independently which plugins have unpublished changes
+  -- without another migration. Excludes the hooks subtree, which rolls out on
+  -- published_hooks_version instead. Nullable so connections predating the split
+  -- republish once to backfill it.
+  published_mcp_fingerprints JSONB,
+  -- The hooksGeneratorVersion stamped into the observability (hooks) plugin last
+  -- published to this repo. The rollout regenerates the hooks subtree only when
+  -- the current hooksGeneratorVersion differs from this value, so an MCP-only
+  -- publish leaves the hooks plugin untouched. Nullable so connections predating
+  -- the split republish the hooks plugin once to backfill it.
+  published_hooks_version TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3363,6 +3385,10 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- (model id, temperature, fail-mode, etc.) as a JSON object. NULL for
   -- standard policies.
   model_config JSONB,
+  -- CVSS-style severity (0.1-10) the policy author assigns to findings this
+  -- policy produces. Purely descriptive; changing it does NOT bump `version`
+  -- or re-scan messages. Bounds are validated in the application layer.
+  score DOUBLE PRECISION NOT NULL DEFAULT 5.0,
   version BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),

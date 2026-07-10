@@ -233,6 +233,10 @@ type GetPublishStatusResponseBody struct {
 	// Slug of the generated Codex observability plugin in the published
 	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
 	CodexObservabilityPlugin *string `form:"codex_observability_plugin,omitempty" json:"codex_observability_plugin,omitempty" xml:"codex_observability_plugin,omitempty"`
+	// Whether the repo has at least one directly-added GitHub collaborator
+	// (excludes access granted via org membership/teams). Absent when the project
+	// is not connected.
+	HasCollaborators *bool `form:"has_collaborators,omitempty" json:"has_collaborators,omitempty" xml:"has_collaborators,omitempty"`
 	// Whether the project's current plugin state matches what was last published
 	// to GitHub. Absent when the project is not connected, or when the connection
 	// predates content fingerprinting (freshness can't be determined).
@@ -3489,6 +3493,7 @@ func NewGetPublishStatusResponseBody(res *plugins.PublishStatusResult) *GetPubli
 		MarketplaceURL:            res.MarketplaceURL,
 		ClaudeObservabilityPlugin: res.ClaudeObservabilityPlugin,
 		CodexObservabilityPlugin:  res.CodexObservabilityPlugin,
+		HasCollaborators:          res.HasCollaborators,
 		UpToDate:                  res.UpToDate,
 		LastPublishedAt:           res.LastPublishedAt,
 	}

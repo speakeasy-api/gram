@@ -26,6 +26,10 @@ export type PublishStatusResult = {
    */
   connected: boolean;
   /**
+   * Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.
+   */
+  hasCollaborators?: boolean | undefined;
+  /**
    * When the project was last published to GitHub. Absent when the project is not connected.
    */
   lastPublishedAt?: Date | undefined;
@@ -61,6 +65,7 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
     codex_observability_plugin: z.optional(z.string()),
     configured: z.boolean(),
     connected: z.boolean(),
+    has_collaborators: z.optional(z.boolean()),
     last_published_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -74,6 +79,7 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "claude_observability_plugin": "claudeObservabilityPlugin",
       "codex_observability_plugin": "codexObservabilityPlugin",
+      "has_collaborators": "hasCollaborators",
       "last_published_at": "lastPublishedAt",
       "marketplace_url": "marketplaceUrl",
       "repo_name": "repoName",
