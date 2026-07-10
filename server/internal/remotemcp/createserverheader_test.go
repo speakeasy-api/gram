@@ -178,6 +178,7 @@ func TestCreateServerHeader_OtherProjectServerNotFound(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+// A read-only grant must not satisfy createServerHeader's write scope.
 func TestCreateServerHeader_RBACForbidden(t *testing.T) {
 	t.Parallel()
 
@@ -192,5 +193,5 @@ func TestCreateServerHeader_RBACForbidden(t *testing.T) {
 	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("value")
 	}))
-	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

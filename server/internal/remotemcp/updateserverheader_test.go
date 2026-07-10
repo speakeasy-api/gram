@@ -12,6 +12,8 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -258,6 +260,29 @@ func TestUpdateServerHeader_NotFound(t *testing.T) {
 	}))
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// A read-only grant must not satisfy updateServerHeader's write scope.
+func TestUpdateServerHeader_RBACForbidden(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+
+	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
+		p.Value = new("value")
+	}))
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeMCPRead, Selector: authz.NewSelector(authz.ScopeMCPRead, authCtx.ProjectID.String())})
+
+	_, err = ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-API-Key", func(p *gen.UpdateServerHeaderPayload) {
+		p.Value = new("hijacked")
+	}))
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 // A header in another project must not be updatable by id.

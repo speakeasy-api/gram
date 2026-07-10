@@ -131,6 +131,24 @@ func TestListServerHeaders_DeletedServerNotFound(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+// A principal holding no grants must not be able to list headers.
+func TestListServerHeaders_RBACForbidden(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn)
+
+	_, err := ti.service.ListServerHeaders(ctx, &gen.ListServerHeadersPayload{
+		RemoteMcpServerID: server.ID,
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 func TestListServerHeaders_ExcludesDeleted(t *testing.T) {
 	t.Parallel()
 

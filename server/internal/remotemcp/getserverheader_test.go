@@ -102,6 +102,29 @@ func TestGetServerHeader_OtherProjectNotFound(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+// A principal holding no grants must not be able to read a header.
+func TestGetServerHeader_RBACForbidden(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+
+	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
+		p.Value = new("value")
+	}))
+	require.NoError(t, err)
+
+	ctx = withExactAccessGrants(t, ctx, ti.conn)
+
+	_, err = ti.service.GetServerHeader(ctx, &gen.GetServerHeaderPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 func TestGetServerHeader_DeletedNotFound(t *testing.T) {
 	t.Parallel()
 

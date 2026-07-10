@@ -10,7 +10,10 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 )
@@ -86,6 +89,44 @@ func TestDeleteServerHeader_RepeatDeleteEmitsNoAudit(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteMcpServerHeaderDelete)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount, afterCount)
+}
+
+// Delete is a silent no-op on an unreachable id, so asserting the forbidden
+// code is the only way to tell a denied delete apart from one that simply
+// matched no row.
+func TestDeleteServerHeader_RBACForbidden(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+
+	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
+		p.Value = new("value")
+	}))
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	restricted := withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeMCPRead, Selector: authz.NewSelector(authz.ScopeMCPRead, authCtx.ProjectID.String())})
+
+	err = ti.service.DeleteServerHeader(restricted, &gen.DeleteServerHeaderPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	// The header must still be there: a denied delete may not mutate anything.
+	// Read it straight from the repo, since the restricted context cannot list.
+	surviving, err := repo.New(ti.conn).ListServerHeaders(ctx, repo.ListServerHeadersParams{
+		RemoteMcpServerID: uuid.MustParse(server.ID),
+		ProjectID:         *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, surviving, 1)
+	require.Equal(t, created.ID, surviving[0].ID.String())
 }
 
 // A header in another project must not be deletable by id. Silent-no-op on

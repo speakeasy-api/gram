@@ -137,7 +137,7 @@ func TestCreateServer_RBACForbidden(t *testing.T) {
 	}
 
 	_, err := ti.service.CreateServer(ctx, payload)
-	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestCreateServer_NameStored(t *testing.T) {
