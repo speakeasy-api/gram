@@ -7,13 +7,16 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * How the challenge is being resolved.
  */
 export const ResolveChallengeFormResolutionType = {
-    RoleAssigned: "role_assigned",
-    Dismissed: "dismissed",
+  RoleAssigned: "role_assigned",
+  Dismissed: "dismissed",
 };
 /** @internal */
-export const ResolveChallengeFormResolutionType$outboundSchema = z.enum(ResolveChallengeFormResolutionType);
+export const ResolveChallengeFormResolutionType$outboundSchema = z.enum(
+  ResolveChallengeFormResolutionType,
+);
 /** @internal */
-export const ResolveChallengeForm$outboundSchema = z.pipe(z.object({
+export const ResolveChallengeForm$outboundSchema = z.pipe(
+  z.object({
     challengeIds: z.array(z.string()),
     principalUrn: z.string(),
     resolutionType: ResolveChallengeFormResolutionType$outboundSchema,
@@ -21,17 +24,21 @@ export const ResolveChallengeForm$outboundSchema = z.pipe(z.object({
     resourceKind: z.optional(z.string()),
     roleSlug: z.optional(z.string()),
     scope: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        challengeIds: "challenge_ids",
-        principalUrn: "principal_urn",
-        resolutionType: "resolution_type",
-        resourceId: "resource_id",
-        resourceKind: "resource_kind",
-        roleSlug: "role_slug",
+      challengeIds: "challenge_ids",
+      principalUrn: "principal_urn",
+      resolutionType: "resolution_type",
+      resourceId: "resource_id",
+      resourceKind: "resource_kind",
+      roleSlug: "role_slug",
     });
-}));
+  }),
+);
 export function resolveChallengeFormToJSON(resolveChallengeForm) {
-    return JSON.stringify(ResolveChallengeForm$outboundSchema.parse(resolveChallengeForm));
+  return JSON.stringify(
+    ResolveChallengeForm$outboundSchema.parse(resolveChallengeForm),
+  );
 }
 //# sourceMappingURL=resolvechallengeform.js.map

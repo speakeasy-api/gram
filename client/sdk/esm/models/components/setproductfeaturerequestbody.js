@@ -7,28 +7,36 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Name of the feature to update
  */
 export const FeatureName = {
-    Logs: "logs",
-    ToolIoLogs: "tool_io_logs",
-    SessionCapture: "session_capture",
-    AuthzChallengeLogging: "authz_challenge_logging",
-    Webhooks: "webhooks",
-    Sso: "sso",
-    Scim: "scim",
-    ObservabilityMode: "observability_mode",
+  Logs: "logs",
+  ToolIoLogs: "tool_io_logs",
+  SessionCapture: "session_capture",
+  AuthzChallengeLogging: "authz_challenge_logging",
+  Webhooks: "webhooks",
+  Sso: "sso",
+  Scim: "scim",
+  ObservabilityMode: "observability_mode",
 };
 /** @internal */
-export const FeatureName$outboundSchema = z
-    .enum(FeatureName);
+export const FeatureName$outboundSchema = z.enum(FeatureName);
 /** @internal */
-export const SetProductFeatureRequestBody$outboundSchema = z.pipe(z.object({
+export const SetProductFeatureRequestBody$outboundSchema = z.pipe(
+  z.object({
     enabled: z.boolean(),
     featureName: FeatureName$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        featureName: "feature_name",
+      featureName: "feature_name",
     });
-}));
-export function setProductFeatureRequestBodyToJSON(setProductFeatureRequestBody) {
-    return JSON.stringify(SetProductFeatureRequestBody$outboundSchema.parse(setProductFeatureRequestBody));
+  }),
+);
+export function setProductFeatureRequestBodyToJSON(
+  setProductFeatureRequestBody,
+) {
+  return JSON.stringify(
+    SetProductFeatureRequestBody$outboundSchema.parse(
+      setProductFeatureRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=setproductfeaturerequestbody.js.map

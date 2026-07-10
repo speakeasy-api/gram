@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ExternalMCPServer$inboundSchema, } from "./externalmcpserver.js";
+import { ExternalMCPServer$inboundSchema } from "./externalmcpserver.js";
 /** @internal */
 export const ListServersResponseBody$inboundSchema = z.object({
-    servers: z.array(ExternalMCPServer$inboundSchema),
+  servers: z.array(ExternalMCPServer$inboundSchema),
 });
 export function listServersResponseBodyFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListServersResponseBody$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListServersResponseBody' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListServersResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListServersResponseBody' from JSON`,
+  );
 }
 //# sourceMappingURL=listserversresponsebody.js.map

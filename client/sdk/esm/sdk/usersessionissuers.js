@@ -11,59 +11,74 @@ import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 import { unwrapResultIterator } from "../types/operations.js";
 export class UserSessionIssuers extends ClientSDK {
-    /**
-     * createUserSessionIssuer userSessionIssuers
-     *
-     * @remarks
-     * Create a new user_session_issuer.
-     */
-    async create(request, security, options) {
-        return unwrapAsync(userSessionIssuersCreate(this, request, security, options));
-    }
-    /**
-     * deleteUserSessionIssuer userSessionIssuers
-     *
-     * @remarks
-     * Soft-delete a user_session_issuer. Cascades to dependent user_sessions, user_session_consents, and remote_session_clients.
-     */
-    async delete(request, security, options) {
-        return unwrapAsync(userSessionIssuersDelete(this, request, security, options));
-    }
-    /**
-     * getUserSessionIssuer userSessionIssuers
-     *
-     * @remarks
-     * Get a user_session_issuer by id or by slug. Provide exactly one.
-     */
-    async get(request, security, options) {
-        return unwrapAsync(userSessionIssuersGet(this, request, security, options));
-    }
-    /**
-     * listUserSessionIssuers userSessionIssuers
-     *
-     * @remarks
-     * List user_session_issuers in the caller's project.
-     */
-    async list(request, security, options) {
-        return unwrapResultIterator(userSessionIssuersList(this, request, security, options));
-    }
-    /**
-     * migrateLegacyGramRegistrations userSessionIssuers
-     *
-     * @remarks
-     * One-off migration: lift the legacy Redis dynamic-client registrations from a gram-type oauth_proxy_provider into user_session_clients on the given user_session_issuer, so migrated MCP clients skip re-registration and re-auth. Removed once the OAuth proxy is retired.
-     */
-    async migrateLegacyGramRegistrations(request, security, options) {
-        return unwrapAsync(userSessionIssuersMigrateLegacyGramRegistrations(this, request, security, options));
-    }
-    /**
-     * updateUserSessionIssuer userSessionIssuers
-     *
-     * @remarks
-     * Update fields on an existing user_session_issuer.
-     */
-    async update(request, security, options) {
-        return unwrapAsync(userSessionIssuersUpdate(this, request, security, options));
-    }
+  /**
+   * createUserSessionIssuer userSessionIssuers
+   *
+   * @remarks
+   * Create a new user_session_issuer.
+   */
+  async create(request, security, options) {
+    return unwrapAsync(
+      userSessionIssuersCreate(this, request, security, options),
+    );
+  }
+  /**
+   * deleteUserSessionIssuer userSessionIssuers
+   *
+   * @remarks
+   * Soft-delete a user_session_issuer. Cascades to dependent user_sessions, user_session_consents, and remote_session_clients.
+   */
+  async delete(request, security, options) {
+    return unwrapAsync(
+      userSessionIssuersDelete(this, request, security, options),
+    );
+  }
+  /**
+   * getUserSessionIssuer userSessionIssuers
+   *
+   * @remarks
+   * Get a user_session_issuer by id or by slug. Provide exactly one.
+   */
+  async get(request, security, options) {
+    return unwrapAsync(userSessionIssuersGet(this, request, security, options));
+  }
+  /**
+   * listUserSessionIssuers userSessionIssuers
+   *
+   * @remarks
+   * List user_session_issuers in the caller's project.
+   */
+  async list(request, security, options) {
+    return unwrapResultIterator(
+      userSessionIssuersList(this, request, security, options),
+    );
+  }
+  /**
+   * migrateLegacyGramRegistrations userSessionIssuers
+   *
+   * @remarks
+   * One-off migration: lift the legacy Redis dynamic-client registrations from a gram-type oauth_proxy_provider into user_session_clients on the given user_session_issuer, so migrated MCP clients skip re-registration and re-auth. Removed once the OAuth proxy is retired.
+   */
+  async migrateLegacyGramRegistrations(request, security, options) {
+    return unwrapAsync(
+      userSessionIssuersMigrateLegacyGramRegistrations(
+        this,
+        request,
+        security,
+        options,
+      ),
+    );
+  }
+  /**
+   * updateUserSessionIssuer userSessionIssuers
+   *
+   * @remarks
+   * Update fields on an existing user_session_issuer.
+   */
+  async update(request, security, options) {
+    return unwrapAsync(
+      userSessionIssuersUpdate(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=usersessionissuers.js.map

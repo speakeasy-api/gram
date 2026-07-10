@@ -3,23 +3,23 @@
  */
 import * as z from "zod/v4-mini";
 export const blobLikeSchema = z.custom(isBlobLike, {
-    message: "expected a Blob, File or Blob-like object",
-    abort: true,
+  message: "expected a Blob, File or Blob-like object",
+  abort: true,
 });
 export function isBlobLike(val) {
-    if (val instanceof Blob) {
-        return true;
-    }
-    if (typeof val !== "object" || val == null || !(Symbol.toStringTag in val)) {
-        return false;
-    }
-    const name = val[Symbol.toStringTag];
-    if (typeof name !== "string") {
-        return false;
-    }
-    if (name !== "Blob" && name !== "File") {
-        return false;
-    }
-    return "stream" in val && typeof val.stream === "function";
+  if (val instanceof Blob) {
+    return true;
+  }
+  if (typeof val !== "object" || val == null || !(Symbol.toStringTag in val)) {
+    return false;
+  }
+  const name = val[Symbol.toStringTag];
+  if (typeof name !== "string") {
+    return false;
+  }
+  if (name !== "Blob" && name !== "File") {
+    return false;
+  }
+  return "stream" in val && typeof val.stream === "function";
 }
 //# sourceMappingURL=blobs.js.map

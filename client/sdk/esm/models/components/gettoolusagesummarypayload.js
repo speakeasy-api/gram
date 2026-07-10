@@ -3,41 +3,51 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { ToolUsageUserFilter$outboundSchema, } from "./toolusageuserfilter.js";
+import { ToolUsageUserFilter$outboundSchema } from "./toolusageuserfilter.js";
 /**
  * Tool usage target type
  */
 export const TargetTypes = {
-    HostedMcpServer: "hosted_mcp_server",
-    TunneledMcpServer: "tunneled_mcp_server",
-    ShadowMcpServer: "shadow_mcp_server",
-    LocalTool: "local_tool",
-    Skill: "skill",
+  HostedMcpServer: "hosted_mcp_server",
+  TunneledMcpServer: "tunneled_mcp_server",
+  ShadowMcpServer: "shadow_mcp_server",
+  LocalTool: "local_tool",
+  Skill: "skill",
 };
 /** @internal */
-export const TargetTypes$outboundSchema = z
-    .enum(TargetTypes);
+export const TargetTypes$outboundSchema = z.enum(TargetTypes);
 /** @internal */
-export const GetToolUsageSummaryPayload$outboundSchema = z.pipe(z.object({
+export const GetToolUsageSummaryPayload$outboundSchema = z.pipe(
+  z.object({
     accountType: z.optional(z.string()),
-    from: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    from: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
     hookSources: z.optional(z.array(z.string())),
     hostedToolsetSlugs: z.optional(z.array(z.string())),
     shadowServerNames: z.optional(z.array(z.string())),
     targetTypes: z.optional(z.array(TargetTypes$outboundSchema)),
-    to: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    to: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
     userFilters: z.optional(z.array(ToolUsageUserFilter$outboundSchema)),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        accountType: "account_type",
-        hookSources: "hook_sources",
-        hostedToolsetSlugs: "hosted_toolset_slugs",
-        shadowServerNames: "shadow_server_names",
-        targetTypes: "target_types",
-        userFilters: "user_filters",
+      accountType: "account_type",
+      hookSources: "hook_sources",
+      hostedToolsetSlugs: "hosted_toolset_slugs",
+      shadowServerNames: "shadow_server_names",
+      targetTypes: "target_types",
+      userFilters: "user_filters",
     });
-}));
+  }),
+);
 export function getToolUsageSummaryPayloadToJSON(getToolUsageSummaryPayload) {
-    return JSON.stringify(GetToolUsageSummaryPayload$outboundSchema.parse(getToolUsageSummaryPayload));
+  return JSON.stringify(
+    GetToolUsageSummaryPayload$outboundSchema.parse(getToolUsageSummaryPayload),
+  );
 }
 //# sourceMappingURL=gettoolusagesummarypayload.js.map

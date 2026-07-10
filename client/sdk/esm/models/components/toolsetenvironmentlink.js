@@ -5,17 +5,24 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ToolsetEnvironmentLink$inboundSchema = z.pipe(z.object({
+export const ToolsetEnvironmentLink$inboundSchema = z.pipe(
+  z.object({
     environment_id: z.string(),
     id: z.string(),
     toolset_id: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "environment_id": "environmentId",
-        "toolset_id": "toolsetId",
+      environment_id: "environmentId",
+      toolset_id: "toolsetId",
     });
-}));
+  }),
+);
 export function toolsetEnvironmentLinkFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolsetEnvironmentLink$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolsetEnvironmentLink' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolsetEnvironmentLink$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolsetEnvironmentLink' from JSON`,
+  );
 }
 //# sourceMappingURL=toolsetenvironmentlink.js.map

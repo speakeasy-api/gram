@@ -12,6 +12,6 @@ let value: SetPluginAssignmentsResponseBody = {
 
 ## Fields
 
-| Field                                                                        | Type                                                                         | Required                                                                     | Description                                                                  |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `assignments`                                                                | [components.PluginAssignment](../../models/components/pluginassignment.md)[] | :heavy_check_mark:                                                           | The updated assignments.                                                     |
+| Field         | Type                                                                         | Required           | Description              |
+| ------------- | ---------------------------------------------------------------------------- | ------------------ | ------------------------ |
+| `assignments` | [components.PluginAssignment](../../models/components/pluginassignment.md)[] | :heavy_check_mark: | The updated assignments. |

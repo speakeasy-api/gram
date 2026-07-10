@@ -6,22 +6,22 @@ Manage distributable plugin bundles of MCP servers and hooks.
 
 ### Available Operations
 
-* [addPluginServer](#addpluginserver) - addPluginServer plugins
-* [createPlugin](#createplugin) - createPlugin plugins
-* [deletePlugin](#deleteplugin) - deletePlugin plugins
-* [downloadCodexInstallScript](#downloadcodexinstallscript) - downloadCodexInstallScript plugins
-* [downloadObservabilityPlugin](#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
-* [downloadPluginPackage](#downloadpluginpackage) - downloadPluginPackage plugins
-* [getMarketplaceSettings](#getmarketplacesettings) - getMarketplaceSettings plugins
-* [getPlugin](#getplugin) - getPlugin plugins
-* [getPublishStatus](#getpublishstatus) - getPublishStatus plugins
-* [listPlugins](#listplugins) - listPlugins plugins
-* [publishPlugins](#publishplugins) - publishPlugins plugins
-* [removePluginServer](#removepluginserver) - removePluginServer plugins
-* [setPluginAssignments](#setpluginassignments) - setPluginAssignments plugins
-* [updateMarketplaceSettings](#updatemarketplacesettings) - updateMarketplaceSettings plugins
-* [updatePlugin](#updateplugin) - updatePlugin plugins
-* [updatePluginServer](#updatepluginserver) - updatePluginServer plugins
+- [addPluginServer](#addpluginserver) - addPluginServer plugins
+- [createPlugin](#createplugin) - createPlugin plugins
+- [deletePlugin](#deleteplugin) - deletePlugin plugins
+- [downloadCodexInstallScript](#downloadcodexinstallscript) - downloadCodexInstallScript plugins
+- [downloadObservabilityPlugin](#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
+- [downloadPluginPackage](#downloadpluginpackage) - downloadPluginPackage plugins
+- [getMarketplaceSettings](#getmarketplacesettings) - getMarketplaceSettings plugins
+- [getPlugin](#getplugin) - getPlugin plugins
+- [getPublishStatus](#getpublishstatus) - getPublishStatus plugins
+- [listPlugins](#listplugins) - listPlugins plugins
+- [publishPlugins](#publishplugins) - publishPlugins plugins
+- [removePluginServer](#removepluginserver) - removePluginServer plugins
+- [setPluginAssignments](#setpluginassignments) - setPluginAssignments plugins
+- [updateMarketplaceSettings](#updatemarketplacesettings) - updateMarketplaceSettings plugins
+- [updatePlugin](#updateplugin) - updatePlugin plugins
+- [updatePluginServer](#updatepluginserver) - updatePluginServer plugins
 
 ## addPluginServer
 
@@ -30,6 +30,7 @@ Add an MCP server to a plugin.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="addPluginServer" method="post" path="/rpc/plugins.addPluginServer" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -90,19 +91,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useAddPluginServerMutation
+  useAddPluginServerMutation,
 } from "@gram/client/react-query/pluginsAddPluginServer.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.AddPluginServerRequest](../../models/operations/addpluginserverrequest.md)                                                                                         | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.AddPluginServerSecurity](../../models/operations/addpluginserversecurity.md)                                                                                       | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                     | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.AddPluginServerRequest](../../models/operations/addpluginserverrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.AddPluginServerSecurity](../../models/operations/addpluginserversecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                           | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)  | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                            | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -110,11 +111,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## createPlugin
 
@@ -123,6 +124,7 @@ Create a new plugin.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="createPlugin" method="post" path="/rpc/plugins.createPlugin" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -183,19 +185,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useCreatePluginMutation
+  useCreatePluginMutation,
 } from "@gram/client/react-query/pluginsCreatePlugin.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.CreatePluginRequest](../../models/operations/createpluginrequest.md)                                                                                               | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.CreatePluginSecurity](../../models/operations/createpluginsecurity.md)                                                                                             | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                    | Required           | Description                                                                                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.CreatePluginRequest](../../models/operations/createpluginrequest.md)        | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.CreatePluginSecurity](../../models/operations/createpluginsecurity.md)      | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                          | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options) | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                           | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -203,11 +205,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## deletePlugin
 
@@ -216,6 +218,7 @@ Delete a plugin.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="deletePlugin" method="delete" path="/rpc/plugins.deletePlugin" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -225,8 +228,6 @@ async function run() {
   await gram.plugins.deletePlugin({
     id: "6142055f-198f-4218-a376-7ef9b3022bcd",
   });
-
-
 }
 
 run();
@@ -250,7 +251,6 @@ async function run() {
   });
   if (res.ok) {
     const { value: result } = res;
-    
   } else {
     console.log("pluginsDeletePlugin failed:", res.error);
   }
@@ -272,19 +272,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useDeletePluginMutation
+  useDeletePluginMutation,
 } from "@gram/client/react-query/pluginsDeletePlugin.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.DeletePluginRequest](../../models/operations/deletepluginrequest.md)                                                                                               | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.DeletePluginSecurity](../../models/operations/deletepluginsecurity.md)                                                                                             | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                    | Required           | Description                                                                                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.DeletePluginRequest](../../models/operations/deletepluginrequest.md)        | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.DeletePluginSecurity](../../models/operations/deletepluginsecurity.md)      | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                          | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options) | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                           | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -292,11 +292,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## downloadCodexInstallScript
 
@@ -305,6 +305,7 @@ Download a bash install script that registers the Codex observability marketplac
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="downloadCodexInstallScript" method="get" path="/rpc/plugins.downloadCodexInstallScript" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -364,7 +365,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchPluginsDownloadCodexInstallScript,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidatePluginsDownloadCodexInstallScript,
@@ -374,13 +375,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.DownloadCodexInstallScriptRequest](../../models/operations/downloadcodexinstallscriptrequest.md)                                                                   | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.DownloadCodexInstallScriptSecurity](../../models/operations/downloadcodexinstallscriptsecurity.md)                                                                 | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                           | Required           | Description                                                                                                                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.DownloadCodexInstallScriptRequest](../../models/operations/downloadcodexinstallscriptrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.DownloadCodexInstallScriptSecurity](../../models/operations/downloadcodexinstallscriptsecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                                 | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                        | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                                  | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -388,11 +389,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## downloadObservabilityPlugin
 
@@ -401,6 +402,7 @@ Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh h
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="downloadObservabilityPlugin" method="get" path="/rpc/plugins.downloadObservabilityPlugin" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -464,7 +466,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchPluginsDownloadObservabilityPlugin,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidatePluginsDownloadObservabilityPlugin,
@@ -474,13 +476,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.DownloadObservabilityPluginRequest](../../models/operations/downloadobservabilitypluginrequest.md)                                                                 | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.DownloadObservabilityPluginSecurity](../../models/operations/downloadobservabilitypluginsecurity.md)                                                               | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                             | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.DownloadObservabilityPluginRequest](../../models/operations/downloadobservabilitypluginrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.DownloadObservabilityPluginSecurity](../../models/operations/downloadobservabilitypluginsecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                                   | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                          | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                                    | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -488,11 +490,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## downloadPluginPackage
 
@@ -501,6 +503,7 @@ Download a ZIP of a single plugin package for direct installation.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="downloadPluginPackage" method="get" path="/rpc/plugins.downloadPluginPackage" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -566,7 +569,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchPluginsDownloadPluginPackage,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidatePluginsDownloadPluginPackage,
@@ -576,13 +579,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.DownloadPluginPackageRequest](../../models/operations/downloadpluginpackagerequest.md)                                                                             | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.DownloadPluginPackageSecurity](../../models/operations/downloadpluginpackagesecurity.md)                                                                           | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                 | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.DownloadPluginPackageRequest](../../models/operations/downloadpluginpackagerequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.DownloadPluginPackageSecurity](../../models/operations/downloadpluginpackagesecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                       | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)              | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                        | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -590,11 +593,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## getMarketplaceSettings
 
@@ -603,6 +606,7 @@ Get the marketplace settings for the current project, including the effective ma
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="getMarketplaceSettings" method="get" path="/rpc/plugins.getMarketplaceSettings" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -662,7 +666,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchMarketplaceSettings,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidateMarketplaceSettings,
@@ -672,13 +676,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetMarketplaceSettingsRequest](../../models/operations/getmarketplacesettingsrequest.md)                                                                           | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.GetMarketplaceSettingsSecurity](../../models/operations/getmarketplacesettingssecurity.md)                                                                         | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                   | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.GetMarketplaceSettingsRequest](../../models/operations/getmarketplacesettingsrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.GetMarketplaceSettingsSecurity](../../models/operations/getmarketplacesettingssecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                         | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                          | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -686,11 +690,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## getPlugin
 
@@ -699,6 +703,7 @@ Get a plugin with its servers and assignments.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="getPlugin" method="get" path="/rpc/plugins.getPlugin" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -762,7 +767,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchPlugin,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidatePlugin,
@@ -772,13 +777,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetPluginRequest](../../models/operations/getpluginrequest.md)                                                                                                     | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.GetPluginSecurity](../../models/operations/getpluginsecurity.md)                                                                                                   | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                    | Required           | Description                                                                                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.GetPluginRequest](../../models/operations/getpluginrequest.md)              | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.GetPluginSecurity](../../models/operations/getpluginsecurity.md)            | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                          | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options) | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                           | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -786,11 +791,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## getPublishStatus
 
@@ -799,6 +804,7 @@ Check whether GitHub publishing is configured and connected for this project.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="getPublishStatus" method="get" path="/rpc/plugins.getPublishStatus" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -858,7 +864,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchPublishStatus,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidatePublishStatus,
@@ -868,13 +874,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetPublishStatusRequest](../../models/operations/getpublishstatusrequest.md)                                                                                       | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.GetPublishStatusSecurity](../../models/operations/getpublishstatussecurity.md)                                                                                     | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                       | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.GetPublishStatusRequest](../../models/operations/getpublishstatusrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.GetPublishStatusSecurity](../../models/operations/getpublishstatussecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                             | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)    | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                              | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -882,11 +888,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## listPlugins
 
@@ -895,6 +901,7 @@ List all plugins for the current project.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="listPlugins" method="get" path="/rpc/plugins.listPlugins" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -954,7 +961,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchPlugins,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidatePlugins,
@@ -964,13 +971,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.ListPluginsRequest](../../models/operations/listpluginsrequest.md)                                                                                                 | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.ListPluginsSecurity](../../models/operations/listpluginssecurity.md)                                                                                               | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                    | Required           | Description                                                                                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.ListPluginsRequest](../../models/operations/listpluginsrequest.md)          | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.ListPluginsSecurity](../../models/operations/listpluginssecurity.md)        | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                          | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options) | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                           | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -978,11 +985,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## publishPlugins
 
@@ -991,6 +998,7 @@ Generate and publish all plugin packages to a GitHub repository.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="publishPlugins" method="post" path="/rpc/plugins.publishPlugins" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -1047,19 +1055,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  usePublishPluginsMutation
+  usePublishPluginsMutation,
 } from "@gram/client/react-query/pluginsPublishPlugins.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.PublishPluginsRequest](../../models/operations/publishpluginsrequest.md)                                                                                           | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.PublishPluginsSecurity](../../models/operations/publishpluginssecurity.md)                                                                                         | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                    | Required           | Description                                                                                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.PublishPluginsRequest](../../models/operations/publishpluginsrequest.md)    | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.PublishPluginsSecurity](../../models/operations/publishpluginssecurity.md)  | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                          | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options) | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                           | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -1067,11 +1075,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## removePluginServer
 
@@ -1080,6 +1088,7 @@ Remove a server from a plugin.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="removePluginServer" method="delete" path="/rpc/plugins.removePluginServer" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -1090,8 +1099,6 @@ async function run() {
     id: "91c5229b-08a3-4bd8-9242-b4205ff5cb2c",
     pluginId: "6f058190-f0b3-450c-8990-3daeadd09c9b",
   });
-
-
 }
 
 run();
@@ -1116,7 +1123,6 @@ async function run() {
   });
   if (res.ok) {
     const { value: result } = res;
-    
   } else {
     console.log("pluginsRemovePluginServer failed:", res.error);
   }
@@ -1138,19 +1144,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useRemovePluginServerMutation
+  useRemovePluginServerMutation,
 } from "@gram/client/react-query/pluginsRemovePluginServer.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.RemovePluginServerRequest](../../models/operations/removepluginserverrequest.md)                                                                                   | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.RemovePluginServerSecurity](../../models/operations/removepluginserversecurity.md)                                                                                 | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                           | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.RemovePluginServerRequest](../../models/operations/removepluginserverrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.RemovePluginServerSecurity](../../models/operations/removepluginserversecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                 | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)        | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                  | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -1158,11 +1164,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## setPluginAssignments
 
@@ -1171,6 +1177,7 @@ Replace all assignments for a plugin with the given list of principal URNs.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="setPluginAssignments" method="put" path="/rpc/plugins.setPluginAssignments" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -1233,19 +1240,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useSetPluginAssignmentsMutation
+  useSetPluginAssignmentsMutation,
 } from "@gram/client/react-query/pluginsSetPluginAssignments.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.SetPluginAssignmentsRequest](../../models/operations/setpluginassignmentsrequest.md)                                                                               | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.SetPluginAssignmentsSecurity](../../models/operations/setpluginassignmentssecurity.md)                                                                             | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                               | Required           | Description                                                                                                                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.SetPluginAssignmentsRequest](../../models/operations/setpluginassignmentsrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.SetPluginAssignmentsSecurity](../../models/operations/setpluginassignmentssecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                     | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)            | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                      | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -1253,11 +1260,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## updateMarketplaceSettings
 
@@ -1266,6 +1273,7 @@ Update the marketplace settings for the current project. If a marketplace is alr
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="updateMarketplaceSettings" method="post" path="/rpc/plugins.updateMarketplaceSettings" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -1322,19 +1330,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useUpdateMarketplaceSettingsMutation
+  useUpdateMarketplaceSettingsMutation,
 } from "@gram/client/react-query/pluginsUpdateMarketplaceSettings.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.UpdateMarketplaceSettingsRequest](../../models/operations/updatemarketplacesettingsrequest.md)                                                                     | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.UpdateMarketplaceSettingsSecurity](../../models/operations/updatemarketplacesettingssecurity.md)                                                                   | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                         | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.UpdateMarketplaceSettingsRequest](../../models/operations/updatemarketplacesettingsrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.UpdateMarketplaceSettingsSecurity](../../models/operations/updatemarketplacesettingssecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                               | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                      | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                                | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -1342,11 +1350,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## updatePlugin
 
@@ -1355,6 +1363,7 @@ Update plugin metadata.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="updatePlugin" method="put" path="/rpc/plugins.updatePlugin" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -1419,19 +1428,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useUpdatePluginMutation
+  useUpdatePluginMutation,
 } from "@gram/client/react-query/pluginsUpdatePlugin.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.UpdatePluginRequest](../../models/operations/updatepluginrequest.md)                                                                                               | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.UpdatePluginSecurity](../../models/operations/updatepluginsecurity.md)                                                                                             | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                    | Required           | Description                                                                                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.UpdatePluginRequest](../../models/operations/updatepluginrequest.md)        | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.UpdatePluginSecurity](../../models/operations/updatepluginsecurity.md)      | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                          | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options) | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                           | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -1439,11 +1448,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## updatePluginServer
 
@@ -1452,6 +1461,7 @@ Update a server's configuration within a plugin.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="updatePluginServer" method="put" path="/rpc/plugins.updatePluginServer" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -1516,19 +1526,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useUpdatePluginServerMutation
+  useUpdatePluginServerMutation,
 } from "@gram/client/react-query/pluginsUpdatePluginServer.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.UpdatePluginServerRequest](../../models/operations/updatepluginserverrequest.md)                                                                                   | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.UpdatePluginServerSecurity](../../models/operations/updatepluginserversecurity.md)                                                                                 | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                           | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.UpdatePluginServerRequest](../../models/operations/updatepluginserverrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.UpdatePluginServerSecurity](../../models/operations/updatepluginserversecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                 | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)        | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                  | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -1536,8 +1546,8 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |

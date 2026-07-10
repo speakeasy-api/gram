@@ -12,6 +12,6 @@ let value: ListTriggerInstancesResult = {
 
 ## Fields
 
-| Field                                                                      | Type                                                                       | Required                                                                   | Description                                                                |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `triggers`                                                                 | [components.TriggerInstance](../../models/components/triggerinstance.md)[] | :heavy_check_mark:                                                         | The trigger instances for the current project.                             |
+| Field      | Type                                                                       | Required           | Description                                    |
+| ---------- | -------------------------------------------------------------------------- | ------------------ | ---------------------------------------------- |
+| `triggers` | [components.TriggerInstance](../../models/components/triggerinstance.md)[] | :heavy_check_mark: | The trigger instances for the current project. |

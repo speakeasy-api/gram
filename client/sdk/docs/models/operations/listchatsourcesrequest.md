@@ -10,8 +10,8 @@ let value: ListChatSourcesRequest = {};
 
 ## Fields
 
-| Field                      | Type                       | Required                   | Description                |
-| -------------------------- | -------------------------- | -------------------------- | -------------------------- |
-| `gramSession`              | *string*                   | :heavy_minus_sign:         | Session header             |
-| `gramProject`              | *string*                   | :heavy_minus_sign:         | project header             |
-| `gramChatSession`          | *string*                   | :heavy_minus_sign:         | Chat Sessions token header |
+| Field             | Type     | Required           | Description                |
+| ----------------- | -------- | ------------------ | -------------------------- |
+| `gramSession`     | _string_ | :heavy_minus_sign: | Session header             |
+| `gramProject`     | _string_ | :heavy_minus_sign: | project header             |
+| `gramChatSession` | _string_ | :heavy_minus_sign: | Chat Sessions token header |

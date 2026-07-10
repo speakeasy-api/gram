@@ -5,11 +5,15 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const TriggerEnvRequirement$inboundSchema = z.object({
-    description: z.optional(z.string()),
-    name: z.string(),
-    required: z.boolean(),
+  description: z.optional(z.string()),
+  name: z.string(),
+  required: z.boolean(),
 });
 export function triggerEnvRequirementFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TriggerEnvRequirement$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TriggerEnvRequirement' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TriggerEnvRequirement$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TriggerEnvRequirement' from JSON`,
+  );
 }
 //# sourceMappingURL=triggerenvrequirement.js.map

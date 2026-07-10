@@ -6,10 +6,14 @@ import { safeParse } from "../../lib/schemas.js";
 import { ChatOverview$inboundSchema } from "./chatoverview.js";
 /** @internal */
 export const ListChatsResult$inboundSchema = z.object({
-    chats: z.array(ChatOverview$inboundSchema),
-    total: z.int(),
+  chats: z.array(ChatOverview$inboundSchema),
+  total: z.int(),
 });
 export function listChatsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListChatsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListChatsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListChatsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListChatsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listchatsresult.js.map

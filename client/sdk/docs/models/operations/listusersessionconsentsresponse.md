@@ -24,6 +24,6 @@ let value: ListUserSessionConsentsResponse = {
 
 ## Fields
 
-| Field                                                                                                | Type                                                                                                 | Required                                                                                             | Description                                                                                          |
-| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `result`                                                                                             | [components.ListUserSessionConsentsResult](../../models/components/listusersessionconsentsresult.md) | :heavy_check_mark:                                                                                   | N/A                                                                                                  |
+| Field    | Type                                                                                                 | Required           | Description |
+| -------- | ---------------------------------------------------------------------------------------------------- | ------------------ | ----------- |
+| `result` | [components.ListUserSessionConsentsResult](../../models/components/listusersessionconsentsresult.md) | :heavy_check_mark: | N/A         |

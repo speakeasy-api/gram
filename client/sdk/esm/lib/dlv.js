@@ -36,11 +36,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * dlv(object, "foo.bar.baz", "Hello, default value!")
  */
 export function dlv(obj, key, def, p, undef) {
-    key = Array.isArray(key) ? key : key.split(".");
-    for (p = 0; p < key.length; p++) {
-        const k = key[p];
-        obj = k != null && obj ? obj[k] : undef;
-    }
-    return obj === undef ? def : obj;
+  key = Array.isArray(key) ? key : key.split(".");
+  for (p = 0; p < key.length; p++) {
+    const k = key[p];
+    obj = k != null && obj ? obj[k] : undef;
+  }
+  return obj === undef ? def : obj;
 }
 //# sourceMappingURL=dlv.js.map

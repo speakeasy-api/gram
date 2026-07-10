@@ -5,33 +5,45 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const AssistantMCPServerRef$inboundSchema = z.pipe(z.object({
+export const AssistantMCPServerRef$inboundSchema = z.pipe(
+  z.object({
     endpoint_slug: z.optional(z.string()),
     environment_slug: z.optional(z.string()),
     mcp_server_slug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "endpoint_slug": "endpointSlug",
-        "environment_slug": "environmentSlug",
-        "mcp_server_slug": "mcpServerSlug",
+      endpoint_slug: "endpointSlug",
+      environment_slug: "environmentSlug",
+      mcp_server_slug: "mcpServerSlug",
     });
-}));
+  }),
+);
 /** @internal */
-export const AssistantMCPServerRef$outboundSchema = z.pipe(z.object({
+export const AssistantMCPServerRef$outboundSchema = z.pipe(
+  z.object({
     endpointSlug: z.optional(z.string()),
     environmentSlug: z.optional(z.string()),
     mcpServerSlug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        endpointSlug: "endpoint_slug",
-        environmentSlug: "environment_slug",
-        mcpServerSlug: "mcp_server_slug",
+      endpointSlug: "endpoint_slug",
+      environmentSlug: "environment_slug",
+      mcpServerSlug: "mcp_server_slug",
     });
-}));
+  }),
+);
 export function assistantMCPServerRefToJSON(assistantMCPServerRef) {
-    return JSON.stringify(AssistantMCPServerRef$outboundSchema.parse(assistantMCPServerRef));
+  return JSON.stringify(
+    AssistantMCPServerRef$outboundSchema.parse(assistantMCPServerRef),
+  );
 }
 export function assistantMCPServerRefFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => AssistantMCPServerRef$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'AssistantMCPServerRef' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => AssistantMCPServerRef$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AssistantMCPServerRef' from JSON`,
+  );
 }
 //# sourceMappingURL=assistantmcpserverref.js.map

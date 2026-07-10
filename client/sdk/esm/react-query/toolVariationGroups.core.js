@@ -4,30 +4,47 @@
 import { variationsListGroups } from "../funcs/variationsListGroups.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchToolVariationGroups(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildToolVariationGroupsQuery(client$, request, security, options),
-    });
+export function prefetchToolVariationGroups(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildToolVariationGroupsQuery(client$, request, security, options),
+  });
 }
-export function buildToolVariationGroupsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyToolVariationGroups({
-            gramSession: request?.gramSession,
-            gramKey: request?.gramKey,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function toolVariationGroupsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(variationsListGroups(client$, request, security, mergedOptions));
-        },
-    };
+export function buildToolVariationGroupsQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyToolVariationGroups({
+      gramSession: request?.gramSession,
+      gramKey: request?.gramKey,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function toolVariationGroupsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        variationsListGroups(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyToolVariationGroups(parameters) {
-    return ["@gram/client", "variations", "listGroups", parameters];
+  return ["@gram/client", "variations", "listGroups", parameters];
 }
 //# sourceMappingURL=toolVariationGroups.core.js.map

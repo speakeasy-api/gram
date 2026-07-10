@@ -3,61 +3,93 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateMcpServerForm$outboundSchema, } from "../components/createmcpserverform.js";
+import { CreateMcpServerForm$outboundSchema } from "../components/createmcpserverform.js";
 /** @internal */
-export const CreateMcpServerSecurityOption1$outboundSchema = z.pipe(z.object({
+export const CreateMcpServerSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function createMcpServerSecurityOption1ToJSON(createMcpServerSecurityOption1) {
-    return JSON.stringify(CreateMcpServerSecurityOption1$outboundSchema.parse(createMcpServerSecurityOption1));
+  }),
+);
+export function createMcpServerSecurityOption1ToJSON(
+  createMcpServerSecurityOption1,
+) {
+  return JSON.stringify(
+    CreateMcpServerSecurityOption1$outboundSchema.parse(
+      createMcpServerSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const CreateMcpServerSecurityOption2$outboundSchema = z.pipe(z.object({
+export const CreateMcpServerSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function createMcpServerSecurityOption2ToJSON(createMcpServerSecurityOption2) {
-    return JSON.stringify(CreateMcpServerSecurityOption2$outboundSchema.parse(createMcpServerSecurityOption2));
+  }),
+);
+export function createMcpServerSecurityOption2ToJSON(
+  createMcpServerSecurityOption2,
+) {
+  return JSON.stringify(
+    CreateMcpServerSecurityOption2$outboundSchema.parse(
+      createMcpServerSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const CreateMcpServerSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => CreateMcpServerSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => CreateMcpServerSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const CreateMcpServerSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => CreateMcpServerSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => CreateMcpServerSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function createMcpServerSecurityToJSON(createMcpServerSecurity) {
-    return JSON.stringify(CreateMcpServerSecurity$outboundSchema.parse(createMcpServerSecurity));
+  return JSON.stringify(
+    CreateMcpServerSecurity$outboundSchema.parse(createMcpServerSecurity),
+  );
 }
 /** @internal */
-export const CreateMcpServerRequest$outboundSchema = z.pipe(z.object({
+export const CreateMcpServerRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     createMcpServerForm: CreateMcpServerForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        createMcpServerForm: "CreateMcpServerForm",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      createMcpServerForm: "CreateMcpServerForm",
     });
-}));
+  }),
+);
 export function createMcpServerRequestToJSON(createMcpServerRequest) {
-    return JSON.stringify(CreateMcpServerRequest$outboundSchema.parse(createMcpServerRequest));
+  return JSON.stringify(
+    CreateMcpServerRequest$outboundSchema.parse(createMcpServerRequest),
+  );
 }
 //# sourceMappingURL=createmcpserver.js.map

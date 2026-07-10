@@ -4,59 +4,89 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ListUserSessionsResult$inboundSchema, } from "../components/listusersessionsresult.js";
+import { ListUserSessionsResult$inboundSchema } from "../components/listusersessionsresult.js";
 /**
  * Filter by session status.
  */
 export const ListUserSessionsQueryParamStatus = {
-    Active: "active",
-    Expired: "expired",
-    Revoked: "revoked",
-    All: "all",
+  Active: "active",
+  Expired: "expired",
+  Revoked: "revoked",
+  All: "all",
 };
 /** @internal */
-export const ListUserSessionsSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListUserSessionsSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listUserSessionsSecurityOption1ToJSON(listUserSessionsSecurityOption1) {
-    return JSON.stringify(ListUserSessionsSecurityOption1$outboundSchema.parse(listUserSessionsSecurityOption1));
+  }),
+);
+export function listUserSessionsSecurityOption1ToJSON(
+  listUserSessionsSecurityOption1,
+) {
+  return JSON.stringify(
+    ListUserSessionsSecurityOption1$outboundSchema.parse(
+      listUserSessionsSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListUserSessionsSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListUserSessionsSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listUserSessionsSecurityOption2ToJSON(listUserSessionsSecurityOption2) {
-    return JSON.stringify(ListUserSessionsSecurityOption2$outboundSchema.parse(listUserSessionsSecurityOption2));
+  }),
+);
+export function listUserSessionsSecurityOption2ToJSON(
+  listUserSessionsSecurityOption2,
+) {
+  return JSON.stringify(
+    ListUserSessionsSecurityOption2$outboundSchema.parse(
+      listUserSessionsSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListUserSessionsSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListUserSessionsSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListUserSessionsSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListUserSessionsSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListUserSessionsSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListUserSessionsSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function listUserSessionsSecurityToJSON(listUserSessionsSecurity) {
-    return JSON.stringify(ListUserSessionsSecurity$outboundSchema.parse(listUserSessionsSecurity));
+  return JSON.stringify(
+    ListUserSessionsSecurity$outboundSchema.parse(listUserSessionsSecurity),
+  );
 }
 /** @internal */
-export const ListUserSessionsQueryParamStatus$outboundSchema = z.enum(ListUserSessionsQueryParamStatus);
+export const ListUserSessionsQueryParamStatus$outboundSchema = z.enum(
+  ListUserSessionsQueryParamStatus,
+);
 /** @internal */
-export const ListUserSessionsRequest$outboundSchema = z.pipe(z.object({
+export const ListUserSessionsRequest$outboundSchema = z.pipe(
+  z.object({
     subjectUrn: z.optional(z.string()),
     userSessionIssuerId: z.optional(z.string()),
     status: z.optional(ListUserSessionsQueryParamStatus$outboundSchema),
@@ -66,28 +96,39 @@ export const ListUserSessionsRequest$outboundSchema = z.pipe(z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        subjectUrn: "subject_urn",
-        userSessionIssuerId: "user_session_issuer_id",
-        clientId: "client_id",
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
+      subjectUrn: "subject_urn",
+      userSessionIssuerId: "user_session_issuer_id",
+      clientId: "client_id",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function listUserSessionsRequestToJSON(listUserSessionsRequest) {
-    return JSON.stringify(ListUserSessionsRequest$outboundSchema.parse(listUserSessionsRequest));
+  return JSON.stringify(
+    ListUserSessionsRequest$outboundSchema.parse(listUserSessionsRequest),
+  );
 }
 /** @internal */
-export const ListUserSessionsResponse$inboundSchema = z.pipe(z.object({
+export const ListUserSessionsResponse$inboundSchema = z.pipe(
+  z.object({
     Result: ListUserSessionsResult$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Result": "result",
+      Result: "result",
     });
-}));
+  }),
+);
 export function listUserSessionsResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListUserSessionsResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListUserSessionsResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListUserSessionsResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListUserSessionsResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=listusersessions.js.map

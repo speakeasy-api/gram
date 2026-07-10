@@ -13,5 +13,5 @@ let value: LastPollStatus = "failed";
 ## Values
 
 ```typescript
-"pending" | "success" | "failed"
+"pending" | "success" | "failed";
 ```

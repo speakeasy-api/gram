@@ -4,30 +4,48 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ResumeTriggerInstanceSecurity$outboundSchema = z.pipe(z.object({
+export const ResumeTriggerInstanceSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function resumeTriggerInstanceSecurityToJSON(resumeTriggerInstanceSecurity) {
-    return JSON.stringify(ResumeTriggerInstanceSecurity$outboundSchema.parse(resumeTriggerInstanceSecurity));
+  }),
+);
+export function resumeTriggerInstanceSecurityToJSON(
+  resumeTriggerInstanceSecurity,
+) {
+  return JSON.stringify(
+    ResumeTriggerInstanceSecurity$outboundSchema.parse(
+      resumeTriggerInstanceSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ResumeTriggerInstanceRequest$outboundSchema = z.pipe(z.object({
+export const ResumeTriggerInstanceRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
-export function resumeTriggerInstanceRequestToJSON(resumeTriggerInstanceRequest) {
-    return JSON.stringify(ResumeTriggerInstanceRequest$outboundSchema.parse(resumeTriggerInstanceRequest));
+  }),
+);
+export function resumeTriggerInstanceRequestToJSON(
+  resumeTriggerInstanceRequest,
+) {
+  return JSON.stringify(
+    ResumeTriggerInstanceRequest$outboundSchema.parse(
+      resumeTriggerInstanceRequest,
+    ),
+  );
 }
 //# sourceMappingURL=resumetriggerinstance.js.map

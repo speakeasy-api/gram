@@ -4,25 +4,35 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetPeriodUsageSecurity$outboundSchema = z.pipe(z.object({
+export const GetPeriodUsageSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function getPeriodUsageSecurityToJSON(getPeriodUsageSecurity) {
-    return JSON.stringify(GetPeriodUsageSecurity$outboundSchema.parse(getPeriodUsageSecurity));
+  return JSON.stringify(
+    GetPeriodUsageSecurity$outboundSchema.parse(getPeriodUsageSecurity),
+  );
 }
 /** @internal */
-export const GetPeriodUsageRequest$outboundSchema = z.pipe(z.object({
+export const GetPeriodUsageRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function getPeriodUsageRequestToJSON(getPeriodUsageRequest) {
-    return JSON.stringify(GetPeriodUsageRequest$outboundSchema.parse(getPeriodUsageRequest));
+  return JSON.stringify(
+    GetPeriodUsageRequest$outboundSchema.parse(getPeriodUsageRequest),
+  );
 }
 //# sourceMappingURL=getperiodusage.js.map

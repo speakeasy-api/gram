@@ -12,6 +12,6 @@ let value: ListUserGrantsResult = {
 
 ## Fields
 
-| Field                                                                  | Type                                                                   | Required                                                               | Description                                                            |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `grants`                                                               | [components.ListRoleGrant](../../models/components/listrolegrant.md)[] | :heavy_check_mark:                                                     | The user's effective grants in this organization.                      |
+| Field    | Type                                                                   | Required           | Description                                       |
+| -------- | ---------------------------------------------------------------------- | ------------------ | ------------------------------------------------- |
+| `grants` | [components.ListRoleGrant](../../models/components/listrolegrant.md)[] | :heavy_check_mark: | The user's effective grants in this organization. |

@@ -13,5 +13,5 @@ let value: SortBy = "num_messages";
 ## Values
 
 ```typescript
-"last_message_timestamp" | "num_messages"
+"last_message_timestamp" | "num_messages";
 ```

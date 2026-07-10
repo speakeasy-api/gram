@@ -13,5 +13,5 @@ let value: Effect = "deny";
 ## Values
 
 ```typescript
-"allow" | "deny"
+"allow" | "deny";
 ```

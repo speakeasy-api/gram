@@ -4,30 +4,40 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetProjectSecurity$outboundSchema = z.pipe(z.object({
+export const GetProjectSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function getProjectSecurityToJSON(getProjectSecurity) {
-    return JSON.stringify(GetProjectSecurity$outboundSchema.parse(getProjectSecurity));
+  return JSON.stringify(
+    GetProjectSecurity$outboundSchema.parse(getProjectSecurity),
+  );
 }
 /** @internal */
-export const GetProjectRequest$outboundSchema = z.pipe(z.object({
+export const GetProjectRequest$outboundSchema = z.pipe(
+  z.object({
     slug: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function getProjectRequestToJSON(getProjectRequest) {
-    return JSON.stringify(GetProjectRequest$outboundSchema.parse(getProjectRequest));
+  return JSON.stringify(
+    GetProjectRequest$outboundSchema.parse(getProjectRequest),
+  );
 }
 //# sourceMappingURL=getproject.js.map

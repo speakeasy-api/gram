@@ -3,29 +3,49 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateGlobalRemoteSessionClientForm$outboundSchema, } from "../components/createglobalremotesessionclientform.js";
+import { CreateGlobalRemoteSessionClientForm$outboundSchema } from "../components/createglobalremotesessionclientform.js";
 /** @internal */
-export const CreateGlobalRemoteSessionClientSecurity$outboundSchema = z.pipe(z.object({
+export const CreateGlobalRemoteSessionClientSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function createGlobalRemoteSessionClientSecurityToJSON(createGlobalRemoteSessionClientSecurity) {
-    return JSON.stringify(CreateGlobalRemoteSessionClientSecurity$outboundSchema.parse(createGlobalRemoteSessionClientSecurity));
+  }),
+);
+export function createGlobalRemoteSessionClientSecurityToJSON(
+  createGlobalRemoteSessionClientSecurity,
+) {
+  return JSON.stringify(
+    CreateGlobalRemoteSessionClientSecurity$outboundSchema.parse(
+      createGlobalRemoteSessionClientSecurity,
+    ),
+  );
 }
 /** @internal */
-export const CreateGlobalRemoteSessionClientRequest$outboundSchema = z.pipe(z.object({
+export const CreateGlobalRemoteSessionClientRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-    createGlobalRemoteSessionClientForm: CreateGlobalRemoteSessionClientForm$outboundSchema,
-}), z.transform((v) => {
+    createGlobalRemoteSessionClientForm:
+      CreateGlobalRemoteSessionClientForm$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        createGlobalRemoteSessionClientForm: "CreateGlobalRemoteSessionClientForm",
+      gramSession: "Gram-Session",
+      createGlobalRemoteSessionClientForm:
+        "CreateGlobalRemoteSessionClientForm",
     });
-}));
-export function createGlobalRemoteSessionClientRequestToJSON(createGlobalRemoteSessionClientRequest) {
-    return JSON.stringify(CreateGlobalRemoteSessionClientRequest$outboundSchema.parse(createGlobalRemoteSessionClientRequest));
+  }),
+);
+export function createGlobalRemoteSessionClientRequestToJSON(
+  createGlobalRemoteSessionClientRequest,
+) {
+  return JSON.stringify(
+    CreateGlobalRemoteSessionClientRequest$outboundSchema.parse(
+      createGlobalRemoteSessionClientRequest,
+    ),
+  );
 }
 //# sourceMappingURL=createglobalremotesessionclient.js.map

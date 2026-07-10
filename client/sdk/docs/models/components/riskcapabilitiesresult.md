@@ -12,6 +12,6 @@ let value: RiskCapabilitiesResult = {
 
 ## Fields
 
-| Field                                                                    | Type                                                                     | Required                                                                 | Description                                                              |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| `piClassifierEnabled`                                                    | *boolean*                                                                | :heavy_check_mark:                                                       | Whether the prompt-injection ML classifier is configured on this server. |
+| Field                 | Type      | Required           | Description                                                              |
+| --------------------- | --------- | ------------------ | ------------------------------------------------------------------------ |
+| `piClassifierEnabled` | _boolean_ | :heavy_check_mark: | Whether the prompt-injection ML classifier is configured on this server. |

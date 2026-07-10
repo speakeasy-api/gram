@@ -3,9 +3,14 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { Package } from "./package.js";
 export type CreatePackageResult = {
-    package: Package;
+  package: Package;
 };
 /** @internal */
-export declare const CreatePackageResult$inboundSchema: z.ZodMiniType<CreatePackageResult, unknown>;
-export declare function createPackageResultFromJSON(jsonString: string): SafeParseResult<CreatePackageResult, SDKValidationError>;
+export declare const CreatePackageResult$inboundSchema: z.ZodMiniType<
+  CreatePackageResult,
+  unknown
+>;
+export declare function createPackageResultFromJSON(
+  jsonString: string,
+): SafeParseResult<CreatePackageResult, SDKValidationError>;
 //# sourceMappingURL=createpackageresult.d.ts.map

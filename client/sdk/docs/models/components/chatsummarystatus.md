@@ -13,5 +13,5 @@ let value: ChatSummaryStatus = "success";
 ## Values
 
 ```typescript
-"success" | "error"
+"success" | "error";
 ```

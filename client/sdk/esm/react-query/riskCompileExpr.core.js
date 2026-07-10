@@ -4,31 +4,43 @@
 import { riskExprCompile } from "../funcs/riskExprCompile.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchRiskCompileExpr(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildRiskCompileExprQuery(client$, request, security, options),
-    });
+export function prefetchRiskCompileExpr(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildRiskCompileExprQuery(client$, request, security, options),
+  });
 }
 export function buildRiskCompileExprQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyRiskCompileExpr({
-            expr: request?.expr,
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function riskCompileExprQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(riskExprCompile(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyRiskCompileExpr({
+      expr: request?.expr,
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function riskCompileExprQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        riskExprCompile(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyRiskCompileExpr(parameters) {
-    return ["@gram/client", "expr", "compile", parameters];
+  return ["@gram/client", "expr", "compile", parameters];
 }
 //# sourceMappingURL=riskCompileExpr.core.js.map

@@ -5,19 +5,26 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const CursorHookResult$inboundSchema = z.pipe(z.object({
+export const CursorHookResult$inboundSchema = z.pipe(
+  z.object({
     additional_context: z.optional(z.string()),
     agent_message: z.optional(z.string()),
     permission: z.optional(z.string()),
     user_message: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "additional_context": "additionalContext",
-        "agent_message": "agentMessage",
-        "user_message": "userMessage",
+      additional_context: "additionalContext",
+      agent_message: "agentMessage",
+      user_message: "userMessage",
     });
-}));
+  }),
+);
 export function cursorHookResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => CursorHookResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'CursorHookResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => CursorHookResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CursorHookResult' from JSON`,
+  );
 }
 //# sourceMappingURL=cursorhookresult.js.map

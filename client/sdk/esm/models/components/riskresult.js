@@ -6,14 +6,17 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { RiskSpan$inboundSchema } from "./riskspan.js";
 /** @internal */
-export const RiskResult$inboundSchema = z
-    .pipe(z.object({
+export const RiskResult$inboundSchema = z.pipe(
+  z.object({
     block_id: z.optional(z.string()),
     chat_id: z.optional(z.string()),
     chat_message_id: z.string(),
     chat_title: z.optional(z.string()),
     confidence: z.optional(z.number()),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     description: z.optional(z.string()),
     end_pos: z.optional(z.int()),
     id: z.string(),
@@ -27,23 +30,29 @@ export const RiskResult$inboundSchema = z
     start_pos: z.optional(z.int()),
     tags: z.optional(z.array(z.string())),
     user_id: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "block_id": "blockId",
-        "chat_id": "chatId",
-        "chat_message_id": "chatMessageId",
-        "chat_title": "chatTitle",
-        "created_at": "createdAt",
-        "end_pos": "endPos",
-        "match_redacted": "matchRedacted",
-        "policy_id": "policyId",
-        "policy_version": "policyVersion",
-        "rule_id": "ruleId",
-        "start_pos": "startPos",
-        "user_id": "userId",
+      block_id: "blockId",
+      chat_id: "chatId",
+      chat_message_id: "chatMessageId",
+      chat_title: "chatTitle",
+      created_at: "createdAt",
+      end_pos: "endPos",
+      match_redacted: "matchRedacted",
+      policy_id: "policyId",
+      policy_version: "policyVersion",
+      rule_id: "ruleId",
+      start_pos: "startPos",
+      user_id: "userId",
     });
-}));
+  }),
+);
 export function riskResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskResult' from JSON`,
+  );
 }
 //# sourceMappingURL=riskresult.js.map

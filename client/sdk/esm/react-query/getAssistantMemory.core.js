@@ -4,30 +4,47 @@
 import { assistantMemoriesGet } from "../funcs/assistantMemoriesGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchGetAssistantMemory(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildGetAssistantMemoryQuery(client$, request, security, options),
-    });
+export function prefetchGetAssistantMemory(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildGetAssistantMemoryQuery(client$, request, security, options),
+  });
 }
-export function buildGetAssistantMemoryQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyGetAssistantMemory({
-            id: request.id,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function getAssistantMemoryQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(assistantMemoriesGet(client$, request, security, mergedOptions));
-        },
-    };
+export function buildGetAssistantMemoryQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyGetAssistantMemory({
+      id: request.id,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function getAssistantMemoryQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        assistantMemoriesGet(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyGetAssistantMemory(parameters) {
-    return ["@gram/client", "assistantMemories", "get", parameters];
+  return ["@gram/client", "assistantMemories", "get", parameters];
 }
 //# sourceMappingURL=getAssistantMemory.core.js.map

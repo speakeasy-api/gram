@@ -8,37 +8,65 @@ import { safeParse } from "../../lib/schemas.js";
  * Invitation lifecycle state.
  */
 export const State = {
-    Pending: "pending",
-    Accepted: "accepted",
-    Expired: "expired",
-    Revoked: "revoked",
+  Pending: "pending",
+  Accepted: "accepted",
+  Expired: "expired",
+  Revoked: "revoked",
 };
 /** @internal */
 export const State$inboundSchema = z.enum(State);
 /** @internal */
-export const OrganizationInvitation$inboundSchema = z.pipe(z.object({
-    accepted_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const OrganizationInvitation$inboundSchema = z.pipe(
+  z.object({
+    accepted_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     email: z.string(),
-    expires_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
+    expires_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
     id: z.string(),
     inviter_user_id: z.optional(z.string()),
-    revoked_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
+    revoked_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
     role_slug: z.optional(z.string()),
     state: State$inboundSchema,
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "accepted_at": "acceptedAt",
-        "created_at": "createdAt",
-        "expires_at": "expiresAt",
-        "inviter_user_id": "inviterUserId",
-        "revoked_at": "revokedAt",
-        "role_slug": "roleSlug",
-        "updated_at": "updatedAt",
+      accepted_at: "acceptedAt",
+      created_at: "createdAt",
+      expires_at: "expiresAt",
+      inviter_user_id: "inviterUserId",
+      revoked_at: "revokedAt",
+      role_slug: "roleSlug",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function organizationInvitationFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => OrganizationInvitation$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'OrganizationInvitation' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => OrganizationInvitation$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'OrganizationInvitation' from JSON`,
+  );
 }
 //# sourceMappingURL=organizationinvitation.js.map

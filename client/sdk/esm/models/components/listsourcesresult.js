@@ -5,9 +5,13 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const ListSourcesResult$inboundSchema = z.object({
-    sources: z.array(z.string()),
+  sources: z.array(z.string()),
 });
 export function listSourcesResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListSourcesResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListSourcesResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListSourcesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListSourcesResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listsourcesresult.js.map

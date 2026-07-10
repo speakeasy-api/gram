@@ -13,5 +13,13 @@ let value: HookEventName = "UserPromptSubmit";
 ## Values
 
 ```typescript
-"SessionStart" | "ConfigChange" | "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "UserPromptSubmit" | "Stop" | "SessionEnd" | "Notification"
+"SessionStart" |
+  "ConfigChange" |
+  "PreToolUse" |
+  "PostToolUse" |
+  "PostToolUseFailure" |
+  "UserPromptSubmit" |
+  "Stop" |
+  "SessionEnd" |
+  "Notification";
 ```

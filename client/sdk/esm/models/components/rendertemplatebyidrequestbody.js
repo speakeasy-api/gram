@@ -4,9 +4,15 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const RenderTemplateByIDRequestBody$outboundSchema = z.object({
-    arguments: z.record(z.string(), z.any()),
+  arguments: z.record(z.string(), z.any()),
 });
-export function renderTemplateByIDRequestBodyToJSON(renderTemplateByIDRequestBody) {
-    return JSON.stringify(RenderTemplateByIDRequestBody$outboundSchema.parse(renderTemplateByIDRequestBody));
+export function renderTemplateByIDRequestBodyToJSON(
+  renderTemplateByIDRequestBody,
+) {
+  return JSON.stringify(
+    RenderTemplateByIDRequestBody$outboundSchema.parse(
+      renderTemplateByIDRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=rendertemplatebyidrequestbody.js.map

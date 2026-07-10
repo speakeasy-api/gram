@@ -4,10 +4,10 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const CreateKeyForm$outboundSchema = z.object({
-    name: z.string(),
-    scopes: z.array(z.string()),
+  name: z.string(),
+  scopes: z.array(z.string()),
 });
 export function createKeyFormToJSON(createKeyForm) {
-    return JSON.stringify(CreateKeyForm$outboundSchema.parse(createKeyForm));
+  return JSON.stringify(CreateKeyForm$outboundSchema.parse(createKeyForm));
 }
 //# sourceMappingURL=createkeyform.js.map

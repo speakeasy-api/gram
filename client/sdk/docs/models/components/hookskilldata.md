@@ -14,7 +14,7 @@ let value: HookSkillData = {
 
 ## Fields
 
-| Field                                    | Type                                     | Required                                 | Description                              |
-| ---------------------------------------- | ---------------------------------------- | ---------------------------------------- | ---------------------------------------- |
-| `name`                                   | *string*                                 | :heavy_check_mark:                       | Activated skill name.                    |
-| `source`                                 | *string*                                 | :heavy_minus_sign:                       | Skill source or namespace, if available. |
+| Field    | Type     | Required           | Description                              |
+| -------- | -------- | ------------------ | ---------------------------------------- |
+| `name`   | _string_ | :heavy_check_mark: | Activated skill name.                    |
+| `source` | _string_ | :heavy_minus_sign: | Skill source or namespace, if available. |

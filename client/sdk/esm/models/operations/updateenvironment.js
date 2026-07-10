@@ -3,34 +3,44 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpdateEnvironmentRequestBody$outboundSchema, } from "../components/updateenvironmentrequestbody.js";
+import { UpdateEnvironmentRequestBody$outboundSchema } from "../components/updateenvironmentrequestbody.js";
 /** @internal */
-export const UpdateEnvironmentSecurity$outboundSchema = z.pipe(z.object({
+export const UpdateEnvironmentSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function updateEnvironmentSecurityToJSON(updateEnvironmentSecurity) {
-    return JSON.stringify(UpdateEnvironmentSecurity$outboundSchema.parse(updateEnvironmentSecurity));
+  return JSON.stringify(
+    UpdateEnvironmentSecurity$outboundSchema.parse(updateEnvironmentSecurity),
+  );
 }
 /** @internal */
-export const UpdateEnvironmentRequest$outboundSchema = z.pipe(z.object({
+export const UpdateEnvironmentRequest$outboundSchema = z.pipe(
+  z.object({
     slug: z.string(),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     updateEnvironmentRequestBody: UpdateEnvironmentRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        updateEnvironmentRequestBody: "UpdateEnvironmentRequestBody",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      updateEnvironmentRequestBody: "UpdateEnvironmentRequestBody",
     });
-}));
+  }),
+);
 export function updateEnvironmentRequestToJSON(updateEnvironmentRequest) {
-    return JSON.stringify(UpdateEnvironmentRequest$outboundSchema.parse(updateEnvironmentRequest));
+  return JSON.stringify(
+    UpdateEnvironmentRequest$outboundSchema.parse(updateEnvironmentRequest),
+  );
 }
 //# sourceMappingURL=updateenvironment.js.map

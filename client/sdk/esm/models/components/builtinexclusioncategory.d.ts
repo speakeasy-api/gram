@@ -6,16 +6,21 @@ import { BuiltinExclusionEntry } from "./builtinexclusionentry.js";
  * A named group of built-in exclusion rules.
  */
 export type BuiltinExclusionCategory = {
-    /**
-     * The rules in this category.
-     */
-    entries: Array<BuiltinExclusionEntry>;
-    /**
-     * Human category label, e.g. "Test credit cards".
-     */
-    label: string;
+  /**
+   * The rules in this category.
+   */
+  entries: Array<BuiltinExclusionEntry>;
+  /**
+   * Human category label, e.g. "Test credit cards".
+   */
+  label: string;
 };
 /** @internal */
-export declare const BuiltinExclusionCategory$inboundSchema: z.ZodMiniType<BuiltinExclusionCategory, unknown>;
-export declare function builtinExclusionCategoryFromJSON(jsonString: string): SafeParseResult<BuiltinExclusionCategory, SDKValidationError>;
+export declare const BuiltinExclusionCategory$inboundSchema: z.ZodMiniType<
+  BuiltinExclusionCategory,
+  unknown
+>;
+export declare function builtinExclusionCategoryFromJSON(
+  jsonString: string,
+): SafeParseResult<BuiltinExclusionCategory, SDKValidationError>;
 //# sourceMappingURL=builtinexclusioncategory.d.ts.map

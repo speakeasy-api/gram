@@ -12,7 +12,7 @@ let value: DeleteShadowMCPAccessRuleRequest = {
 
 ## Fields
 
-| Field              | Type               | Required           | Description        |
-| ------------------ | ------------------ | ------------------ | ------------------ |
-| `id`               | *string*           | :heavy_check_mark: | N/A                |
-| `gramSession`      | *string*           | :heavy_minus_sign: | Session header     |
+| Field         | Type     | Required           | Description    |
+| ------------- | -------- | ------------------ | -------------- |
+| `id`          | _string_ | :heavy_check_mark: | N/A            |
+| `gramSession` | _string_ | :heavy_minus_sign: | Session header |

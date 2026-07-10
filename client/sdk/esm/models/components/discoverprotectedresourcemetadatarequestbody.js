@@ -4,14 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DiscoverProtectedResourceMetadataRequestBody$outboundSchema = z.pipe(z.object({
-    remoteMcpServerId: z.string(),
-}), z.transform((v) => {
-    return remap$(v, {
+export const DiscoverProtectedResourceMetadataRequestBody$outboundSchema =
+  z.pipe(
+    z.object({
+      remoteMcpServerId: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         remoteMcpServerId: "remote_mcp_server_id",
-    });
-}));
-export function discoverProtectedResourceMetadataRequestBodyToJSON(discoverProtectedResourceMetadataRequestBody) {
-    return JSON.stringify(DiscoverProtectedResourceMetadataRequestBody$outboundSchema.parse(discoverProtectedResourceMetadataRequestBody));
+      });
+    }),
+  );
+export function discoverProtectedResourceMetadataRequestBodyToJSON(
+  discoverProtectedResourceMetadataRequestBody,
+) {
+  return JSON.stringify(
+    DiscoverProtectedResourceMetadataRequestBody$outboundSchema.parse(
+      discoverProtectedResourceMetadataRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=discoverprotectedresourcemetadatarequestbody.js.map

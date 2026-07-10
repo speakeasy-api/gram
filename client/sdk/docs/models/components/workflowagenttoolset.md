@@ -15,7 +15,7 @@ let value: WorkflowAgentToolset = {
 
 ## Fields
 
-| Field                                | Type                                 | Required                             | Description                          |
-| ------------------------------------ | ------------------------------------ | ------------------------------------ | ------------------------------------ |
-| `environmentSlug`                    | *string*                             | :heavy_check_mark:                   | The slug of the environment for auth |
-| `toolsetSlug`                        | *string*                             | :heavy_check_mark:                   | The slug of the toolset to use       |
+| Field             | Type     | Required           | Description                          |
+| ----------------- | -------- | ------------------ | ------------------------------------ |
+| `environmentSlug` | _string_ | :heavy_check_mark: | The slug of the environment for auth |
+| `toolsetSlug`     | _string_ | :heavy_check_mark: | The slug of the toolset to use       |

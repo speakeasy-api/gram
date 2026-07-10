@@ -4,46 +4,56 @@
 import { chatList } from "../funcs/chatList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchListChats(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildListChatsQuery(client$, request, security, options),
-    });
+export function prefetchListChats(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildListChatsQuery(client$, request, security, options),
+  });
 }
 export function buildListChatsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyListChats({
-            search: request?.search,
-            externalUserId: request?.externalUserId,
-            source: request?.source,
-            assistantId: request?.assistantId,
-            sourceKind: request?.sourceKind,
-            excludeSourceKind: request?.excludeSourceKind,
-            hasRisk: request?.hasRisk,
-            accountType: request?.accountType,
-            pinned: request?.pinned,
-            minRiskScore: request?.minRiskScore,
-            from: request?.from,
-            to: request?.to,
-            limit: request?.limit,
-            offset: request?.offset,
-            sortBy: request?.sortBy,
-            sortOrder: request?.sortOrder,
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-            gramChatSession: request?.gramChatSession,
-        }),
-        queryFn: async function listChatsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(chatList(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyListChats({
+      search: request?.search,
+      externalUserId: request?.externalUserId,
+      source: request?.source,
+      assistantId: request?.assistantId,
+      sourceKind: request?.sourceKind,
+      excludeSourceKind: request?.excludeSourceKind,
+      hasRisk: request?.hasRisk,
+      accountType: request?.accountType,
+      pinned: request?.pinned,
+      minRiskScore: request?.minRiskScore,
+      from: request?.from,
+      to: request?.to,
+      limit: request?.limit,
+      offset: request?.offset,
+      sortBy: request?.sortBy,
+      sortOrder: request?.sortOrder,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+      gramChatSession: request?.gramChatSession,
+    }),
+    queryFn: async function listChatsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(chatList(client$, request, security, mergedOptions));
+    },
+  };
 }
 export function queryKeyListChats(parameters) {
-    return ["@gram/client", "chat", "list", parameters];
+  return ["@gram/client", "chat", "list", parameters];
 }
 //# sourceMappingURL=listChats.core.js.map

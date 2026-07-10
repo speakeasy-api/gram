@@ -3,33 +3,51 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { DeleteConfigRequestBody$outboundSchema, } from "../components/deleteconfigrequestbody.js";
+import { DeleteConfigRequestBody$outboundSchema } from "../components/deleteconfigrequestbody.js";
 /** @internal */
-export const DeleteAIIntegrationConfigSecurity$outboundSchema = z.pipe(z.object({
+export const DeleteAIIntegrationConfigSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function deleteAIIntegrationConfigSecurityToJSON(deleteAIIntegrationConfigSecurity) {
-    return JSON.stringify(DeleteAIIntegrationConfigSecurity$outboundSchema.parse(deleteAIIntegrationConfigSecurity));
+  }),
+);
+export function deleteAIIntegrationConfigSecurityToJSON(
+  deleteAIIntegrationConfigSecurity,
+) {
+  return JSON.stringify(
+    DeleteAIIntegrationConfigSecurity$outboundSchema.parse(
+      deleteAIIntegrationConfigSecurity,
+    ),
+  );
 }
 /** @internal */
-export const DeleteAIIntegrationConfigRequest$outboundSchema = z.pipe(z.object({
+export const DeleteAIIntegrationConfigRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     deleteConfigRequestBody: DeleteConfigRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        deleteConfigRequestBody: "DeleteConfigRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      deleteConfigRequestBody: "DeleteConfigRequestBody",
     });
-}));
-export function deleteAIIntegrationConfigRequestToJSON(deleteAIIntegrationConfigRequest) {
-    return JSON.stringify(DeleteAIIntegrationConfigRequest$outboundSchema.parse(deleteAIIntegrationConfigRequest));
+  }),
+);
+export function deleteAIIntegrationConfigRequestToJSON(
+  deleteAIIntegrationConfigRequest,
+) {
+  return JSON.stringify(
+    DeleteAIIntegrationConfigRequest$outboundSchema.parse(
+      deleteAIIntegrationConfigRequest,
+    ),
+  );
 }
 //# sourceMappingURL=deleteaiintegrationconfig.js.map

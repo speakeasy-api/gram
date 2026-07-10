@@ -8,28 +8,27 @@ import { safeParse } from "../../lib/schemas.js";
  * Tool usage aggregation target kind
  */
 export const TargetKind = {
-    Server: "server",
-    LocalTools: "local_tools",
-    Skill: "skill",
+  Server: "server",
+  LocalTools: "local_tools",
+  Skill: "skill",
 };
 /**
  * Tool usage target type
  */
 export const TargetType = {
-    HostedMcpServer: "hosted_mcp_server",
-    TunneledMcpServer: "tunneled_mcp_server",
-    ShadowMcpServer: "shadow_mcp_server",
-    LocalTool: "local_tool",
-    Skill: "skill",
+  HostedMcpServer: "hosted_mcp_server",
+  TunneledMcpServer: "tunneled_mcp_server",
+  ShadowMcpServer: "shadow_mcp_server",
+  LocalTool: "local_tool",
+  Skill: "skill",
 };
 /** @internal */
-export const TargetKind$inboundSchema = z
-    .enum(TargetKind);
+export const TargetKind$inboundSchema = z.enum(TargetKind);
 /** @internal */
-export const TargetType$inboundSchema = z
-    .enum(TargetType);
+export const TargetType$inboundSchema = z.enum(TargetType);
 /** @internal */
-export const ToolUsageTargetTimeSeriesPoint$inboundSchema = z.pipe(z.object({
+export const ToolUsageTargetTimeSeriesPoint$inboundSchema = z.pipe(
+  z.object({
     bucket_start_ns: z.string(),
     event_count: z.int(),
     failure_count: z.int(),
@@ -37,18 +36,24 @@ export const ToolUsageTargetTimeSeriesPoint$inboundSchema = z.pipe(z.object({
     target_kind: TargetKind$inboundSchema,
     target_label: z.string(),
     target_type: TargetType$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "bucket_start_ns": "bucketStartNs",
-        "event_count": "eventCount",
-        "failure_count": "failureCount",
-        "target_id": "targetId",
-        "target_kind": "targetKind",
-        "target_label": "targetLabel",
-        "target_type": "targetType",
+      bucket_start_ns: "bucketStartNs",
+      event_count: "eventCount",
+      failure_count: "failureCount",
+      target_id: "targetId",
+      target_kind: "targetKind",
+      target_label: "targetLabel",
+      target_type: "targetType",
     });
-}));
+  }),
+);
 export function toolUsageTargetTimeSeriesPointFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolUsageTargetTimeSeriesPoint$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolUsageTargetTimeSeriesPoint' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolUsageTargetTimeSeriesPoint$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolUsageTargetTimeSeriesPoint' from JSON`,
+  );
 }
 //# sourceMappingURL=toolusagetargettimeseriespoint.js.map

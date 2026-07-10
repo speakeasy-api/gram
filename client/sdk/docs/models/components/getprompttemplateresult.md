@@ -19,11 +19,7 @@ let value: GetPromptTemplateResult = {
     prompt: "<value>",
     schema: "<value>",
     toolUrn: "<value>",
-    toolsHint: [
-      "<value 1>",
-      "<value 2>",
-      "<value 3>",
-    ],
+    toolsHint: ["<value 1>", "<value 2>", "<value 3>"],
     updatedAt: new Date("2026-12-12T05:35:57.442Z"),
   },
 };
@@ -31,6 +27,6 @@ let value: GetPromptTemplateResult = {
 
 ## Fields
 
-| Field                                                                  | Type                                                                   | Required                                                               | Description                                                            |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `template`                                                             | [components.PromptTemplate](../../models/components/prompttemplate.md) | :heavy_check_mark:                                                     | A prompt template                                                      |
+| Field      | Type                                                                   | Required           | Description       |
+| ---------- | ---------------------------------------------------------------------- | ------------------ | ----------------- |
+| `template` | [components.PromptTemplate](../../models/components/prompttemplate.md) | :heavy_check_mark: | A prompt template |

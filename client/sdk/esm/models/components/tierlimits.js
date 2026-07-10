@@ -5,8 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const TierLimits$inboundSchema = z
-    .pipe(z.object({
+export const TierLimits$inboundSchema = z.pipe(
+  z.object({
     add_on_bullets: z.optional(z.array(z.string())),
     base_price: z.number(),
     feature_bullets: z.array(z.string()),
@@ -16,20 +16,26 @@ export const TierLimits$inboundSchema = z
     included_tool_calls: z.int(),
     price_per_additional_server: z.number(),
     price_per_additional_tool_call: z.number(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "add_on_bullets": "addOnBullets",
-        "base_price": "basePrice",
-        "feature_bullets": "featureBullets",
-        "included_bullets": "includedBullets",
-        "included_credits": "includedCredits",
-        "included_servers": "includedServers",
-        "included_tool_calls": "includedToolCalls",
-        "price_per_additional_server": "pricePerAdditionalServer",
-        "price_per_additional_tool_call": "pricePerAdditionalToolCall",
+      add_on_bullets: "addOnBullets",
+      base_price: "basePrice",
+      feature_bullets: "featureBullets",
+      included_bullets: "includedBullets",
+      included_credits: "includedCredits",
+      included_servers: "includedServers",
+      included_tool_calls: "includedToolCalls",
+      price_per_additional_server: "pricePerAdditionalServer",
+      price_per_additional_tool_call: "pricePerAdditionalToolCall",
     });
-}));
+  }),
+);
 export function tierLimitsFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TierLimits$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TierLimits' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TierLimits$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TierLimits' from JSON`,
+  );
 }
 //# sourceMappingURL=tierlimits.js.map

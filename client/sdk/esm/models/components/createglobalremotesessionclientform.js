@@ -7,29 +7,40 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
  */
 export const TokenEndpointAuthMethod = {
-    ClientSecretBasic: "client_secret_basic",
-    ClientSecretPost: "client_secret_post",
-    None: "none",
+  ClientSecretBasic: "client_secret_basic",
+  ClientSecretPost: "client_secret_post",
+  None: "none",
 };
 /** @internal */
-export const TokenEndpointAuthMethod$outboundSchema = z.enum(TokenEndpointAuthMethod);
+export const TokenEndpointAuthMethod$outboundSchema = z.enum(
+  TokenEndpointAuthMethod,
+);
 /** @internal */
-export const CreateGlobalRemoteSessionClientForm$outboundSchema = z.pipe(z.object({
+export const CreateGlobalRemoteSessionClientForm$outboundSchema = z.pipe(
+  z.object({
     audience: z.optional(z.string()),
     clientId: z.string(),
     clientSecret: z.optional(z.string()),
     remoteSessionIssuerId: z.string(),
     scope: z.optional(z.array(z.string())),
     tokenEndpointAuthMethod: z.optional(TokenEndpointAuthMethod$outboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        clientId: "client_id",
-        clientSecret: "client_secret",
-        remoteSessionIssuerId: "remote_session_issuer_id",
-        tokenEndpointAuthMethod: "token_endpoint_auth_method",
+      clientId: "client_id",
+      clientSecret: "client_secret",
+      remoteSessionIssuerId: "remote_session_issuer_id",
+      tokenEndpointAuthMethod: "token_endpoint_auth_method",
     });
-}));
-export function createGlobalRemoteSessionClientFormToJSON(createGlobalRemoteSessionClientForm) {
-    return JSON.stringify(CreateGlobalRemoteSessionClientForm$outboundSchema.parse(createGlobalRemoteSessionClientForm));
+  }),
+);
+export function createGlobalRemoteSessionClientFormToJSON(
+  createGlobalRemoteSessionClientForm,
+) {
+  return JSON.stringify(
+    CreateGlobalRemoteSessionClientForm$outboundSchema.parse(
+      createGlobalRemoteSessionClientForm,
+    ),
+  );
 }
 //# sourceMappingURL=createglobalremotesessionclientform.js.map

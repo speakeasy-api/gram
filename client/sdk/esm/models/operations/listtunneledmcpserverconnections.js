@@ -4,58 +4,104 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListTunneledMcpServerConnectionsSecurityOption1$outboundSchema = z.pipe(z.object({
-    projectSlugHeaderGramProject: z.string(),
-    sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
-    return remap$(v, {
+export const ListTunneledMcpServerConnectionsSecurityOption1$outboundSchema =
+  z.pipe(
+    z.object({
+      projectSlugHeaderGramProject: z.string(),
+      sessionHeaderGramSession: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
         sessionHeaderGramSession: "session_header_Gram-Session",
-    });
-}));
-export function listTunneledMcpServerConnectionsSecurityOption1ToJSON(listTunneledMcpServerConnectionsSecurityOption1) {
-    return JSON.stringify(ListTunneledMcpServerConnectionsSecurityOption1$outboundSchema.parse(listTunneledMcpServerConnectionsSecurityOption1));
+      });
+    }),
+  );
+export function listTunneledMcpServerConnectionsSecurityOption1ToJSON(
+  listTunneledMcpServerConnectionsSecurityOption1,
+) {
+  return JSON.stringify(
+    ListTunneledMcpServerConnectionsSecurityOption1$outboundSchema.parse(
+      listTunneledMcpServerConnectionsSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListTunneledMcpServerConnectionsSecurityOption2$outboundSchema = z.pipe(z.object({
-    apikeyHeaderGramKey: z.string(),
-    projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
-    return remap$(v, {
+export const ListTunneledMcpServerConnectionsSecurityOption2$outboundSchema =
+  z.pipe(
+    z.object({
+      apikeyHeaderGramKey: z.string(),
+      projectSlugHeaderGramProject: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
         projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    });
-}));
-export function listTunneledMcpServerConnectionsSecurityOption2ToJSON(listTunneledMcpServerConnectionsSecurityOption2) {
-    return JSON.stringify(ListTunneledMcpServerConnectionsSecurityOption2$outboundSchema.parse(listTunneledMcpServerConnectionsSecurityOption2));
+      });
+    }),
+  );
+export function listTunneledMcpServerConnectionsSecurityOption2ToJSON(
+  listTunneledMcpServerConnectionsSecurityOption2,
+) {
+  return JSON.stringify(
+    ListTunneledMcpServerConnectionsSecurityOption2$outboundSchema.parse(
+      listTunneledMcpServerConnectionsSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListTunneledMcpServerConnectionsSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListTunneledMcpServerConnectionsSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListTunneledMcpServerConnectionsSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListTunneledMcpServerConnectionsSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(
+        () => ListTunneledMcpServerConnectionsSecurityOption1$outboundSchema,
+      ),
+    ),
+    option2: z.optional(
+      z.lazy(
+        () => ListTunneledMcpServerConnectionsSecurityOption2$outboundSchema,
+      ),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function listTunneledMcpServerConnectionsSecurityToJSON(listTunneledMcpServerConnectionsSecurity) {
-    return JSON.stringify(ListTunneledMcpServerConnectionsSecurity$outboundSchema.parse(listTunneledMcpServerConnectionsSecurity));
+  }),
+);
+export function listTunneledMcpServerConnectionsSecurityToJSON(
+  listTunneledMcpServerConnectionsSecurity,
+) {
+  return JSON.stringify(
+    ListTunneledMcpServerConnectionsSecurity$outboundSchema.parse(
+      listTunneledMcpServerConnectionsSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListTunneledMcpServerConnectionsRequest$outboundSchema = z.pipe(z.object({
+export const ListTunneledMcpServerConnectionsRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
     });
-}));
-export function listTunneledMcpServerConnectionsRequestToJSON(listTunneledMcpServerConnectionsRequest) {
-    return JSON.stringify(ListTunneledMcpServerConnectionsRequest$outboundSchema.parse(listTunneledMcpServerConnectionsRequest));
+  }),
+);
+export function listTunneledMcpServerConnectionsRequestToJSON(
+  listTunneledMcpServerConnectionsRequest,
+) {
+  return JSON.stringify(
+    ListTunneledMcpServerConnectionsRequest$outboundSchema.parse(
+      listTunneledMcpServerConnectionsRequest,
+    ),
+  );
 }
 //# sourceMappingURL=listtunneledmcpserverconnections.js.map

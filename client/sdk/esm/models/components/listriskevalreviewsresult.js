@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { RiskPolicyEvalReview$inboundSchema, } from "./riskpolicyevalreview.js";
+import { RiskPolicyEvalReview$inboundSchema } from "./riskpolicyevalreview.js";
 /** @internal */
 export const ListRiskEvalReviewsResult$inboundSchema = z.object({
-    reviews: z.array(RiskPolicyEvalReview$inboundSchema),
+  reviews: z.array(RiskPolicyEvalReview$inboundSchema),
 });
 export function listRiskEvalReviewsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListRiskEvalReviewsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListRiskEvalReviewsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListRiskEvalReviewsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListRiskEvalReviewsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listriskevalreviewsresult.js.map

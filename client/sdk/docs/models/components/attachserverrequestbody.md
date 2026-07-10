@@ -12,8 +12,8 @@ let value: AttachServerRequestBody = {
 
 ## Fields
 
-| Field                                                                               | Type                                                                                | Required                                                                            | Description                                                                         |
-| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `collectionId`                                                                      | *string*                                                                            | :heavy_check_mark:                                                                  | ID of the collection                                                                |
-| `mcpServerId`                                                                       | *string*                                                                            | :heavy_minus_sign:                                                                  | ID of the MCP server to attach (provide exactly one of toolset_id or mcp_server_id) |
-| `toolsetId`                                                                         | *string*                                                                            | :heavy_minus_sign:                                                                  | ID of the toolset to attach (provide exactly one of toolset_id or mcp_server_id)    |
+| Field          | Type     | Required           | Description                                                                         |
+| -------------- | -------- | ------------------ | ----------------------------------------------------------------------------------- |
+| `collectionId` | _string_ | :heavy_check_mark: | ID of the collection                                                                |
+| `mcpServerId`  | _string_ | :heavy_minus_sign: | ID of the MCP server to attach (provide exactly one of toolset_id or mcp_server_id) |
+| `toolsetId`    | _string_ | :heavy_minus_sign: | ID of the toolset to attach (provide exactly one of toolset_id or mcp_server_id)    |

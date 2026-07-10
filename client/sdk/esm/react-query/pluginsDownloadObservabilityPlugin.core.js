@@ -4,30 +4,57 @@
 import { pluginsDownloadObservabilityPlugin } from "../funcs/pluginsDownloadObservabilityPlugin.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchPluginsDownloadObservabilityPlugin(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildPluginsDownloadObservabilityPluginQuery(client$, request, security, options),
-    });
+export function prefetchPluginsDownloadObservabilityPlugin(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildPluginsDownloadObservabilityPluginQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+  });
 }
-export function buildPluginsDownloadObservabilityPluginQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyPluginsDownloadObservabilityPlugin({
-            platform: request.platform,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function pluginsDownloadObservabilityPluginQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(pluginsDownloadObservabilityPlugin(client$, request, security, mergedOptions));
-        },
-    };
+export function buildPluginsDownloadObservabilityPluginQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyPluginsDownloadObservabilityPlugin({
+      platform: request.platform,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function pluginsDownloadObservabilityPluginQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        pluginsDownloadObservabilityPlugin(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ),
+      );
+    },
+  };
 }
 export function queryKeyPluginsDownloadObservabilityPlugin(parameters) {
-    return ["@gram/client", "plugins", "downloadObservabilityPlugin", parameters];
+  return ["@gram/client", "plugins", "downloadObservabilityPlugin", parameters];
 }
 //# sourceMappingURL=pluginsDownloadObservabilityPlugin.core.js.map

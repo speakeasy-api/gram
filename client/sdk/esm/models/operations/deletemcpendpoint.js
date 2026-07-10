@@ -4,58 +4,90 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteMcpEndpointSecurityOption1$outboundSchema = z.pipe(z.object({
+export const DeleteMcpEndpointSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function deleteMcpEndpointSecurityOption1ToJSON(deleteMcpEndpointSecurityOption1) {
-    return JSON.stringify(DeleteMcpEndpointSecurityOption1$outboundSchema.parse(deleteMcpEndpointSecurityOption1));
+  }),
+);
+export function deleteMcpEndpointSecurityOption1ToJSON(
+  deleteMcpEndpointSecurityOption1,
+) {
+  return JSON.stringify(
+    DeleteMcpEndpointSecurityOption1$outboundSchema.parse(
+      deleteMcpEndpointSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const DeleteMcpEndpointSecurityOption2$outboundSchema = z.pipe(z.object({
+export const DeleteMcpEndpointSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function deleteMcpEndpointSecurityOption2ToJSON(deleteMcpEndpointSecurityOption2) {
-    return JSON.stringify(DeleteMcpEndpointSecurityOption2$outboundSchema.parse(deleteMcpEndpointSecurityOption2));
+  }),
+);
+export function deleteMcpEndpointSecurityOption2ToJSON(
+  deleteMcpEndpointSecurityOption2,
+) {
+  return JSON.stringify(
+    DeleteMcpEndpointSecurityOption2$outboundSchema.parse(
+      deleteMcpEndpointSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const DeleteMcpEndpointSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => DeleteMcpEndpointSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => DeleteMcpEndpointSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const DeleteMcpEndpointSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => DeleteMcpEndpointSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => DeleteMcpEndpointSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function deleteMcpEndpointSecurityToJSON(deleteMcpEndpointSecurity) {
-    return JSON.stringify(DeleteMcpEndpointSecurity$outboundSchema.parse(deleteMcpEndpointSecurity));
+  return JSON.stringify(
+    DeleteMcpEndpointSecurity$outboundSchema.parse(deleteMcpEndpointSecurity),
+  );
 }
 /** @internal */
-export const DeleteMcpEndpointRequest$outboundSchema = z.pipe(z.object({
+export const DeleteMcpEndpointRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function deleteMcpEndpointRequestToJSON(deleteMcpEndpointRequest) {
-    return JSON.stringify(DeleteMcpEndpointRequest$outboundSchema.parse(deleteMcpEndpointRequest));
+  return JSON.stringify(
+    DeleteMcpEndpointRequest$outboundSchema.parse(deleteMcpEndpointRequest),
+  );
 }
 //# sourceMappingURL=deletemcpendpoint.js.map

@@ -12,6 +12,6 @@ let value: GenerateWorkOSAdminPortalLinkResult = {
 
 ## Fields
 
-| Field                                | Type                                 | Required                             | Description                          |
-| ------------------------------------ | ------------------------------------ | ------------------------------------ | ------------------------------------ |
-| `url`                                | *string*                             | :heavy_check_mark:                   | URL to the WorkOS Admin Portal flow. |
+| Field | Type     | Required           | Description                          |
+| ----- | -------- | ------------------ | ------------------------------------ |
+| `url` | _string_ | :heavy_check_mark: | URL to the WorkOS Admin Portal flow. |

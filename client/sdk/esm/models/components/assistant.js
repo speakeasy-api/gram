@@ -4,21 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { AssistantMCPServerRef$inboundSchema, } from "./assistantmcpserverref.js";
-import { AssistantToolsetRef$inboundSchema, } from "./assistanttoolsetref.js";
+import { AssistantMCPServerRef$inboundSchema } from "./assistantmcpserverref.js";
+import { AssistantToolsetRef$inboundSchema } from "./assistanttoolsetref.js";
 /**
  * The assistant status.
  */
 export const AssistantStatus = {
-    Active: "active",
-    Paused: "paused",
+  Active: "active",
+  Paused: "paused",
 };
 /** @internal */
 export const AssistantStatus$inboundSchema = z.enum(AssistantStatus);
 /** @internal */
-export const Assistant$inboundSchema = z
-    .pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const Assistant$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     created_by_user_id: z.optional(z.string()),
     id: z.string(),
     instructions: z.string(),
@@ -29,20 +32,29 @@ export const Assistant$inboundSchema = z
     project_id: z.string(),
     status: AssistantStatus$inboundSchema,
     toolsets: z.array(AssistantToolsetRef$inboundSchema),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     warm_ttl_seconds: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "created_by_user_id": "createdByUserId",
-        "max_concurrency": "maxConcurrency",
-        "mcp_servers": "mcpServers",
-        "project_id": "projectId",
-        "updated_at": "updatedAt",
-        "warm_ttl_seconds": "warmTtlSeconds",
+      created_at: "createdAt",
+      created_by_user_id: "createdByUserId",
+      max_concurrency: "maxConcurrency",
+      mcp_servers: "mcpServers",
+      project_id: "projectId",
+      updated_at: "updatedAt",
+      warm_ttl_seconds: "warmTtlSeconds",
     });
-}));
+  }),
+);
 export function assistantFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => Assistant$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'Assistant' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => Assistant$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'Assistant' from JSON`,
+  );
 }
 //# sourceMappingURL=assistant.js.map

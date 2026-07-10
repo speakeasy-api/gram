@@ -12,6 +12,6 @@ let value: DeleteRequestBody = {
 
 ## Fields
 
-| Field                 | Type                  | Required              | Description           |
-| --------------------- | --------------------- | --------------------- | --------------------- |
-| `overrideId`          | *string*              | :heavy_check_mark:    | Override ID to delete |
+| Field        | Type     | Required           | Description           |
+| ------------ | -------- | ------------------ | --------------------- |
+| `overrideId` | _string_ | :heavy_check_mark: | Override ID to delete |

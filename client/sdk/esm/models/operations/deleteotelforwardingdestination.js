@@ -5,31 +5,49 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 /** @internal */
-export const DeleteOtelForwardingDestinationSecurity$outboundSchema = z.pipe(z.object({
+export const DeleteOtelForwardingDestinationSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function deleteOtelForwardingDestinationSecurityToJSON(deleteOtelForwardingDestinationSecurity) {
-    return JSON.stringify(DeleteOtelForwardingDestinationSecurity$outboundSchema.parse(deleteOtelForwardingDestinationSecurity));
+  }),
+);
+export function deleteOtelForwardingDestinationSecurityToJSON(
+  deleteOtelForwardingDestinationSecurity,
+) {
+  return JSON.stringify(
+    DeleteOtelForwardingDestinationSecurity$outboundSchema.parse(
+      deleteOtelForwardingDestinationSecurity,
+    ),
+  );
 }
 /** @internal */
-export const DeleteOtelForwardingDestinationRequest$outboundSchema = z.pipe(z.object({
+export const DeleteOtelForwardingDestinationRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     serveImageForm: components.ServeImageForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        serveImageForm: "ServeImageForm",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      serveImageForm: "ServeImageForm",
     });
-}));
-export function deleteOtelForwardingDestinationRequestToJSON(deleteOtelForwardingDestinationRequest) {
-    return JSON.stringify(DeleteOtelForwardingDestinationRequest$outboundSchema.parse(deleteOtelForwardingDestinationRequest));
+  }),
+);
+export function deleteOtelForwardingDestinationRequestToJSON(
+  deleteOtelForwardingDestinationRequest,
+) {
+  return JSON.stringify(
+    DeleteOtelForwardingDestinationRequest$outboundSchema.parse(
+      deleteOtelForwardingDestinationRequest,
+    ),
+  );
 }
 //# sourceMappingURL=deleteotelforwardingdestination.js.map

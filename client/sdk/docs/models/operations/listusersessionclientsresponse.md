@@ -14,6 +14,6 @@ let value: ListUserSessionClientsResponse = {
 
 ## Fields
 
-| Field                                                                                              | Type                                                                                               | Required                                                                                           | Description                                                                                        |
-| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `result`                                                                                           | [components.ListUserSessionClientsResult](../../models/components/listusersessionclientsresult.md) | :heavy_check_mark:                                                                                 | N/A                                                                                                |
+| Field    | Type                                                                                               | Required           | Description |
+| -------- | -------------------------------------------------------------------------------------------------- | ------------------ | ----------- |
+| `result` | [components.ListUserSessionClientsResult](../../models/components/listusersessionclientsresult.md) | :heavy_check_mark: | N/A         |

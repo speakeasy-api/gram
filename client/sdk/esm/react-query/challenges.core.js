@@ -4,37 +4,49 @@
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchChallenges(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildChallengesQuery(client$, request, security, options),
-    });
+export function prefetchChallenges(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildChallengesQuery(client$, request, security, options),
+  });
 }
 export function buildChallengesQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyChallenges({
-            outcome: request?.outcome,
-            principalUrn: request?.principalUrn,
-            scope: request?.scope,
-            projectId: request?.projectId,
-            resolved: request?.resolved,
-            ids: request?.ids,
-            limit: request?.limit,
-            offset: request?.offset,
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-        }),
-        queryFn: async function challengesQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(accessListChallenges(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyChallenges({
+      outcome: request?.outcome,
+      principalUrn: request?.principalUrn,
+      scope: request?.scope,
+      projectId: request?.projectId,
+      resolved: request?.resolved,
+      ids: request?.ids,
+      limit: request?.limit,
+      offset: request?.offset,
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+    }),
+    queryFn: async function challengesQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        accessListChallenges(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyChallenges(parameters) {
-    return ["@gram/client", "access", "listChallenges", parameters];
+  return ["@gram/client", "access", "listChallenges", parameters];
 }
 //# sourceMappingURL=challenges.core.js.map

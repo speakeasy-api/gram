@@ -4,14 +4,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const UpdateMarketplaceSettingsRequestBody$outboundSchema = z.pipe(z.object({
+export const UpdateMarketplaceSettingsRequestBody$outboundSchema = z.pipe(
+  z.object({
     marketplaceName: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        marketplaceName: "marketplace_name",
+      marketplaceName: "marketplace_name",
     });
-}));
-export function updateMarketplaceSettingsRequestBodyToJSON(updateMarketplaceSettingsRequestBody) {
-    return JSON.stringify(UpdateMarketplaceSettingsRequestBody$outboundSchema.parse(updateMarketplaceSettingsRequestBody));
+  }),
+);
+export function updateMarketplaceSettingsRequestBodyToJSON(
+  updateMarketplaceSettingsRequestBody,
+) {
+  return JSON.stringify(
+    UpdateMarketplaceSettingsRequestBody$outboundSchema.parse(
+      updateMarketplaceSettingsRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=updatemarketplacesettingsrequestbody.js.map

@@ -13,5 +13,5 @@ let value: CreatePromptTemplateFormEngine = "mustache";
 ## Values
 
 ```typescript
-"mustache"
+"mustache";
 ```

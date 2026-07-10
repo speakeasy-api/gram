@@ -14,7 +14,7 @@ let value: UpdateDomainRequest = {
 
 ## Fields
 
-| Field                                                                                    | Type                                                                                     | Required                                                                                 | Description                                                                              |
-| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `gramSession`                                                                            | *string*                                                                                 | :heavy_minus_sign:                                                                       | Session header                                                                           |
-| `updateDomainRequestBody`                                                                | [components.UpdateDomainRequestBody](../../models/components/updatedomainrequestbody.md) | :heavy_check_mark:                                                                       | N/A                                                                                      |
+| Field                     | Type                                                                                     | Required           | Description    |
+| ------------------------- | ---------------------------------------------------------------------------------------- | ------------------ | -------------- |
+| `gramSession`             | _string_                                                                                 | :heavy_minus_sign: | Session header |
+| `updateDomainRequestBody` | [components.UpdateDomainRequestBody](../../models/components/updatedomainrequestbody.md) | :heavy_check_mark: | N/A            |

@@ -3,20 +3,29 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { EnvironmentEntryInput$outboundSchema, } from "./environmententryinput.js";
+import { EnvironmentEntryInput$outboundSchema } from "./environmententryinput.js";
 /** @internal */
-export const UpdateEnvironmentRequestBody$outboundSchema = z.pipe(z.object({
+export const UpdateEnvironmentRequestBody$outboundSchema = z.pipe(
+  z.object({
     description: z.optional(z.string()),
     entriesToRemove: z.array(z.string()),
     entriesToUpdate: z.array(EnvironmentEntryInput$outboundSchema),
     name: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        entriesToRemove: "entries_to_remove",
-        entriesToUpdate: "entries_to_update",
+      entriesToRemove: "entries_to_remove",
+      entriesToUpdate: "entries_to_update",
     });
-}));
-export function updateEnvironmentRequestBodyToJSON(updateEnvironmentRequestBody) {
-    return JSON.stringify(UpdateEnvironmentRequestBody$outboundSchema.parse(updateEnvironmentRequestBody));
+  }),
+);
+export function updateEnvironmentRequestBodyToJSON(
+  updateEnvironmentRequestBody,
+) {
+  return JSON.stringify(
+    UpdateEnvironmentRequestBody$outboundSchema.parse(
+      updateEnvironmentRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=updateenvironmentrequestbody.js.map

@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const IntegrationEntry$inboundSchema = z.pipe(z.object({
+export const IntegrationEntry$inboundSchema = z.pipe(
+  z.object({
     package_id: z.string(),
     package_image_asset_id: z.optional(z.string()),
     package_keywords: z.optional(z.array(z.string())),
@@ -15,21 +16,30 @@ export const IntegrationEntry$inboundSchema = z.pipe(z.object({
     package_url: z.optional(z.string()),
     tool_names: z.array(z.string()),
     version: z.string(),
-    version_created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    version_created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "package_id": "packageId",
-        "package_image_asset_id": "packageImageAssetId",
-        "package_keywords": "packageKeywords",
-        "package_name": "packageName",
-        "package_summary": "packageSummary",
-        "package_title": "packageTitle",
-        "package_url": "packageUrl",
-        "tool_names": "toolNames",
-        "version_created_at": "versionCreatedAt",
+      package_id: "packageId",
+      package_image_asset_id: "packageImageAssetId",
+      package_keywords: "packageKeywords",
+      package_name: "packageName",
+      package_summary: "packageSummary",
+      package_title: "packageTitle",
+      package_url: "packageUrl",
+      tool_names: "toolNames",
+      version_created_at: "versionCreatedAt",
     });
-}));
+  }),
+);
 export function integrationEntryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => IntegrationEntry$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'IntegrationEntry' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => IntegrationEntry$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'IntegrationEntry' from JSON`,
+  );
 }
 //# sourceMappingURL=integrationentry.js.map

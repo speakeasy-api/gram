@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const RiskCategoryDefinition$inboundSchema = z.pipe(z.object({
+export const RiskCategoryDefinition$inboundSchema = z.pipe(
+  z.object({
     description: z.string(),
     icon: z.string(),
     key: z.string(),
@@ -13,13 +14,19 @@ export const RiskCategoryDefinition$inboundSchema = z.pipe(z.object({
     rule_id_prefix: z.string(),
     rule_ids: z.array(z.string()),
     source: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "rule_id_prefix": "ruleIdPrefix",
-        "rule_ids": "ruleIds",
+      rule_id_prefix: "ruleIdPrefix",
+      rule_ids: "ruleIds",
     });
-}));
+  }),
+);
 export function riskCategoryDefinitionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskCategoryDefinition$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskCategoryDefinition' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskCategoryDefinition$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskCategoryDefinition' from JSON`,
+  );
 }
 //# sourceMappingURL=riskcategorydefinition.js.map

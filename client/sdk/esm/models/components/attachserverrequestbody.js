@@ -4,18 +4,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const AttachServerRequestBody$outboundSchema = z.pipe(z.object({
+export const AttachServerRequestBody$outboundSchema = z.pipe(
+  z.object({
     collectionId: z.string(),
     mcpServerId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        collectionId: "collection_id",
-        mcpServerId: "mcp_server_id",
-        toolsetId: "toolset_id",
+      collectionId: "collection_id",
+      mcpServerId: "mcp_server_id",
+      toolsetId: "toolset_id",
     });
-}));
+  }),
+);
 export function attachServerRequestBodyToJSON(attachServerRequestBody) {
-    return JSON.stringify(AttachServerRequestBody$outboundSchema.parse(attachServerRequestBody));
+  return JSON.stringify(
+    AttachServerRequestBody$outboundSchema.parse(attachServerRequestBody),
+  );
 }
 //# sourceMappingURL=attachserverrequestbody.js.map

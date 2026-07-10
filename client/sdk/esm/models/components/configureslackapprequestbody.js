@@ -4,19 +4,28 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ConfigureSlackAppRequestBody$outboundSchema = z.pipe(z.object({
+export const ConfigureSlackAppRequestBody$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     slackClientId: z.string(),
     slackClientSecret: z.string(),
     slackSigningSecret: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        slackClientId: "slack_client_id",
-        slackClientSecret: "slack_client_secret",
-        slackSigningSecret: "slack_signing_secret",
+      slackClientId: "slack_client_id",
+      slackClientSecret: "slack_client_secret",
+      slackSigningSecret: "slack_signing_secret",
     });
-}));
-export function configureSlackAppRequestBodyToJSON(configureSlackAppRequestBody) {
-    return JSON.stringify(ConfigureSlackAppRequestBody$outboundSchema.parse(configureSlackAppRequestBody));
+  }),
+);
+export function configureSlackAppRequestBodyToJSON(
+  configureSlackAppRequestBody,
+) {
+  return JSON.stringify(
+    ConfigureSlackAppRequestBody$outboundSchema.parse(
+      configureSlackAppRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=configureslackapprequestbody.js.map

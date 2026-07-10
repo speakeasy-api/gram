@@ -6,13 +6,13 @@ Manages re-usable prompt templates and higher-order tools for a project.
 
 ### Available Operations
 
-* [create](#create) - createTemplate templates
-* [delete](#delete) - deleteTemplate templates
-* [get](#get) - getTemplate templates
-* [list](#list) - listTemplates templates
-* [renderByID](#renderbyid) - renderTemplateByID templates
-* [render](#render) - renderTemplate templates
-* [update](#update) - updateTemplate templates
+- [create](#create) - createTemplate templates
+- [delete](#delete) - deleteTemplate templates
+- [get](#get) - getTemplate templates
+- [list](#list) - listTemplates templates
+- [renderByID](#renderbyid) - renderTemplateByID templates
+- [render](#render) - renderTemplate templates
+- [update](#update) - updateTemplate templates
 
 ## create
 
@@ -21,6 +21,7 @@ Create a new prompt template.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="createTemplate" method="post" path="/rpc/templates.create" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -87,19 +88,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useCreateTemplateMutation
+  useCreateTemplateMutation,
 } from "@gram/client/react-query/templatesCreate.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.CreateTemplateRequest](../../models/operations/createtemplaterequest.md)                                                                                           | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.CreateTemplateSecurity](../../models/operations/createtemplatesecurity.md)                                                                                         | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                    | Required           | Description                                                                                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.CreateTemplateRequest](../../models/operations/createtemplaterequest.md)    | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.CreateTemplateSecurity](../../models/operations/createtemplatesecurity.md)  | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                          | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options) | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                           | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -107,11 +108,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## delete
 
@@ -120,6 +121,7 @@ Delete prompt template by its ID or name.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="deleteTemplate" method="delete" path="/rpc/templates.delete" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -127,8 +129,6 @@ const gram = new Gram();
 
 async function run() {
   await gram.templates.delete();
-
-
 }
 
 run();
@@ -150,7 +150,6 @@ async function run() {
   const res = await templatesDelete(gram);
   if (res.ok) {
     const { value: result } = res;
-    
   } else {
     console.log("templatesDelete failed:", res.error);
   }
@@ -172,19 +171,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useDeleteTemplateMutation
+  useDeleteTemplateMutation,
 } from "@gram/client/react-query/templatesDelete.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.DeleteTemplateRequest](../../models/operations/deletetemplaterequest.md)                                                                                           | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.DeleteTemplateSecurity](../../models/operations/deletetemplatesecurity.md)                                                                                         | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                    | Required           | Description                                                                                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.DeleteTemplateRequest](../../models/operations/deletetemplaterequest.md)    | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.DeleteTemplateSecurity](../../models/operations/deletetemplatesecurity.md)  | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                          | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options) | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                           | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -192,11 +191,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## get
 
@@ -205,6 +204,7 @@ Get prompt template by its ID or name.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="getTemplate" method="get" path="/rpc/templates.get" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -264,7 +264,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchTemplate,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidateTemplate,
@@ -274,13 +274,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetTemplateRequest](../../models/operations/gettemplaterequest.md)                                                                                                 | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.GetTemplateSecurity](../../models/operations/gettemplatesecurity.md)                                                                                               | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                    | Required           | Description                                                                                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.GetTemplateRequest](../../models/operations/gettemplaterequest.md)          | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.GetTemplateSecurity](../../models/operations/gettemplatesecurity.md)        | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                          | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options) | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                           | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -288,11 +288,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## list
 
@@ -301,6 +301,7 @@ List available prompt template.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="listTemplates" method="get" path="/rpc/templates.list" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -360,7 +361,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchTemplates,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidateTemplates,
@@ -370,13 +371,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.ListTemplatesRequest](../../models/operations/listtemplatesrequest.md)                                                                                             | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.ListTemplatesSecurity](../../models/operations/listtemplatessecurity.md)                                                                                           | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                    | Required           | Description                                                                                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.ListTemplatesRequest](../../models/operations/listtemplatesrequest.md)      | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.ListTemplatesSecurity](../../models/operations/listtemplatessecurity.md)    | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                          | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options) | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                           | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -384,11 +385,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## renderByID
 
@@ -397,6 +398,7 @@ Render a prompt template by ID with provided input data.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="renderTemplateByID" method="post" path="/rpc/templates.render" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -407,7 +409,7 @@ async function run() {
     id: "<id>",
     renderTemplateByIDRequestBody: {
       arguments: {
-        "key": "<value>",
+        key: "<value>",
       },
     },
   });
@@ -435,7 +437,7 @@ async function run() {
     id: "<id>",
     renderTemplateByIDRequestBody: {
       arguments: {
-        "key": "<value>",
+        key: "<value>",
       },
     },
   });
@@ -470,7 +472,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchRenderTemplateByID,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidateRenderTemplateByID,
@@ -480,13 +482,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.RenderTemplateByIDRequest](../../models/operations/rendertemplatebyidrequest.md)                                                                                   | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.RenderTemplateByIDSecurity](../../models/operations/rendertemplatebyidsecurity.md)                                                                                 | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                           | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.RenderTemplateByIDRequest](../../models/operations/rendertemplatebyidrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.RenderTemplateByIDSecurity](../../models/operations/rendertemplatebyidsecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                 | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)        | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                  | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -494,11 +496,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## render
 
@@ -507,6 +509,7 @@ Render a prompt template directly with all template fields provided.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="renderTemplate" method="post" path="/rpc/templates.renderDirect" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -516,7 +519,7 @@ async function run() {
   const result = await gram.templates.render({
     renderTemplateRequestBody: {
       arguments: {
-        "key": "<value>",
+        key: "<value>",
       },
       engine: "mustache",
       kind: "higher_order_tool",
@@ -546,7 +549,7 @@ async function run() {
   const res = await templatesRender(gram, {
     renderTemplateRequestBody: {
       arguments: {
-        "key": "<value>",
+        key: "<value>",
       },
       engine: "mustache",
       kind: "higher_order_tool",
@@ -584,7 +587,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchRenderTemplate,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidateRenderTemplate,
@@ -594,13 +597,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.RenderTemplateRequest](../../models/operations/rendertemplaterequest.md)                                                                                           | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.RenderTemplateSecurity](../../models/operations/rendertemplatesecurity.md)                                                                                         | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                    | Required           | Description                                                                                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.RenderTemplateRequest](../../models/operations/rendertemplaterequest.md)    | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.RenderTemplateSecurity](../../models/operations/rendertemplatesecurity.md)  | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                          | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options) | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                           | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -608,11 +611,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## update
 
@@ -621,6 +624,7 @@ Update a prompt template.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="updateTemplate" method="post" path="/rpc/templates.update" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -681,19 +685,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useUpdateTemplateMutation
+  useUpdateTemplateMutation,
 } from "@gram/client/react-query/templatesUpdate.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.UpdateTemplateRequest](../../models/operations/updatetemplaterequest.md)                                                                                           | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.UpdateTemplateSecurity](../../models/operations/updatetemplatesecurity.md)                                                                                         | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                    | Required           | Description                                                                                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.UpdateTemplateRequest](../../models/operations/updatetemplaterequest.md)    | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.UpdateTemplateSecurity](../../models/operations/updatetemplatesecurity.md)  | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                          | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options) | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                           | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -701,8 +705,8 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |

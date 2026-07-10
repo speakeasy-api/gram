@@ -4,31 +4,41 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListAuditLogFacetsSecurity$outboundSchema = z.pipe(z.object({
+export const ListAuditLogFacetsSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function listAuditLogFacetsSecurityToJSON(listAuditLogFacetsSecurity) {
-    return JSON.stringify(ListAuditLogFacetsSecurity$outboundSchema.parse(listAuditLogFacetsSecurity));
+  return JSON.stringify(
+    ListAuditLogFacetsSecurity$outboundSchema.parse(listAuditLogFacetsSecurity),
+  );
 }
 /** @internal */
-export const ListAuditLogFacetsRequest$outboundSchema = z.pipe(z.object({
+export const ListAuditLogFacetsRequest$outboundSchema = z.pipe(
+  z.object({
     projectSlug: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlug: "project_slug",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
+      projectSlug: "project_slug",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function listAuditLogFacetsRequestToJSON(listAuditLogFacetsRequest) {
-    return JSON.stringify(ListAuditLogFacetsRequest$outboundSchema.parse(listAuditLogFacetsRequest));
+  return JSON.stringify(
+    ListAuditLogFacetsRequest$outboundSchema.parse(listAuditLogFacetsRequest),
+  );
 }
 //# sourceMappingURL=listauditlogfacets.js.map

@@ -3,13 +3,17 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ChallengeBucket$inboundSchema, } from "./challengebucket.js";
+import { ChallengeBucket$inboundSchema } from "./challengebucket.js";
 /** @internal */
 export const ListChallengeBucketsResult$inboundSchema = z.object({
-    buckets: z.array(ChallengeBucket$inboundSchema),
-    total: z.int(),
+  buckets: z.array(ChallengeBucket$inboundSchema),
+  total: z.int(),
 });
 export function listChallengeBucketsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListChallengeBucketsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListChallengeBucketsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListChallengeBucketsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListChallengeBucketsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listchallengebucketsresult.js.map

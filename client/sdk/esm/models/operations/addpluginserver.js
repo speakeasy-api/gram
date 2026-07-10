@@ -3,33 +3,43 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { AddPluginServerForm$outboundSchema, } from "../components/addpluginserverform.js";
+import { AddPluginServerForm$outboundSchema } from "../components/addpluginserverform.js";
 /** @internal */
-export const AddPluginServerSecurity$outboundSchema = z.pipe(z.object({
+export const AddPluginServerSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function addPluginServerSecurityToJSON(addPluginServerSecurity) {
-    return JSON.stringify(AddPluginServerSecurity$outboundSchema.parse(addPluginServerSecurity));
+  return JSON.stringify(
+    AddPluginServerSecurity$outboundSchema.parse(addPluginServerSecurity),
+  );
 }
 /** @internal */
-export const AddPluginServerRequest$outboundSchema = z.pipe(z.object({
+export const AddPluginServerRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     addPluginServerForm: AddPluginServerForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        addPluginServerForm: "AddPluginServerForm",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      addPluginServerForm: "AddPluginServerForm",
     });
-}));
+  }),
+);
 export function addPluginServerRequestToJSON(addPluginServerRequest) {
-    return JSON.stringify(AddPluginServerRequest$outboundSchema.parse(addPluginServerRequest));
+  return JSON.stringify(
+    AddPluginServerRequest$outboundSchema.parse(addPluginServerRequest),
+  );
 }
 //# sourceMappingURL=addpluginserver.js.map

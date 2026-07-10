@@ -6,75 +6,107 @@ import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
 import { unwrapResultIterator } from "../types/operations.js";
 import { pageIteratorToJSON } from "./_types.js";
-export function prefetchAuditLogs(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildAuditLogsQuery(client$, request, security, options),
-    });
+export function prefetchAuditLogs(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildAuditLogsQuery(client$, request, security, options),
+  });
 }
-export function prefetchAuditLogsInfinite(queryClient, client$, request, security, options) {
-    return queryClient.prefetchInfiniteQuery({
-        ...buildAuditLogsInfiniteQuery(client$, request, security, options),
-        initialPageParam: undefined,
-        getNextPageParam: (previousPage) => previousPage["~next"],
-    });
+export function prefetchAuditLogsInfinite(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchInfiniteQuery({
+    ...buildAuditLogsInfiniteQuery(client$, request, security, options),
+    initialPageParam: undefined,
+    getNextPageParam: (previousPage) => previousPage["~next"],
+  });
 }
 export function buildAuditLogsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyAuditLogs({
-            cursor: request?.cursor,
-            projectSlug: request?.projectSlug,
-            actorId: request?.actorId,
-            action: request?.action,
-            subjectType: request?.subjectType,
-            subjectId: request?.subjectId,
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-        }),
-        queryFn: async function auditLogsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(auditlogsList(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyAuditLogs({
+      cursor: request?.cursor,
+      projectSlug: request?.projectSlug,
+      actorId: request?.actorId,
+      action: request?.action,
+      subjectType: request?.subjectType,
+      subjectId: request?.subjectId,
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+    }),
+    queryFn: async function auditLogsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        auditlogsList(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
-export function buildAuditLogsInfiniteQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyAuditLogsInfinite({
-            cursor: request?.cursor,
-            projectSlug: request?.projectSlug,
-            actorId: request?.actorId,
-            action: request?.action,
-            subjectType: request?.subjectType,
-            subjectId: request?.subjectId,
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-        }),
-        queryFn: async function auditLogsQuery(ctx) {
-            const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options,
-                fetchOptions: { ...options?.fetchOptions, signal: sig },
-            };
-            if (!ctx.pageParam) {
-                const pageResult = await unwrapResultIterator(auditlogsList(client$, request, security, mergedOptions));
-                return pageIteratorToJSON(pageResult);
-            }
-            const pageResult = await unwrapResultIterator(auditlogsList(client$, {
-                ...request,
-                cursor: ctx.pageParam.cursor,
-            }, security, mergedOptions));
-            return pageIteratorToJSON(pageResult);
-        },
-    };
+export function buildAuditLogsInfiniteQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyAuditLogsInfinite({
+      cursor: request?.cursor,
+      projectSlug: request?.projectSlug,
+      actorId: request?.actorId,
+      action: request?.action,
+      subjectType: request?.subjectType,
+      subjectId: request?.subjectId,
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+    }),
+    queryFn: async function auditLogsQuery(ctx) {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+      if (!ctx.pageParam) {
+        const pageResult = await unwrapResultIterator(
+          auditlogsList(client$, request, security, mergedOptions),
+        );
+        return pageIteratorToJSON(pageResult);
+      }
+      const pageResult = await unwrapResultIterator(
+        auditlogsList(
+          client$,
+          {
+            ...request,
+            cursor: ctx.pageParam.cursor,
+          },
+          security,
+          mergedOptions,
+        ),
+      );
+      return pageIteratorToJSON(pageResult);
+    },
+  };
 }
 export function queryKeyAuditLogs(parameters) {
-    return ["@gram/client", "auditlogs", "list", parameters];
+  return ["@gram/client", "auditlogs", "list", parameters];
 }
 export function queryKeyAuditLogsInfinite(parameters) {
-    return ["@gram/client", "auditlogs", "list", "infinite", parameters];
+  return ["@gram/client", "auditlogs", "list", "infinite", parameters];
 }
 //# sourceMappingURL=auditLogs.core.js.map

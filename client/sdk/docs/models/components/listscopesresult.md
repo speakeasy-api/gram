@@ -12,6 +12,6 @@ let value: ListScopesResult = {
 
 ## Fields
 
-| Field                                                                      | Type                                                                       | Required                                                                   | Description                                                                |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `scopes`                                                                   | [components.ScopeDefinition](../../models/components/scopedefinition.md)[] | :heavy_check_mark:                                                         | The scopes available in access control.                                    |
+| Field    | Type                                                                       | Required           | Description                             |
+| -------- | -------------------------------------------------------------------------- | ------------------ | --------------------------------------- |
+| `scopes` | [components.ScopeDefinition](../../models/components/scopedefinition.md)[] | :heavy_check_mark: | The scopes available in access control. |

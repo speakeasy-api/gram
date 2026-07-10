@@ -13,5 +13,5 @@ let value: ResourceKind = "mcp";
 ## Values
 
 ```typescript
-"project" | "mcp" | "org" | "environment" | "risk_policy" | "chat" | "*"
+"project" | "mcp" | "org" | "environment" | "risk_policy" | "chat" | "*";
 ```

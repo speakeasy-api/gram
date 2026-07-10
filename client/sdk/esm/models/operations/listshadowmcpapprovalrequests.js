@@ -4,37 +4,55 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 export const Status = {
-    Requested: "requested",
-    Approved: "approved",
-    Denied: "denied",
+  Requested: "requested",
+  Approved: "approved",
+  Denied: "denied",
 };
 /** @internal */
-export const ListShadowMCPApprovalRequestsSecurity$outboundSchema = z.pipe(z.object({
+export const ListShadowMCPApprovalRequestsSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listShadowMCPApprovalRequestsSecurityToJSON(listShadowMCPApprovalRequestsSecurity) {
-    return JSON.stringify(ListShadowMCPApprovalRequestsSecurity$outboundSchema.parse(listShadowMCPApprovalRequestsSecurity));
+  }),
+);
+export function listShadowMCPApprovalRequestsSecurityToJSON(
+  listShadowMCPApprovalRequestsSecurity,
+) {
+  return JSON.stringify(
+    ListShadowMCPApprovalRequestsSecurity$outboundSchema.parse(
+      listShadowMCPApprovalRequestsSecurity,
+    ),
+  );
 }
 /** @internal */
 export const Status$outboundSchema = z.enum(Status);
 /** @internal */
-export const ListShadowMCPApprovalRequestsRequest$outboundSchema = z.pipe(z.object({
+export const ListShadowMCPApprovalRequestsRequest$outboundSchema = z.pipe(
+  z.object({
     status: z.optional(Status$outboundSchema),
     projectId: z.optional(z.string()),
     limit: z._default(z.int(), 50),
     cursor: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectId: "project_id",
-        gramSession: "Gram-Session",
+      projectId: "project_id",
+      gramSession: "Gram-Session",
     });
-}));
-export function listShadowMCPApprovalRequestsRequestToJSON(listShadowMCPApprovalRequestsRequest) {
-    return JSON.stringify(ListShadowMCPApprovalRequestsRequest$outboundSchema.parse(listShadowMCPApprovalRequestsRequest));
+  }),
+);
+export function listShadowMCPApprovalRequestsRequestToJSON(
+  listShadowMCPApprovalRequestsRequest,
+) {
+  return JSON.stringify(
+    ListShadowMCPApprovalRequestsRequest$outboundSchema.parse(
+      listShadowMCPApprovalRequestsRequest,
+    ),
+  );
 }
 //# sourceMappingURL=listshadowmcpapprovalrequests.js.map

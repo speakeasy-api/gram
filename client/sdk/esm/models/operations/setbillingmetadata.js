@@ -3,29 +3,39 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { SetBillingMetadataRequestBody$outboundSchema, } from "../components/setbillingmetadatarequestbody.js";
+import { SetBillingMetadataRequestBody$outboundSchema } from "../components/setbillingmetadatarequestbody.js";
 /** @internal */
-export const SetBillingMetadataSecurity$outboundSchema = z.pipe(z.object({
+export const SetBillingMetadataSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function setBillingMetadataSecurityToJSON(setBillingMetadataSecurity) {
-    return JSON.stringify(SetBillingMetadataSecurity$outboundSchema.parse(setBillingMetadataSecurity));
+  return JSON.stringify(
+    SetBillingMetadataSecurity$outboundSchema.parse(setBillingMetadataSecurity),
+  );
 }
 /** @internal */
-export const SetBillingMetadataRequest$outboundSchema = z.pipe(z.object({
+export const SetBillingMetadataRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     setBillingMetadataRequestBody: SetBillingMetadataRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        setBillingMetadataRequestBody: "SetBillingMetadataRequestBody",
+      gramSession: "Gram-Session",
+      setBillingMetadataRequestBody: "SetBillingMetadataRequestBody",
     });
-}));
+  }),
+);
 export function setBillingMetadataRequestToJSON(setBillingMetadataRequest) {
-    return JSON.stringify(SetBillingMetadataRequest$outboundSchema.parse(setBillingMetadataRequest));
+  return JSON.stringify(
+    SetBillingMetadataRequest$outboundSchema.parse(setBillingMetadataRequest),
+  );
 }
 //# sourceMappingURL=setbillingmetadata.js.map

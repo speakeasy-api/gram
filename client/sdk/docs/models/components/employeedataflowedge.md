@@ -19,11 +19,11 @@ let value: EmployeeDataFlowEdge = {
 
 ## Fields
 
-| Field                                            | Type                                             | Required                                         | Description                                      |
-| ------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------ |
-| `callCount`                                      | *number*                                         | :heavy_check_mark:                               | Total calls represented by this edge             |
-| `failureCount`                                   | *number*                                         | :heavy_check_mark:                               | Failed or blocked calls represented by this edge |
-| `id`                                             | *string*                                         | :heavy_check_mark:                               | Stable edge ID                                   |
-| `source`                                         | *string*                                         | :heavy_check_mark:                               | Source node ID                                   |
-| `successCount`                                   | *number*                                         | :heavy_check_mark:                               | Successful calls represented by this edge        |
-| `target`                                         | *string*                                         | :heavy_check_mark:                               | Target node ID                                   |
+| Field          | Type     | Required           | Description                                      |
+| -------------- | -------- | ------------------ | ------------------------------------------------ |
+| `callCount`    | _number_ | :heavy_check_mark: | Total calls represented by this edge             |
+| `failureCount` | _number_ | :heavy_check_mark: | Failed or blocked calls represented by this edge |
+| `id`           | _string_ | :heavy_check_mark: | Stable edge ID                                   |
+| `source`       | _string_ | :heavy_check_mark: | Source node ID                                   |
+| `successCount` | _number_ | :heavy_check_mark: | Successful calls represented by this edge        |
+| `target`       | _string_ | :heavy_check_mark: | Target node ID                                   |

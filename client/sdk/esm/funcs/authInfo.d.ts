@@ -1,11 +1,21 @@
 import { GramCore } from "../core.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GramError } from "../models/errors/gramerror.js";
-import { ConnectionError, InvalidRequestError, RequestAbortedError, RequestTimeoutError, UnexpectedClientError } from "../models/errors/httpclienterrors.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { SessionInfoRequest, SessionInfoResponse, SessionInfoSecurity } from "../models/operations/sessioninfo.js";
+import {
+  SessionInfoRequest,
+  SessionInfoResponse,
+  SessionInfoSecurity,
+} from "../models/operations/sessioninfo.js";
 import { APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 /**
@@ -14,5 +24,23 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Provides information about the current authentication status.
  */
-export declare function authInfo(client: GramCore, request?: SessionInfoRequest | undefined, security?: SessionInfoSecurity | undefined, options?: RequestOptions): APIPromise<Result<SessionInfoResponse, ServiceError | GramError | ResponseValidationError | ConnectionError | RequestAbortedError | RequestTimeoutError | InvalidRequestError | UnexpectedClientError | SDKValidationError>>;
+export declare function authInfo(
+  client: GramCore,
+  request?: SessionInfoRequest | undefined,
+  security?: SessionInfoSecurity | undefined,
+  options?: RequestOptions,
+): APIPromise<
+  Result<
+    SessionInfoResponse,
+    | ServiceError
+    | GramError
+    | ResponseValidationError
+    | ConnectionError
+    | RequestAbortedError
+    | RequestTimeoutError
+    | InvalidRequestError
+    | UnexpectedClientError
+    | SDKValidationError
+  >
+>;
 //# sourceMappingURL=authInfo.d.ts.map

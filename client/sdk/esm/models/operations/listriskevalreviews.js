@@ -4,59 +4,93 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListRiskEvalReviewsSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListRiskEvalReviewsSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listRiskEvalReviewsSecurityOption1ToJSON(listRiskEvalReviewsSecurityOption1) {
-    return JSON.stringify(ListRiskEvalReviewsSecurityOption1$outboundSchema.parse(listRiskEvalReviewsSecurityOption1));
+  }),
+);
+export function listRiskEvalReviewsSecurityOption1ToJSON(
+  listRiskEvalReviewsSecurityOption1,
+) {
+  return JSON.stringify(
+    ListRiskEvalReviewsSecurityOption1$outboundSchema.parse(
+      listRiskEvalReviewsSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListRiskEvalReviewsSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListRiskEvalReviewsSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listRiskEvalReviewsSecurityOption2ToJSON(listRiskEvalReviewsSecurityOption2) {
-    return JSON.stringify(ListRiskEvalReviewsSecurityOption2$outboundSchema.parse(listRiskEvalReviewsSecurityOption2));
+  }),
+);
+export function listRiskEvalReviewsSecurityOption2ToJSON(
+  listRiskEvalReviewsSecurityOption2,
+) {
+  return JSON.stringify(
+    ListRiskEvalReviewsSecurityOption2$outboundSchema.parse(
+      listRiskEvalReviewsSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListRiskEvalReviewsSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListRiskEvalReviewsSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListRiskEvalReviewsSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListRiskEvalReviewsSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListRiskEvalReviewsSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListRiskEvalReviewsSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function listRiskEvalReviewsSecurityToJSON(listRiskEvalReviewsSecurity) {
-    return JSON.stringify(ListRiskEvalReviewsSecurity$outboundSchema.parse(listRiskEvalReviewsSecurity));
+  return JSON.stringify(
+    ListRiskEvalReviewsSecurity$outboundSchema.parse(
+      listRiskEvalReviewsSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListRiskEvalReviewsRequest$outboundSchema = z.pipe(z.object({
+export const ListRiskEvalReviewsRequest$outboundSchema = z.pipe(
+  z.object({
     policyId: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        policyId: "policy_id",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      policyId: "policy_id",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function listRiskEvalReviewsRequestToJSON(listRiskEvalReviewsRequest) {
-    return JSON.stringify(ListRiskEvalReviewsRequest$outboundSchema.parse(listRiskEvalReviewsRequest));
+  return JSON.stringify(
+    ListRiskEvalReviewsRequest$outboundSchema.parse(listRiskEvalReviewsRequest),
+  );
 }
 //# sourceMappingURL=listriskevalreviews.js.map

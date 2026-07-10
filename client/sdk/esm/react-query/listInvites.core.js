@@ -4,26 +4,38 @@
 import { organizationsListInvites } from "../funcs/organizationsListInvites.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchListInvites(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildListInvitesQuery(client$, request, security, options),
-    });
+export function prefetchListInvites(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildListInvitesQuery(client$, request, security, options),
+  });
 }
 export function buildListInvitesQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyListInvites({ gramSession: request?.gramSession }),
-        queryFn: async function listInvitesQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(organizationsListInvites(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyListInvites({ gramSession: request?.gramSession }),
+    queryFn: async function listInvitesQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        organizationsListInvites(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyListInvites(parameters) {
-    return ["@gram/client", "organizations", "listInvites", parameters];
+  return ["@gram/client", "organizations", "listInvites", parameters];
 }
 //# sourceMappingURL=listInvites.core.js.map

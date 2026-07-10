@@ -4,29 +4,51 @@
 import { adminRemoteSessionsGetGlobalClient } from "../funcs/adminRemoteSessionsGetGlobalClient.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchGlobalRemoteSessionClient(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildGlobalRemoteSessionClientQuery(client$, request, security, options),
-    });
+export function prefetchGlobalRemoteSessionClient(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildGlobalRemoteSessionClientQuery(client$, request, security, options),
+  });
 }
-export function buildGlobalRemoteSessionClientQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyGlobalRemoteSessionClient({
-            id: request.id,
-            gramSession: request.gramSession,
-        }),
-        queryFn: async function globalRemoteSessionClientQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(adminRemoteSessionsGetGlobalClient(client$, request, security, mergedOptions));
-        },
-    };
+export function buildGlobalRemoteSessionClientQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyGlobalRemoteSessionClient({
+      id: request.id,
+      gramSession: request.gramSession,
+    }),
+    queryFn: async function globalRemoteSessionClientQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        adminRemoteSessionsGetGlobalClient(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ),
+      );
+    },
+  };
 }
 export function queryKeyGlobalRemoteSessionClient(parameters) {
-    return ["@gram/client", "adminRemoteSessions", "getGlobalClient", parameters];
+  return ["@gram/client", "adminRemoteSessions", "getGlobalClient", parameters];
 }
 //# sourceMappingURL=globalRemoteSessionClient.core.js.map

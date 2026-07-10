@@ -4,33 +4,55 @@
 import { accessListShadowMCPAccessRules } from "../funcs/accessListShadowMCPAccessRules.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchShadowMCPAccessRules(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildShadowMCPAccessRulesQuery(client$, request, security, options),
-    });
+export function prefetchShadowMCPAccessRules(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildShadowMCPAccessRulesQuery(client$, request, security, options),
+  });
 }
-export function buildShadowMCPAccessRulesQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyShadowMCPAccessRules({
-            disposition: request?.disposition,
-            accessScope: request?.accessScope,
-            projectId: request?.projectId,
-            limit: request?.limit,
-            cursor: request?.cursor,
-            gramSession: request?.gramSession,
-        }),
-        queryFn: async function shadowMCPAccessRulesQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(accessListShadowMCPAccessRules(client$, request, security, mergedOptions));
-        },
-    };
+export function buildShadowMCPAccessRulesQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyShadowMCPAccessRules({
+      disposition: request?.disposition,
+      accessScope: request?.accessScope,
+      projectId: request?.projectId,
+      limit: request?.limit,
+      cursor: request?.cursor,
+      gramSession: request?.gramSession,
+    }),
+    queryFn: async function shadowMCPAccessRulesQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        accessListShadowMCPAccessRules(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ),
+      );
+    },
+  };
 }
 export function queryKeyShadowMCPAccessRules(parameters) {
-    return ["@gram/client", "access", "listShadowMCPAccessRules", parameters];
+  return ["@gram/client", "access", "listShadowMCPAccessRules", parameters];
 }
 //# sourceMappingURL=shadowMCPAccessRules.core.js.map

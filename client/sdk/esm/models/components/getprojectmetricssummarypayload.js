@@ -4,10 +4,22 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const GetProjectMetricsSummaryPayload$outboundSchema = z.object({
-    from: z.pipe(z.date(), z.transform(v => v.toISOString())),
-    to: z.pipe(z.date(), z.transform(v => v.toISOString())),
+  from: z.pipe(
+    z.date(),
+    z.transform((v) => v.toISOString()),
+  ),
+  to: z.pipe(
+    z.date(),
+    z.transform((v) => v.toISOString()),
+  ),
 });
-export function getProjectMetricsSummaryPayloadToJSON(getProjectMetricsSummaryPayload) {
-    return JSON.stringify(GetProjectMetricsSummaryPayload$outboundSchema.parse(getProjectMetricsSummaryPayload));
+export function getProjectMetricsSummaryPayloadToJSON(
+  getProjectMetricsSummaryPayload,
+) {
+  return JSON.stringify(
+    GetProjectMetricsSummaryPayload$outboundSchema.parse(
+      getProjectMetricsSummaryPayload,
+    ),
+  );
 }
 //# sourceMappingURL=getprojectmetricssummarypayload.js.map

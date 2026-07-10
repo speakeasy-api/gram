@@ -6,15 +6,22 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { AuditLog$inboundSchema } from "./auditlog.js";
 /** @internal */
-export const ListAuditLogsResult$inboundSchema = z.pipe(z.object({
+export const ListAuditLogsResult$inboundSchema = z.pipe(
+  z.object({
     logs: z.array(AuditLog$inboundSchema),
     next_cursor: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function listAuditLogsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListAuditLogsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListAuditLogsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListAuditLogsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListAuditLogsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listauditlogsresult.js.map

@@ -7,26 +7,36 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Filter by outcome.
  */
 export const Outcome = {
-    Allow: "allow",
-    Deny: "deny",
+  Allow: "allow",
+  Deny: "deny",
 };
 /** @internal */
-export const ListChallengeBucketsSecurity$outboundSchema = z.pipe(z.object({
+export const ListChallengeBucketsSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listChallengeBucketsSecurityToJSON(listChallengeBucketsSecurity) {
-    return JSON.stringify(ListChallengeBucketsSecurity$outboundSchema.parse(listChallengeBucketsSecurity));
+  }),
+);
+export function listChallengeBucketsSecurityToJSON(
+  listChallengeBucketsSecurity,
+) {
+  return JSON.stringify(
+    ListChallengeBucketsSecurity$outboundSchema.parse(
+      listChallengeBucketsSecurity,
+    ),
+  );
 }
 /** @internal */
 export const Outcome$outboundSchema = z.enum(Outcome);
 /** @internal */
-export const ListChallengeBucketsRequest$outboundSchema = z.pipe(z.object({
+export const ListChallengeBucketsRequest$outboundSchema = z.pipe(
+  z.object({
     outcome: z.optional(Outcome$outboundSchema),
     principalUrn: z.optional(z.string()),
     scope: z.optional(z.string()),
@@ -36,15 +46,21 @@ export const ListChallengeBucketsRequest$outboundSchema = z.pipe(z.object({
     offset: z._default(z.int(), 0),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        principalUrn: "principal_urn",
-        projectId: "project_id",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
+      principalUrn: "principal_urn",
+      projectId: "project_id",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function listChallengeBucketsRequestToJSON(listChallengeBucketsRequest) {
-    return JSON.stringify(ListChallengeBucketsRequest$outboundSchema.parse(listChallengeBucketsRequest));
+  return JSON.stringify(
+    ListChallengeBucketsRequest$outboundSchema.parse(
+      listChallengeBucketsRequest,
+    ),
+  );
 }
 //# sourceMappingURL=listchallengebuckets.js.map

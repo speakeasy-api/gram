@@ -3,29 +3,39 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateKeyForm$outboundSchema, } from "../components/createkeyform.js";
+import { CreateKeyForm$outboundSchema } from "../components/createkeyform.js";
 /** @internal */
-export const CreateAPIKeySecurity$outboundSchema = z.pipe(z.object({
+export const CreateAPIKeySecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function createAPIKeySecurityToJSON(createAPIKeySecurity) {
-    return JSON.stringify(CreateAPIKeySecurity$outboundSchema.parse(createAPIKeySecurity));
+  return JSON.stringify(
+    CreateAPIKeySecurity$outboundSchema.parse(createAPIKeySecurity),
+  );
 }
 /** @internal */
-export const CreateAPIKeyRequest$outboundSchema = z.pipe(z.object({
+export const CreateAPIKeyRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     createKeyForm: CreateKeyForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        createKeyForm: "CreateKeyForm",
+      gramSession: "Gram-Session",
+      createKeyForm: "CreateKeyForm",
     });
-}));
+  }),
+);
 export function createAPIKeyRequestToJSON(createAPIKeyRequest) {
-    return JSON.stringify(CreateAPIKeyRequest$outboundSchema.parse(createAPIKeyRequest));
+  return JSON.stringify(
+    CreateAPIKeyRequest$outboundSchema.parse(createAPIKeyRequest),
+  );
 }
 //# sourceMappingURL=createapikey.js.map

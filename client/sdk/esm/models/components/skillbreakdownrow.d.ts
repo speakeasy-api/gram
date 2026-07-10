@@ -5,20 +5,25 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  * Per-(skill, user) aggregated counts
  */
 export type SkillBreakdownRow = {
-    /**
-     * Skill name
-     */
-    skillName: string;
-    /**
-     * Use count for this skill/user combination
-     */
-    useCount: number;
-    /**
-     * User email address
-     */
-    userEmail: string;
+  /**
+   * Skill name
+   */
+  skillName: string;
+  /**
+   * Use count for this skill/user combination
+   */
+  useCount: number;
+  /**
+   * User email address
+   */
+  userEmail: string;
 };
 /** @internal */
-export declare const SkillBreakdownRow$inboundSchema: z.ZodMiniType<SkillBreakdownRow, unknown>;
-export declare function skillBreakdownRowFromJSON(jsonString: string): SafeParseResult<SkillBreakdownRow, SDKValidationError>;
+export declare const SkillBreakdownRow$inboundSchema: z.ZodMiniType<
+  SkillBreakdownRow,
+  unknown
+>;
+export declare function skillBreakdownRowFromJSON(
+  jsonString: string,
+): SafeParseResult<SkillBreakdownRow, SDKValidationError>;
 //# sourceMappingURL=skillbreakdownrow.d.ts.map

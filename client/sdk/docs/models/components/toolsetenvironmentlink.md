@@ -16,8 +16,8 @@ let value: ToolsetEnvironmentLink = {
 
 ## Fields
 
-| Field                                  | Type                                   | Required                               | Description                            |
-| -------------------------------------- | -------------------------------------- | -------------------------------------- | -------------------------------------- |
-| `environmentId`                        | *string*                               | :heavy_check_mark:                     | The ID of the environment              |
-| `id`                                   | *string*                               | :heavy_check_mark:                     | The ID of the toolset environment link |
-| `toolsetId`                            | *string*                               | :heavy_check_mark:                     | The ID of the toolset                  |
+| Field           | Type     | Required           | Description                            |
+| --------------- | -------- | ------------------ | -------------------------------------- |
+| `environmentId` | _string_ | :heavy_check_mark: | The ID of the environment              |
+| `id`            | _string_ | :heavy_check_mark: | The ID of the toolset environment link |
+| `toolsetId`     | _string_ | :heavy_check_mark: | The ID of the toolset                  |

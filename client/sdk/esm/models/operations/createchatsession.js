@@ -3,61 +3,93 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateRequestBody$outboundSchema, } from "../components/createrequestbody.js";
+import { CreateRequestBody$outboundSchema } from "../components/createrequestbody.js";
 /** @internal */
-export const CreateChatSessionSecurityOption1$outboundSchema = z.pipe(z.object({
+export const CreateChatSessionSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function createChatSessionSecurityOption1ToJSON(createChatSessionSecurityOption1) {
-    return JSON.stringify(CreateChatSessionSecurityOption1$outboundSchema.parse(createChatSessionSecurityOption1));
+  }),
+);
+export function createChatSessionSecurityOption1ToJSON(
+  createChatSessionSecurityOption1,
+) {
+  return JSON.stringify(
+    CreateChatSessionSecurityOption1$outboundSchema.parse(
+      createChatSessionSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const CreateChatSessionSecurityOption2$outboundSchema = z.pipe(z.object({
+export const CreateChatSessionSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function createChatSessionSecurityOption2ToJSON(createChatSessionSecurityOption2) {
-    return JSON.stringify(CreateChatSessionSecurityOption2$outboundSchema.parse(createChatSessionSecurityOption2));
+  }),
+);
+export function createChatSessionSecurityOption2ToJSON(
+  createChatSessionSecurityOption2,
+) {
+  return JSON.stringify(
+    CreateChatSessionSecurityOption2$outboundSchema.parse(
+      createChatSessionSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const CreateChatSessionSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => CreateChatSessionSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => CreateChatSessionSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const CreateChatSessionSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => CreateChatSessionSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => CreateChatSessionSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function createChatSessionSecurityToJSON(createChatSessionSecurity) {
-    return JSON.stringify(CreateChatSessionSecurity$outboundSchema.parse(createChatSessionSecurity));
+  return JSON.stringify(
+    CreateChatSessionSecurity$outboundSchema.parse(createChatSessionSecurity),
+  );
 }
 /** @internal */
-export const CreateChatSessionRequest$outboundSchema = z.pipe(z.object({
+export const CreateChatSessionRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     createRequestBody: CreateRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        createRequestBody: "CreateRequestBody",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      createRequestBody: "CreateRequestBody",
     });
-}));
+  }),
+);
 export function createChatSessionRequestToJSON(createChatSessionRequest) {
-    return JSON.stringify(CreateChatSessionRequest$outboundSchema.parse(createChatSessionRequest));
+  return JSON.stringify(
+    CreateChatSessionRequest$outboundSchema.parse(createChatSessionRequest),
+  );
 }
 //# sourceMappingURL=createchatsession.js.map

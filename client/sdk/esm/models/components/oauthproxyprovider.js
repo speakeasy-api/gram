@@ -8,16 +8,19 @@ import { safeParse } from "../../lib/schemas.js";
  * The type of OAuth provider
  */
 export const ProviderType = {
-    Custom: "custom",
-    Gram: "gram",
+  Custom: "custom",
+  Gram: "gram",
 };
 /** @internal */
-export const ProviderType$inboundSchema = z
-    .enum(ProviderType);
+export const ProviderType$inboundSchema = z.enum(ProviderType);
 /** @internal */
-export const OAuthProxyProvider$inboundSchema = z.pipe(z.object({
+export const OAuthProxyProvider$inboundSchema = z.pipe(
+  z.object({
     authorization_endpoint: z.string(),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     environment_slug: z.optional(z.string()),
     grant_types_supported: z.optional(z.array(z.string())),
     id: z.string(),
@@ -26,21 +29,31 @@ export const OAuthProxyProvider$inboundSchema = z.pipe(z.object({
     slug: z.string(),
     token_endpoint: z.string(),
     token_endpoint_auth_methods_supported: z.optional(z.array(z.string())),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "authorization_endpoint": "authorizationEndpoint",
-        "created_at": "createdAt",
-        "environment_slug": "environmentSlug",
-        "grant_types_supported": "grantTypesSupported",
-        "provider_type": "providerType",
-        "scopes_supported": "scopesSupported",
-        "token_endpoint": "tokenEndpoint",
-        "token_endpoint_auth_methods_supported": "tokenEndpointAuthMethodsSupported",
-        "updated_at": "updatedAt",
+      authorization_endpoint: "authorizationEndpoint",
+      created_at: "createdAt",
+      environment_slug: "environmentSlug",
+      grant_types_supported: "grantTypesSupported",
+      provider_type: "providerType",
+      scopes_supported: "scopesSupported",
+      token_endpoint: "tokenEndpoint",
+      token_endpoint_auth_methods_supported:
+        "tokenEndpointAuthMethodsSupported",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function oAuthProxyProviderFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => OAuthProxyProvider$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'OAuthProxyProvider' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => OAuthProxyProvider$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'OAuthProxyProvider' from JSON`,
+  );
 }
 //# sourceMappingURL=oauthproxyprovider.js.map

@@ -13,7 +13,7 @@ let value: CloneToolsetSecurityOption2 = {
 
 ## Fields
 
-| Field                          | Type                           | Required                       | Description                    |
-| ------------------------------ | ------------------------------ | ------------------------------ | ------------------------------ |
-| `apikeyHeaderAuthorization`    | *string*                       | :heavy_check_mark:             | N/A                            |
-| `projectSlugHeaderGramProject` | *string*                       | :heavy_check_mark:             | N/A                            |
+| Field                          | Type     | Required           | Description |
+| ------------------------------ | -------- | ------------------ | ----------- |
+| `apikeyHeaderAuthorization`    | _string_ | :heavy_check_mark: | N/A         |
+| `projectSlugHeaderGramProject` | _string_ | :heavy_check_mark: | N/A         |

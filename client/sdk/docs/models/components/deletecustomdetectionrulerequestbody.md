@@ -12,6 +12,6 @@ let value: DeleteCustomDetectionRuleRequestBody = {
 
 ## Fields
 
-| Field                         | Type                          | Required                      | Description                   |
-| ----------------------------- | ----------------------------- | ----------------------------- | ----------------------------- |
-| `id`                          | *string*                      | :heavy_check_mark:            | The custom detection rule ID. |
+| Field | Type     | Required           | Description                   |
+| ----- | -------- | ------------------ | ----------------------------- |
+| `id`  | _string_ | :heavy_check_mark: | The custom detection rule ID. |

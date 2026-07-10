@@ -5,8 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const RoleSummary$inboundSchema = z
-    .pipe(z.object({
+export const RoleSummary$inboundSchema = z.pipe(
+  z.object({
     cost_per_user: z.number(),
     role_id: z.string(),
     role_name: z.string(),
@@ -16,20 +16,26 @@ export const RoleSummary$inboundSchema = z
     total_output_tokens: z.int(),
     total_tokens: z.int(),
     user_count: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "cost_per_user": "costPerUser",
-        "role_id": "roleId",
-        "role_name": "roleName",
-        "total_chats": "totalChats",
-        "total_cost": "totalCost",
-        "total_input_tokens": "totalInputTokens",
-        "total_output_tokens": "totalOutputTokens",
-        "total_tokens": "totalTokens",
-        "user_count": "userCount",
+      cost_per_user: "costPerUser",
+      role_id: "roleId",
+      role_name: "roleName",
+      total_chats: "totalChats",
+      total_cost: "totalCost",
+      total_input_tokens: "totalInputTokens",
+      total_output_tokens: "totalOutputTokens",
+      total_tokens: "totalTokens",
+      user_count: "userCount",
     });
-}));
+  }),
+);
 export function roleSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RoleSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RoleSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RoleSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RoleSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=rolesummary.js.map

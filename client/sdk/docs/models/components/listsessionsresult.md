@@ -29,7 +29,7 @@ let value: ListSessionsResult = {
 
 ## Fields
 
-| Field                                                                    | Type                                                                     | Required                                                                 | Description                                                              |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| `nextCursor`                                                             | *string*                                                                 | :heavy_minus_sign:                                                       | Cursor for next page                                                     |
-| `sessions`                                                               | [components.SessionSummary](../../models/components/sessionsummary.md)[] | :heavy_check_mark:                                                       | List of chat session summaries                                           |
+| Field        | Type                                                                     | Required           | Description                    |
+| ------------ | ------------------------------------------------------------------------ | ------------------ | ------------------------------ |
+| `nextCursor` | _string_                                                                 | :heavy_minus_sign: | Cursor for next page           |
+| `sessions`   | [components.SessionSummary](../../models/components/sessionsummary.md)[] | :heavy_check_mark: | List of chat session summaries |

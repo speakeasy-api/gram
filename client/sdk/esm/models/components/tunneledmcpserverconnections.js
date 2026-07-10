@@ -4,19 +4,26 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { TunneledMcpConnection$inboundSchema, } from "./tunneledmcpconnection.js";
+import { TunneledMcpConnection$inboundSchema } from "./tunneledmcpconnection.js";
 /** @internal */
-export const TunneledMcpServerConnections$inboundSchema = z.pipe(z.object({
+export const TunneledMcpServerConnections$inboundSchema = z.pipe(
+  z.object({
     active_connection_count: z.int(),
     active_consumer_session_count: z.int(),
     connections: z.array(TunneledMcpConnection$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "active_connection_count": "activeConnectionCount",
-        "active_consumer_session_count": "activeConsumerSessionCount",
+      active_connection_count: "activeConnectionCount",
+      active_consumer_session_count: "activeConsumerSessionCount",
     });
-}));
+  }),
+);
 export function tunneledMcpServerConnectionsFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TunneledMcpServerConnections$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TunneledMcpServerConnections' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TunneledMcpServerConnections$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TunneledMcpServerConnections' from JSON`,
+  );
 }
 //# sourceMappingURL=tunneledmcpserverconnections.js.map

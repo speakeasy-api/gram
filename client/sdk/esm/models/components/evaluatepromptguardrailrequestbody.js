@@ -3,25 +3,34 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { RiskPolicyModelConfig$outboundSchema, } from "./riskpolicymodelconfig.js";
+import { RiskPolicyModelConfig$outboundSchema } from "./riskpolicymodelconfig.js";
 /** @internal */
-export const EvaluatePromptGuardrailRequestBody$outboundSchema = z.pipe(z.object({
+export const EvaluatePromptGuardrailRequestBody$outboundSchema = z.pipe(
+  z.object({
     chatId: z.string(),
     messageTypes: z.optional(z.array(z.string())),
     modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     prompt: z.string(),
     scopeExempt: z.optional(z.string()),
     scopeInclude: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        chatId: "chat_id",
-        messageTypes: "message_types",
-        modelConfig: "model_config",
-        scopeExempt: "scope_exempt",
-        scopeInclude: "scope_include",
+      chatId: "chat_id",
+      messageTypes: "message_types",
+      modelConfig: "model_config",
+      scopeExempt: "scope_exempt",
+      scopeInclude: "scope_include",
     });
-}));
-export function evaluatePromptGuardrailRequestBodyToJSON(evaluatePromptGuardrailRequestBody) {
-    return JSON.stringify(EvaluatePromptGuardrailRequestBody$outboundSchema.parse(evaluatePromptGuardrailRequestBody));
+  }),
+);
+export function evaluatePromptGuardrailRequestBodyToJSON(
+  evaluatePromptGuardrailRequestBody,
+) {
+  return JSON.stringify(
+    EvaluatePromptGuardrailRequestBody$outboundSchema.parse(
+      evaluatePromptGuardrailRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=evaluatepromptguardrailrequestbody.js.map

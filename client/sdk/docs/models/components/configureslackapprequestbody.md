@@ -15,9 +15,9 @@ let value: ConfigureSlackAppRequestBody = {
 
 ## Fields
 
-| Field                    | Type                     | Required                 | Description              |
-| ------------------------ | ------------------------ | ------------------------ | ------------------------ |
-| `id`                     | *string*                 | :heavy_check_mark:       | The Slack app ID         |
-| `slackClientId`          | *string*                 | :heavy_check_mark:       | Slack app Client ID      |
-| `slackClientSecret`      | *string*                 | :heavy_check_mark:       | Slack app Client Secret  |
-| `slackSigningSecret`     | *string*                 | :heavy_check_mark:       | Slack app Signing Secret |
+| Field                | Type     | Required           | Description              |
+| -------------------- | -------- | ------------------ | ------------------------ |
+| `id`                 | _string_ | :heavy_check_mark: | The Slack app ID         |
+| `slackClientId`      | _string_ | :heavy_check_mark: | Slack app Client ID      |
+| `slackClientSecret`  | _string_ | :heavy_check_mark: | Slack app Client Secret  |
+| `slackSigningSecret` | _string_ | :heavy_check_mark: | Slack app Signing Secret |

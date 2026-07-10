@@ -13,5 +13,5 @@ let value: OrganizationInvitationState = "expired";
 ## Values
 
 ```typescript
-"pending" | "accepted" | "expired" | "revoked"
+"pending" | "accepted" | "expired" | "revoked";
 ```

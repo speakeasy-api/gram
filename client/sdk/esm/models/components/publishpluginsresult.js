@@ -5,14 +5,21 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const PublishPluginsResult$inboundSchema = z.pipe(z.object({
+export const PublishPluginsResult$inboundSchema = z.pipe(
+  z.object({
     repo_url: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "repo_url": "repoUrl",
+      repo_url: "repoUrl",
     });
-}));
+  }),
+);
 export function publishPluginsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => PublishPluginsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'PublishPluginsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => PublishPluginsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'PublishPluginsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=publishpluginsresult.js.map

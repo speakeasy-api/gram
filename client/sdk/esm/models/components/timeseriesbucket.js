@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const TimeSeriesBucket$inboundSchema = z.pipe(z.object({
+export const TimeSeriesBucket$inboundSchema = z.pipe(
+  z.object({
     abandoned_chats: z.int(),
     avg_session_duration_ms: z.number(),
     avg_tool_latency_ms: z.number(),
@@ -22,27 +23,33 @@ export const TimeSeriesBucket$inboundSchema = z.pipe(z.object({
     total_output_tokens: z.int(),
     total_tokens: z.int(),
     total_tool_calls: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "abandoned_chats": "abandonedChats",
-        "avg_session_duration_ms": "avgSessionDurationMs",
-        "avg_tool_latency_ms": "avgToolLatencyMs",
-        "bucket_time_unix_nano": "bucketTimeUnixNano",
-        "cache_creation_input_tokens": "cacheCreationInputTokens",
-        "cache_read_input_tokens": "cacheReadInputTokens",
-        "failed_chats": "failedChats",
-        "failed_tool_calls": "failedToolCalls",
-        "partial_chats": "partialChats",
-        "resolved_chats": "resolvedChats",
-        "total_chats": "totalChats",
-        "total_cost": "totalCost",
-        "total_input_tokens": "totalInputTokens",
-        "total_output_tokens": "totalOutputTokens",
-        "total_tokens": "totalTokens",
-        "total_tool_calls": "totalToolCalls",
+      abandoned_chats: "abandonedChats",
+      avg_session_duration_ms: "avgSessionDurationMs",
+      avg_tool_latency_ms: "avgToolLatencyMs",
+      bucket_time_unix_nano: "bucketTimeUnixNano",
+      cache_creation_input_tokens: "cacheCreationInputTokens",
+      cache_read_input_tokens: "cacheReadInputTokens",
+      failed_chats: "failedChats",
+      failed_tool_calls: "failedToolCalls",
+      partial_chats: "partialChats",
+      resolved_chats: "resolvedChats",
+      total_chats: "totalChats",
+      total_cost: "totalCost",
+      total_input_tokens: "totalInputTokens",
+      total_output_tokens: "totalOutputTokens",
+      total_tokens: "totalTokens",
+      total_tool_calls: "totalToolCalls",
     });
-}));
+  }),
+);
 export function timeSeriesBucketFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TimeSeriesBucket$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TimeSeriesBucket' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TimeSeriesBucket$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TimeSeriesBucket' from JSON`,
+  );
 }
 //# sourceMappingURL=timeseriesbucket.js.map

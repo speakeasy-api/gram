@@ -8,17 +8,23 @@ import { safeParse } from "../../lib/schemas.js";
  * Severity level for findings produced by this rule.
  */
 export const RiskCustomDetectionRuleSeverity = {
-    Info: "info",
-    Low: "low",
-    Medium: "medium",
-    High: "high",
-    Critical: "critical",
+  Info: "info",
+  Low: "low",
+  Medium: "medium",
+  High: "high",
+  Critical: "critical",
 };
 /** @internal */
-export const RiskCustomDetectionRuleSeverity$inboundSchema = z.enum(RiskCustomDetectionRuleSeverity);
+export const RiskCustomDetectionRuleSeverity$inboundSchema = z.enum(
+  RiskCustomDetectionRuleSeverity,
+);
 /** @internal */
-export const RiskCustomDetectionRule$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const RiskCustomDetectionRule$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     description: z.string(),
     detection_expr: z.optional(z.string()),
     id: z.string(),
@@ -26,16 +32,25 @@ export const RiskCustomDetectionRule$inboundSchema = z.pipe(z.object({
     rule_id: z.string(),
     severity: RiskCustomDetectionRuleSeverity$inboundSchema,
     title: z.string(),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "detection_expr": "detectionExpr",
-        "rule_id": "ruleId",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      detection_expr: "detectionExpr",
+      rule_id: "ruleId",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function riskCustomDetectionRuleFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskCustomDetectionRule$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskCustomDetectionRule' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskCustomDetectionRule$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskCustomDetectionRule' from JSON`,
+  );
 }
 //# sourceMappingURL=riskcustomdetectionrule.js.map

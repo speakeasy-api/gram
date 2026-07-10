@@ -6,9 +6,9 @@ Manage per-organization forwarding of inbound OTEL hook payloads to a customer-o
 
 ### Available Operations
 
-* [deleteConfig](#deleteconfig) - deleteConfig otelForwarding
-* [getConfig](#getconfig) - getConfig otelForwarding
-* [upsertConfig](#upsertconfig) - upsertConfig otelForwarding
+- [deleteConfig](#deleteconfig) - deleteConfig otelForwarding
+- [getConfig](#getconfig) - getConfig otelForwarding
+- [upsertConfig](#upsertconfig) - upsertConfig otelForwarding
 
 ## deleteConfig
 
@@ -17,6 +17,7 @@ Delete the org-wide OTEL forwarding config.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="deleteOtelForwardingConfig" method="post" path="/rpc/otelForwarding.deleteConfig" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -24,8 +25,6 @@ const gram = new Gram();
 
 async function run() {
   await gram.otelForwarding.deleteConfig();
-
-
 }
 
 run();
@@ -47,7 +46,6 @@ async function run() {
   const res = await otelForwardingDeleteConfig(gram);
   if (res.ok) {
     const { value: result } = res;
-    
   } else {
     console.log("otelForwardingDeleteConfig failed:", res.error);
   }
@@ -69,19 +67,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useDeleteOtelForwardingConfigMutation
+  useDeleteOtelForwardingConfigMutation,
 } from "@gram/client/react-query/otelForwardingDeleteConfig.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.DeleteOtelForwardingConfigRequest](../../models/operations/deleteotelforwardingconfigrequest.md)                                                                   | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.DeleteOtelForwardingConfigSecurity](../../models/operations/deleteotelforwardingconfigsecurity.md)                                                                 | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                           | Required           | Description                                                                                                                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.DeleteOtelForwardingConfigRequest](../../models/operations/deleteotelforwardingconfigrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.DeleteOtelForwardingConfigSecurity](../../models/operations/deleteotelforwardingconfigsecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                                 | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                        | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                                  | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -89,11 +87,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## getConfig
 
@@ -102,6 +100,7 @@ Get the org-wide OTEL forwarding config. Returns an empty config (enabled=false,
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="getOtelForwardingConfig" method="get" path="/rpc/otelForwarding.getConfig" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -161,7 +160,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchOtelForwardingConfig,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidateOtelForwardingConfig,
@@ -171,13 +170,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetOtelForwardingConfigRequest](../../models/operations/getotelforwardingconfigrequest.md)                                                                         | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.GetOtelForwardingConfigSecurity](../../models/operations/getotelforwardingconfigsecurity.md)                                                                       | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                     | Required           | Description                                                                                                                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.GetOtelForwardingConfigRequest](../../models/operations/getotelforwardingconfigrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.GetOtelForwardingConfigSecurity](../../models/operations/getotelforwardingconfigsecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                           | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                  | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                            | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -185,11 +184,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## upsertConfig
 
@@ -198,6 +197,7 @@ Create or update the org-wide OTEL forwarding config. Replaces the full header s
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="upsertOtelForwardingConfig" method="post" path="/rpc/otelForwarding.upsertConfig" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -260,19 +260,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useUpsertOtelForwardingConfigMutation
+  useUpsertOtelForwardingConfigMutation,
 } from "@gram/client/react-query/otelForwardingUpsertConfig.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.UpsertOtelForwardingConfigRequest](../../models/operations/upsertotelforwardingconfigrequest.md)                                                                   | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.UpsertOtelForwardingConfigSecurity](../../models/operations/upsertotelforwardingconfigsecurity.md)                                                                 | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                           | Required           | Description                                                                                                                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.UpsertOtelForwardingConfigRequest](../../models/operations/upsertotelforwardingconfigrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.UpsertOtelForwardingConfigSecurity](../../models/operations/upsertotelforwardingconfigsecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                                 | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                        | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                                  | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -280,8 +280,8 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |

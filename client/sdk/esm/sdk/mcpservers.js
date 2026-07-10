@@ -10,59 +10,61 @@ import { mcpServersUpdate } from "../funcs/mcpServersUpdate.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class McpServers extends ClientSDK {
-    /**
-     * createMcpServer mcpServers
-     *
-     * @remarks
-     * Create a new MCP server
-     */
-    async create(request, security, options) {
-        return unwrapAsync(mcpServersCreate(this, request, security, options));
-    }
-    /**
-     * deleteMcpServer mcpServers
-     *
-     * @remarks
-     * Delete an MCP server
-     */
-    async delete(request, security, options) {
-        return unwrapAsync(mcpServersDelete(this, request, security, options));
-    }
-    /**
-     * getMcpServer mcpServers
-     *
-     * @remarks
-     * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
-     */
-    async get(request, security, options) {
-        return unwrapAsync(mcpServersGet(this, request, security, options));
-    }
-    /**
-     * listMcpServers mcpServers
-     *
-     * @remarks
-     * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
-     */
-    async list(request, security, options) {
-        return unwrapAsync(mcpServersList(this, request, security, options));
-    }
-    /**
-     * listToolFilters mcpServers
-     *
-     * @remarks
-     * List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
-     */
-    async listToolFilters(request, security, options) {
-        return unwrapAsync(mcpServersListToolFilters(this, request, security, options));
-    }
-    /**
-     * updateMcpServer mcpServers
-     *
-     * @remarks
-     * Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.
-     */
-    async update(request, security, options) {
-        return unwrapAsync(mcpServersUpdate(this, request, security, options));
-    }
+  /**
+   * createMcpServer mcpServers
+   *
+   * @remarks
+   * Create a new MCP server
+   */
+  async create(request, security, options) {
+    return unwrapAsync(mcpServersCreate(this, request, security, options));
+  }
+  /**
+   * deleteMcpServer mcpServers
+   *
+   * @remarks
+   * Delete an MCP server
+   */
+  async delete(request, security, options) {
+    return unwrapAsync(mcpServersDelete(this, request, security, options));
+  }
+  /**
+   * getMcpServer mcpServers
+   *
+   * @remarks
+   * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
+   */
+  async get(request, security, options) {
+    return unwrapAsync(mcpServersGet(this, request, security, options));
+  }
+  /**
+   * listMcpServers mcpServers
+   *
+   * @remarks
+   * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
+   */
+  async list(request, security, options) {
+    return unwrapAsync(mcpServersList(this, request, security, options));
+  }
+  /**
+   * listToolFilters mcpServers
+   *
+   * @remarks
+   * List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
+   */
+  async listToolFilters(request, security, options) {
+    return unwrapAsync(
+      mcpServersListToolFilters(this, request, security, options),
+    );
+  }
+  /**
+   * updateMcpServer mcpServers
+   *
+   * @remarks
+   * Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.
+   */
+  async update(request, security, options) {
+    return unwrapAsync(mcpServersUpdate(this, request, security, options));
+  }
 }
 //# sourceMappingURL=mcpservers.js.map

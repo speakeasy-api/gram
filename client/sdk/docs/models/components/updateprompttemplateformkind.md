@@ -13,5 +13,5 @@ let value: UpdatePromptTemplateFormKind = "prompt";
 ## Values
 
 ```typescript
-"prompt" | "higher_order_tool"
+"prompt" | "higher_order_tool";
 ```

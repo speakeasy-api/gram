@@ -15,8 +15,8 @@ let value: SendAssistantMessageRequest = {
 
 ## Fields
 
-| Field                                                                                  | Type                                                                                   | Required                                                                               | Description                                                                            |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `gramSession`                                                                          | *string*                                                                               | :heavy_minus_sign:                                                                     | Session header                                                                         |
-| `gramProject`                                                                          | *string*                                                                               | :heavy_minus_sign:                                                                     | project header                                                                         |
-| `sendMessageRequestBody`                                                               | [components.SendMessageRequestBody](../../models/components/sendmessagerequestbody.md) | :heavy_check_mark:                                                                     | N/A                                                                                    |
+| Field                    | Type                                                                                   | Required           | Description    |
+| ------------------------ | -------------------------------------------------------------------------------------- | ------------------ | -------------- |
+| `gramSession`            | _string_                                                                               | :heavy_minus_sign: | Session header |
+| `gramProject`            | _string_                                                                               | :heavy_minus_sign: | project header |
+| `sendMessageRequestBody` | [components.SendMessageRequestBody](../../models/components/sendmessagerequestbody.md) | :heavy_check_mark: | N/A            |

@@ -4,18 +4,25 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ToolFilterTool$inboundSchema, } from "./toolfiltertool.js";
+import { ToolFilterTool$inboundSchema } from "./toolfiltertool.js";
 /** @internal */
-export const ToolFilterScope$inboundSchema = z.pipe(z.object({
+export const ToolFilterScope$inboundSchema = z.pipe(
+  z.object({
     tag: z.string(),
     tool_count: z.int(),
     tools: z.array(ToolFilterTool$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "tool_count": "toolCount",
+      tool_count: "toolCount",
     });
-}));
+  }),
+);
 export function toolFilterScopeFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolFilterScope$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolFilterScope' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolFilterScope$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolFilterScope' from JSON`,
+  );
 }
 //# sourceMappingURL=toolfilterscope.js.map

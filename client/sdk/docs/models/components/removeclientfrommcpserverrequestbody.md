@@ -13,7 +13,7 @@ let value: RemoveClientFromMcpServerRequestBody = {
 
 ## Fields
 
-| Field                             | Type                              | Required                          | Description                       |
-| --------------------------------- | --------------------------------- | --------------------------------- | --------------------------------- |
-| `clientId`                        | *string*                          | :heavy_check_mark:                | The remote_session_client id.     |
-| `mcpServerId`                     | *string*                          | :heavy_check_mark:                | The mcp_server id to detach from. |
+| Field         | Type     | Required           | Description                       |
+| ------------- | -------- | ------------------ | --------------------------------- |
+| `clientId`    | _string_ | :heavy_check_mark: | The remote_session_client id.     |
+| `mcpServerId` | _string_ | :heavy_check_mark: | The mcp_server id to detach from. |

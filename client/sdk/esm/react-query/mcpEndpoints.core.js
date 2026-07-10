@@ -4,31 +4,43 @@
 import { mcpEndpointsList } from "../funcs/mcpEndpointsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchMcpEndpoints(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildMcpEndpointsQuery(client$, request, security, options),
-    });
+export function prefetchMcpEndpoints(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildMcpEndpointsQuery(client$, request, security, options),
+  });
 }
 export function buildMcpEndpointsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyMcpEndpoints({
-            mcpServerId: request?.mcpServerId,
-            gramSession: request?.gramSession,
-            gramKey: request?.gramKey,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function mcpEndpointsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(mcpEndpointsList(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyMcpEndpoints({
+      mcpServerId: request?.mcpServerId,
+      gramSession: request?.gramSession,
+      gramKey: request?.gramKey,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function mcpEndpointsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        mcpEndpointsList(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyMcpEndpoints(parameters) {
-    return ["@gram/client", "mcpEndpoints", "list", parameters];
+  return ["@gram/client", "mcpEndpoints", "list", parameters];
 }
 //# sourceMappingURL=mcpEndpoints.core.js.map

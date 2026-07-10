@@ -4,25 +4,43 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListCustomDomainMcpEndpointsSecurity$outboundSchema = z.pipe(z.object({
+export const ListCustomDomainMcpEndpointsSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listCustomDomainMcpEndpointsSecurityToJSON(listCustomDomainMcpEndpointsSecurity) {
-    return JSON.stringify(ListCustomDomainMcpEndpointsSecurity$outboundSchema.parse(listCustomDomainMcpEndpointsSecurity));
+  }),
+);
+export function listCustomDomainMcpEndpointsSecurityToJSON(
+  listCustomDomainMcpEndpointsSecurity,
+) {
+  return JSON.stringify(
+    ListCustomDomainMcpEndpointsSecurity$outboundSchema.parse(
+      listCustomDomainMcpEndpointsSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListCustomDomainMcpEndpointsRequest$outboundSchema = z.pipe(z.object({
+export const ListCustomDomainMcpEndpointsRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
-export function listCustomDomainMcpEndpointsRequestToJSON(listCustomDomainMcpEndpointsRequest) {
-    return JSON.stringify(ListCustomDomainMcpEndpointsRequest$outboundSchema.parse(listCustomDomainMcpEndpointsRequest));
+  }),
+);
+export function listCustomDomainMcpEndpointsRequestToJSON(
+  listCustomDomainMcpEndpointsRequest,
+) {
+  return JSON.stringify(
+    ListCustomDomainMcpEndpointsRequest$outboundSchema.parse(
+      listCustomDomainMcpEndpointsRequest,
+    ),
+  );
 }
 //# sourceMappingURL=listcustomdomainmcpendpoints.js.map

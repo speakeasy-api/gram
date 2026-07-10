@@ -4,9 +4,11 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const RiskIDRequestBody$outboundSchema = z.object({
-    id: z.string(),
+  id: z.string(),
 });
 export function riskIDRequestBodyToJSON(riskIDRequestBody) {
-    return JSON.stringify(RiskIDRequestBody$outboundSchema.parse(riskIDRequestBody));
+  return JSON.stringify(
+    RiskIDRequestBody$outboundSchema.parse(riskIDRequestBody),
+  );
 }
 //# sourceMappingURL=riskidrequestbody.js.map

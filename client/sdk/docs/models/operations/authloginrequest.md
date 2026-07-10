@@ -10,6 +10,6 @@ let value: AuthLoginRequest = {};
 
 ## Fields
 
-| Field                                                       | Type                                                        | Required                                                    | Description                                                 |
-| ----------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
-| `redirect`                                                  | *string*                                                    | :heavy_minus_sign:                                          | Optional URL to redirect to after successful authentication |
+| Field      | Type     | Required           | Description                                                 |
+| ---------- | -------- | ------------------ | ----------------------------------------------------------- |
+| `redirect` | _string_ | :heavy_minus_sign: | Optional URL to redirect to after successful authentication |

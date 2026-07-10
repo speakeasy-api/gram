@@ -3,14 +3,18 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { UserSessionFacetOption$inboundSchema, } from "./usersessionfacetoption.js";
+import { UserSessionFacetOption$inboundSchema } from "./usersessionfacetoption.js";
 /** @internal */
 export const ListUserSessionFacetsResult$inboundSchema = z.object({
-    clients: z.array(UserSessionFacetOption$inboundSchema),
-    servers: z.array(UserSessionFacetOption$inboundSchema),
-    users: z.array(UserSessionFacetOption$inboundSchema),
+  clients: z.array(UserSessionFacetOption$inboundSchema),
+  servers: z.array(UserSessionFacetOption$inboundSchema),
+  users: z.array(UserSessionFacetOption$inboundSchema),
 });
 export function listUserSessionFacetsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListUserSessionFacetsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListUserSessionFacetsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListUserSessionFacetsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListUserSessionFacetsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listusersessionfacetsresult.js.map

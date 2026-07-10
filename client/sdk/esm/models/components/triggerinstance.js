@@ -8,17 +8,23 @@ import { safeParse } from "../../lib/schemas.js";
  * The trigger instance status.
  */
 export const TriggerInstanceStatus = {
-    Active: "active",
-    Paused: "paused",
-    Fired: "fired",
-    Cancelled: "cancelled",
+  Active: "active",
+  Paused: "paused",
+  Fired: "fired",
+  Cancelled: "cancelled",
 };
 /** @internal */
-export const TriggerInstanceStatus$inboundSchema = z.enum(TriggerInstanceStatus);
+export const TriggerInstanceStatus$inboundSchema = z.enum(
+  TriggerInstanceStatus,
+);
 /** @internal */
-export const TriggerInstance$inboundSchema = z.pipe(z.object({
+export const TriggerInstance$inboundSchema = z.pipe(
+  z.object({
     config: z.record(z.string(), z.any()),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     definition_slug: z.string(),
     environment_id: z.optional(z.string()),
     id: z.string(),
@@ -28,22 +34,31 @@ export const TriggerInstance$inboundSchema = z.pipe(z.object({
     target_display: z.string(),
     target_kind: z.string(),
     target_ref: z.string(),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     webhook_url: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "definition_slug": "definitionSlug",
-        "environment_id": "environmentId",
-        "project_id": "projectId",
-        "target_display": "targetDisplay",
-        "target_kind": "targetKind",
-        "target_ref": "targetRef",
-        "updated_at": "updatedAt",
-        "webhook_url": "webhookUrl",
+      created_at: "createdAt",
+      definition_slug: "definitionSlug",
+      environment_id: "environmentId",
+      project_id: "projectId",
+      target_display: "targetDisplay",
+      target_kind: "targetKind",
+      target_ref: "targetRef",
+      updated_at: "updatedAt",
+      webhook_url: "webhookUrl",
     });
-}));
+  }),
+);
 export function triggerInstanceFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TriggerInstance$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TriggerInstance' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TriggerInstance$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TriggerInstance' from JSON`,
+  );
 }
 //# sourceMappingURL=triggerinstance.js.map

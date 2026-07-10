@@ -11,59 +11,71 @@ import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 import { unwrapResultIterator } from "../types/operations.js";
 export class RemoteSessionIssuers extends ClientSDK {
-    /**
-     * createRemoteSessionIssuer remoteSessionIssuers
-     *
-     * @remarks
-     * Create a new remote_session_issuer.
-     */
-    async create(request, security, options) {
-        return unwrapAsync(remoteSessionIssuersCreate(this, request, security, options));
-    }
-    /**
-     * deleteRemoteSessionIssuer remoteSessionIssuers
-     *
-     * @remarks
-     * Soft-delete a remote_session_issuer. Blocked if any remote_session_clients still reference it.
-     */
-    async delete(request, security, options) {
-        return unwrapAsync(remoteSessionIssuersDelete(this, request, security, options));
-    }
-    /**
-     * discoverRemoteSessionIssuer remoteSessionIssuers
-     *
-     * @remarks
-     * Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.
-     */
-    async discover(request, security, options) {
-        return unwrapAsync(remoteSessionIssuersDiscover(this, request, security, options));
-    }
-    /**
-     * getRemoteSessionIssuer remoteSessionIssuers
-     *
-     * @remarks
-     * Get a remote_session_issuer by id or by slug. Provide exactly one.
-     */
-    async get(request, security, options) {
-        return unwrapAsync(remoteSessionIssuersGet(this, request, security, options));
-    }
-    /**
-     * listRemoteSessionIssuers remoteSessionIssuers
-     *
-     * @remarks
-     * List remote_session_issuers in the caller's project.
-     */
-    async list(request, security, options) {
-        return unwrapResultIterator(remoteSessionIssuersList(this, request, security, options));
-    }
-    /**
-     * updateRemoteSessionIssuer remoteSessionIssuers
-     *
-     * @remarks
-     * Update fields on an existing remote_session_issuer.
-     */
-    async update(request, security, options) {
-        return unwrapAsync(remoteSessionIssuersUpdate(this, request, security, options));
-    }
+  /**
+   * createRemoteSessionIssuer remoteSessionIssuers
+   *
+   * @remarks
+   * Create a new remote_session_issuer.
+   */
+  async create(request, security, options) {
+    return unwrapAsync(
+      remoteSessionIssuersCreate(this, request, security, options),
+    );
+  }
+  /**
+   * deleteRemoteSessionIssuer remoteSessionIssuers
+   *
+   * @remarks
+   * Soft-delete a remote_session_issuer. Blocked if any remote_session_clients still reference it.
+   */
+  async delete(request, security, options) {
+    return unwrapAsync(
+      remoteSessionIssuersDelete(this, request, security, options),
+    );
+  }
+  /**
+   * discoverRemoteSessionIssuer remoteSessionIssuers
+   *
+   * @remarks
+   * Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.
+   */
+  async discover(request, security, options) {
+    return unwrapAsync(
+      remoteSessionIssuersDiscover(this, request, security, options),
+    );
+  }
+  /**
+   * getRemoteSessionIssuer remoteSessionIssuers
+   *
+   * @remarks
+   * Get a remote_session_issuer by id or by slug. Provide exactly one.
+   */
+  async get(request, security, options) {
+    return unwrapAsync(
+      remoteSessionIssuersGet(this, request, security, options),
+    );
+  }
+  /**
+   * listRemoteSessionIssuers remoteSessionIssuers
+   *
+   * @remarks
+   * List remote_session_issuers in the caller's project.
+   */
+  async list(request, security, options) {
+    return unwrapResultIterator(
+      remoteSessionIssuersList(this, request, security, options),
+    );
+  }
+  /**
+   * updateRemoteSessionIssuer remoteSessionIssuers
+   *
+   * @remarks
+   * Update fields on an existing remote_session_issuer.
+   */
+  async update(request, security, options) {
+    return unwrapAsync(
+      remoteSessionIssuersUpdate(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=remotesessionissuers.js.map

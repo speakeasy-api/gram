@@ -21,7 +21,7 @@ let value: BuiltinExclusionCategory = {
 
 ## Fields
 
-| Field                                                                                  | Type                                                                                   | Required                                                                               | Description                                                                            |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `entries`                                                                              | [components.BuiltinExclusionEntry](../../models/components/builtinexclusionentry.md)[] | :heavy_check_mark:                                                                     | The rules in this category.                                                            |
-| `label`                                                                                | *string*                                                                               | :heavy_check_mark:                                                                     | Human category label, e.g. "Test credit cards".                                        |
+| Field     | Type                                                                                   | Required           | Description                                     |
+| --------- | -------------------------------------------------------------------------------------- | ------------------ | ----------------------------------------------- |
+| `entries` | [components.BuiltinExclusionEntry](../../models/components/builtinexclusionentry.md)[] | :heavy_check_mark: | The rules in this category.                     |
+| `label`   | _string_                                                                               | :heavy_check_mark: | Human category label, e.g. "Test credit cards". |

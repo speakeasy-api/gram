@@ -3,33 +3,52 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { MoveIssuerRequestBody$outboundSchema, } from "../components/moveissuerrequestbody.js";
+import { MoveIssuerRequestBody$outboundSchema } from "../components/moveissuerrequestbody.js";
 /** @internal */
-export const MoveOrganizationRemoteSessionIssuerSecurity$outboundSchema = z.pipe(z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
-    apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const MoveOrganizationRemoteSessionIssuerSecurity$outboundSchema =
+  z.pipe(
+    z.object({
+      sessionHeaderGramSession: z.optional(z.string()),
+      apikeyHeaderGramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         sessionHeaderGramSession: "session_header_Gram-Session",
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    });
-}));
-export function moveOrganizationRemoteSessionIssuerSecurityToJSON(moveOrganizationRemoteSessionIssuerSecurity) {
-    return JSON.stringify(MoveOrganizationRemoteSessionIssuerSecurity$outboundSchema.parse(moveOrganizationRemoteSessionIssuerSecurity));
+      });
+    }),
+  );
+export function moveOrganizationRemoteSessionIssuerSecurityToJSON(
+  moveOrganizationRemoteSessionIssuerSecurity,
+) {
+  return JSON.stringify(
+    MoveOrganizationRemoteSessionIssuerSecurity$outboundSchema.parse(
+      moveOrganizationRemoteSessionIssuerSecurity,
+    ),
+  );
 }
 /** @internal */
-export const MoveOrganizationRemoteSessionIssuerRequest$outboundSchema = z.pipe(z.object({
+export const MoveOrganizationRemoteSessionIssuerRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     moveIssuerRequestBody: MoveIssuerRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        moveIssuerRequestBody: "MoveIssuerRequestBody",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      moveIssuerRequestBody: "MoveIssuerRequestBody",
     });
-}));
-export function moveOrganizationRemoteSessionIssuerRequestToJSON(moveOrganizationRemoteSessionIssuerRequest) {
-    return JSON.stringify(MoveOrganizationRemoteSessionIssuerRequest$outboundSchema.parse(moveOrganizationRemoteSessionIssuerRequest));
+  }),
+);
+export function moveOrganizationRemoteSessionIssuerRequestToJSON(
+  moveOrganizationRemoteSessionIssuerRequest,
+) {
+  return JSON.stringify(
+    MoveOrganizationRemoteSessionIssuerRequest$outboundSchema.parse(
+      moveOrganizationRemoteSessionIssuerRequest,
+    ),
+  );
 }
 //# sourceMappingURL=moveorganizationremotesessionissuer.js.map

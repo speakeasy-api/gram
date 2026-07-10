@@ -5,18 +5,25 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const RedeemResponseBody$inboundSchema = z.pipe(z.object({
+export const RedeemResponseBody$inboundSchema = z.pipe(
+  z.object({
     access_token: z.string(),
     project_slug: z.string(),
     user_email: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "access_token": "accessToken",
-        "project_slug": "projectSlug",
-        "user_email": "userEmail",
+      access_token: "accessToken",
+      project_slug: "projectSlug",
+      user_email: "userEmail",
     });
-}));
+  }),
+);
 export function redeemResponseBodyFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RedeemResponseBody$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RedeemResponseBody' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RedeemResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RedeemResponseBody' from JSON`,
+  );
 }
 //# sourceMappingURL=redeemresponsebody.js.map

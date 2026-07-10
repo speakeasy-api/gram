@@ -5,14 +5,21 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const RevokeAllRemoteSessionsResult$inboundSchema = z.pipe(z.object({
+export const RevokeAllRemoteSessionsResult$inboundSchema = z.pipe(
+  z.object({
     revoked_count: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "revoked_count": "revokedCount",
+      revoked_count: "revokedCount",
     });
-}));
+  }),
+);
 export function revokeAllRemoteSessionsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RevokeAllRemoteSessionsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RevokeAllRemoteSessionsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RevokeAllRemoteSessionsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RevokeAllRemoteSessionsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=revokeallremotesessionsresult.js.map

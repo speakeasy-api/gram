@@ -6,81 +6,123 @@ import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
 import { unwrapResultIterator } from "../types/operations.js";
 import { pageIteratorToJSON } from "./_types.js";
-export function prefetchUserSessionConsents(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildUserSessionConsentsQuery(client$, request, security, options),
-    });
+export function prefetchUserSessionConsents(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildUserSessionConsentsQuery(client$, request, security, options),
+  });
 }
-export function prefetchUserSessionConsentsInfinite(queryClient, client$, request, security, options) {
-    return queryClient.prefetchInfiniteQuery({
-        ...buildUserSessionConsentsInfiniteQuery(client$, request, security, options),
-        initialPageParam: undefined,
-        getNextPageParam: (previousPage) => previousPage["~next"],
-    });
+export function prefetchUserSessionConsentsInfinite(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchInfiniteQuery({
+    ...buildUserSessionConsentsInfiniteQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: undefined,
+    getNextPageParam: (previousPage) => previousPage["~next"],
+  });
 }
-export function buildUserSessionConsentsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyUserSessionConsents({
-            subjectUrn: request?.subjectUrn,
-            userSessionClientId: request?.userSessionClientId,
-            userSessionIssuerId: request?.userSessionIssuerId,
-            cursor: request?.cursor,
-            limit: request?.limit,
-            gramSession: request?.gramSession,
-            gramKey: request?.gramKey,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function userSessionConsentsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(userSessionConsentsList(client$, request, security, mergedOptions));
-        },
-    };
+export function buildUserSessionConsentsQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyUserSessionConsents({
+      subjectUrn: request?.subjectUrn,
+      userSessionClientId: request?.userSessionClientId,
+      userSessionIssuerId: request?.userSessionIssuerId,
+      cursor: request?.cursor,
+      limit: request?.limit,
+      gramSession: request?.gramSession,
+      gramKey: request?.gramKey,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function userSessionConsentsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        userSessionConsentsList(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
-export function buildUserSessionConsentsInfiniteQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyUserSessionConsentsInfinite({
-            subjectUrn: request?.subjectUrn,
-            userSessionClientId: request?.userSessionClientId,
-            userSessionIssuerId: request?.userSessionIssuerId,
-            cursor: request?.cursor,
-            limit: request?.limit,
-            gramSession: request?.gramSession,
-            gramKey: request?.gramKey,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function userSessionConsentsQuery(ctx) {
-            const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options,
-                fetchOptions: { ...options?.fetchOptions, signal: sig },
-            };
-            if (!ctx.pageParam) {
-                const pageResult = await unwrapResultIterator(userSessionConsentsList(client$, request, security, mergedOptions));
-                return pageIteratorToJSON(pageResult);
-            }
-            const pageResult = await unwrapResultIterator(userSessionConsentsList(client$, {
-                ...request,
-                cursor: ctx.pageParam.cursor,
-            }, security, mergedOptions));
-            return pageIteratorToJSON(pageResult);
-        },
-    };
+export function buildUserSessionConsentsInfiniteQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyUserSessionConsentsInfinite({
+      subjectUrn: request?.subjectUrn,
+      userSessionClientId: request?.userSessionClientId,
+      userSessionIssuerId: request?.userSessionIssuerId,
+      cursor: request?.cursor,
+      limit: request?.limit,
+      gramSession: request?.gramSession,
+      gramKey: request?.gramKey,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function userSessionConsentsQuery(ctx) {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+      if (!ctx.pageParam) {
+        const pageResult = await unwrapResultIterator(
+          userSessionConsentsList(client$, request, security, mergedOptions),
+        );
+        return pageIteratorToJSON(pageResult);
+      }
+      const pageResult = await unwrapResultIterator(
+        userSessionConsentsList(
+          client$,
+          {
+            ...request,
+            cursor: ctx.pageParam.cursor,
+          },
+          security,
+          mergedOptions,
+        ),
+      );
+      return pageIteratorToJSON(pageResult);
+    },
+  };
 }
 export function queryKeyUserSessionConsents(parameters) {
-    return ["@gram/client", "userSessionConsents", "list", parameters];
+  return ["@gram/client", "userSessionConsents", "list", parameters];
 }
 export function queryKeyUserSessionConsentsInfinite(parameters) {
-    return [
-        "@gram/client",
-        "userSessionConsents",
-        "list",
-        "infinite",
-        parameters,
-    ];
+  return [
+    "@gram/client",
+    "userSessionConsents",
+    "list",
+    "infinite",
+    parameters,
+  ];
 }
 //# sourceMappingURL=userSessionConsents.core.js.map

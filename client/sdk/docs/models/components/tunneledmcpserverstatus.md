@@ -13,5 +13,5 @@ let value: TunneledMcpServerStatus = "revoked";
 ## Values
 
 ```typescript
-"created" | "active" | "revoked"
+"created" | "active" | "revoked";
 ```

@@ -7,19 +7,23 @@ import { safeParse } from "../../lib/schemas.js";
  * Whether the local hook should allow or deny the action.
  */
 export const Decision = {
-    Allow: "allow",
-    Deny: "deny",
+  Allow: "allow",
+  Deny: "deny",
 };
 /** @internal */
 export const Decision$inboundSchema = z.enum(Decision);
 /** @internal */
 export const IngestHookResult$inboundSchema = z.object({
-    decision: Decision$inboundSchema,
-    effects: z.optional(z.record(z.string(), z.any())),
-    message: z.optional(z.string()),
-    reason: z.optional(z.string()),
+  decision: Decision$inboundSchema,
+  effects: z.optional(z.record(z.string(), z.any())),
+  message: z.optional(z.string()),
+  reason: z.optional(z.string()),
 });
 export function ingestHookResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => IngestHookResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'IngestHookResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => IngestHookResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'IngestHookResult' from JSON`,
+  );
 }
 //# sourceMappingURL=ingesthookresult.js.map

@@ -3,35 +3,44 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { WorkOSIntentOptions$outboundSchema, } from "./workosintentoptions.js";
+import { WorkOSIntentOptions$outboundSchema } from "./workosintentoptions.js";
 /**
  * WorkOS Admin Portal intent.
  */
 export const Intent = {
-    Dsync: "dsync",
-    Sso: "sso",
-    AuditLogs: "audit_logs",
-    DomainVerification: "domain_verification",
-    LogStreams: "log_streams",
+  Dsync: "dsync",
+  Sso: "sso",
+  AuditLogs: "audit_logs",
+  DomainVerification: "domain_verification",
+  LogStreams: "log_streams",
 };
 /** @internal */
 export const Intent$outboundSchema = z.enum(Intent);
 /** @internal */
-export const GenerateWorkOSAdminPortalLinkRequestBody$outboundSchema = z.pipe(z.object({
+export const GenerateWorkOSAdminPortalLinkRequestBody$outboundSchema = z.pipe(
+  z.object({
     intent: Intent$outboundSchema,
     intentOptions: z.optional(WorkOSIntentOptions$outboundSchema),
     itContactEmails: z.optional(z.array(z.string())),
     returnUrl: z.optional(z.string()),
     successUrl: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        intentOptions: "intent_options",
-        itContactEmails: "it_contact_emails",
-        returnUrl: "return_url",
-        successUrl: "success_url",
+      intentOptions: "intent_options",
+      itContactEmails: "it_contact_emails",
+      returnUrl: "return_url",
+      successUrl: "success_url",
     });
-}));
-export function generateWorkOSAdminPortalLinkRequestBodyToJSON(generateWorkOSAdminPortalLinkRequestBody) {
-    return JSON.stringify(GenerateWorkOSAdminPortalLinkRequestBody$outboundSchema.parse(generateWorkOSAdminPortalLinkRequestBody));
+  }),
+);
+export function generateWorkOSAdminPortalLinkRequestBodyToJSON(
+  generateWorkOSAdminPortalLinkRequestBody,
+) {
+  return JSON.stringify(
+    GenerateWorkOSAdminPortalLinkRequestBody$outboundSchema.parse(
+      generateWorkOSAdminPortalLinkRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=generateworkosadminportallinkrequestbody.js.map

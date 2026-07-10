@@ -3,77 +3,120 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { RenderTemplateByIDRequestBody$outboundSchema, } from "../components/rendertemplatebyidrequestbody.js";
+import { RenderTemplateByIDRequestBody$outboundSchema } from "../components/rendertemplatebyidrequestbody.js";
 /** @internal */
-export const RenderTemplateByIDSecurityOption1$outboundSchema = z.pipe(z.object({
+export const RenderTemplateByIDSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function renderTemplateByIDSecurityOption1ToJSON(renderTemplateByIDSecurityOption1) {
-    return JSON.stringify(RenderTemplateByIDSecurityOption1$outboundSchema.parse(renderTemplateByIDSecurityOption1));
+  }),
+);
+export function renderTemplateByIDSecurityOption1ToJSON(
+  renderTemplateByIDSecurityOption1,
+) {
+  return JSON.stringify(
+    RenderTemplateByIDSecurityOption1$outboundSchema.parse(
+      renderTemplateByIDSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const RenderTemplateByIDSecurityOption2$outboundSchema = z.pipe(z.object({
+export const RenderTemplateByIDSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function renderTemplateByIDSecurityOption2ToJSON(renderTemplateByIDSecurityOption2) {
-    return JSON.stringify(RenderTemplateByIDSecurityOption2$outboundSchema.parse(renderTemplateByIDSecurityOption2));
+  }),
+);
+export function renderTemplateByIDSecurityOption2ToJSON(
+  renderTemplateByIDSecurityOption2,
+) {
+  return JSON.stringify(
+    RenderTemplateByIDSecurityOption2$outboundSchema.parse(
+      renderTemplateByIDSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const RenderTemplateByIDSecurityOption3$outboundSchema = z.pipe(z.object({
+export const RenderTemplateByIDSecurityOption3$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function renderTemplateByIDSecurityOption3ToJSON(renderTemplateByIDSecurityOption3) {
-    return JSON.stringify(RenderTemplateByIDSecurityOption3$outboundSchema.parse(renderTemplateByIDSecurityOption3));
+  }),
+);
+export function renderTemplateByIDSecurityOption3ToJSON(
+  renderTemplateByIDSecurityOption3,
+) {
+  return JSON.stringify(
+    RenderTemplateByIDSecurityOption3$outboundSchema.parse(
+      renderTemplateByIDSecurityOption3,
+    ),
+  );
 }
 /** @internal */
-export const RenderTemplateByIDSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => RenderTemplateByIDSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => RenderTemplateByIDSecurityOption2$outboundSchema)),
-    option3: z.optional(z.lazy(() => RenderTemplateByIDSecurityOption3$outboundSchema)),
-}), z.transform((v) => {
+export const RenderTemplateByIDSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => RenderTemplateByIDSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => RenderTemplateByIDSecurityOption2$outboundSchema),
+    ),
+    option3: z.optional(
+      z.lazy(() => RenderTemplateByIDSecurityOption3$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
-        option3: "Option3",
+      option1: "Option1",
+      option2: "Option2",
+      option3: "Option3",
     });
-}));
+  }),
+);
 export function renderTemplateByIDSecurityToJSON(renderTemplateByIDSecurity) {
-    return JSON.stringify(RenderTemplateByIDSecurity$outboundSchema.parse(renderTemplateByIDSecurity));
+  return JSON.stringify(
+    RenderTemplateByIDSecurity$outboundSchema.parse(renderTemplateByIDSecurity),
+  );
 }
 /** @internal */
-export const RenderTemplateByIDRequest$outboundSchema = z.pipe(z.object({
+export const RenderTemplateByIDRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     renderTemplateByIDRequestBody: RenderTemplateByIDRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        renderTemplateByIDRequestBody: "RenderTemplateByIDRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      renderTemplateByIDRequestBody: "RenderTemplateByIDRequestBody",
     });
-}));
+  }),
+);
 export function renderTemplateByIDRequestToJSON(renderTemplateByIDRequest) {
-    return JSON.stringify(RenderTemplateByIDRequest$outboundSchema.parse(renderTemplateByIDRequest));
+  return JSON.stringify(
+    RenderTemplateByIDRequest$outboundSchema.parse(renderTemplateByIDRequest),
+  );
 }
 //# sourceMappingURL=rendertemplatebyid.js.map

@@ -15,6 +15,6 @@ let value: AddOAuthProxyServerRequestBody = {
 
 ## Fields
 
-| Field                                                                              | Type                                                                               | Required                                                                           | Description                                                                        |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `oauthProxyServer`                                                                 | [components.OAuthProxyServerForm](../../models/components/oauthproxyserverform.md) | :heavy_check_mark:                                                                 | N/A                                                                                |
+| Field              | Type                                                                               | Required           | Description |
+| ------------------ | ---------------------------------------------------------------------------------- | ------------------ | ----------- |
+| `oauthProxyServer` | [components.OAuthProxyServerForm](../../models/components/oauthproxyserverform.md) | :heavy_check_mark: | N/A         |

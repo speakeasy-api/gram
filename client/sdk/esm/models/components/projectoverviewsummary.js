@@ -4,11 +4,12 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { LLMClientUsage$inboundSchema, } from "./llmclientusage.js";
+import { LLMClientUsage$inboundSchema } from "./llmclientusage.js";
 import { TopServer$inboundSchema } from "./topserver.js";
 import { TopUser$inboundSchema } from "./topuser.js";
 /** @internal */
-export const ProjectOverviewSummary$inboundSchema = z.pipe(z.object({
+export const ProjectOverviewSummary$inboundSchema = z.pipe(
+  z.object({
     active_servers_count: z.int(),
     active_users_count: z.int(),
     failed_chats: z.int(),
@@ -19,21 +20,27 @@ export const ProjectOverviewSummary$inboundSchema = z.pipe(z.object({
     top_users: z.array(TopUser$inboundSchema),
     total_chats: z.int(),
     total_tool_calls: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "active_servers_count": "activeServersCount",
-        "active_users_count": "activeUsersCount",
-        "failed_chats": "failedChats",
-        "failed_tool_calls": "failedToolCalls",
-        "llm_client_breakdown": "llmClientBreakdown",
-        "resolved_chats": "resolvedChats",
-        "top_servers": "topServers",
-        "top_users": "topUsers",
-        "total_chats": "totalChats",
-        "total_tool_calls": "totalToolCalls",
+      active_servers_count: "activeServersCount",
+      active_users_count: "activeUsersCount",
+      failed_chats: "failedChats",
+      failed_tool_calls: "failedToolCalls",
+      llm_client_breakdown: "llmClientBreakdown",
+      resolved_chats: "resolvedChats",
+      top_servers: "topServers",
+      top_users: "topUsers",
+      total_chats: "totalChats",
+      total_tool_calls: "totalToolCalls",
     });
-}));
+  }),
+);
 export function projectOverviewSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ProjectOverviewSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ProjectOverviewSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ProjectOverviewSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ProjectOverviewSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=projectoverviewsummary.js.map

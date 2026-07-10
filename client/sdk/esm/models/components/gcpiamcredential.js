@@ -8,35 +8,50 @@ import { safeParse } from "../../lib/schemas.js";
  * The cloud provider of the credential.
  */
 export const GcpIamCredentialProvider = {
-    AwsIam: "aws_iam",
-    GcpIam: "gcp_iam",
+  AwsIam: "aws_iam",
+  GcpIam: "gcp_iam",
 };
 /** @internal */
-export const GcpIamCredentialProvider$inboundSchema = z.enum(GcpIamCredentialProvider);
+export const GcpIamCredentialProvider$inboundSchema = z.enum(
+  GcpIamCredentialProvider,
+);
 /** @internal */
-export const GcpIamCredential$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const GcpIamCredential$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     id: z.string(),
     impersonate_service_account: z.optional(z.string()),
     name: z.string(),
     organization_id: z.string(),
     provider: GcpIamCredentialProvider$inboundSchema,
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     wif_pool_id: z.optional(z.string()),
     wif_project_number: z.optional(z.string()),
     wif_provider_id: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "impersonate_service_account": "impersonateServiceAccount",
-        "organization_id": "organizationId",
-        "updated_at": "updatedAt",
-        "wif_pool_id": "wifPoolId",
-        "wif_project_number": "wifProjectNumber",
-        "wif_provider_id": "wifProviderId",
+      created_at: "createdAt",
+      impersonate_service_account: "impersonateServiceAccount",
+      organization_id: "organizationId",
+      updated_at: "updatedAt",
+      wif_pool_id: "wifPoolId",
+      wif_project_number: "wifProjectNumber",
+      wif_provider_id: "wifProviderId",
     });
-}));
+  }),
+);
 export function gcpIamCredentialFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GcpIamCredential$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GcpIamCredential' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => GcpIamCredential$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GcpIamCredential' from JSON`,
+  );
 }
 //# sourceMappingURL=gcpiamcredential.js.map

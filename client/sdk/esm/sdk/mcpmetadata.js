@@ -7,32 +7,32 @@ import { mcpMetadataSet } from "../funcs/mcpMetadataSet.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class McpMetadata extends ClientSDK {
-    /**
-     * exportMcpMetadata mcpMetadata
-     *
-     * @remarks
-     * Export MCP server details as JSON for documentation and integration purposes.
-     */
-    async export(request, security, options) {
-        return unwrapAsync(mcpMetadataExport(this, request, security, options));
-    }
-    /**
-     * getMcpMetadata mcpMetadata
-     *
-     * @remarks
-     * Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
-     */
-    async get(request, security, options) {
-        return unwrapAsync(mcpMetadataGet(this, request, security, options));
-    }
-    /**
-     * setMcpMetadata mcpMetadata
-     *
-     * @remarks
-     * Create or update the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
-     */
-    async set(request, security, options) {
-        return unwrapAsync(mcpMetadataSet(this, request, security, options));
-    }
+  /**
+   * exportMcpMetadata mcpMetadata
+   *
+   * @remarks
+   * Export MCP server details as JSON for documentation and integration purposes.
+   */
+  async export(request, security, options) {
+    return unwrapAsync(mcpMetadataExport(this, request, security, options));
+  }
+  /**
+   * getMcpMetadata mcpMetadata
+   *
+   * @remarks
+   * Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
+   */
+  async get(request, security, options) {
+    return unwrapAsync(mcpMetadataGet(this, request, security, options));
+  }
+  /**
+   * setMcpMetadata mcpMetadata
+   *
+   * @remarks
+   * Create or update the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
+   */
+  async set(request, security, options) {
+    return unwrapAsync(mcpMetadataSet(this, request, security, options));
+  }
 }
 //# sourceMappingURL=mcpmetadata.js.map

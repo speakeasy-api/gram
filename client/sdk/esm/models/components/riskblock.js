@@ -8,30 +8,39 @@ import { safeParse } from "../../lib/schemas.js";
  * Existing feedback sentiment recorded for this block, when any.
  */
 export const RiskBlockFeedback = {
-    Up: "up",
-    Down: "down",
+  Up: "up",
+  Down: "down",
 };
 /** @internal */
 export const RiskBlockFeedback$inboundSchema = z.enum(RiskBlockFeedback);
 /** @internal */
-export const RiskBlock$inboundSchema = z
-    .pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const RiskBlock$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     feedback: z.optional(RiskBlockFeedback$inboundSchema),
     id: z.string(),
     policy_name: z.string(),
     project_id: z.string(),
     reason: z.string(),
     tool_name: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "policy_name": "policyName",
-        "project_id": "projectId",
-        "tool_name": "toolName",
+      created_at: "createdAt",
+      policy_name: "policyName",
+      project_id: "projectId",
+      tool_name: "toolName",
     });
-}));
+  }),
+);
 export function riskBlockFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskBlock$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskBlock' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskBlock$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskBlock' from JSON`,
+  );
 }
 //# sourceMappingURL=riskblock.js.map

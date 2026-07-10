@@ -3,49 +3,60 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { SearchUsersFilter$outboundSchema, } from "./searchusersfilter.js";
+import { SearchUsersFilter$outboundSchema } from "./searchusersfilter.js";
 /**
  * Grouping dimension for results
  */
 export const SearchUsersPayloadGroupBy = {
-    Employee: "employee",
-    Role: "role",
+  Employee: "employee",
+  Role: "role",
 };
 /**
  * Sort order
  */
 export const SearchUsersPayloadSort = {
-    Asc: "asc",
-    Desc: "desc",
+  Asc: "asc",
+  Desc: "desc",
 };
 /**
  * Type of user identifier to group by
  */
 export const SearchUsersPayloadUserType = {
-    Internal: "internal",
-    External: "external",
+  Internal: "internal",
+  External: "external",
 };
 /** @internal */
-export const SearchUsersPayloadGroupBy$outboundSchema = z.enum(SearchUsersPayloadGroupBy);
+export const SearchUsersPayloadGroupBy$outboundSchema = z.enum(
+  SearchUsersPayloadGroupBy,
+);
 /** @internal */
-export const SearchUsersPayloadSort$outboundSchema = z.enum(SearchUsersPayloadSort);
+export const SearchUsersPayloadSort$outboundSchema = z.enum(
+  SearchUsersPayloadSort,
+);
 /** @internal */
-export const SearchUsersPayloadUserType$outboundSchema = z.enum(SearchUsersPayloadUserType);
+export const SearchUsersPayloadUserType$outboundSchema = z.enum(
+  SearchUsersPayloadUserType,
+);
 /** @internal */
-export const SearchUsersPayload$outboundSchema = z.pipe(z.object({
+export const SearchUsersPayload$outboundSchema = z.pipe(
+  z.object({
     cursor: z.optional(z.string()),
     filter: SearchUsersFilter$outboundSchema,
     groupBy: z._default(SearchUsersPayloadGroupBy$outboundSchema, "employee"),
     limit: z._default(z.int(), 50),
     sort: z._default(SearchUsersPayloadSort$outboundSchema, "desc"),
     userType: SearchUsersPayloadUserType$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        groupBy: "group_by",
-        userType: "user_type",
+      groupBy: "group_by",
+      userType: "user_type",
     });
-}));
+  }),
+);
 export function searchUsersPayloadToJSON(searchUsersPayload) {
-    return JSON.stringify(SearchUsersPayload$outboundSchema.parse(searchUsersPayload));
+  return JSON.stringify(
+    SearchUsersPayload$outboundSchema.parse(searchUsersPayload),
+  );
 }
 //# sourceMappingURL=searchuserspayload.js.map

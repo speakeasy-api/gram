@@ -4,30 +4,48 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetOrganizationRemoteSessionIssuerSecurity$outboundSchema = z.pipe(z.object({
+export const GetOrganizationRemoteSessionIssuerSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
     apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
     });
-}));
-export function getOrganizationRemoteSessionIssuerSecurityToJSON(getOrganizationRemoteSessionIssuerSecurity) {
-    return JSON.stringify(GetOrganizationRemoteSessionIssuerSecurity$outboundSchema.parse(getOrganizationRemoteSessionIssuerSecurity));
+  }),
+);
+export function getOrganizationRemoteSessionIssuerSecurityToJSON(
+  getOrganizationRemoteSessionIssuerSecurity,
+) {
+  return JSON.stringify(
+    GetOrganizationRemoteSessionIssuerSecurity$outboundSchema.parse(
+      getOrganizationRemoteSessionIssuerSecurity,
+    ),
+  );
 }
 /** @internal */
-export const GetOrganizationRemoteSessionIssuerRequest$outboundSchema = z.pipe(z.object({
+export const GetOrganizationRemoteSessionIssuerRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
     });
-}));
-export function getOrganizationRemoteSessionIssuerRequestToJSON(getOrganizationRemoteSessionIssuerRequest) {
-    return JSON.stringify(GetOrganizationRemoteSessionIssuerRequest$outboundSchema.parse(getOrganizationRemoteSessionIssuerRequest));
+  }),
+);
+export function getOrganizationRemoteSessionIssuerRequestToJSON(
+  getOrganizationRemoteSessionIssuerRequest,
+) {
+  return JSON.stringify(
+    GetOrganizationRemoteSessionIssuerRequest$outboundSchema.parse(
+      getOrganizationRemoteSessionIssuerRequest,
+    ),
+  );
 }
 //# sourceMappingURL=getorganizationremotesessionissuer.js.map

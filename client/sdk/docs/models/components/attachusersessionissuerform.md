@@ -15,7 +15,7 @@ let value: AttachUserSessionIssuerForm = {
 
 ## Fields
 
-| Field                              | Type                               | Required                           | Description                        |
-| ---------------------------------- | ---------------------------------- | ---------------------------------- | ---------------------------------- |
-| `id`                               | *string*                           | :heavy_check_mark:                 | The remote_session_client id.      |
-| `userSessionIssuerId`              | *string*                           | :heavy_check_mark:                 | The user_session_issuer to attach. |
+| Field                 | Type     | Required           | Description                        |
+| --------------------- | -------- | ------------------ | ---------------------------------- |
+| `id`                  | _string_ | :heavy_check_mark: | The remote_session_client id.      |
+| `userSessionIssuerId` | _string_ | :heavy_check_mark: | The user_session_issuer to attach. |

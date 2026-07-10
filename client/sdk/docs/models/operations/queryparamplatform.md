@@ -13,5 +13,5 @@ let value: QueryParamPlatform = "cursor";
 ## Values
 
 ```typescript
-"claude" | "cursor" | "codex"
+"claude" | "cursor" | "codex";
 ```

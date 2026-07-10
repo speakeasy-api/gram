@@ -4,25 +4,35 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListAPIKeysSecurity$outboundSchema = z.pipe(z.object({
+export const ListAPIKeysSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function listAPIKeysSecurityToJSON(listAPIKeysSecurity) {
-    return JSON.stringify(ListAPIKeysSecurity$outboundSchema.parse(listAPIKeysSecurity));
+  return JSON.stringify(
+    ListAPIKeysSecurity$outboundSchema.parse(listAPIKeysSecurity),
+  );
 }
 /** @internal */
-export const ListAPIKeysRequest$outboundSchema = z.pipe(z.object({
+export const ListAPIKeysRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function listAPIKeysRequestToJSON(listAPIKeysRequest) {
-    return JSON.stringify(ListAPIKeysRequest$outboundSchema.parse(listAPIKeysRequest));
+  return JSON.stringify(
+    ListAPIKeysRequest$outboundSchema.parse(listAPIKeysRequest),
+  );
 }
 //# sourceMappingURL=listapikeys.js.map

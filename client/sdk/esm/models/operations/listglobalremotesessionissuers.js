@@ -4,40 +4,66 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ListRemoteSessionIssuersResult$inboundSchema, } from "../components/listremotesessionissuersresult.js";
+import { ListRemoteSessionIssuersResult$inboundSchema } from "../components/listremotesessionissuersresult.js";
 /** @internal */
-export const ListGlobalRemoteSessionIssuersSecurity$outboundSchema = z.pipe(z.object({
+export const ListGlobalRemoteSessionIssuersSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listGlobalRemoteSessionIssuersSecurityToJSON(listGlobalRemoteSessionIssuersSecurity) {
-    return JSON.stringify(ListGlobalRemoteSessionIssuersSecurity$outboundSchema.parse(listGlobalRemoteSessionIssuersSecurity));
+  }),
+);
+export function listGlobalRemoteSessionIssuersSecurityToJSON(
+  listGlobalRemoteSessionIssuersSecurity,
+) {
+  return JSON.stringify(
+    ListGlobalRemoteSessionIssuersSecurity$outboundSchema.parse(
+      listGlobalRemoteSessionIssuersSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListGlobalRemoteSessionIssuersRequest$outboundSchema = z.pipe(z.object({
+export const ListGlobalRemoteSessionIssuersRequest$outboundSchema = z.pipe(
+  z.object({
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
-export function listGlobalRemoteSessionIssuersRequestToJSON(listGlobalRemoteSessionIssuersRequest) {
-    return JSON.stringify(ListGlobalRemoteSessionIssuersRequest$outboundSchema.parse(listGlobalRemoteSessionIssuersRequest));
+  }),
+);
+export function listGlobalRemoteSessionIssuersRequestToJSON(
+  listGlobalRemoteSessionIssuersRequest,
+) {
+  return JSON.stringify(
+    ListGlobalRemoteSessionIssuersRequest$outboundSchema.parse(
+      listGlobalRemoteSessionIssuersRequest,
+    ),
+  );
 }
 /** @internal */
-export const ListGlobalRemoteSessionIssuersResponse$inboundSchema = z.pipe(z.object({
+export const ListGlobalRemoteSessionIssuersResponse$inboundSchema = z.pipe(
+  z.object({
     Result: ListRemoteSessionIssuersResult$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Result": "result",
+      Result: "result",
     });
-}));
+  }),
+);
 export function listGlobalRemoteSessionIssuersResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListGlobalRemoteSessionIssuersResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListGlobalRemoteSessionIssuersResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) =>
+      ListGlobalRemoteSessionIssuersResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListGlobalRemoteSessionIssuersResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=listglobalremotesessionissuers.js.map

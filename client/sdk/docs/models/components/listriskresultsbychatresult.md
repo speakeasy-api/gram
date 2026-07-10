@@ -12,7 +12,7 @@ let value: ListRiskResultsByChatResult = {
 
 ## Fields
 
-| Field                                                                      | Type                                                                       | Required                                                                   | Description                                                                |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `chats`                                                                    | [components.RiskChatSummary](../../models/components/riskchatsummary.md)[] | :heavy_check_mark:                                                         | Risk results grouped by chat.                                              |
-| `nextCursor`                                                               | *string*                                                                   | :heavy_minus_sign:                                                         | Cursor for the next page of results.                                       |
+| Field        | Type                                                                       | Required           | Description                          |
+| ------------ | -------------------------------------------------------------------------- | ------------------ | ------------------------------------ |
+| `chats`      | [components.RiskChatSummary](../../models/components/riskchatsummary.md)[] | :heavy_check_mark: | Risk results grouped by chat.        |
+| `nextCursor` | _string_                                                                   | :heavy_minus_sign: | Cursor for the next page of results. |

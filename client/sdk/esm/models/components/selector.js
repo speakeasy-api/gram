@@ -8,68 +8,78 @@ import { safeParse } from "../../lib/schemas.js";
  * Tool disposition filter (MCP scopes only).
  */
 export const SelectorDisposition = {
-    ReadOnly: "read_only",
-    Destructive: "destructive",
-    Idempotent: "idempotent",
-    OpenWorld: "open_world",
+  ReadOnly: "read_only",
+  Destructive: "destructive",
+  Idempotent: "idempotent",
+  OpenWorld: "open_world",
 };
 /**
  * The kind of resource this selector targets.
  */
 export const ResourceKind = {
-    Project: "project",
-    Mcp: "mcp",
-    Org: "org",
-    Environment: "environment",
-    RiskPolicy: "risk_policy",
-    Chat: "chat",
-    Wildcard: "*",
+  Project: "project",
+  Mcp: "mcp",
+  Org: "org",
+  Environment: "environment",
+  RiskPolicy: "risk_policy",
+  Chat: "chat",
+  Wildcard: "*",
 };
 /** @internal */
 export const SelectorDisposition$inboundSchema = z.enum(SelectorDisposition);
 /** @internal */
-export const SelectorDisposition$outboundSchema = SelectorDisposition$inboundSchema;
+export const SelectorDisposition$outboundSchema =
+  SelectorDisposition$inboundSchema;
 /** @internal */
-export const ResourceKind$inboundSchema = z
-    .enum(ResourceKind);
+export const ResourceKind$inboundSchema = z.enum(ResourceKind);
 /** @internal */
 export const ResourceKind$outboundSchema = ResourceKind$inboundSchema;
 /** @internal */
-export const Selector$inboundSchema = z.pipe(z.object({
+export const Selector$inboundSchema = z.pipe(
+  z.object({
     disposition: z.optional(SelectorDisposition$inboundSchema),
     project_id: z.optional(z.string()),
     resource_id: z.string(),
     resource_kind: ResourceKind$inboundSchema,
     server_url: z.optional(z.string()),
     tool: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "project_id": "projectId",
-        "resource_id": "resourceId",
-        "resource_kind": "resourceKind",
-        "server_url": "serverUrl",
+      project_id: "projectId",
+      resource_id: "resourceId",
+      resource_kind: "resourceKind",
+      server_url: "serverUrl",
     });
-}));
+  }),
+);
 /** @internal */
-export const Selector$outboundSchema = z.pipe(z.object({
+export const Selector$outboundSchema = z.pipe(
+  z.object({
     disposition: z.optional(SelectorDisposition$outboundSchema),
     projectId: z.optional(z.string()),
     resourceId: z.string(),
     resourceKind: ResourceKind$outboundSchema,
     serverUrl: z.optional(z.string()),
     tool: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectId: "project_id",
-        resourceId: "resource_id",
-        resourceKind: "resource_kind",
-        serverUrl: "server_url",
+      projectId: "project_id",
+      resourceId: "resource_id",
+      resourceKind: "resource_kind",
+      serverUrl: "server_url",
     });
-}));
+  }),
+);
 export function selectorToJSON(selector) {
-    return JSON.stringify(Selector$outboundSchema.parse(selector));
+  return JSON.stringify(Selector$outboundSchema.parse(selector));
 }
 export function selectorFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => Selector$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'Selector' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => Selector$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'Selector' from JSON`,
+  );
 }
 //# sourceMappingURL=selector.js.map

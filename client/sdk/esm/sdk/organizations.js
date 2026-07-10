@@ -18,131 +18,167 @@ import { organizationsVerifyOnboardingHooksSetup } from "../funcs/organizationsV
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Organizations extends ClientSDK {
-    /**
-     * createPortalSession organizations
-     *
-     * @remarks
-     * Create a webhook portal session.
-     */
-    async createPortalSession(request, security, options) {
-        return unwrapAsync(organizationsCreatePortalSession(this, request, security, options));
-    }
-    /**
-     * disableWebhooks organizations
-     *
-     * @remarks
-     * Disable  webhooks for the active organization.
-     */
-    async disableWebhooks(request, security, options) {
-        return unwrapAsync(organizationsDisableWebhooks(this, request, security, options));
-    }
-    /**
-     * enableWebhooks organizations
-     *
-     * @remarks
-     * Enable  webhooks for the active organization.
-     */
-    async enableWebhooks(request, security, options) {
-        return unwrapAsync(organizationsEnableWebhooks(this, request, security, options));
-    }
-    /**
-     * generateWorkOSAdminPortalLink organizations
-     *
-     * @remarks
-     * Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).
-     */
-    async generateWorkOSAdminPortalLink(request, security, options) {
-        return unwrapAsync(organizationsGenerateWorkOSAdminPortalLink(this, request, security, options));
-    }
-    /**
-     * get organizations
-     *
-     * @remarks
-     * Get the active organization from the session.
-     */
-    async get(request, security, options) {
-        return unwrapAsync(organizationsGet(this, request, security, options));
-    }
-    /**
-     * getOnboardingStatus organizations
-     *
-     * @remarks
-     * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
-     */
-    async getOnboardingStatus(request, security, options) {
-        return unwrapAsync(organizationsGetOnboardingStatus(this, request, security, options));
-    }
-    /**
-     * listInvites organizations
-     *
-     * @remarks
-     * List pending WorkOS invitations for the active organization.
-     */
-    async listInvites(request, security, options) {
-        return unwrapAsync(organizationsListInvites(this, request, security, options));
-    }
-    /**
-     * listUsers organizations
-     *
-     * @remarks
-     * List users in the active organization from Gram organization_user_relationships.
-     */
-    async listUsers(request, security, options) {
-        return unwrapAsync(organizationsListUsers(this, request, security, options));
-    }
-    /**
-     * removeUser organizations
-     *
-     * @remarks
-     * Remove a user from the active organization in Gram and delete their WorkOS organization membership.
-     */
-    async removeUser(request, security, options) {
-        return unwrapAsync(organizationsRemoveUser(this, request, security, options));
-    }
-    /**
-     * revokeInvite organizations
-     *
-     * @remarks
-     * Revoke a pending WorkOS invitation.
-     */
-    async revokeInvite(request, security, options) {
-        return unwrapAsync(organizationsRevokeInvite(this, request, security, options));
-    }
-    /**
-     * sendEnterpriseAdminOnboardingEmail organizations
-     *
-     * @remarks
-     * Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the Platform Admin onboarding tools.
-     */
-    async sendEnterpriseAdminOnboardingEmail(request, security, options) {
-        return unwrapAsync(organizationsSendEnterpriseAdminOnboardingEmail(this, request, security, options));
-    }
-    /**
-     * sendInvite organizations
-     *
-     * @remarks
-     * Send a WorkOS invitation for the active organization.
-     */
-    async sendInvite(request, security, options) {
-        return unwrapAsync(organizationsSendInvite(this, request, security, options));
-    }
-    /**
-     * updateInviteRole organizations
-     *
-     * @remarks
-     * Change the role assigned to a pending WorkOS invitation.
-     */
-    async updateInviteRole(request, security, options) {
-        return unwrapAsync(organizationsUpdateInviteRole(this, request, security, options));
-    }
-    /**
-     * verifyOnboardingHooksSetup organizations
-     *
-     * @remarks
-     * Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
-     */
-    async verifyOnboardingHooksSetup(request, security, options) {
-        return unwrapAsync(organizationsVerifyOnboardingHooksSetup(this, request, security, options));
-    }
+  /**
+   * createPortalSession organizations
+   *
+   * @remarks
+   * Create a webhook portal session.
+   */
+  async createPortalSession(request, security, options) {
+    return unwrapAsync(
+      organizationsCreatePortalSession(this, request, security, options),
+    );
+  }
+  /**
+   * disableWebhooks organizations
+   *
+   * @remarks
+   * Disable  webhooks for the active organization.
+   */
+  async disableWebhooks(request, security, options) {
+    return unwrapAsync(
+      organizationsDisableWebhooks(this, request, security, options),
+    );
+  }
+  /**
+   * enableWebhooks organizations
+   *
+   * @remarks
+   * Enable  webhooks for the active organization.
+   */
+  async enableWebhooks(request, security, options) {
+    return unwrapAsync(
+      organizationsEnableWebhooks(this, request, security, options),
+    );
+  }
+  /**
+   * generateWorkOSAdminPortalLink organizations
+   *
+   * @remarks
+   * Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).
+   */
+  async generateWorkOSAdminPortalLink(request, security, options) {
+    return unwrapAsync(
+      organizationsGenerateWorkOSAdminPortalLink(
+        this,
+        request,
+        security,
+        options,
+      ),
+    );
+  }
+  /**
+   * get organizations
+   *
+   * @remarks
+   * Get the active organization from the session.
+   */
+  async get(request, security, options) {
+    return unwrapAsync(organizationsGet(this, request, security, options));
+  }
+  /**
+   * getOnboardingStatus organizations
+   *
+   * @remarks
+   * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
+   */
+  async getOnboardingStatus(request, security, options) {
+    return unwrapAsync(
+      organizationsGetOnboardingStatus(this, request, security, options),
+    );
+  }
+  /**
+   * listInvites organizations
+   *
+   * @remarks
+   * List pending WorkOS invitations for the active organization.
+   */
+  async listInvites(request, security, options) {
+    return unwrapAsync(
+      organizationsListInvites(this, request, security, options),
+    );
+  }
+  /**
+   * listUsers organizations
+   *
+   * @remarks
+   * List users in the active organization from Gram organization_user_relationships.
+   */
+  async listUsers(request, security, options) {
+    return unwrapAsync(
+      organizationsListUsers(this, request, security, options),
+    );
+  }
+  /**
+   * removeUser organizations
+   *
+   * @remarks
+   * Remove a user from the active organization in Gram and delete their WorkOS organization membership.
+   */
+  async removeUser(request, security, options) {
+    return unwrapAsync(
+      organizationsRemoveUser(this, request, security, options),
+    );
+  }
+  /**
+   * revokeInvite organizations
+   *
+   * @remarks
+   * Revoke a pending WorkOS invitation.
+   */
+  async revokeInvite(request, security, options) {
+    return unwrapAsync(
+      organizationsRevokeInvite(this, request, security, options),
+    );
+  }
+  /**
+   * sendEnterpriseAdminOnboardingEmail organizations
+   *
+   * @remarks
+   * Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the Platform Admin onboarding tools.
+   */
+  async sendEnterpriseAdminOnboardingEmail(request, security, options) {
+    return unwrapAsync(
+      organizationsSendEnterpriseAdminOnboardingEmail(
+        this,
+        request,
+        security,
+        options,
+      ),
+    );
+  }
+  /**
+   * sendInvite organizations
+   *
+   * @remarks
+   * Send a WorkOS invitation for the active organization.
+   */
+  async sendInvite(request, security, options) {
+    return unwrapAsync(
+      organizationsSendInvite(this, request, security, options),
+    );
+  }
+  /**
+   * updateInviteRole organizations
+   *
+   * @remarks
+   * Change the role assigned to a pending WorkOS invitation.
+   */
+  async updateInviteRole(request, security, options) {
+    return unwrapAsync(
+      organizationsUpdateInviteRole(this, request, security, options),
+    );
+  }
+  /**
+   * verifyOnboardingHooksSetup organizations
+   *
+   * @remarks
+   * Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
+   */
+  async verifyOnboardingHooksSetup(request, security, options) {
+    return unwrapAsync(
+      organizationsVerifyOnboardingHooksSetup(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=organizations.js.map

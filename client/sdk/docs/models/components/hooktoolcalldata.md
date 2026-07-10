@@ -12,14 +12,14 @@ let value: HookToolCallData = {};
 
 ## Fields
 
-| Field                                                    | Type                                                     | Required                                                 | Description                                              |
-| -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
-| `durationMs`                                             | *number*                                                 | :heavy_minus_sign:                                       | Tool execution duration in milliseconds, when reported.  |
-| `error`                                                  | *any*                                                    | :heavy_minus_sign:                                       | Tool error payload.                                      |
-| `id`                                                     | *string*                                                 | :heavy_minus_sign:                                       | Provider tool call identifier.                           |
-| `input`                                                  | *any*                                                    | :heavy_minus_sign:                                       | Tool input payload.                                      |
-| `isInterrupt`                                            | *boolean*                                                | :heavy_minus_sign:                                       | Whether the failure was caused by user interruption.     |
-| `name`                                                   | *string*                                                 | :heavy_minus_sign:                                       | Tool name.                                               |
-| `output`                                                 | *any*                                                    | :heavy_minus_sign:                                       | Tool output payload.                                     |
-| `permissionType`                                         | *string*                                                 | :heavy_minus_sign:                                       | Permission type requested by the agent, when applicable. |
-| `status`                                                 | *string*                                                 | :heavy_minus_sign:                                       | Provider-reported tool call status, when available.      |
+| Field            | Type      | Required           | Description                                              |
+| ---------------- | --------- | ------------------ | -------------------------------------------------------- |
+| `durationMs`     | _number_  | :heavy_minus_sign: | Tool execution duration in milliseconds, when reported.  |
+| `error`          | _any_     | :heavy_minus_sign: | Tool error payload.                                      |
+| `id`             | _string_  | :heavy_minus_sign: | Provider tool call identifier.                           |
+| `input`          | _any_     | :heavy_minus_sign: | Tool input payload.                                      |
+| `isInterrupt`    | _boolean_ | :heavy_minus_sign: | Whether the failure was caused by user interruption.     |
+| `name`           | _string_  | :heavy_minus_sign: | Tool name.                                               |
+| `output`         | _any_     | :heavy_minus_sign: | Tool output payload.                                     |
+| `permissionType` | _string_  | :heavy_minus_sign: | Permission type requested by the agent, when applicable. |
+| `status`         | _string_  | :heavy_minus_sign: | Provider-reported tool call status, when available.      |

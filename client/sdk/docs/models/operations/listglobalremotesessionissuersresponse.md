@@ -27,6 +27,6 @@ let value: ListGlobalRemoteSessionIssuersResponse = {
 
 ## Fields
 
-| Field                                                                                                  | Type                                                                                                   | Required                                                                                               | Description                                                                                            |
-| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `result`                                                                                               | [components.ListRemoteSessionIssuersResult](../../models/components/listremotesessionissuersresult.md) | :heavy_check_mark:                                                                                     | N/A                                                                                                    |
+| Field    | Type                                                                                                   | Required           | Description |
+| -------- | ------------------------------------------------------------------------------------------------------ | ------------------ | ----------- |
+| `result` | [components.ListRemoteSessionIssuersResult](../../models/components/listremotesessionissuersresult.md) | :heavy_check_mark: | N/A         |

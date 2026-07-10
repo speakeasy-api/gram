@@ -3,61 +3,101 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { FetchOpenAPIv3FromURLForm2$outboundSchema, } from "../components/fetchopenapiv3fromurlform2.js";
+import { FetchOpenAPIv3FromURLForm2$outboundSchema } from "../components/fetchopenapiv3fromurlform2.js";
 /** @internal */
-export const FetchOpenAPIv3FromURLSecurityOption1$outboundSchema = z.pipe(z.object({
+export const FetchOpenAPIv3FromURLSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function fetchOpenAPIv3FromURLSecurityOption1ToJSON(fetchOpenAPIv3FromURLSecurityOption1) {
-    return JSON.stringify(FetchOpenAPIv3FromURLSecurityOption1$outboundSchema.parse(fetchOpenAPIv3FromURLSecurityOption1));
+  }),
+);
+export function fetchOpenAPIv3FromURLSecurityOption1ToJSON(
+  fetchOpenAPIv3FromURLSecurityOption1,
+) {
+  return JSON.stringify(
+    FetchOpenAPIv3FromURLSecurityOption1$outboundSchema.parse(
+      fetchOpenAPIv3FromURLSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const FetchOpenAPIv3FromURLSecurityOption2$outboundSchema = z.pipe(z.object({
+export const FetchOpenAPIv3FromURLSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function fetchOpenAPIv3FromURLSecurityOption2ToJSON(fetchOpenAPIv3FromURLSecurityOption2) {
-    return JSON.stringify(FetchOpenAPIv3FromURLSecurityOption2$outboundSchema.parse(fetchOpenAPIv3FromURLSecurityOption2));
+  }),
+);
+export function fetchOpenAPIv3FromURLSecurityOption2ToJSON(
+  fetchOpenAPIv3FromURLSecurityOption2,
+) {
+  return JSON.stringify(
+    FetchOpenAPIv3FromURLSecurityOption2$outboundSchema.parse(
+      fetchOpenAPIv3FromURLSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const FetchOpenAPIv3FromURLSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => FetchOpenAPIv3FromURLSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => FetchOpenAPIv3FromURLSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const FetchOpenAPIv3FromURLSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => FetchOpenAPIv3FromURLSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => FetchOpenAPIv3FromURLSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function fetchOpenAPIv3FromURLSecurityToJSON(fetchOpenAPIv3FromURLSecurity) {
-    return JSON.stringify(FetchOpenAPIv3FromURLSecurity$outboundSchema.parse(fetchOpenAPIv3FromURLSecurity));
+  }),
+);
+export function fetchOpenAPIv3FromURLSecurityToJSON(
+  fetchOpenAPIv3FromURLSecurity,
+) {
+  return JSON.stringify(
+    FetchOpenAPIv3FromURLSecurity$outboundSchema.parse(
+      fetchOpenAPIv3FromURLSecurity,
+    ),
+  );
 }
 /** @internal */
-export const FetchOpenAPIv3FromURLRequest$outboundSchema = z.pipe(z.object({
+export const FetchOpenAPIv3FromURLRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     fetchOpenAPIv3FromURLForm2: FetchOpenAPIv3FromURLForm2$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        gramSession: "Gram-Session",
-        fetchOpenAPIv3FromURLForm2: "FetchOpenAPIv3FromURLForm2",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      fetchOpenAPIv3FromURLForm2: "FetchOpenAPIv3FromURLForm2",
     });
-}));
-export function fetchOpenAPIv3FromURLRequestToJSON(fetchOpenAPIv3FromURLRequest) {
-    return JSON.stringify(FetchOpenAPIv3FromURLRequest$outboundSchema.parse(fetchOpenAPIv3FromURLRequest));
+  }),
+);
+export function fetchOpenAPIv3FromURLRequestToJSON(
+  fetchOpenAPIv3FromURLRequest,
+) {
+  return JSON.stringify(
+    FetchOpenAPIv3FromURLRequest$outboundSchema.parse(
+      fetchOpenAPIv3FromURLRequest,
+    ),
+  );
 }
 //# sourceMappingURL=fetchopenapiv3fromurl.js.map

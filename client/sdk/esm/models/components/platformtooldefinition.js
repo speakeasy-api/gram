@@ -4,17 +4,21 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { CanonicalToolAttributes$inboundSchema, } from "./canonicaltoolattributes.js";
-import { ToolAnnotations$inboundSchema, } from "./toolannotations.js";
+import { CanonicalToolAttributes$inboundSchema } from "./canonicaltoolattributes.js";
+import { ToolAnnotations$inboundSchema } from "./toolannotations.js";
 import { ToolVariation$inboundSchema } from "./toolvariation.js";
 /** @internal */
-export const PlatformToolDefinition$inboundSchema = z.pipe(z.object({
+export const PlatformToolDefinition$inboundSchema = z.pipe(
+  z.object({
     annotations: z.optional(ToolAnnotations$inboundSchema),
     canonical: z.optional(CanonicalToolAttributes$inboundSchema),
     canonical_name: z.string(),
     confirm: z.optional(z.string()),
     confirm_prompt: z.optional(z.string()),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     description: z.string(),
     id: z.string(),
     name: z.string(),
@@ -26,23 +30,32 @@ export const PlatformToolDefinition$inboundSchema = z.pipe(z.object({
     source_slug: z.string(),
     summarizer: z.optional(z.string()),
     tool_urn: z.string(),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     variation: z.optional(ToolVariation$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "canonical_name": "canonicalName",
-        "confirm_prompt": "confirmPrompt",
-        "created_at": "createdAt",
-        "owner_id": "ownerId",
-        "owner_kind": "ownerKind",
-        "project_id": "projectId",
-        "schema_version": "schemaVersion",
-        "source_slug": "sourceSlug",
-        "tool_urn": "toolUrn",
-        "updated_at": "updatedAt",
+      canonical_name: "canonicalName",
+      confirm_prompt: "confirmPrompt",
+      created_at: "createdAt",
+      owner_id: "ownerId",
+      owner_kind: "ownerKind",
+      project_id: "projectId",
+      schema_version: "schemaVersion",
+      source_slug: "sourceSlug",
+      tool_urn: "toolUrn",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function platformToolDefinitionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => PlatformToolDefinition$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'PlatformToolDefinition' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => PlatformToolDefinition$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'PlatformToolDefinition' from JSON`,
+  );
 }
 //# sourceMappingURL=platformtooldefinition.js.map

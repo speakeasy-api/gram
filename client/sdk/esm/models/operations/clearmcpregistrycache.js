@@ -4,59 +4,99 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ClearMCPRegistryCacheSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ClearMCPRegistryCacheSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function clearMCPRegistryCacheSecurityOption1ToJSON(clearMCPRegistryCacheSecurityOption1) {
-    return JSON.stringify(ClearMCPRegistryCacheSecurityOption1$outboundSchema.parse(clearMCPRegistryCacheSecurityOption1));
+  }),
+);
+export function clearMCPRegistryCacheSecurityOption1ToJSON(
+  clearMCPRegistryCacheSecurityOption1,
+) {
+  return JSON.stringify(
+    ClearMCPRegistryCacheSecurityOption1$outboundSchema.parse(
+      clearMCPRegistryCacheSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ClearMCPRegistryCacheSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ClearMCPRegistryCacheSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function clearMCPRegistryCacheSecurityOption2ToJSON(clearMCPRegistryCacheSecurityOption2) {
-    return JSON.stringify(ClearMCPRegistryCacheSecurityOption2$outboundSchema.parse(clearMCPRegistryCacheSecurityOption2));
+  }),
+);
+export function clearMCPRegistryCacheSecurityOption2ToJSON(
+  clearMCPRegistryCacheSecurityOption2,
+) {
+  return JSON.stringify(
+    ClearMCPRegistryCacheSecurityOption2$outboundSchema.parse(
+      clearMCPRegistryCacheSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ClearMCPRegistryCacheSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ClearMCPRegistryCacheSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ClearMCPRegistryCacheSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ClearMCPRegistryCacheSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ClearMCPRegistryCacheSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ClearMCPRegistryCacheSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function clearMCPRegistryCacheSecurityToJSON(clearMCPRegistryCacheSecurity) {
-    return JSON.stringify(ClearMCPRegistryCacheSecurity$outboundSchema.parse(clearMCPRegistryCacheSecurity));
+  }),
+);
+export function clearMCPRegistryCacheSecurityToJSON(
+  clearMCPRegistryCacheSecurity,
+) {
+  return JSON.stringify(
+    ClearMCPRegistryCacheSecurity$outboundSchema.parse(
+      clearMCPRegistryCacheSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ClearMCPRegistryCacheRequest$outboundSchema = z.pipe(z.object({
+export const ClearMCPRegistryCacheRequest$outboundSchema = z.pipe(
+  z.object({
     registryId: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        registryId: "registry_id",
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
+      registryId: "registry_id",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
     });
-}));
-export function clearMCPRegistryCacheRequestToJSON(clearMCPRegistryCacheRequest) {
-    return JSON.stringify(ClearMCPRegistryCacheRequest$outboundSchema.parse(clearMCPRegistryCacheRequest));
+  }),
+);
+export function clearMCPRegistryCacheRequestToJSON(
+  clearMCPRegistryCacheRequest,
+) {
+  return JSON.stringify(
+    ClearMCPRegistryCacheRequest$outboundSchema.parse(
+      clearMCPRegistryCacheRequest,
+    ),
+  );
 }
 //# sourceMappingURL=clearmcpregistrycache.js.map

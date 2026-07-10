@@ -22,7 +22,7 @@ let value: ListChatsResult = {
 
 ## Fields
 
-| Field                                                                | Type                                                                 | Required                                                             | Description                                                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `chats`                                                              | [components.ChatOverview](../../models/components/chatoverview.md)[] | :heavy_check_mark:                                                   | The list of chats                                                    |
-| `total`                                                              | *number*                                                             | :heavy_check_mark:                                                   | Total number of chats (before pagination)                            |
+| Field   | Type                                                                 | Required           | Description                               |
+| ------- | -------------------------------------------------------------------- | ------------------ | ----------------------------------------- |
+| `chats` | [components.ChatOverview](../../models/components/chatoverview.md)[] | :heavy_check_mark: | The list of chats                         |
+| `total` | _number_                                                             | :heavy_check_mark: | Total number of chats (before pagination) |

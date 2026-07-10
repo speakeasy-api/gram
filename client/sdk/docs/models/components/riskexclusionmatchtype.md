@@ -13,5 +13,5 @@ let value: RiskExclusionMatchType = "entity_type";
 ## Values
 
 ```typescript
-"exact" | "regex" | "rule_id" | "source" | "entity_type"
+"exact" | "regex" | "rule_id" | "source" | "entity_type";
 ```

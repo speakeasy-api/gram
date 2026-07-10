@@ -13,5 +13,12 @@ let value: FeatureName = "tool_io_logs";
 ## Values
 
 ```typescript
-"logs" | "tool_io_logs" | "session_capture" | "authz_challenge_logging" | "webhooks" | "sso" | "scim" | "observability_mode"
+"logs" |
+  "tool_io_logs" |
+  "session_capture" |
+  "authz_challenge_logging" |
+  "webhooks" |
+  "sso" |
+  "scim" |
+  "observability_mode";
 ```

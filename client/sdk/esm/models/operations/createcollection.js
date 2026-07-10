@@ -3,33 +3,43 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateRequestBody2$outboundSchema, } from "../components/createrequestbody2.js";
+import { CreateRequestBody2$outboundSchema } from "../components/createrequestbody2.js";
 /** @internal */
-export const CreateCollectionSecurity$outboundSchema = z.pipe(z.object({
+export const CreateCollectionSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
     apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
     });
-}));
+  }),
+);
 export function createCollectionSecurityToJSON(createCollectionSecurity) {
-    return JSON.stringify(CreateCollectionSecurity$outboundSchema.parse(createCollectionSecurity));
+  return JSON.stringify(
+    CreateCollectionSecurity$outboundSchema.parse(createCollectionSecurity),
+  );
 }
 /** @internal */
-export const CreateCollectionRequest$outboundSchema = z.pipe(z.object({
+export const CreateCollectionRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     createRequestBody2: CreateRequestBody2$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        createRequestBody2: "CreateRequestBody2",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      createRequestBody2: "CreateRequestBody2",
     });
-}));
+  }),
+);
 export function createCollectionRequestToJSON(createCollectionRequest) {
-    return JSON.stringify(CreateCollectionRequest$outboundSchema.parse(createCollectionRequest));
+  return JSON.stringify(
+    CreateCollectionRequest$outboundSchema.parse(createCollectionRequest),
+  );
 }
 //# sourceMappingURL=createcollection.js.map

@@ -15,8 +15,8 @@ let value: CreateResponseRequest = {
 
 ## Fields
 
-| Field                                                                              | Type                                                                               | Required                                                                           | Description                                                                        |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `gramKey`                                                                          | *string*                                                                           | :heavy_minus_sign:                                                                 | API Key header                                                                     |
-| `gramProject`                                                                      | *string*                                                                           | :heavy_minus_sign:                                                                 | project header                                                                     |
-| `workflowAgentRequest`                                                             | [components.WorkflowAgentRequest](../../models/components/workflowagentrequest.md) | :heavy_check_mark:                                                                 | N/A                                                                                |
+| Field                  | Type                                                                               | Required           | Description    |
+| ---------------------- | ---------------------------------------------------------------------------------- | ------------------ | -------------- |
+| `gramKey`              | _string_                                                                           | :heavy_minus_sign: | API Key header |
+| `gramProject`          | _string_                                                                           | :heavy_minus_sign: | project header |
+| `workflowAgentRequest` | [components.WorkflowAgentRequest](../../models/components/workflowagentrequest.md) | :heavy_check_mark: | N/A            |

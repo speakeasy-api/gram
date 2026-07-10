@@ -4,26 +4,37 @@
 import { assetsServeChatAttachmentSigned } from "../funcs/assetsServeChatAttachmentSigned.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchServeChatAttachmentSigned(queryClient, client$, request, options) {
-    return queryClient.prefetchQuery({
-        ...buildServeChatAttachmentSignedQuery(client$, request, options),
-    });
+export function prefetchServeChatAttachmentSigned(
+  queryClient,
+  client$,
+  request,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildServeChatAttachmentSignedQuery(client$, request, options),
+  });
 }
 export function buildServeChatAttachmentSignedQuery(client$, request, options) {
-    return {
-        queryKey: queryKeyServeChatAttachmentSigned({ token: request.token }),
-        queryFn: async function serveChatAttachmentSignedQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(assetsServeChatAttachmentSigned(client$, request, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyServeChatAttachmentSigned({ token: request.token }),
+    queryFn: async function serveChatAttachmentSignedQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        assetsServeChatAttachmentSigned(client$, request, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyServeChatAttachmentSigned(parameters) {
-    return ["@gram/client", "assets", "serveChatAttachmentSigned", parameters];
+  return ["@gram/client", "assets", "serveChatAttachmentSigned", parameters];
 }
 //# sourceMappingURL=serveChatAttachmentSigned.core.js.map

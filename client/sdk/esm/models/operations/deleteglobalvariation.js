@@ -4,59 +4,99 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteGlobalVariationSecurityOption1$outboundSchema = z.pipe(z.object({
+export const DeleteGlobalVariationSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function deleteGlobalVariationSecurityOption1ToJSON(deleteGlobalVariationSecurityOption1) {
-    return JSON.stringify(DeleteGlobalVariationSecurityOption1$outboundSchema.parse(deleteGlobalVariationSecurityOption1));
+  }),
+);
+export function deleteGlobalVariationSecurityOption1ToJSON(
+  deleteGlobalVariationSecurityOption1,
+) {
+  return JSON.stringify(
+    DeleteGlobalVariationSecurityOption1$outboundSchema.parse(
+      deleteGlobalVariationSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const DeleteGlobalVariationSecurityOption2$outboundSchema = z.pipe(z.object({
+export const DeleteGlobalVariationSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function deleteGlobalVariationSecurityOption2ToJSON(deleteGlobalVariationSecurityOption2) {
-    return JSON.stringify(DeleteGlobalVariationSecurityOption2$outboundSchema.parse(deleteGlobalVariationSecurityOption2));
+  }),
+);
+export function deleteGlobalVariationSecurityOption2ToJSON(
+  deleteGlobalVariationSecurityOption2,
+) {
+  return JSON.stringify(
+    DeleteGlobalVariationSecurityOption2$outboundSchema.parse(
+      deleteGlobalVariationSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const DeleteGlobalVariationSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => DeleteGlobalVariationSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => DeleteGlobalVariationSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const DeleteGlobalVariationSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => DeleteGlobalVariationSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => DeleteGlobalVariationSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function deleteGlobalVariationSecurityToJSON(deleteGlobalVariationSecurity) {
-    return JSON.stringify(DeleteGlobalVariationSecurity$outboundSchema.parse(deleteGlobalVariationSecurity));
+  }),
+);
+export function deleteGlobalVariationSecurityToJSON(
+  deleteGlobalVariationSecurity,
+) {
+  return JSON.stringify(
+    DeleteGlobalVariationSecurity$outboundSchema.parse(
+      deleteGlobalVariationSecurity,
+    ),
+  );
 }
 /** @internal */
-export const DeleteGlobalVariationRequest$outboundSchema = z.pipe(z.object({
+export const DeleteGlobalVariationRequest$outboundSchema = z.pipe(
+  z.object({
     variationId: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        variationId: "variation_id",
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
+      variationId: "variation_id",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
     });
-}));
-export function deleteGlobalVariationRequestToJSON(deleteGlobalVariationRequest) {
-    return JSON.stringify(DeleteGlobalVariationRequest$outboundSchema.parse(deleteGlobalVariationRequest));
+  }),
+);
+export function deleteGlobalVariationRequestToJSON(
+  deleteGlobalVariationRequest,
+) {
+  return JSON.stringify(
+    DeleteGlobalVariationRequest$outboundSchema.parse(
+      deleteGlobalVariationRequest,
+    ),
+  );
 }
 //# sourceMappingURL=deleteglobalvariation.js.map

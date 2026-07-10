@@ -12,6 +12,6 @@ let value: ExportMcpMetadataRequestBody = {
 
 ## Fields
 
-| Field                                      | Type                                       | Required                                   | Description                                |
-| ------------------------------------------ | ------------------------------------------ | ------------------------------------------ | ------------------------------------------ |
-| `mcpSlug`                                  | *string*                                   | :heavy_check_mark:                         | The MCP server slug (from the install URL) |
+| Field     | Type     | Required           | Description                                |
+| --------- | -------- | ------------------ | ------------------------------------------ |
+| `mcpSlug` | _string_ | :heavy_check_mark: | The MCP server slug (from the install URL) |

@@ -29,6 +29,6 @@ let value: ListRolesResult = {
 
 ## Fields
 
-| Field                                                | Type                                                 | Required                                             | Description                                          |
-| ---------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------- |
-| `roles`                                              | [components.Role](../../models/components/role.md)[] | :heavy_check_mark:                                   | The roles in your organization.                      |
+| Field   | Type                                                 | Required           | Description                     |
+| ------- | ---------------------------------------------------- | ------------------ | ------------------------------- |
+| `roles` | [components.Role](../../models/components/role.md)[] | :heavy_check_mark: | The roles in your organization. |

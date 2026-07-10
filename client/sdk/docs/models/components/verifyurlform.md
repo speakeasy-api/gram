@@ -15,7 +15,7 @@ let value: VerifyURLForm = {
 
 ## Fields
 
-| Field                                                               | Type                                                                | Required                                                            | Description                                                         |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `transportType`                                                     | *string*                                                            | :heavy_check_mark:                                                  | The transport type for the remote MCP server (e.g. streamable-http) |
-| `url`                                                               | *string*                                                            | :heavy_check_mark:                                                  | The URL of the remote MCP server to probe                           |
+| Field           | Type     | Required           | Description                                                         |
+| --------------- | -------- | ------------------ | ------------------------------------------------------------------- |
+| `transportType` | _string_ | :heavy_check_mark: | The transport type for the remote MCP server (e.g. streamable-http) |
+| `url`           | _string_ | :heavy_check_mark: | The URL of the remote MCP server to probe                           |

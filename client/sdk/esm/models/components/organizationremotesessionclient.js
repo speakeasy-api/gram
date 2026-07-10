@@ -4,19 +4,26 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { RemoteSessionClient$inboundSchema, } from "./remotesessionclient.js";
+import { RemoteSessionClient$inboundSchema } from "./remotesessionclient.js";
 /** @internal */
-export const OrganizationRemoteSessionClient$inboundSchema = z.pipe(z.object({
+export const OrganizationRemoteSessionClient$inboundSchema = z.pipe(
+  z.object({
     active_session_count: z.int(),
     client: RemoteSessionClient$inboundSchema,
     mcp_server_count: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "active_session_count": "activeSessionCount",
-        "mcp_server_count": "mcpServerCount",
+      active_session_count: "activeSessionCount",
+      mcp_server_count: "mcpServerCount",
     });
-}));
+  }),
+);
 export function organizationRemoteSessionClientFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => OrganizationRemoteSessionClient$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'OrganizationRemoteSessionClient' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => OrganizationRemoteSessionClient$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'OrganizationRemoteSessionClient' from JSON`,
+  );
 }
 //# sourceMappingURL=organizationremotesessionclient.js.map

@@ -13,5 +13,5 @@ let value: UpdateTriggerInstanceFormStatus = "paused";
 ## Values
 
 ```typescript
-"active" | "paused"
+"active" | "paused";
 ```

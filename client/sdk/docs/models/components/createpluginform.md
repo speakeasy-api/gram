@@ -12,8 +12,8 @@ let value: CreatePluginForm = {
 
 ## Fields
 
-| Field                                                              | Type                                                               | Required                                                           | Description                                                        |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `description`                                                      | *string*                                                           | :heavy_minus_sign:                                                 | Optional description.                                              |
-| `name`                                                             | *string*                                                           | :heavy_check_mark:                                                 | Display name for the plugin.                                       |
-| `slug`                                                             | *string*                                                           | :heavy_minus_sign:                                                 | Optional URL-safe identifier. Auto-generated from name if omitted. |
+| Field         | Type     | Required           | Description                                                        |
+| ------------- | -------- | ------------------ | ------------------------------------------------------------------ |
+| `description` | _string_ | :heavy_minus_sign: | Optional description.                                              |
+| `name`        | _string_ | :heavy_check_mark: | Display name for the plugin.                                       |
+| `slug`        | _string_ | :heavy_minus_sign: | Optional URL-safe identifier. Auto-generated from name if omitted. |

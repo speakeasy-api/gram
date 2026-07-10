@@ -12,6 +12,6 @@ let value: RBACStatus = {
 
 ## Fields
 
-| Field                                                                | Type                                                                 | Required                                                             | Description                                                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `rbacEnabled`                                                        | *boolean*                                                            | :heavy_check_mark:                                                   | Whether RBAC enforcement is currently enabled for this organization. |
+| Field         | Type      | Required           | Description                                                          |
+| ------------- | --------- | ------------------ | -------------------------------------------------------------------- |
+| `rbacEnabled` | _boolean_ | :heavy_check_mark: | Whether RBAC enforcement is currently enabled for this organization. |

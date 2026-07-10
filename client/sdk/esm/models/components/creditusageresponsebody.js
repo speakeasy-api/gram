@@ -5,16 +5,23 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const CreditUsageResponseBody$inboundSchema = z.pipe(z.object({
+export const CreditUsageResponseBody$inboundSchema = z.pipe(
+  z.object({
     credits_used: z.number(),
     monthly_credits: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "credits_used": "creditsUsed",
-        "monthly_credits": "monthlyCredits",
+      credits_used: "creditsUsed",
+      monthly_credits: "monthlyCredits",
     });
-}));
+  }),
+);
 export function creditUsageResponseBodyFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => CreditUsageResponseBody$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'CreditUsageResponseBody' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => CreditUsageResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CreditUsageResponseBody' from JSON`,
+  );
 }
 //# sourceMappingURL=creditusageresponsebody.js.map

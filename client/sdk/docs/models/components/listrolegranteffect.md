@@ -13,5 +13,5 @@ let value: ListRoleGrantEffect = "deny";
 ## Values
 
 ```typescript
-"allow" | "deny"
+"allow" | "deny";
 ```

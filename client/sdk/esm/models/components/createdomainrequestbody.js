@@ -4,15 +4,20 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CreateDomainRequestBody$outboundSchema = z.pipe(z.object({
+export const CreateDomainRequestBody$outboundSchema = z.pipe(
+  z.object({
     domain: z.string(),
     ipAllowlist: z.optional(z.array(z.string())),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        ipAllowlist: "ip_allowlist",
+      ipAllowlist: "ip_allowlist",
     });
-}));
+  }),
+);
 export function createDomainRequestBodyToJSON(createDomainRequestBody) {
-    return JSON.stringify(CreateDomainRequestBody$outboundSchema.parse(createDomainRequestBody));
+  return JSON.stringify(
+    CreateDomainRequestBody$outboundSchema.parse(createDomainRequestBody),
+  );
 }
 //# sourceMappingURL=createdomainrequestbody.js.map

@@ -7,28 +7,38 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Severity level for findings produced by this rule.
  */
 export const UpdateCustomDetectionRuleRequestBodySeverity = {
-    Info: "info",
-    Low: "low",
-    Medium: "medium",
-    High: "high",
-    Critical: "critical",
+  Info: "info",
+  Low: "low",
+  Medium: "medium",
+  High: "high",
+  Critical: "critical",
 };
 /** @internal */
-export const UpdateCustomDetectionRuleRequestBodySeverity$outboundSchema = z.enum(UpdateCustomDetectionRuleRequestBodySeverity);
+export const UpdateCustomDetectionRuleRequestBodySeverity$outboundSchema =
+  z.enum(UpdateCustomDetectionRuleRequestBodySeverity);
 /** @internal */
-export const UpdateCustomDetectionRuleRequestBody$outboundSchema = z.pipe(z.object({
+export const UpdateCustomDetectionRuleRequestBody$outboundSchema = z.pipe(
+  z.object({
     description: z.optional(z.string()),
     detectionExpr: z.optional(z.string()),
     id: z.string(),
     regex: z.optional(z.string()),
     severity: UpdateCustomDetectionRuleRequestBodySeverity$outboundSchema,
     title: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        detectionExpr: "detection_expr",
+      detectionExpr: "detection_expr",
     });
-}));
-export function updateCustomDetectionRuleRequestBodyToJSON(updateCustomDetectionRuleRequestBody) {
-    return JSON.stringify(UpdateCustomDetectionRuleRequestBody$outboundSchema.parse(updateCustomDetectionRuleRequestBody));
+  }),
+);
+export function updateCustomDetectionRuleRequestBodyToJSON(
+  updateCustomDetectionRuleRequestBody,
+) {
+  return JSON.stringify(
+    UpdateCustomDetectionRuleRequestBody$outboundSchema.parse(
+      updateCustomDetectionRuleRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=updatecustomdetectionrulerequestbody.js.map

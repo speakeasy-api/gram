@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { MCPRegistry$inboundSchema } from "./mcpregistry.js";
 /** @internal */
 export const ListRegistriesResponseBody$inboundSchema = z.object({
-    registries: z.array(MCPRegistry$inboundSchema),
+  registries: z.array(MCPRegistry$inboundSchema),
 });
 export function listRegistriesResponseBodyFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListRegistriesResponseBody$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListRegistriesResponseBody' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListRegistriesResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListRegistriesResponseBody' from JSON`,
+  );
 }
 //# sourceMappingURL=listregistriesresponsebody.js.map

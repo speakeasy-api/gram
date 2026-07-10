@@ -36,8 +36,8 @@ let value: ShadowMCPApprovalDecisionResult = {
 
 ## Fields
 
-| Field                                                                                      | Type                                                                                       | Required                                                                                   | Description                                                                                |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `request`                                                                                  | [components.ShadowMCPApprovalRequest](../../models/components/shadowmcpapprovalrequest.md) | :heavy_check_mark:                                                                         | N/A                                                                                        |
-| `rule`                                                                                     | [components.ShadowMCPAccessRule](../../models/components/shadowmcpaccessrule.md)           | :heavy_minus_sign:                                                                         | N/A                                                                                        |
-| `rules`                                                                                    | [components.ShadowMCPAccessRule](../../models/components/shadowmcpaccessrule.md)[]         | :heavy_check_mark:                                                                         | N/A                                                                                        |
+| Field     | Type                                                                                       | Required           | Description |
+| --------- | ------------------------------------------------------------------------------------------ | ------------------ | ----------- |
+| `request` | [components.ShadowMCPApprovalRequest](../../models/components/shadowmcpapprovalrequest.md) | :heavy_check_mark: | N/A         |
+| `rule`    | [components.ShadowMCPAccessRule](../../models/components/shadowmcpaccessrule.md)           | :heavy_minus_sign: | N/A         |
+| `rules`   | [components.ShadowMCPAccessRule](../../models/components/shadowmcpaccessrule.md)[]         | :heavy_check_mark: | N/A         |

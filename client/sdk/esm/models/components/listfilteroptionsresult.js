@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { FilterOption$inboundSchema } from "./filteroption.js";
 /** @internal */
 export const ListFilterOptionsResult$inboundSchema = z.object({
-    options: z.array(FilterOption$inboundSchema),
+  options: z.array(FilterOption$inboundSchema),
 });
 export function listFilterOptionsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListFilterOptionsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListFilterOptionsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListFilterOptionsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListFilterOptionsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listfilteroptionsresult.js.map

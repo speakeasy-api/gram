@@ -12,7 +12,7 @@ let value: SendInviteRequestBody = {
 
 ## Fields
 
-| Field                             | Type                              | Required                          | Description                       |
-| --------------------------------- | --------------------------------- | --------------------------------- | --------------------------------- |
-| `email`                           | *string*                          | :heavy_check_mark:                | Email address to invite.          |
-| `roleId`                          | *string*                          | :heavy_minus_sign:                | Optional role ID for the invitee. |
+| Field    | Type     | Required           | Description                       |
+| -------- | -------- | ------------------ | --------------------------------- |
+| `email`  | _string_ | :heavy_check_mark: | Email address to invite.          |
+| `roleId` | _string_ | :heavy_minus_sign: | Optional role ID for the invitee. |

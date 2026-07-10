@@ -4,66 +4,104 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const UploadOpenAPIv3AssetSecurityOption1$outboundSchema = z.pipe(z.object({
+export const UploadOpenAPIv3AssetSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function uploadOpenAPIv3AssetSecurityOption1ToJSON(uploadOpenAPIv3AssetSecurityOption1) {
-    return JSON.stringify(UploadOpenAPIv3AssetSecurityOption1$outboundSchema.parse(uploadOpenAPIv3AssetSecurityOption1));
+  }),
+);
+export function uploadOpenAPIv3AssetSecurityOption1ToJSON(
+  uploadOpenAPIv3AssetSecurityOption1,
+) {
+  return JSON.stringify(
+    UploadOpenAPIv3AssetSecurityOption1$outboundSchema.parse(
+      uploadOpenAPIv3AssetSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const UploadOpenAPIv3AssetSecurityOption2$outboundSchema = z.pipe(z.object({
+export const UploadOpenAPIv3AssetSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function uploadOpenAPIv3AssetSecurityOption2ToJSON(uploadOpenAPIv3AssetSecurityOption2) {
-    return JSON.stringify(UploadOpenAPIv3AssetSecurityOption2$outboundSchema.parse(uploadOpenAPIv3AssetSecurityOption2));
+  }),
+);
+export function uploadOpenAPIv3AssetSecurityOption2ToJSON(
+  uploadOpenAPIv3AssetSecurityOption2,
+) {
+  return JSON.stringify(
+    UploadOpenAPIv3AssetSecurityOption2$outboundSchema.parse(
+      uploadOpenAPIv3AssetSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const UploadOpenAPIv3AssetSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => UploadOpenAPIv3AssetSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => UploadOpenAPIv3AssetSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const UploadOpenAPIv3AssetSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => UploadOpenAPIv3AssetSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => UploadOpenAPIv3AssetSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function uploadOpenAPIv3AssetSecurityToJSON(uploadOpenAPIv3AssetSecurity) {
-    return JSON.stringify(UploadOpenAPIv3AssetSecurity$outboundSchema.parse(uploadOpenAPIv3AssetSecurity));
+  }),
+);
+export function uploadOpenAPIv3AssetSecurityToJSON(
+  uploadOpenAPIv3AssetSecurity,
+) {
+  return JSON.stringify(
+    UploadOpenAPIv3AssetSecurity$outboundSchema.parse(
+      uploadOpenAPIv3AssetSecurity,
+    ),
+  );
 }
 /** @internal */
-export const UploadOpenAPIv3AssetRequest$outboundSchema = z.pipe(z.object({
+export const UploadOpenAPIv3AssetRequest$outboundSchema = z.pipe(
+  z.object({
     contentLength: z.int(),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     requestBody: z.union([
-        z.custom(x => x instanceof ReadableStream),
-        z.custom(x => x instanceof Blob),
-        z.custom(x => x instanceof ArrayBuffer),
-        z.custom(x => x instanceof Uint8Array),
+      z.custom((x) => x instanceof ReadableStream),
+      z.custom((x) => x instanceof Blob),
+      z.custom((x) => x instanceof ArrayBuffer),
+      z.custom((x) => x instanceof Uint8Array),
     ]),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        contentLength: "Content-Length",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        gramSession: "Gram-Session",
-        requestBody: "RequestBody",
+      contentLength: "Content-Length",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      requestBody: "RequestBody",
     });
-}));
+  }),
+);
 export function uploadOpenAPIv3AssetRequestToJSON(uploadOpenAPIv3AssetRequest) {
-    return JSON.stringify(UploadOpenAPIv3AssetRequest$outboundSchema.parse(uploadOpenAPIv3AssetRequest));
+  return JSON.stringify(
+    UploadOpenAPIv3AssetRequest$outboundSchema.parse(
+      uploadOpenAPIv3AssetRequest,
+    ),
+  );
 }
 //# sourceMappingURL=uploadopenapiv3asset.js.map

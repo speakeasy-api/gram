@@ -13,5 +13,5 @@ let value: RenderTemplateRequestBodyEngine = "mustache";
 ## Values
 
 ```typescript
-"mustache"
+"mustache";
 ```

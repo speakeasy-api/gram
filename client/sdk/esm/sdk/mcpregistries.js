@@ -8,41 +8,49 @@ import { mcpRegistriesListRegistries } from "../funcs/mcpRegistriesListRegistrie
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class McpRegistries extends ClientSDK {
-    /**
-     * clearCache mcpRegistries
-     *
-     * @remarks
-     * Clear the registry cache for a specific registry (admin only)
-     */
-    async clearCache(request, security, options) {
-        return unwrapAsync(mcpRegistriesClearCache(this, request, security, options));
-    }
-    /**
-     * getServerDetails mcpRegistries
-     *
-     * @remarks
-     * Get detailed information about an MCP server including remotes
-     */
-    async getServerDetails(request, security, options) {
-        return unwrapAsync(mcpRegistriesGetServerDetails(this, request, security, options));
-    }
-    /**
-     * listCatalog mcpRegistries
-     *
-     * @remarks
-     * List available MCP servers from configured registries
-     */
-    async listCatalog(request, security, options) {
-        return unwrapAsync(mcpRegistriesListCatalog(this, request, security, options));
-    }
-    /**
-     * listRegistries mcpRegistries
-     *
-     * @remarks
-     * List all MCP registries (admin only)
-     */
-    async listRegistries(request, security, options) {
-        return unwrapAsync(mcpRegistriesListRegistries(this, request, security, options));
-    }
+  /**
+   * clearCache mcpRegistries
+   *
+   * @remarks
+   * Clear the registry cache for a specific registry (admin only)
+   */
+  async clearCache(request, security, options) {
+    return unwrapAsync(
+      mcpRegistriesClearCache(this, request, security, options),
+    );
+  }
+  /**
+   * getServerDetails mcpRegistries
+   *
+   * @remarks
+   * Get detailed information about an MCP server including remotes
+   */
+  async getServerDetails(request, security, options) {
+    return unwrapAsync(
+      mcpRegistriesGetServerDetails(this, request, security, options),
+    );
+  }
+  /**
+   * listCatalog mcpRegistries
+   *
+   * @remarks
+   * List available MCP servers from configured registries
+   */
+  async listCatalog(request, security, options) {
+    return unwrapAsync(
+      mcpRegistriesListCatalog(this, request, security, options),
+    );
+  }
+  /**
+   * listRegistries mcpRegistries
+   *
+   * @remarks
+   * List all MCP registries (admin only)
+   */
+  async listRegistries(request, security, options) {
+    return unwrapAsync(
+      mcpRegistriesListRegistries(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=mcpregistries.js.map

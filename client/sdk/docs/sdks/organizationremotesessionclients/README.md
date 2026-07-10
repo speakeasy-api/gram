@@ -6,15 +6,15 @@ Manage remote_session_client records from the organization-administrator surface
 
 ### Available Operations
 
-* [create](#create) - createClient organizationRemoteSessionClients
-* [createCimd](#createcimd) - createCimdClient organizationRemoteSessionClients
-* [delete](#delete) - deleteClient organizationRemoteSessionClients
-* [get](#get) - getClient organizationRemoteSessionClients
-* [getDeletePreflight](#getdeletepreflight) - getClientDeletePreflight organizationRemoteSessionClients
-* [list](#list) - listClients organizationRemoteSessionClients
-* [listMcpServers](#listmcpservers) - listClientMcpServers organizationRemoteSessionClients
-* [removeFromMcpServer](#removefrommcpserver) - removeClientFromMcpServer organizationRemoteSessionClients
-* [update](#update) - updateClient organizationRemoteSessionClients
+- [create](#create) - createClient organizationRemoteSessionClients
+- [createCimd](#createcimd) - createCimdClient organizationRemoteSessionClients
+- [delete](#delete) - deleteClient organizationRemoteSessionClients
+- [get](#get) - getClient organizationRemoteSessionClients
+- [getDeletePreflight](#getdeletepreflight) - getClientDeletePreflight organizationRemoteSessionClients
+- [list](#list) - listClients organizationRemoteSessionClients
+- [listMcpServers](#listmcpservers) - listClientMcpServers organizationRemoteSessionClients
+- [removeFromMcpServer](#removefrommcpserver) - removeClientFromMcpServer organizationRemoteSessionClients
+- [update](#update) - updateClient organizationRemoteSessionClients
 
 ## create
 
@@ -23,6 +23,7 @@ Register a standalone remote_session_client under an existing remote_session_iss
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="createOrganizationRemoteSessionClient" method="post" path="/rpc/organizationRemoteSessionClients.create" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -85,19 +86,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useCreateOrganizationRemoteSessionClientMutation
+  useCreateOrganizationRemoteSessionClientMutation,
 } from "@gram/client/react-query/organizationRemoteSessionClientsCreate.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.CreateOrganizationRemoteSessionClientRequest](../../models/operations/createorganizationremotesessionclientrequest.md)                                             | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.CreateOrganizationRemoteSessionClientSecurity](../../models/operations/createorganizationremotesessionclientsecurity.md)                                           | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                                                 | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.CreateOrganizationRemoteSessionClientRequest](../../models/operations/createorganizationremotesessionclientrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.CreateOrganizationRemoteSessionClientSecurity](../../models/operations/createorganizationremotesessionclientsecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                                                       | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                              | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                        | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -105,11 +106,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## createCimd
 
@@ -118,6 +119,7 @@ Register a standalone remote_session_client in Client ID Metadata Document (CIMD
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="createCimdOrganizationRemoteSessionClient" method="post" path="/rpc/organizationRemoteSessionClients.createCimd" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -158,7 +160,10 @@ async function run() {
     const { value: result } = res;
     console.log(result);
   } else {
-    console.log("organizationRemoteSessionClientsCreateCimd failed:", res.error);
+    console.log(
+      "organizationRemoteSessionClientsCreateCimd failed:",
+      res.error,
+    );
   }
 }
 
@@ -178,19 +183,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useCreateCimdOrganizationRemoteSessionClientMutation
+  useCreateCimdOrganizationRemoteSessionClientMutation,
 } from "@gram/client/react-query/organizationRemoteSessionClientsCreateCimd.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.CreateCimdOrganizationRemoteSessionClientRequest](../../models/operations/createcimdorganizationremotesessionclientrequest.md)                                     | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.CreateCimdOrganizationRemoteSessionClientSecurity](../../models/operations/createcimdorganizationremotesessionclientsecurity.md)                                   | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                                                         | Required           | Description                                                                                                                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.CreateCimdOrganizationRemoteSessionClientRequest](../../models/operations/createcimdorganizationremotesessionclientrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.CreateCimdOrganizationRemoteSessionClientSecurity](../../models/operations/createcimdorganizationremotesessionclientsecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                                                               | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                      | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -198,11 +203,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## delete
 
@@ -211,6 +216,7 @@ Soft-delete a remote_session_client in the caller's organization. Cascades to th
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="deleteOrganizationRemoteSessionClient" method="delete" path="/rpc/organizationRemoteSessionClients.delete" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -220,8 +226,6 @@ async function run() {
   await gram.organizationRemoteSessionClients.delete({
     id: "1d758bb6-ef22-4047-b7cd-a26fe8f05dfe",
   });
-
-
 }
 
 run();
@@ -245,7 +249,6 @@ async function run() {
   });
   if (res.ok) {
     const { value: result } = res;
-    
   } else {
     console.log("organizationRemoteSessionClientsDelete failed:", res.error);
   }
@@ -267,19 +270,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useDeleteOrganizationRemoteSessionClientMutation
+  useDeleteOrganizationRemoteSessionClientMutation,
 } from "@gram/client/react-query/organizationRemoteSessionClientsDelete.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.DeleteOrganizationRemoteSessionClientRequest](../../models/operations/deleteorganizationremotesessionclientrequest.md)                                             | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.DeleteOrganizationRemoteSessionClientSecurity](../../models/operations/deleteorganizationremotesessionclientsecurity.md)                                           | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                                                 | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.DeleteOrganizationRemoteSessionClientRequest](../../models/operations/deleteorganizationremotesessionclientrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.DeleteOrganizationRemoteSessionClientSecurity](../../models/operations/deleteorganizationremotesessionclientsecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                                                       | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                              | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                        | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -287,11 +290,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## get
 
@@ -300,6 +303,7 @@ Get a remote_session_client in the caller's organization by id. Requires org:rea
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="getOrganizationRemoteSessionClient" method="get" path="/rpc/organizationRemoteSessionClients.get" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -363,7 +367,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchOrganizationRemoteSessionClient,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidateOrganizationRemoteSessionClient,
@@ -373,13 +377,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetOrganizationRemoteSessionClientRequest](../../models/operations/getorganizationremotesessionclientrequest.md)                                                   | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.GetOrganizationRemoteSessionClientSecurity](../../models/operations/getorganizationremotesessionclientsecurity.md)                                                 | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                                           | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.GetOrganizationRemoteSessionClientRequest](../../models/operations/getorganizationremotesessionclientrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.GetOrganizationRemoteSessionClientSecurity](../../models/operations/getorganizationremotesessionclientsecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                                                 | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                        | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                  | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -387,11 +391,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## getDeletePreflight
 
@@ -400,15 +404,18 @@ Authoritative impact summary for deleting a remote_session_client: associated se
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="getOrganizationRemoteSessionClientDeletePreflight" method="get" path="/rpc/organizationRemoteSessionClients.getDeletePreflight" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.organizationRemoteSessionClients.getDeletePreflight({
-    id: "e1f42171-6f72-4604-8a8f-46ad41ca8150",
-  });
+  const result = await gram.organizationRemoteSessionClients.getDeletePreflight(
+    {
+      id: "e1f42171-6f72-4604-8a8f-46ad41ca8150",
+    },
+  );
 
   console.log(result);
 }
@@ -436,7 +443,10 @@ async function run() {
     const { value: result } = res;
     console.log(result);
   } else {
-    console.log("organizationRemoteSessionClientsGetDeletePreflight failed:", res.error);
+    console.log(
+      "organizationRemoteSessionClientsGetDeletePreflight failed:",
+      res.error,
+    );
   }
 }
 
@@ -463,7 +473,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchOrganizationRemoteSessionClientDeletePreflight,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidateOrganizationRemoteSessionClientDeletePreflight,
@@ -473,13 +483,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetOrganizationRemoteSessionClientDeletePreflightRequest](../../models/operations/getorganizationremotesessionclientdeletepreflightrequest.md)                     | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.GetOrganizationRemoteSessionClientDeletePreflightSecurity](../../models/operations/getorganizationremotesessionclientdeletepreflightsecurity.md)                   | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                                                                         | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.GetOrganizationRemoteSessionClientDeletePreflightRequest](../../models/operations/getorganizationremotesessionclientdeletepreflightrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.GetOrganizationRemoteSessionClientDeletePreflightSecurity](../../models/operations/getorganizationremotesessionclientdeletepreflightsecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                                                                               | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                      | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -487,11 +497,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## list
 
@@ -500,6 +510,7 @@ List the remote_session_clients registered with a given issuer in the caller's o
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="listOrganizationRemoteSessionClients" method="get" path="/rpc/organizationRemoteSessionClients.list" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -537,8 +548,8 @@ async function run() {
   if (res.ok) {
     const { value: result } = res;
     for await (const page of result) {
-    console.log(page);
-  }
+      console.log(page);
+    }
   } else {
     console.log("organizationRemoteSessionClientsList failed:", res.error);
   }
@@ -570,7 +581,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchOrganizationRemoteSessionClients,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidateOrganizationRemoteSessionClients,
@@ -580,13 +591,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.ListOrganizationRemoteSessionClientsRequest](../../models/operations/listorganizationremotesessionclientsrequest.md)                                               | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.ListOrganizationRemoteSessionClientsSecurity](../../models/operations/listorganizationremotesessionclientssecurity.md)                                             | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                                               | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.ListOrganizationRemoteSessionClientsRequest](../../models/operations/listorganizationremotesessionclientsrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.ListOrganizationRemoteSessionClientsSecurity](../../models/operations/listorganizationremotesessionclientssecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                                                     | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                            | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                      | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -594,11 +605,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## listMcpServers
 
@@ -607,6 +618,7 @@ List the MCP servers a remote_session_client is attached to (resolved through us
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="listOrganizationRemoteSessionClientMcpServers" method="get" path="/rpc/organizationRemoteSessionClients.listMcpServers" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -643,7 +655,10 @@ async function run() {
     const { value: result } = res;
     console.log(result);
   } else {
-    console.log("organizationRemoteSessionClientsListMcpServers failed:", res.error);
+    console.log(
+      "organizationRemoteSessionClientsListMcpServers failed:",
+      res.error,
+    );
   }
 }
 
@@ -670,7 +685,7 @@ import {
   // Server Components that will be immediately available to client components
   // using the hooks.
   prefetchOrganizationRemoteSessionClientMcpServers,
-  
+
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
   invalidateOrganizationRemoteSessionClientMcpServers,
@@ -680,13 +695,13 @@ import {
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.ListOrganizationRemoteSessionClientMcpServersRequest](../../models/operations/listorganizationremotesessionclientmcpserversrequest.md)                             | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.ListOrganizationRemoteSessionClientMcpServersSecurity](../../models/operations/listorganizationremotesessionclientmcpserverssecurity.md)                           | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                                                                 | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.ListOrganizationRemoteSessionClientMcpServersRequest](../../models/operations/listorganizationremotesessionclientmcpserversrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.ListOrganizationRemoteSessionClientMcpServersSecurity](../../models/operations/listorganizationremotesessionclientmcpserverssecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                                                                       | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                              | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                        | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -694,11 +709,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## removeFromMcpServer
 
@@ -707,6 +722,7 @@ Detach a remote_session_client from an MCP server (clears the MCP server's user_
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="removeOrganizationRemoteSessionClientFromMcpServer" method="post" path="/rpc/organizationRemoteSessionClients.removeFromMcpServer" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -719,8 +735,6 @@ async function run() {
       mcpServerId: "67f4ce51-85c5-4d1d-aaae-81da7cc4c225",
     },
   });
-
-
 }
 
 run();
@@ -747,9 +761,11 @@ async function run() {
   });
   if (res.ok) {
     const { value: result } = res;
-    
   } else {
-    console.log("organizationRemoteSessionClientsRemoveFromMcpServer failed:", res.error);
+    console.log(
+      "organizationRemoteSessionClientsRemoveFromMcpServer failed:",
+      res.error,
+    );
   }
 }
 
@@ -769,19 +785,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useRemoveOrganizationRemoteSessionClientFromMcpServerMutation
+  useRemoveOrganizationRemoteSessionClientFromMcpServerMutation,
 } from "@gram/client/react-query/organizationRemoteSessionClientsRemoveFromMcpServer.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.RemoveOrganizationRemoteSessionClientFromMcpServerRequest](../../models/operations/removeorganizationremotesessionclientfrommcpserverrequest.md)                   | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.RemoveOrganizationRemoteSessionClientFromMcpServerSecurity](../../models/operations/removeorganizationremotesessionclientfrommcpserversecurity.md)                 | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                                                                           | Required           | Description                                                                                                                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.RemoveOrganizationRemoteSessionClientFromMcpServerRequest](../../models/operations/removeorganizationremotesessionclientfrommcpserverrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.RemoveOrganizationRemoteSessionClientFromMcpServerSecurity](../../models/operations/removeorganizationremotesessionclientfrommcpserversecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                                                                                 | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                        | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                  | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -789,11 +805,11 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |
 
 ## update
 
@@ -802,6 +818,7 @@ Update a remote_session_client's non-secret fields in the caller's organization.
 ### Example Usage
 
 <!-- UsageSnippet language="typescript" operationID="updateOrganizationRemoteSessionClient" method="post" path="/rpc/organizationRemoteSessionClients.update" -->
+
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -862,19 +879,19 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useUpdateOrganizationRemoteSessionClientMutation
+  useUpdateOrganizationRemoteSessionClientMutation,
 } from "@gram/client/react-query/organizationRemoteSessionClientsUpdate.js";
 ```
 
 ### Parameters
 
-| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.UpdateOrganizationRemoteSessionClientRequest](../../models/operations/updateorganizationremotesessionclientrequest.md)                                             | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.UpdateOrganizationRemoteSessionClientSecurity](../../models/operations/updateorganizationremotesessionclientsecurity.md)                                           | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
-| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
-| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
-| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+| Parameter              | Type                                                                                                                                 | Required           | Description                                                                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`              | [operations.UpdateOrganizationRemoteSessionClientRequest](../../models/operations/updateorganizationremotesessionclientrequest.md)   | :heavy_check_mark: | The request object to use for the request.                                                                                                                                     |
+| `security`             | [operations.UpdateOrganizationRemoteSessionClientSecurity](../../models/operations/updateorganizationremotesessionclientsecurity.md) | :heavy_check_mark: | The security requirements to use for the request.                                                                                                                              |
+| `options`              | RequestOptions                                                                                                                       | :heavy_minus_sign: | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                              | :heavy_minus_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`      | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                        | :heavy_minus_sign: | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
@@ -882,8 +899,8 @@ import {
 
 ### Errors
 
-| Error Type                        | Status Code                       | Content Type                      |
-| --------------------------------- | --------------------------------- | --------------------------------- |
-| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
-| errors.ServiceError               | 500, 502                          | application/json                  |
-| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+| Error Type          | Status Code                       | Content Type     |
+| ------------------- | --------------------------------- | ---------------- |
+| errors.ServiceError | 400, 401, 403, 404, 409, 415, 422 | application/json |
+| errors.ServiceError | 500, 502                          | application/json |
+| errors.APIError     | 4XX, 5XX                          | \*/\*            |

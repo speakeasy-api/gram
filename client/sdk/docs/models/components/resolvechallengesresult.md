@@ -23,6 +23,6 @@ let value: ResolveChallengesResult = {
 
 ## Fields
 
-| Field                                                                              | Type                                                                               | Required                                                                           | Description                                                                        |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `resolutions`                                                                      | [components.ChallengeResolution](../../models/components/challengeresolution.md)[] | :heavy_check_mark:                                                                 | The created resolution records.                                                    |
+| Field         | Type                                                                               | Required           | Description                     |
+| ------------- | ---------------------------------------------------------------------------------- | ------------------ | ------------------------------- |
+| `resolutions` | [components.ChallengeResolution](../../models/components/challengeresolution.md)[] | :heavy_check_mark: | The created resolution records. |

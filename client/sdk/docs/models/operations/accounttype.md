@@ -13,5 +13,5 @@ let value: AccountType = "personal";
 ## Values
 
 ```typescript
-"" | "team" | "personal"
+"" | "team" | "personal";
 ```

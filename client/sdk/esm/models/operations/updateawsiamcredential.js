@@ -3,29 +3,48 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpdateAwsIamCredentialRequestBody$outboundSchema, } from "../components/updateawsiamcredentialrequestbody.js";
+import { UpdateAwsIamCredentialRequestBody$outboundSchema } from "../components/updateawsiamcredentialrequestbody.js";
 /** @internal */
-export const UpdateAwsIamCredentialSecurity$outboundSchema = z.pipe(z.object({
+export const UpdateAwsIamCredentialSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function updateAwsIamCredentialSecurityToJSON(updateAwsIamCredentialSecurity) {
-    return JSON.stringify(UpdateAwsIamCredentialSecurity$outboundSchema.parse(updateAwsIamCredentialSecurity));
+  }),
+);
+export function updateAwsIamCredentialSecurityToJSON(
+  updateAwsIamCredentialSecurity,
+) {
+  return JSON.stringify(
+    UpdateAwsIamCredentialSecurity$outboundSchema.parse(
+      updateAwsIamCredentialSecurity,
+    ),
+  );
 }
 /** @internal */
-export const UpdateAwsIamCredentialRequest$outboundSchema = z.pipe(z.object({
+export const UpdateAwsIamCredentialRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-    updateAwsIamCredentialRequestBody: UpdateAwsIamCredentialRequestBody$outboundSchema,
-}), z.transform((v) => {
+    updateAwsIamCredentialRequestBody:
+      UpdateAwsIamCredentialRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        updateAwsIamCredentialRequestBody: "UpdateAwsIamCredentialRequestBody",
+      gramSession: "Gram-Session",
+      updateAwsIamCredentialRequestBody: "UpdateAwsIamCredentialRequestBody",
     });
-}));
-export function updateAwsIamCredentialRequestToJSON(updateAwsIamCredentialRequest) {
-    return JSON.stringify(UpdateAwsIamCredentialRequest$outboundSchema.parse(updateAwsIamCredentialRequest));
+  }),
+);
+export function updateAwsIamCredentialRequestToJSON(
+  updateAwsIamCredentialRequest,
+) {
+  return JSON.stringify(
+    UpdateAwsIamCredentialRequest$outboundSchema.parse(
+      updateAwsIamCredentialRequest,
+    ),
+  );
 }
 //# sourceMappingURL=updateawsiamcredential.js.map

@@ -12,11 +12,7 @@ let value: ListSlackAppsResult = {
       id: "51091588-0481-482b-979d-e52e17a6374e",
       name: "<value>",
       status: "<value>",
-      toolsetIds: [
-        "<value 1>",
-        "<value 2>",
-        "<value 3>",
-      ],
+      toolsetIds: ["<value 1>", "<value 2>", "<value 3>"],
       updatedAt: new Date("2026-05-13T17:45:02.449Z"),
     },
   ],
@@ -25,6 +21,6 @@ let value: ListSlackAppsResult = {
 
 ## Fields
 
-| Field                                                                    | Type                                                                     | Required                                                                 | Description                                                              |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| `items`                                                                  | [components.SlackAppResult](../../models/components/slackappresult.md)[] | :heavy_check_mark:                                                       | List of Slack apps                                                       |
+| Field   | Type                                                                     | Required           | Description        |
+| ------- | ------------------------------------------------------------------------ | ------------------ | ------------------ |
+| `items` | [components.SlackAppResult](../../models/components/slackappresult.md)[] | :heavy_check_mark: | List of Slack apps |

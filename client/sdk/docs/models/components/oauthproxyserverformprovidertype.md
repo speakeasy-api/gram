@@ -13,5 +13,5 @@ let value: OAuthProxyServerFormProviderType = "custom";
 ## Values
 
 ```typescript
-"custom" | "gram"
+"custom" | "gram";
 ```

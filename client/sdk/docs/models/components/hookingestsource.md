@@ -14,9 +14,9 @@ let value: HookIngestSource = {
 
 ## Fields
 
-| Field                                                                     | Type                                                                      | Required                                                                  | Description                                                               |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `adapter`                                                                 | *string*                                                                  | :heavy_check_mark:                                                        | Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name. |
-| `adapterVersion`                                                          | *string*                                                                  | :heavy_minus_sign:                                                        | Adapter implementation version.                                           |
-| `hostname`                                                                | *string*                                                                  | :heavy_minus_sign:                                                        | Hostname of the machine that emitted the hook event.                      |
-| `rawEventName`                                                            | *string*                                                                  | :heavy_minus_sign:                                                        | Provider-native event name, if one exists.                                |
+| Field            | Type     | Required           | Description                                                               |
+| ---------------- | -------- | ------------------ | ------------------------------------------------------------------------- |
+| `adapter`        | _string_ | :heavy_check_mark: | Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name. |
+| `adapterVersion` | _string_ | :heavy_minus_sign: | Adapter implementation version.                                           |
+| `hostname`       | _string_ | :heavy_minus_sign: | Hostname of the machine that emitted the hook event.                      |
+| `rawEventName`   | _string_ | :heavy_minus_sign: | Provider-native event name, if one exists.                                |

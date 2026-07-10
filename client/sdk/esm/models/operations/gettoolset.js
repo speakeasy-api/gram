@@ -4,58 +4,78 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetToolsetSecurityOption1$outboundSchema = z.pipe(z.object({
+export const GetToolsetSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function getToolsetSecurityOption1ToJSON(getToolsetSecurityOption1) {
-    return JSON.stringify(GetToolsetSecurityOption1$outboundSchema.parse(getToolsetSecurityOption1));
+  return JSON.stringify(
+    GetToolsetSecurityOption1$outboundSchema.parse(getToolsetSecurityOption1),
+  );
 }
 /** @internal */
-export const GetToolsetSecurityOption2$outboundSchema = z.pipe(z.object({
+export const GetToolsetSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
+  }),
+);
 export function getToolsetSecurityOption2ToJSON(getToolsetSecurityOption2) {
-    return JSON.stringify(GetToolsetSecurityOption2$outboundSchema.parse(getToolsetSecurityOption2));
+  return JSON.stringify(
+    GetToolsetSecurityOption2$outboundSchema.parse(getToolsetSecurityOption2),
+  );
 }
 /** @internal */
-export const GetToolsetSecurity$outboundSchema = z.pipe(z.object({
+export const GetToolsetSecurity$outboundSchema = z.pipe(
+  z.object({
     option1: z.optional(z.lazy(() => GetToolsetSecurityOption1$outboundSchema)),
     option2: z.optional(z.lazy(() => GetToolsetSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function getToolsetSecurityToJSON(getToolsetSecurity) {
-    return JSON.stringify(GetToolsetSecurity$outboundSchema.parse(getToolsetSecurity));
+  return JSON.stringify(
+    GetToolsetSecurity$outboundSchema.parse(getToolsetSecurity),
+  );
 }
 /** @internal */
-export const GetToolsetRequest$outboundSchema = z.pipe(z.object({
+export const GetToolsetRequest$outboundSchema = z.pipe(
+  z.object({
     slug: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function getToolsetRequestToJSON(getToolsetRequest) {
-    return JSON.stringify(GetToolsetRequest$outboundSchema.parse(getToolsetRequest));
+  return JSON.stringify(
+    GetToolsetRequest$outboundSchema.parse(getToolsetRequest),
+  );
 }
 //# sourceMappingURL=gettoolset.js.map

@@ -13,5 +13,5 @@ let value: Sentiment = "up";
 ## Values
 
 ```typescript
-"up" | "down"
+"up" | "down";
 ```

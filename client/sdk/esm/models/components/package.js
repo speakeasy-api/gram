@@ -5,9 +5,18 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const Package$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-    deleted_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
+export const Package$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+    deleted_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
     description: z.optional(z.string()),
     description_raw: z.optional(z.string()),
     id: z.string(),
@@ -19,21 +28,30 @@ export const Package$inboundSchema = z.pipe(z.object({
     project_id: z.string(),
     summary: z.optional(z.string()),
     title: z.optional(z.string()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     url: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "deleted_at": "deletedAt",
-        "description_raw": "descriptionRaw",
-        "image_asset_id": "imageAssetId",
-        "latest_version": "latestVersion",
-        "organization_id": "organizationId",
-        "project_id": "projectId",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      deleted_at: "deletedAt",
+      description_raw: "descriptionRaw",
+      image_asset_id: "imageAssetId",
+      latest_version: "latestVersion",
+      organization_id: "organizationId",
+      project_id: "projectId",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function packageFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => Package$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'Package' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => Package$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'Package' from JSON`,
+  );
 }
 //# sourceMappingURL=package.js.map

@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ToolVariationGroup$inboundSchema, } from "./toolvariationgroup.js";
+import { ToolVariationGroup$inboundSchema } from "./toolvariationgroup.js";
 /** @internal */
 export const ToolVariationGroupResult$inboundSchema = z.object({
-    group: ToolVariationGroup$inboundSchema,
+  group: ToolVariationGroup$inboundSchema,
 });
 export function toolVariationGroupResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolVariationGroupResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolVariationGroupResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolVariationGroupResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolVariationGroupResult' from JSON`,
+  );
 }
 //# sourceMappingURL=toolvariationgroupresult.js.map

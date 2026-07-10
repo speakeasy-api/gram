@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { McpMetadata$inboundSchema } from "./mcpmetadata.js";
 /** @internal */
 export const GetMcpMetadataResponseBody$inboundSchema = z.object({
-    metadata: z.optional(McpMetadata$inboundSchema),
+  metadata: z.optional(McpMetadata$inboundSchema),
 });
 export function getMcpMetadataResponseBodyFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GetMcpMetadataResponseBody$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GetMcpMetadataResponseBody' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => GetMcpMetadataResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetMcpMetadataResponseBody' from JSON`,
+  );
 }
 //# sourceMappingURL=getmcpmetadataresponsebody.js.map

@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { RiskCustomDetectionRule$inboundSchema, } from "./riskcustomdetectionrule.js";
+import { RiskCustomDetectionRule$inboundSchema } from "./riskcustomdetectionrule.js";
 /** @internal */
 export const ListCustomDetectionRulesResult$inboundSchema = z.object({
-    rules: z.array(RiskCustomDetectionRule$inboundSchema),
+  rules: z.array(RiskCustomDetectionRule$inboundSchema),
 });
 export function listCustomDetectionRulesResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListCustomDetectionRulesResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListCustomDetectionRulesResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListCustomDetectionRulesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListCustomDetectionRulesResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listcustomdetectionrulesresult.js.map

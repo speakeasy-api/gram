@@ -4,14 +4,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ExportMcpMetadataRequestBody$outboundSchema = z.pipe(z.object({
+export const ExportMcpMetadataRequestBody$outboundSchema = z.pipe(
+  z.object({
     mcpSlug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        mcpSlug: "mcp_slug",
+      mcpSlug: "mcp_slug",
     });
-}));
-export function exportMcpMetadataRequestBodyToJSON(exportMcpMetadataRequestBody) {
-    return JSON.stringify(ExportMcpMetadataRequestBody$outboundSchema.parse(exportMcpMetadataRequestBody));
+  }),
+);
+export function exportMcpMetadataRequestBodyToJSON(
+  exportMcpMetadataRequestBody,
+) {
+  return JSON.stringify(
+    ExportMcpMetadataRequestBody$outboundSchema.parse(
+      exportMcpMetadataRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=exportmcpmetadatarequestbody.js.map

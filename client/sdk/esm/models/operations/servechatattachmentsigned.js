@@ -6,22 +6,35 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const ServeChatAttachmentSignedRequest$outboundSchema = z.object({
-    token: z.string(),
+  token: z.string(),
 });
-export function serveChatAttachmentSignedRequestToJSON(serveChatAttachmentSignedRequest) {
-    return JSON.stringify(ServeChatAttachmentSignedRequest$outboundSchema.parse(serveChatAttachmentSignedRequest));
+export function serveChatAttachmentSignedRequestToJSON(
+  serveChatAttachmentSignedRequest,
+) {
+  return JSON.stringify(
+    ServeChatAttachmentSignedRequest$outboundSchema.parse(
+      serveChatAttachmentSignedRequest,
+    ),
+  );
 }
 /** @internal */
-export const ServeChatAttachmentSignedResponse$inboundSchema = z.pipe(z.object({
+export const ServeChatAttachmentSignedResponse$inboundSchema = z.pipe(
+  z.object({
     Headers: z._default(z.record(z.string(), z.array(z.string())), {}),
-    Result: z.custom(x => x instanceof ReadableStream),
-}), z.transform((v) => {
+    Result: z.custom((x) => x instanceof ReadableStream),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Headers": "headers",
-        "Result": "result",
+      Headers: "headers",
+      Result: "result",
     });
-}));
+  }),
+);
 export function serveChatAttachmentSignedResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ServeChatAttachmentSignedResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ServeChatAttachmentSignedResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ServeChatAttachmentSignedResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ServeChatAttachmentSignedResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=servechatattachmentsigned.js.map

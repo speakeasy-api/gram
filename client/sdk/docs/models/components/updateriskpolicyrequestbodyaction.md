@@ -13,5 +13,5 @@ let value: UpdateRiskPolicyRequestBodyAction = "flag";
 ## Values
 
 ```typescript
-"flag" | "block"
+"flag" | "block";
 ```

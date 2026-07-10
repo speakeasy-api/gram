@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Integration$inboundSchema } from "./integration.js";
 /** @internal */
 export const GetIntegrationResult$inboundSchema = z.object({
-    integration: z.optional(Integration$inboundSchema),
+  integration: z.optional(Integration$inboundSchema),
 });
 export function getIntegrationResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GetIntegrationResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GetIntegrationResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => GetIntegrationResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetIntegrationResult' from JSON`,
+  );
 }
 //# sourceMappingURL=getintegrationresult.js.map

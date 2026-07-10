@@ -4,31 +4,48 @@
 import { riskPoliciesStatus } from "../funcs/riskPoliciesStatus.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchRiskPoliciesStatus(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildRiskPoliciesStatusQuery(client$, request, security, options),
-    });
+export function prefetchRiskPoliciesStatus(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildRiskPoliciesStatusQuery(client$, request, security, options),
+  });
 }
-export function buildRiskPoliciesStatusQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyRiskPoliciesStatus({
-            id: request.id,
-            gramKey: request.gramKey,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function riskPoliciesStatusQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(riskPoliciesStatus(client$, request, security, mergedOptions));
-        },
-    };
+export function buildRiskPoliciesStatusQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyRiskPoliciesStatus({
+      id: request.id,
+      gramKey: request.gramKey,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function riskPoliciesStatusQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        riskPoliciesStatus(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyRiskPoliciesStatus(parameters) {
-    return ["@gram/client", "policies", "status", parameters];
+  return ["@gram/client", "policies", "status", parameters];
 }
 //# sourceMappingURL=riskPoliciesStatus.core.js.map

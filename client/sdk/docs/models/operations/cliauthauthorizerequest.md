@@ -15,7 +15,7 @@ let value: CliAuthAuthorizeRequest = {
 
 ## Fields
 
-| Field                                                                              | Type                                                                               | Required                                                                           | Description                                                                        |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `gramSession`                                                                      | *string*                                                                           | :heavy_minus_sign:                                                                 | Session header                                                                     |
-| `authorizeRequestBody`                                                             | [components.AuthorizeRequestBody](../../models/components/authorizerequestbody.md) | :heavy_check_mark:                                                                 | N/A                                                                                |
+| Field                  | Type                                                                               | Required           | Description    |
+| ---------------------- | ---------------------------------------------------------------------------------- | ------------------ | -------------- |
+| `gramSession`          | _string_                                                                           | :heavy_minus_sign: | Session header |
+| `authorizeRequestBody` | [components.AuthorizeRequestBody](../../models/components/authorizerequestbody.md) | :heavy_check_mark: | N/A            |

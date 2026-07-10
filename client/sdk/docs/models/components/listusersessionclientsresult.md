@@ -25,7 +25,7 @@ let value: ListUserSessionClientsResult = {
 
 ## Fields
 
-| Field                                                                          | Type                                                                           | Required                                                                       | Description                                                                    |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `items`                                                                        | [components.UserSessionClient](../../models/components/usersessionclient.md)[] | :heavy_check_mark:                                                             | N/A                                                                            |
-| `nextCursor`                                                                   | *string*                                                                       | :heavy_minus_sign:                                                             | Cursor for the next page; empty when exhausted.                                |
+| Field        | Type                                                                           | Required           | Description                                     |
+| ------------ | ------------------------------------------------------------------------------ | ------------------ | ----------------------------------------------- |
+| `items`      | [components.UserSessionClient](../../models/components/usersessionclient.md)[] | :heavy_check_mark: | N/A                                             |
+| `nextCursor` | _string_                                                                       | :heavy_minus_sign: | Cursor for the next page; empty when exhausted. |

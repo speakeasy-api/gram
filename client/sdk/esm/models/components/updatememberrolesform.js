@@ -4,16 +4,21 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const UpdateMemberRolesForm$outboundSchema = z.pipe(z.object({
+export const UpdateMemberRolesForm$outboundSchema = z.pipe(
+  z.object({
     roleIds: z.array(z.string()),
     userId: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        roleIds: "role_ids",
-        userId: "user_id",
+      roleIds: "role_ids",
+      userId: "user_id",
     });
-}));
+  }),
+);
 export function updateMemberRolesFormToJSON(updateMemberRolesForm) {
-    return JSON.stringify(UpdateMemberRolesForm$outboundSchema.parse(updateMemberRolesForm));
+  return JSON.stringify(
+    UpdateMemberRolesForm$outboundSchema.parse(updateMemberRolesForm),
+  );
 }
 //# sourceMappingURL=updatememberrolesform.js.map

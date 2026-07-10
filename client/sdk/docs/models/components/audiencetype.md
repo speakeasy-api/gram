@@ -13,5 +13,5 @@ let value: AudienceType = "targeted";
 ## Values
 
 ```typescript
-"everyone" | "targeted"
+"everyone" | "targeted";
 ```

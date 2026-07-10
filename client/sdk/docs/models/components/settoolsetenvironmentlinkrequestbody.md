@@ -13,7 +13,7 @@ let value: SetToolsetEnvironmentLinkRequestBody = {
 
 ## Fields
 
-| Field                             | Type                              | Required                          | Description                       |
-| --------------------------------- | --------------------------------- | --------------------------------- | --------------------------------- |
-| `environmentId`                   | *string*                          | :heavy_check_mark:                | The ID of the environment to link |
-| `toolsetId`                       | *string*                          | :heavy_check_mark:                | The ID of the toolset             |
+| Field           | Type     | Required           | Description                       |
+| --------------- | -------- | ------------------ | --------------------------------- |
+| `environmentId` | _string_ | :heavy_check_mark: | The ID of the environment to link |
+| `toolsetId`     | _string_ | :heavy_check_mark: | The ID of the toolset             |

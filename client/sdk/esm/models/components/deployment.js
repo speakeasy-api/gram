@@ -4,15 +4,18 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { DeploymentExternalMCP$inboundSchema, } from "./deploymentexternalmcp.js";
-import { DeploymentFunctions$inboundSchema, } from "./deploymentfunctions.js";
-import { DeploymentPackage$inboundSchema, } from "./deploymentpackage.js";
-import { OpenAPIv3DeploymentAsset$inboundSchema, } from "./openapiv3deploymentasset.js";
+import { DeploymentExternalMCP$inboundSchema } from "./deploymentexternalmcp.js";
+import { DeploymentFunctions$inboundSchema } from "./deploymentfunctions.js";
+import { DeploymentPackage$inboundSchema } from "./deploymentpackage.js";
+import { OpenAPIv3DeploymentAsset$inboundSchema } from "./openapiv3deploymentasset.js";
 /** @internal */
-export const Deployment$inboundSchema = z
-    .pipe(z.object({
+export const Deployment$inboundSchema = z.pipe(
+  z.object({
     cloned_from: z.optional(z.string()),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     external_id: z.optional(z.string()),
     external_mcp_tool_count: z.int(),
     external_mcps: z.optional(z.array(DeploymentExternalMCP$inboundSchema)),
@@ -31,28 +34,34 @@ export const Deployment$inboundSchema = z
     project_id: z.string(),
     status: z.string(),
     user_id: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "cloned_from": "clonedFrom",
-        "created_at": "createdAt",
-        "external_id": "externalId",
-        "external_mcp_tool_count": "externalMcpToolCount",
-        "external_mcps": "externalMcps",
-        "external_url": "externalUrl",
-        "functions_assets": "functionsAssets",
-        "functions_tool_count": "functionsToolCount",
-        "github_pr": "githubPr",
-        "github_repo": "githubRepo",
-        "github_sha": "githubSha",
-        "idempotency_key": "idempotencyKey",
-        "openapiv3_assets": "openapiv3Assets",
-        "openapiv3_tool_count": "openapiv3ToolCount",
-        "organization_id": "organizationId",
-        "project_id": "projectId",
-        "user_id": "userId",
+      cloned_from: "clonedFrom",
+      created_at: "createdAt",
+      external_id: "externalId",
+      external_mcp_tool_count: "externalMcpToolCount",
+      external_mcps: "externalMcps",
+      external_url: "externalUrl",
+      functions_assets: "functionsAssets",
+      functions_tool_count: "functionsToolCount",
+      github_pr: "githubPr",
+      github_repo: "githubRepo",
+      github_sha: "githubSha",
+      idempotency_key: "idempotencyKey",
+      openapiv3_assets: "openapiv3Assets",
+      openapiv3_tool_count: "openapiv3ToolCount",
+      organization_id: "organizationId",
+      project_id: "projectId",
+      user_id: "userId",
     });
-}));
+  }),
+);
 export function deploymentFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => Deployment$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'Deployment' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => Deployment$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'Deployment' from JSON`,
+  );
 }
 //# sourceMappingURL=deployment.js.map

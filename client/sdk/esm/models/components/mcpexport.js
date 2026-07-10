@@ -4,11 +4,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { McpExportAuthentication$inboundSchema, } from "./mcpexportauthentication.js";
+import { McpExportAuthentication$inboundSchema } from "./mcpexportauthentication.js";
 import { McpExportTool$inboundSchema } from "./mcpexporttool.js";
 /** @internal */
-export const McpExport$inboundSchema = z
-    .pipe(z.object({
+export const McpExport$inboundSchema = z.pipe(
+  z.object({
     authentication: McpExportAuthentication$inboundSchema,
     description: z.optional(z.string()),
     documentation_url: z.optional(z.string()),
@@ -18,14 +18,20 @@ export const McpExport$inboundSchema = z
     server_url: z.string(),
     slug: z.string(),
     tools: z.array(McpExportTool$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "documentation_url": "documentationUrl",
-        "logo_url": "logoUrl",
-        "server_url": "serverUrl",
+      documentation_url: "documentationUrl",
+      logo_url: "logoUrl",
+      server_url: "serverUrl",
     });
-}));
+  }),
+);
 export function mcpExportFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => McpExport$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'McpExport' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => McpExport$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'McpExport' from JSON`,
+  );
 }
 //# sourceMappingURL=mcpexport.js.map

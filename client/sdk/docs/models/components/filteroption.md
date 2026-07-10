@@ -16,8 +16,8 @@ let value: FilterOption = {
 
 ## Fields
 
-| Field                            | Type                             | Required                         | Description                      |
-| -------------------------------- | -------------------------------- | -------------------------------- | -------------------------------- |
-| `count`                          | *number*                         | :heavy_check_mark:               | Number of events for this option |
-| `id`                             | *string*                         | :heavy_check_mark:               | Unique identifier for the option |
-| `label`                          | *string*                         | :heavy_check_mark:               | Display label for the option     |
+| Field   | Type     | Required           | Description                      |
+| ------- | -------- | ------------------ | -------------------------------- |
+| `count` | _number_ | :heavy_check_mark: | Number of events for this option |
+| `id`    | _string_ | :heavy_check_mark: | Unique identifier for the option |
+| `label` | _string_ | :heavy_check_mark: | Display label for the option     |

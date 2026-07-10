@@ -19,6 +19,6 @@ let value: GetProjectResult = {
 
 ## Fields
 
-| Field                                                    | Type                                                     | Required                                                 | Description                                              |
-| -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
-| `project`                                                | [components.Project](../../models/components/project.md) | :heavy_check_mark:                                       | N/A                                                      |
+| Field     | Type                                                     | Required           | Description |
+| --------- | -------------------------------------------------------- | ------------------ | ----------- |
+| `project` | [components.Project](../../models/components/project.md) | :heavy_check_mark: | N/A         |

@@ -4,11 +4,13 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const CreatePluginForm$outboundSchema = z.object({
-    description: z.optional(z.string()),
-    name: z.string(),
-    slug: z.optional(z.string()),
+  description: z.optional(z.string()),
+  name: z.string(),
+  slug: z.optional(z.string()),
 });
 export function createPluginFormToJSON(createPluginForm) {
-    return JSON.stringify(CreatePluginForm$outboundSchema.parse(createPluginForm));
+  return JSON.stringify(
+    CreatePluginForm$outboundSchema.parse(createPluginForm),
+  );
 }
 //# sourceMappingURL=createpluginform.js.map

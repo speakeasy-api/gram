@@ -4,30 +4,47 @@
 import { deploymentsActive } from "../funcs/deploymentsActive.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchActiveDeployment(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildActiveDeploymentQuery(client$, request, security, options),
-    });
+export function prefetchActiveDeployment(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildActiveDeploymentQuery(client$, request, security, options),
+  });
 }
-export function buildActiveDeploymentQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyActiveDeployment({
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function activeDeploymentQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(deploymentsActive(client$, request, security, mergedOptions));
-        },
-    };
+export function buildActiveDeploymentQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyActiveDeployment({
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function activeDeploymentQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        deploymentsActive(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyActiveDeployment(parameters) {
-    return ["@gram/client", "deployments", "active", parameters];
+  return ["@gram/client", "deployments", "active", parameters];
 }
 //# sourceMappingURL=activeDeployment.core.js.map

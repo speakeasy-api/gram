@@ -13,5 +13,5 @@ let value: QueryParamOutcome = "deny";
 ## Values
 
 ```typescript
-"allow" | "deny"
+"allow" | "deny";
 ```

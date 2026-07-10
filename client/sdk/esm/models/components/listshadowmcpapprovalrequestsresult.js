@@ -4,17 +4,25 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ShadowMCPApprovalRequest$inboundSchema, } from "./shadowmcpapprovalrequest.js";
+import { ShadowMCPApprovalRequest$inboundSchema } from "./shadowmcpapprovalrequest.js";
 /** @internal */
-export const ListShadowMCPApprovalRequestsResult$inboundSchema = z.pipe(z.object({
+export const ListShadowMCPApprovalRequestsResult$inboundSchema = z.pipe(
+  z.object({
     next_cursor: z.optional(z.string()),
     requests: z.array(ShadowMCPApprovalRequest$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function listShadowMCPApprovalRequestsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListShadowMCPApprovalRequestsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListShadowMCPApprovalRequestsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) =>
+      ListShadowMCPApprovalRequestsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListShadowMCPApprovalRequestsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listshadowmcpapprovalrequestsresult.js.map

@@ -12,7 +12,7 @@ let value: DeleteGcpIamCredentialRequest = {
 
 ## Fields
 
-| Field                               | Type                                | Required                            | Description                         |
-| ----------------------------------- | ----------------------------------- | ----------------------------------- | ----------------------------------- |
-| `id`                                | *string*                            | :heavy_check_mark:                  | The ID of the credential to delete. |
-| `gramSession`                       | *string*                            | :heavy_minus_sign:                  | Session header                      |
+| Field         | Type     | Required           | Description                         |
+| ------------- | -------- | ------------------ | ----------------------------------- |
+| `id`          | _string_ | :heavy_check_mark: | The ID of the credential to delete. |
+| `gramSession` | _string_ | :heavy_minus_sign: | Session header                      |

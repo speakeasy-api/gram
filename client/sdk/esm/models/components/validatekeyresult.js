@@ -3,15 +3,19 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ValidateKeyOrganization$inboundSchema, } from "./validatekeyorganization.js";
-import { ValidateKeyProject$inboundSchema, } from "./validatekeyproject.js";
+import { ValidateKeyOrganization$inboundSchema } from "./validatekeyorganization.js";
+import { ValidateKeyProject$inboundSchema } from "./validatekeyproject.js";
 /** @internal */
 export const ValidateKeyResult$inboundSchema = z.object({
-    organization: ValidateKeyOrganization$inboundSchema,
-    projects: z.array(ValidateKeyProject$inboundSchema),
-    scopes: z.array(z.string()),
+  organization: ValidateKeyOrganization$inboundSchema,
+  projects: z.array(ValidateKeyProject$inboundSchema),
+  scopes: z.array(z.string()),
 });
 export function validateKeyResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ValidateKeyResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ValidateKeyResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ValidateKeyResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ValidateKeyResult' from JSON`,
+  );
 }
 //# sourceMappingURL=validatekeyresult.js.map

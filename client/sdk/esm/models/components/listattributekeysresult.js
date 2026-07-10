@@ -5,9 +5,13 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const ListAttributeKeysResult$inboundSchema = z.object({
-    keys: z.array(z.string()),
+  keys: z.array(z.string()),
 });
 export function listAttributeKeysResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListAttributeKeysResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListAttributeKeysResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListAttributeKeysResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListAttributeKeysResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listattributekeysresult.js.map

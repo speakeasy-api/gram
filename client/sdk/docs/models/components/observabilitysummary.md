@@ -27,19 +27,19 @@ let value: ObservabilitySummary = {
 
 ## Fields
 
-| Field                                      | Type                                       | Required                                   | Description                                |
-| ------------------------------------------ | ------------------------------------------ | ------------------------------------------ | ------------------------------------------ |
-| `avgLatencyMs`                             | *number*                                   | :heavy_check_mark:                         | Average tool latency in milliseconds       |
-| `avgResolutionTimeMs`                      | *number*                                   | :heavy_check_mark:                         | Average time to resolution in milliseconds |
-| `avgSessionDurationMs`                     | *number*                                   | :heavy_check_mark:                         | Average session duration in milliseconds   |
-| `cacheCreationInputTokens`                 | *number*                                   | :heavy_check_mark:                         | Sum of cache creation input tokens         |
-| `cacheReadInputTokens`                     | *number*                                   | :heavy_check_mark:                         | Sum of cache read input tokens             |
-| `failedChats`                              | *number*                                   | :heavy_check_mark:                         | Number of failed chat sessions             |
-| `failedToolCalls`                          | *number*                                   | :heavy_check_mark:                         | Number of failed tool calls                |
-| `resolvedChats`                            | *number*                                   | :heavy_check_mark:                         | Number of resolved chat sessions           |
-| `totalChats`                               | *number*                                   | :heavy_check_mark:                         | Total number of chat sessions              |
-| `totalCost`                                | *number*                                   | :heavy_check_mark:                         | Total cost of all requests                 |
-| `totalInputTokens`                         | *number*                                   | :heavy_check_mark:                         | Sum of input tokens used                   |
-| `totalOutputTokens`                        | *number*                                   | :heavy_check_mark:                         | Sum of output tokens used                  |
-| `totalTokens`                              | *number*                                   | :heavy_check_mark:                         | Sum of all tokens used                     |
-| `totalToolCalls`                           | *number*                                   | :heavy_check_mark:                         | Total number of tool calls                 |
+| Field                      | Type     | Required           | Description                                |
+| -------------------------- | -------- | ------------------ | ------------------------------------------ |
+| `avgLatencyMs`             | _number_ | :heavy_check_mark: | Average tool latency in milliseconds       |
+| `avgResolutionTimeMs`      | _number_ | :heavy_check_mark: | Average time to resolution in milliseconds |
+| `avgSessionDurationMs`     | _number_ | :heavy_check_mark: | Average session duration in milliseconds   |
+| `cacheCreationInputTokens` | _number_ | :heavy_check_mark: | Sum of cache creation input tokens         |
+| `cacheReadInputTokens`     | _number_ | :heavy_check_mark: | Sum of cache read input tokens             |
+| `failedChats`              | _number_ | :heavy_check_mark: | Number of failed chat sessions             |
+| `failedToolCalls`          | _number_ | :heavy_check_mark: | Number of failed tool calls                |
+| `resolvedChats`            | _number_ | :heavy_check_mark: | Number of resolved chat sessions           |
+| `totalChats`               | _number_ | :heavy_check_mark: | Total number of chat sessions              |
+| `totalCost`                | _number_ | :heavy_check_mark: | Total cost of all requests                 |
+| `totalInputTokens`         | _number_ | :heavy_check_mark: | Sum of input tokens used                   |
+| `totalOutputTokens`        | _number_ | :heavy_check_mark: | Sum of output tokens used                  |
+| `totalTokens`              | _number_ | :heavy_check_mark: | Sum of all tokens used                     |
+| `totalToolCalls`           | _number_ | :heavy_check_mark: | Total number of tool calls                 |

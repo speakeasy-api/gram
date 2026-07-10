@@ -6,22 +6,31 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const ServeImageRequest$outboundSchema = z.object({
-    id: z.string(),
+  id: z.string(),
 });
 export function serveImageRequestToJSON(serveImageRequest) {
-    return JSON.stringify(ServeImageRequest$outboundSchema.parse(serveImageRequest));
+  return JSON.stringify(
+    ServeImageRequest$outboundSchema.parse(serveImageRequest),
+  );
 }
 /** @internal */
-export const ServeImageResponse$inboundSchema = z.pipe(z.object({
+export const ServeImageResponse$inboundSchema = z.pipe(
+  z.object({
     Headers: z._default(z.record(z.string(), z.array(z.string())), {}),
-    Result: z.custom(x => x instanceof ReadableStream),
-}), z.transform((v) => {
+    Result: z.custom((x) => x instanceof ReadableStream),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Headers": "headers",
-        "Result": "result",
+      Headers: "headers",
+      Result: "result",
     });
-}));
+  }),
+);
 export function serveImageResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ServeImageResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ServeImageResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ServeImageResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ServeImageResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=serveimage.js.map

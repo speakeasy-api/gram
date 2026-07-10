@@ -4,42 +4,68 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ListRemoteSessionClientsResult$inboundSchema, } from "../components/listremotesessionclientsresult.js";
+import { ListRemoteSessionClientsResult$inboundSchema } from "../components/listremotesessionclientsresult.js";
 /** @internal */
-export const ListGlobalRemoteSessionClientsSecurity$outboundSchema = z.pipe(z.object({
+export const ListGlobalRemoteSessionClientsSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listGlobalRemoteSessionClientsSecurityToJSON(listGlobalRemoteSessionClientsSecurity) {
-    return JSON.stringify(ListGlobalRemoteSessionClientsSecurity$outboundSchema.parse(listGlobalRemoteSessionClientsSecurity));
+  }),
+);
+export function listGlobalRemoteSessionClientsSecurityToJSON(
+  listGlobalRemoteSessionClientsSecurity,
+) {
+  return JSON.stringify(
+    ListGlobalRemoteSessionClientsSecurity$outboundSchema.parse(
+      listGlobalRemoteSessionClientsSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListGlobalRemoteSessionClientsRequest$outboundSchema = z.pipe(z.object({
+export const ListGlobalRemoteSessionClientsRequest$outboundSchema = z.pipe(
+  z.object({
     remoteSessionIssuerId: z.string(),
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        remoteSessionIssuerId: "remote_session_issuer_id",
-        gramSession: "Gram-Session",
+      remoteSessionIssuerId: "remote_session_issuer_id",
+      gramSession: "Gram-Session",
     });
-}));
-export function listGlobalRemoteSessionClientsRequestToJSON(listGlobalRemoteSessionClientsRequest) {
-    return JSON.stringify(ListGlobalRemoteSessionClientsRequest$outboundSchema.parse(listGlobalRemoteSessionClientsRequest));
+  }),
+);
+export function listGlobalRemoteSessionClientsRequestToJSON(
+  listGlobalRemoteSessionClientsRequest,
+) {
+  return JSON.stringify(
+    ListGlobalRemoteSessionClientsRequest$outboundSchema.parse(
+      listGlobalRemoteSessionClientsRequest,
+    ),
+  );
 }
 /** @internal */
-export const ListGlobalRemoteSessionClientsResponse$inboundSchema = z.pipe(z.object({
+export const ListGlobalRemoteSessionClientsResponse$inboundSchema = z.pipe(
+  z.object({
     Result: ListRemoteSessionClientsResult$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Result": "result",
+      Result: "result",
     });
-}));
+  }),
+);
 export function listGlobalRemoteSessionClientsResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListGlobalRemoteSessionClientsResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListGlobalRemoteSessionClientsResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) =>
+      ListGlobalRemoteSessionClientsResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListGlobalRemoteSessionClientsResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=listglobalremotesessionclients.js.map

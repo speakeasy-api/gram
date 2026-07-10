@@ -12,10 +12,10 @@ let value: UploadChatAttachmentRequest = {
 
 ## Fields
 
-| Field                      | Type                       | Required                   | Description                |
-| -------------------------- | -------------------------- | -------------------------- | -------------------------- |
-| `contentLength`            | *number*                   | :heavy_check_mark:         | N/A                        |
-| `gramKey`                  | *string*                   | :heavy_minus_sign:         | API Key header             |
-| `gramProject`              | *string*                   | :heavy_minus_sign:         | project header             |
-| `gramSession`              | *string*                   | :heavy_minus_sign:         | Session header             |
-| `gramChatSession`          | *string*                   | :heavy_minus_sign:         | Chat Sessions token header |
+| Field             | Type     | Required           | Description                |
+| ----------------- | -------- | ------------------ | -------------------------- |
+| `contentLength`   | _number_ | :heavy_check_mark: | N/A                        |
+| `gramKey`         | _string_ | :heavy_minus_sign: | API Key header             |
+| `gramProject`     | _string_ | :heavy_minus_sign: | project header             |
+| `gramSession`     | _string_ | :heavy_minus_sign: | Session header             |
+| `gramChatSession` | _string_ | :heavy_minus_sign: | Chat Sessions token header |

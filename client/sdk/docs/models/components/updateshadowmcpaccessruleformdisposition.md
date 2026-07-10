@@ -11,5 +11,5 @@ let value: UpdateShadowMCPAccessRuleFormDisposition = "allowed";
 ## Values
 
 ```typescript
-"allowed" | "denied"
+"allowed" | "denied";
 ```

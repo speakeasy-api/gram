@@ -5,23 +5,33 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ChatResolution$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const ChatResolution$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     id: z.string(),
     message_ids: z.array(z.string()),
     resolution: z.string(),
     resolution_notes: z.string(),
     score: z.int(),
     user_goal: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "message_ids": "messageIds",
-        "resolution_notes": "resolutionNotes",
-        "user_goal": "userGoal",
+      created_at: "createdAt",
+      message_ids: "messageIds",
+      resolution_notes: "resolutionNotes",
+      user_goal: "userGoal",
     });
-}));
+  }),
+);
 export function chatResolutionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ChatResolution$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ChatResolution' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ChatResolution$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ChatResolution' from JSON`,
+  );
 }
 //# sourceMappingURL=chatresolution.js.map

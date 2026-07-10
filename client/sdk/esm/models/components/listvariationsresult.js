@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { ToolVariation$inboundSchema } from "./toolvariation.js";
 /** @internal */
 export const ListVariationsResult$inboundSchema = z.object({
-    variations: z.array(ToolVariation$inboundSchema),
+  variations: z.array(ToolVariation$inboundSchema),
 });
 export function listVariationsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListVariationsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListVariationsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListVariationsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListVariationsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listvariationsresult.js.map

@@ -3,61 +3,81 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { SearchLogsPayload$outboundSchema, } from "../components/searchlogspayload.js";
+import { SearchLogsPayload$outboundSchema } from "../components/searchlogspayload.js";
 /** @internal */
-export const SearchLogsSecurityOption1$outboundSchema = z.pipe(z.object({
+export const SearchLogsSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
+  }),
+);
 export function searchLogsSecurityOption1ToJSON(searchLogsSecurityOption1) {
-    return JSON.stringify(SearchLogsSecurityOption1$outboundSchema.parse(searchLogsSecurityOption1));
+  return JSON.stringify(
+    SearchLogsSecurityOption1$outboundSchema.parse(searchLogsSecurityOption1),
+  );
 }
 /** @internal */
-export const SearchLogsSecurityOption2$outboundSchema = z.pipe(z.object({
+export const SearchLogsSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function searchLogsSecurityOption2ToJSON(searchLogsSecurityOption2) {
-    return JSON.stringify(SearchLogsSecurityOption2$outboundSchema.parse(searchLogsSecurityOption2));
+  return JSON.stringify(
+    SearchLogsSecurityOption2$outboundSchema.parse(searchLogsSecurityOption2),
+  );
 }
 /** @internal */
-export const SearchLogsSecurity$outboundSchema = z.pipe(z.object({
+export const SearchLogsSecurity$outboundSchema = z.pipe(
+  z.object({
     option1: z.optional(z.lazy(() => SearchLogsSecurityOption1$outboundSchema)),
     option2: z.optional(z.lazy(() => SearchLogsSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function searchLogsSecurityToJSON(searchLogsSecurity) {
-    return JSON.stringify(SearchLogsSecurity$outboundSchema.parse(searchLogsSecurity));
+  return JSON.stringify(
+    SearchLogsSecurity$outboundSchema.parse(searchLogsSecurity),
+  );
 }
 /** @internal */
-export const SearchLogsRequest$outboundSchema = z.pipe(z.object({
+export const SearchLogsRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     searchLogsPayload: SearchLogsPayload$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        searchLogsPayload: "SearchLogsPayload",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      searchLogsPayload: "SearchLogsPayload",
     });
-}));
+  }),
+);
 export function searchLogsRequestToJSON(searchLogsRequest) {
-    return JSON.stringify(SearchLogsRequest$outboundSchema.parse(searchLogsRequest));
+  return JSON.stringify(
+    SearchLogsRequest$outboundSchema.parse(searchLogsRequest),
+  );
 }
 //# sourceMappingURL=searchlogs.js.map

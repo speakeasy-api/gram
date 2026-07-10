@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { SlackAppResult$inboundSchema, } from "./slackappresult.js";
+import { SlackAppResult$inboundSchema } from "./slackappresult.js";
 /** @internal */
 export const ListSlackAppsResult$inboundSchema = z.object({
-    items: z.array(SlackAppResult$inboundSchema),
+  items: z.array(SlackAppResult$inboundSchema),
 });
 export function listSlackAppsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListSlackAppsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListSlackAppsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListSlackAppsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListSlackAppsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listslackappsresult.js.map

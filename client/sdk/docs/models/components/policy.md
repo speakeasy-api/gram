@@ -11,5 +11,5 @@ let value: Policy = "optional";
 ## Values
 
 ```typescript
-"required" | "optional"
+"required" | "optional";
 ```

@@ -15,7 +15,7 @@ let value: OtelForwardingHeaderInput = {
 
 ## Fields
 
-| Field                                                            | Type                                                             | Required                                                         | Description                                                      |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `name`                                                           | *string*                                                         | :heavy_check_mark:                                               | Header name.                                                     |
-| `value`                                                          | *string*                                                         | :heavy_check_mark:                                               | Header value. Stored encrypted at rest; never returned on reads. |
+| Field   | Type     | Required           | Description                                                      |
+| ------- | -------- | ------------------ | ---------------------------------------------------------------- |
+| `name`  | _string_ | :heavy_check_mark: | Header name.                                                     |
+| `value` | _string_ | :heavy_check_mark: | Header value. Stored encrypted at rest; never returned on reads. |

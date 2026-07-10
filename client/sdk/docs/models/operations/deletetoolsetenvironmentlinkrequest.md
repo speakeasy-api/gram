@@ -12,8 +12,8 @@ let value: DeleteToolsetEnvironmentLinkRequest = {
 
 ## Fields
 
-| Field                 | Type                  | Required              | Description           |
-| --------------------- | --------------------- | --------------------- | --------------------- |
-| `toolsetId`           | *string*              | :heavy_check_mark:    | The ID of the toolset |
-| `gramSession`         | *string*              | :heavy_minus_sign:    | Session header        |
-| `gramProject`         | *string*              | :heavy_minus_sign:    | project header        |
+| Field         | Type     | Required           | Description           |
+| ------------- | -------- | ------------------ | --------------------- |
+| `toolsetId`   | _string_ | :heavy_check_mark: | The ID of the toolset |
+| `gramSession` | _string_ | :heavy_minus_sign: | Session header        |
+| `gramProject` | _string_ | :heavy_minus_sign: | project header        |

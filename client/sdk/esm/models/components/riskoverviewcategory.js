@@ -5,10 +5,14 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const RiskOverviewCategory$inboundSchema = z.object({
-    category: z.string(),
-    findings: z.int(),
+  category: z.string(),
+  findings: z.int(),
 });
 export function riskOverviewCategoryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskOverviewCategory$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskOverviewCategory' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskOverviewCategory$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskOverviewCategory' from JSON`,
+  );
 }
 //# sourceMappingURL=riskoverviewcategory.js.map

@@ -24,8 +24,8 @@ let value: ListRiskResultsForAgentResult = {
 
 ## Fields
 
-| Field                                                                            | Type                                                                             | Required                                                                         | Description                                                                      |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `nextCursor`                                                                     | *string*                                                                         | :heavy_minus_sign:                                                               | Cursor for the next page of results.                                             |
-| `results`                                                                        | [components.RiskResultRedacted](../../models/components/riskresultredacted.md)[] | :heavy_check_mark:                                                               | The list of risk results with match content redacted to opaque fingerprints.     |
-| `totalCount`                                                                     | *number*                                                                         | :heavy_check_mark:                                                               | Total number of findings across all enabled policies.                            |
+| Field        | Type                                                                             | Required           | Description                                                                  |
+| ------------ | -------------------------------------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------- |
+| `nextCursor` | _string_                                                                         | :heavy_minus_sign: | Cursor for the next page of results.                                         |
+| `results`    | [components.RiskResultRedacted](../../models/components/riskresultredacted.md)[] | :heavy_check_mark: | The list of risk results with match content redacted to opaque fingerprints. |
+| `totalCount` | _number_                                                                         | :heavy_check_mark: | Total number of findings across all enabled policies.                        |

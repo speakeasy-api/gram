@@ -12,6 +12,6 @@ let value: ListRiskExclusionsResult = {
 
 ## Fields
 
-| Field                                                                  | Type                                                                   | Required                                                               | Description                                                            |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `exclusions`                                                           | [components.RiskExclusion](../../models/components/riskexclusion.md)[] | :heavy_check_mark:                                                     | The list of risk exclusions.                                           |
+| Field        | Type                                                                   | Required           | Description                  |
+| ------------ | ---------------------------------------------------------------------- | ------------------ | ---------------------------- |
+| `exclusions` | [components.RiskExclusion](../../models/components/riskexclusion.md)[] | :heavy_check_mark: | The list of risk exclusions. |

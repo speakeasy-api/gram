@@ -13,7 +13,7 @@ let value: UpdateInviteRoleRequestBody = {
 
 ## Fields
 
-| Field                             | Type                              | Required                          | Description                       |
-| --------------------------------- | --------------------------------- | --------------------------------- | --------------------------------- |
-| `invitationId`                    | *string*                          | :heavy_check_mark:                | WorkOS invitation ID.             |
-| `roleId`                          | *string*                          | :heavy_check_mark:                | Role ID to assign to the invitee. |
+| Field          | Type     | Required           | Description                       |
+| -------------- | -------- | ------------------ | --------------------------------- |
+| `invitationId` | _string_ | :heavy_check_mark: | WorkOS invitation ID.             |
+| `roleId`       | _string_ | :heavy_check_mark: | Role ID to assign to the invitee. |

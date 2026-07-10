@@ -4,72 +4,122 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListRiskResultsForAgentSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListRiskResultsForAgentSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listRiskResultsForAgentSecurityOption1ToJSON(listRiskResultsForAgentSecurityOption1) {
-    return JSON.stringify(ListRiskResultsForAgentSecurityOption1$outboundSchema.parse(listRiskResultsForAgentSecurityOption1));
+  }),
+);
+export function listRiskResultsForAgentSecurityOption1ToJSON(
+  listRiskResultsForAgentSecurityOption1,
+) {
+  return JSON.stringify(
+    ListRiskResultsForAgentSecurityOption1$outboundSchema.parse(
+      listRiskResultsForAgentSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListRiskResultsForAgentSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListRiskResultsForAgentSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listRiskResultsForAgentSecurityOption2ToJSON(listRiskResultsForAgentSecurityOption2) {
-    return JSON.stringify(ListRiskResultsForAgentSecurityOption2$outboundSchema.parse(listRiskResultsForAgentSecurityOption2));
+  }),
+);
+export function listRiskResultsForAgentSecurityOption2ToJSON(
+  listRiskResultsForAgentSecurityOption2,
+) {
+  return JSON.stringify(
+    ListRiskResultsForAgentSecurityOption2$outboundSchema.parse(
+      listRiskResultsForAgentSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListRiskResultsForAgentSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListRiskResultsForAgentSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListRiskResultsForAgentSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListRiskResultsForAgentSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListRiskResultsForAgentSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListRiskResultsForAgentSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function listRiskResultsForAgentSecurityToJSON(listRiskResultsForAgentSecurity) {
-    return JSON.stringify(ListRiskResultsForAgentSecurity$outboundSchema.parse(listRiskResultsForAgentSecurity));
+  }),
+);
+export function listRiskResultsForAgentSecurityToJSON(
+  listRiskResultsForAgentSecurity,
+) {
+  return JSON.stringify(
+    ListRiskResultsForAgentSecurity$outboundSchema.parse(
+      listRiskResultsForAgentSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListRiskResultsForAgentRequest$outboundSchema = z.pipe(z.object({
+export const ListRiskResultsForAgentRequest$outboundSchema = z.pipe(
+  z.object({
     policyId: z.optional(z.string()),
     chatId: z.optional(z.string()),
     category: z.optional(z.string()),
     ruleId: z.optional(z.string()),
     userId: z.optional(z.string()),
     uniqueMatch: z.optional(z.boolean()),
-    from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
-    to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    from: z.optional(
+      z.pipe(
+        z.date(),
+        z.transform((v) => v.toISOString()),
+      ),
+    ),
+    to: z.optional(
+      z.pipe(
+        z.date(),
+        z.transform((v) => v.toISOString()),
+      ),
+    ),
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        policyId: "policy_id",
-        chatId: "chat_id",
-        ruleId: "rule_id",
-        userId: "user_id",
-        uniqueMatch: "unique_match",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      policyId: "policy_id",
+      chatId: "chat_id",
+      ruleId: "rule_id",
+      userId: "user_id",
+      uniqueMatch: "unique_match",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
-export function listRiskResultsForAgentRequestToJSON(listRiskResultsForAgentRequest) {
-    return JSON.stringify(ListRiskResultsForAgentRequest$outboundSchema.parse(listRiskResultsForAgentRequest));
+  }),
+);
+export function listRiskResultsForAgentRequestToJSON(
+  listRiskResultsForAgentRequest,
+) {
+  return JSON.stringify(
+    ListRiskResultsForAgentRequest$outboundSchema.parse(
+      listRiskResultsForAgentRequest,
+    ),
+  );
 }
 //# sourceMappingURL=listriskresultsforagent.js.map

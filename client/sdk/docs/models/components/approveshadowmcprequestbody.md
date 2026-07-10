@@ -13,8 +13,8 @@ let value: ApproveShadowMCPRequestBody = {
 
 ## Fields
 
-| Field                                              | Type                                               | Required                                           | Description                                        |
-| -------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
-| `match`                                            | *string*                                           | :heavy_check_mark:                                 | The MCP server identifier to approve.              |
-| `policyId`                                         | *string*                                           | :heavy_check_mark:                                 | The risk policy ID.                                |
-| `serverName`                                       | *string*                                           | :heavy_minus_sign:                                 | Display name of the MCP server (optional, for UI). |
+| Field        | Type     | Required           | Description                                        |
+| ------------ | -------- | ------------------ | -------------------------------------------------- |
+| `match`      | _string_ | :heavy_check_mark: | The MCP server identifier to approve.              |
+| `policyId`   | _string_ | :heavy_check_mark: | The risk policy ID.                                |
+| `serverName` | _string_ | :heavy_minus_sign: | Display name of the MCP server (optional, for UI). |

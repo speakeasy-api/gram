@@ -8,29 +8,38 @@ import { safeParse } from "../../lib/schemas.js";
  * Suggested severity level.
  */
 export const SuggestCustomDetectionRuleResultSeverity = {
-    Info: "info",
-    Low: "low",
-    Medium: "medium",
-    High: "high",
-    Critical: "critical",
+  Info: "info",
+  Low: "low",
+  Medium: "medium",
+  High: "high",
+  Critical: "critical",
 };
 /** @internal */
-export const SuggestCustomDetectionRuleResultSeverity$inboundSchema = z.enum(SuggestCustomDetectionRuleResultSeverity);
+export const SuggestCustomDetectionRuleResultSeverity$inboundSchema = z.enum(
+  SuggestCustomDetectionRuleResultSeverity,
+);
 /** @internal */
-export const SuggestCustomDetectionRuleResult$inboundSchema = z.pipe(z.object({
+export const SuggestCustomDetectionRuleResult$inboundSchema = z.pipe(
+  z.object({
     description: z.string(),
     detection_expr: z.optional(z.string()),
     regex: z.string(),
     rule_id: z.string(),
     severity: SuggestCustomDetectionRuleResultSeverity$inboundSchema,
     title: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "detection_expr": "detectionExpr",
-        "rule_id": "ruleId",
+      detection_expr: "detectionExpr",
+      rule_id: "ruleId",
     });
-}));
+  }),
+);
 export function suggestCustomDetectionRuleResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SuggestCustomDetectionRuleResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SuggestCustomDetectionRuleResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SuggestCustomDetectionRuleResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SuggestCustomDetectionRuleResult' from JSON`,
+  );
 }
 //# sourceMappingURL=suggestcustomdetectionruleresult.js.map

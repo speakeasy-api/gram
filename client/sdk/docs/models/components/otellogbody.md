@@ -12,6 +12,6 @@ let value: OTELLogBody = {};
 
 ## Fields
 
-| Field              | Type               | Required           | Description        |
-| ------------------ | ------------------ | ------------------ | ------------------ |
-| `stringValue`      | *string*           | :heavy_minus_sign: | String body value  |
+| Field         | Type     | Required           | Description       |
+| ------------- | -------- | ------------------ | ----------------- |
+| `stringValue` | _string_ | :heavy_minus_sign: | String body value |

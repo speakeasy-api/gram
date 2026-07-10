@@ -3,33 +3,49 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { SendMessageRequestBody$outboundSchema, } from "../components/sendmessagerequestbody.js";
+import { SendMessageRequestBody$outboundSchema } from "../components/sendmessagerequestbody.js";
 /** @internal */
-export const SendAssistantMessageSecurity$outboundSchema = z.pipe(z.object({
+export const SendAssistantMessageSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function sendAssistantMessageSecurityToJSON(sendAssistantMessageSecurity) {
-    return JSON.stringify(SendAssistantMessageSecurity$outboundSchema.parse(sendAssistantMessageSecurity));
+  }),
+);
+export function sendAssistantMessageSecurityToJSON(
+  sendAssistantMessageSecurity,
+) {
+  return JSON.stringify(
+    SendAssistantMessageSecurity$outboundSchema.parse(
+      sendAssistantMessageSecurity,
+    ),
+  );
 }
 /** @internal */
-export const SendAssistantMessageRequest$outboundSchema = z.pipe(z.object({
+export const SendAssistantMessageRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     sendMessageRequestBody: SendMessageRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        sendMessageRequestBody: "SendMessageRequestBody",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      sendMessageRequestBody: "SendMessageRequestBody",
     });
-}));
+  }),
+);
 export function sendAssistantMessageRequestToJSON(sendAssistantMessageRequest) {
-    return JSON.stringify(SendAssistantMessageRequest$outboundSchema.parse(sendAssistantMessageRequest));
+  return JSON.stringify(
+    SendAssistantMessageRequest$outboundSchema.parse(
+      sendAssistantMessageRequest,
+    ),
+  );
 }
 //# sourceMappingURL=sendassistantmessage.js.map

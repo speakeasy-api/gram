@@ -4,59 +4,99 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListShadowMCPApprovalsSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListShadowMCPApprovalsSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listShadowMCPApprovalsSecurityOption1ToJSON(listShadowMCPApprovalsSecurityOption1) {
-    return JSON.stringify(ListShadowMCPApprovalsSecurityOption1$outboundSchema.parse(listShadowMCPApprovalsSecurityOption1));
+  }),
+);
+export function listShadowMCPApprovalsSecurityOption1ToJSON(
+  listShadowMCPApprovalsSecurityOption1,
+) {
+  return JSON.stringify(
+    ListShadowMCPApprovalsSecurityOption1$outboundSchema.parse(
+      listShadowMCPApprovalsSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListShadowMCPApprovalsSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListShadowMCPApprovalsSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listShadowMCPApprovalsSecurityOption2ToJSON(listShadowMCPApprovalsSecurityOption2) {
-    return JSON.stringify(ListShadowMCPApprovalsSecurityOption2$outboundSchema.parse(listShadowMCPApprovalsSecurityOption2));
+  }),
+);
+export function listShadowMCPApprovalsSecurityOption2ToJSON(
+  listShadowMCPApprovalsSecurityOption2,
+) {
+  return JSON.stringify(
+    ListShadowMCPApprovalsSecurityOption2$outboundSchema.parse(
+      listShadowMCPApprovalsSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListShadowMCPApprovalsSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListShadowMCPApprovalsSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListShadowMCPApprovalsSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListShadowMCPApprovalsSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListShadowMCPApprovalsSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListShadowMCPApprovalsSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function listShadowMCPApprovalsSecurityToJSON(listShadowMCPApprovalsSecurity) {
-    return JSON.stringify(ListShadowMCPApprovalsSecurity$outboundSchema.parse(listShadowMCPApprovalsSecurity));
+  }),
+);
+export function listShadowMCPApprovalsSecurityToJSON(
+  listShadowMCPApprovalsSecurity,
+) {
+  return JSON.stringify(
+    ListShadowMCPApprovalsSecurity$outboundSchema.parse(
+      listShadowMCPApprovalsSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListShadowMCPApprovalsRequest$outboundSchema = z.pipe(z.object({
+export const ListShadowMCPApprovalsRequest$outboundSchema = z.pipe(
+  z.object({
     policyId: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        policyId: "policy_id",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      policyId: "policy_id",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
-export function listShadowMCPApprovalsRequestToJSON(listShadowMCPApprovalsRequest) {
-    return JSON.stringify(ListShadowMCPApprovalsRequest$outboundSchema.parse(listShadowMCPApprovalsRequest));
+  }),
+);
+export function listShadowMCPApprovalsRequestToJSON(
+  listShadowMCPApprovalsRequest,
+) {
+  return JSON.stringify(
+    ListShadowMCPApprovalsRequest$outboundSchema.parse(
+      listShadowMCPApprovalsRequest,
+    ),
+  );
 }
 //# sourceMappingURL=listshadowmcpapprovals.js.map

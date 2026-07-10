@@ -5,11 +5,15 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const DeploymentPackage$inboundSchema = z.object({
-    id: z.string(),
-    name: z.string(),
-    version: z.string(),
+  id: z.string(),
+  name: z.string(),
+  version: z.string(),
 });
 export function deploymentPackageFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => DeploymentPackage$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'DeploymentPackage' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => DeploymentPackage$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'DeploymentPackage' from JSON`,
+  );
 }
 //# sourceMappingURL=deploymentpackage.js.map

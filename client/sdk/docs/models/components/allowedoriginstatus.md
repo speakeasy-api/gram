@@ -11,5 +11,5 @@ let value: AllowedOriginStatus = "approved";
 ## Values
 
 ```typescript
-"pending" | "approved" | "rejected"
+"pending" | "approved" | "rejected";
 ```

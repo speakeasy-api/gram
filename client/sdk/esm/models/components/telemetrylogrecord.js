@@ -6,7 +6,8 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { ServiceInfo$inboundSchema } from "./serviceinfo.js";
 /** @internal */
-export const TelemetryLogRecord$inboundSchema = z.pipe(z.object({
+export const TelemetryLogRecord$inboundSchema = z.pipe(
+  z.object({
     attributes: z.any(),
     body: z.string(),
     id: z.string(),
@@ -17,17 +18,23 @@ export const TelemetryLogRecord$inboundSchema = z.pipe(z.object({
     span_id: z.optional(z.string()),
     time_unix_nano: z.string(),
     trace_id: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "observed_time_unix_nano": "observedTimeUnixNano",
-        "resource_attributes": "resourceAttributes",
-        "severity_text": "severityText",
-        "span_id": "spanId",
-        "time_unix_nano": "timeUnixNano",
-        "trace_id": "traceId",
+      observed_time_unix_nano: "observedTimeUnixNano",
+      resource_attributes: "resourceAttributes",
+      severity_text: "severityText",
+      span_id: "spanId",
+      time_unix_nano: "timeUnixNano",
+      trace_id: "traceId",
     });
-}));
+  }),
+);
 export function telemetryLogRecordFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TelemetryLogRecord$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TelemetryLogRecord' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TelemetryLogRecord$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TelemetryLogRecord' from JSON`,
+  );
 }
 //# sourceMappingURL=telemetrylogrecord.js.map

@@ -5,45 +5,62 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ServeFunctionSecurity$outboundSchema = z.pipe(z.object({
+export const ServeFunctionSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function serveFunctionSecurityToJSON(serveFunctionSecurity) {
-    return JSON.stringify(ServeFunctionSecurity$outboundSchema.parse(serveFunctionSecurity));
+  return JSON.stringify(
+    ServeFunctionSecurity$outboundSchema.parse(serveFunctionSecurity),
+  );
 }
 /** @internal */
-export const ServeFunctionRequest$outboundSchema = z.pipe(z.object({
+export const ServeFunctionRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     projectId: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectId: "project_id",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
+      projectId: "project_id",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function serveFunctionRequestToJSON(serveFunctionRequest) {
-    return JSON.stringify(ServeFunctionRequest$outboundSchema.parse(serveFunctionRequest));
+  return JSON.stringify(
+    ServeFunctionRequest$outboundSchema.parse(serveFunctionRequest),
+  );
 }
 /** @internal */
-export const ServeFunctionResponse$inboundSchema = z.pipe(z.object({
+export const ServeFunctionResponse$inboundSchema = z.pipe(
+  z.object({
     Headers: z._default(z.record(z.string(), z.array(z.string())), {}),
-    Result: z.custom(x => x instanceof ReadableStream),
-}), z.transform((v) => {
+    Result: z.custom((x) => x instanceof ReadableStream),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Headers": "headers",
-        "Result": "result",
+      Headers: "headers",
+      Result: "result",
     });
-}));
+  }),
+);
 export function serveFunctionResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ServeFunctionResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ServeFunctionResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ServeFunctionResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ServeFunctionResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=servefunction.js.map

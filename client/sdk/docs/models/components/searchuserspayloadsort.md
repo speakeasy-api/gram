@@ -13,5 +13,5 @@ let value: SearchUsersPayloadSort = "asc";
 ## Values
 
 ```typescript
-"asc" | "desc"
+"asc" | "desc";
 ```

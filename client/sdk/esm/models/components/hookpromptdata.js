@@ -4,9 +4,9 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const HookPromptData$outboundSchema = z.object({
-    text: z.optional(z.string()),
+  text: z.optional(z.string()),
 });
 export function hookPromptDataToJSON(hookPromptData) {
-    return JSON.stringify(HookPromptData$outboundSchema.parse(hookPromptData));
+  return JSON.stringify(HookPromptData$outboundSchema.parse(hookPromptData));
 }
 //# sourceMappingURL=hookpromptdata.js.map

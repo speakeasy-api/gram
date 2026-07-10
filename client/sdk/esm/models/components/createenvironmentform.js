@@ -3,19 +3,24 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { EnvironmentEntryInput$outboundSchema, } from "./environmententryinput.js";
+import { EnvironmentEntryInput$outboundSchema } from "./environmententryinput.js";
 /** @internal */
-export const CreateEnvironmentForm$outboundSchema = z.pipe(z.object({
+export const CreateEnvironmentForm$outboundSchema = z.pipe(
+  z.object({
     description: z.optional(z.string()),
     entries: z.array(EnvironmentEntryInput$outboundSchema),
     name: z.string(),
     organizationId: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        organizationId: "organization_id",
+      organizationId: "organization_id",
     });
-}));
+  }),
+);
 export function createEnvironmentFormToJSON(createEnvironmentForm) {
-    return JSON.stringify(CreateEnvironmentForm$outboundSchema.parse(createEnvironmentForm));
+  return JSON.stringify(
+    CreateEnvironmentForm$outboundSchema.parse(createEnvironmentForm),
+  );
 }
 //# sourceMappingURL=createenvironmentform.js.map

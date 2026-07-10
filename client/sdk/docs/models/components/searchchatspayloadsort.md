@@ -13,5 +13,5 @@ let value: SearchChatsPayloadSort = "desc";
 ## Values
 
 ```typescript
-"asc" | "desc"
+"asc" | "desc";
 ```

@@ -10,11 +10,11 @@ let value: ListMcpServersRequest = {};
 
 ## Fields
 
-| Field                                                    | Type                                                     | Required                                                 | Description                                              |
-| -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
-| `remoteMcpServerId`                                      | *string*                                                 | :heavy_minus_sign:                                       | Filter to MCP servers backed by this remote MCP server   |
-| `tunneledMcpServerId`                                    | *string*                                                 | :heavy_minus_sign:                                       | Filter to MCP servers backed by this tunneled MCP server |
-| `toolsetId`                                              | *string*                                                 | :heavy_minus_sign:                                       | Filter to MCP servers backed by this toolset             |
-| `gramSession`                                            | *string*                                                 | :heavy_minus_sign:                                       | Session header                                           |
-| `gramKey`                                                | *string*                                                 | :heavy_minus_sign:                                       | API Key header                                           |
-| `gramProject`                                            | *string*                                                 | :heavy_minus_sign:                                       | project header                                           |
+| Field                 | Type     | Required           | Description                                              |
+| --------------------- | -------- | ------------------ | -------------------------------------------------------- |
+| `remoteMcpServerId`   | _string_ | :heavy_minus_sign: | Filter to MCP servers backed by this remote MCP server   |
+| `tunneledMcpServerId` | _string_ | :heavy_minus_sign: | Filter to MCP servers backed by this tunneled MCP server |
+| `toolsetId`           | _string_ | :heavy_minus_sign: | Filter to MCP servers backed by this toolset             |
+| `gramSession`         | _string_ | :heavy_minus_sign: | Session header                                           |
+| `gramKey`             | _string_ | :heavy_minus_sign: | API Key header                                           |
+| `gramProject`         | _string_ | :heavy_minus_sign: | project header                                           |

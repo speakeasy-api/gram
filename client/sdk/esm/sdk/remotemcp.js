@@ -11,68 +11,75 @@ import { remoteMcpVerifyURL } from "../funcs/remoteMcpVerifyURL.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class RemoteMcp extends ClientSDK {
-    /**
-     * createServer remoteMcp
-     *
-     * @remarks
-     * Create a new remote MCP server
-     */
-    async createServer(request, security, options) {
-        return unwrapAsync(remoteMcpCreateServer(this, request, security, options));
-    }
-    /**
-     * deleteServer remoteMcp
-     *
-     * @remarks
-     * Delete a remote MCP server
-     */
-    async deleteServer(request, security, options) {
-        return unwrapAsync(remoteMcpDeleteServer(this, request, security, options));
-    }
-    /**
-     * discoverProtectedResourceMetadata remoteMcp
-     *
-     * @remarks
-     * Probe the remote MCP server's origin for an RFC 9728 .well-known/oauth-protected-resource document and return either the parsed metadata or a typed unavailability reason. Runs server-side under guardian.Policy so production resource servers without CORS can still be inspected.
-     */
-    async discoverProtectedResourceMetadata(request, security, options) {
-        return unwrapAsync(remoteMcpDiscoverProtectedResourceMetadata(this, request, security, options));
-    }
-    /**
-     * getServer remoteMcp
-     *
-     * @remarks
-     * Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
-     */
-    async getServer(request, security, options) {
-        return unwrapAsync(remoteMcpGetServer(this, request, security, options));
-    }
-    /**
-     * listServers remoteMcp
-     *
-     * @remarks
-     * List all remote MCP servers for a project
-     */
-    async listServers(request, security, options) {
-        return unwrapAsync(remoteMcpListServers(this, request, security, options));
-    }
-    /**
-     * updateServer remoteMcp
-     *
-     * @remarks
-     * Update a remote MCP server
-     */
-    async updateServer(request, security, options) {
-        return unwrapAsync(remoteMcpUpdateServer(this, request, security, options));
-    }
-    /**
-     * verifyURL remoteMcp
-     *
-     * @remarks
-     * Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.
-     */
-    async verifyURL(request, security, options) {
-        return unwrapAsync(remoteMcpVerifyURL(this, request, security, options));
-    }
+  /**
+   * createServer remoteMcp
+   *
+   * @remarks
+   * Create a new remote MCP server
+   */
+  async createServer(request, security, options) {
+    return unwrapAsync(remoteMcpCreateServer(this, request, security, options));
+  }
+  /**
+   * deleteServer remoteMcp
+   *
+   * @remarks
+   * Delete a remote MCP server
+   */
+  async deleteServer(request, security, options) {
+    return unwrapAsync(remoteMcpDeleteServer(this, request, security, options));
+  }
+  /**
+   * discoverProtectedResourceMetadata remoteMcp
+   *
+   * @remarks
+   * Probe the remote MCP server's origin for an RFC 9728 .well-known/oauth-protected-resource document and return either the parsed metadata or a typed unavailability reason. Runs server-side under guardian.Policy so production resource servers without CORS can still be inspected.
+   */
+  async discoverProtectedResourceMetadata(request, security, options) {
+    return unwrapAsync(
+      remoteMcpDiscoverProtectedResourceMetadata(
+        this,
+        request,
+        security,
+        options,
+      ),
+    );
+  }
+  /**
+   * getServer remoteMcp
+   *
+   * @remarks
+   * Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
+   */
+  async getServer(request, security, options) {
+    return unwrapAsync(remoteMcpGetServer(this, request, security, options));
+  }
+  /**
+   * listServers remoteMcp
+   *
+   * @remarks
+   * List all remote MCP servers for a project
+   */
+  async listServers(request, security, options) {
+    return unwrapAsync(remoteMcpListServers(this, request, security, options));
+  }
+  /**
+   * updateServer remoteMcp
+   *
+   * @remarks
+   * Update a remote MCP server
+   */
+  async updateServer(request, security, options) {
+    return unwrapAsync(remoteMcpUpdateServer(this, request, security, options));
+  }
+  /**
+   * verifyURL remoteMcp
+   *
+   * @remarks
+   * Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.
+   */
+  async verifyURL(request, security, options) {
+    return unwrapAsync(remoteMcpVerifyURL(this, request, security, options));
+  }
 }
 //# sourceMappingURL=remotemcp.js.map

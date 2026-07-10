@@ -13,5 +13,5 @@ let value: McpServerVisibility = "disabled";
 ## Values
 
 ```typescript
-"disabled" | "private" | "public"
+"disabled" | "private" | "public";
 ```

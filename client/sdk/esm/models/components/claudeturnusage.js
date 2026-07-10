@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ClaudeTurnUsage$inboundSchema = z.pipe(z.object({
+export const ClaudeTurnUsage$inboundSchema = z.pipe(
+  z.object({
     cache_creation_tokens: z.int(),
     cache_read_tokens: z.int(),
     cost_micros: z.int(),
@@ -19,23 +20,29 @@ export const ClaudeTurnUsage$inboundSchema = z.pipe(z.object({
     request_count: z.int(),
     start_time_unix_nano: z.string(),
     total_tokens: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "cache_creation_tokens": "cacheCreationTokens",
-        "cache_read_tokens": "cacheReadTokens",
-        "cost_micros": "costMicros",
-        "cost_usd": "costUsd",
-        "end_time_unix_nano": "endTimeUnixNano",
-        "input_tokens": "inputTokens",
-        "output_tokens": "outputTokens",
-        "prompt_id": "promptId",
-        "query_sources": "querySources",
-        "request_count": "requestCount",
-        "start_time_unix_nano": "startTimeUnixNano",
-        "total_tokens": "totalTokens",
+      cache_creation_tokens: "cacheCreationTokens",
+      cache_read_tokens: "cacheReadTokens",
+      cost_micros: "costMicros",
+      cost_usd: "costUsd",
+      end_time_unix_nano: "endTimeUnixNano",
+      input_tokens: "inputTokens",
+      output_tokens: "outputTokens",
+      prompt_id: "promptId",
+      query_sources: "querySources",
+      request_count: "requestCount",
+      start_time_unix_nano: "startTimeUnixNano",
+      total_tokens: "totalTokens",
     });
-}));
+  }),
+);
 export function claudeTurnUsageFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ClaudeTurnUsage$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ClaudeTurnUsage' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ClaudeTurnUsage$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ClaudeTurnUsage' from JSON`,
+  );
 }
 //# sourceMappingURL=claudeturnusage.js.map

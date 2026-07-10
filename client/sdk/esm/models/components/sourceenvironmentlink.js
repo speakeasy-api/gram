@@ -8,25 +8,34 @@ import { safeParse } from "../../lib/schemas.js";
  * The kind of source that can be linked to an environment
  */
 export const SourceEnvironmentLinkSourceKind = {
-    Http: "http",
-    Function: "function",
+  Http: "http",
+  Function: "function",
 };
 /** @internal */
-export const SourceEnvironmentLinkSourceKind$inboundSchema = z.enum(SourceEnvironmentLinkSourceKind);
+export const SourceEnvironmentLinkSourceKind$inboundSchema = z.enum(
+  SourceEnvironmentLinkSourceKind,
+);
 /** @internal */
-export const SourceEnvironmentLink$inboundSchema = z.pipe(z.object({
+export const SourceEnvironmentLink$inboundSchema = z.pipe(
+  z.object({
     environment_id: z.string(),
     id: z.string(),
     source_kind: SourceEnvironmentLinkSourceKind$inboundSchema,
     source_slug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "environment_id": "environmentId",
-        "source_kind": "sourceKind",
-        "source_slug": "sourceSlug",
+      environment_id: "environmentId",
+      source_kind: "sourceKind",
+      source_slug: "sourceSlug",
     });
-}));
+  }),
+);
 export function sourceEnvironmentLinkFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SourceEnvironmentLink$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SourceEnvironmentLink' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SourceEnvironmentLink$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SourceEnvironmentLink' from JSON`,
+  );
 }
 //# sourceMappingURL=sourceenvironmentlink.js.map

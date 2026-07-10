@@ -5,45 +5,62 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ServeOpenAPIv3Security$outboundSchema = z.pipe(z.object({
+export const ServeOpenAPIv3Security$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function serveOpenAPIv3SecurityToJSON(serveOpenAPIv3Security) {
-    return JSON.stringify(ServeOpenAPIv3Security$outboundSchema.parse(serveOpenAPIv3Security));
+  return JSON.stringify(
+    ServeOpenAPIv3Security$outboundSchema.parse(serveOpenAPIv3Security),
+  );
 }
 /** @internal */
-export const ServeOpenAPIv3Request$outboundSchema = z.pipe(z.object({
+export const ServeOpenAPIv3Request$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     projectId: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectId: "project_id",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
+      projectId: "project_id",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function serveOpenAPIv3RequestToJSON(serveOpenAPIv3Request) {
-    return JSON.stringify(ServeOpenAPIv3Request$outboundSchema.parse(serveOpenAPIv3Request));
+  return JSON.stringify(
+    ServeOpenAPIv3Request$outboundSchema.parse(serveOpenAPIv3Request),
+  );
 }
 /** @internal */
-export const ServeOpenAPIv3Response$inboundSchema = z.pipe(z.object({
+export const ServeOpenAPIv3Response$inboundSchema = z.pipe(
+  z.object({
     Headers: z._default(z.record(z.string(), z.array(z.string())), {}),
-    Result: z.custom(x => x instanceof ReadableStream),
-}), z.transform((v) => {
+    Result: z.custom((x) => x instanceof ReadableStream),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Headers": "headers",
-        "Result": "result",
+      Headers: "headers",
+      Result: "result",
     });
-}));
+  }),
+);
 export function serveOpenAPIv3ResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ServeOpenAPIv3Response$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ServeOpenAPIv3Response' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ServeOpenAPIv3Response$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ServeOpenAPIv3Response' from JSON`,
+  );
 }
 //# sourceMappingURL=serveopenapiv3.js.map

@@ -8,27 +8,42 @@ import { safeParse } from "../../lib/schemas.js";
  * The cloud provider of the credential.
  */
 export const ExternalCredentialSummaryProvider = {
-    AwsIam: "aws_iam",
-    GcpIam: "gcp_iam",
+  AwsIam: "aws_iam",
+  GcpIam: "gcp_iam",
 };
 /** @internal */
-export const ExternalCredentialSummaryProvider$inboundSchema = z.enum(ExternalCredentialSummaryProvider);
+export const ExternalCredentialSummaryProvider$inboundSchema = z.enum(
+  ExternalCredentialSummaryProvider,
+);
 /** @internal */
-export const ExternalCredentialSummary$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const ExternalCredentialSummary$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     id: z.string(),
     name: z.string(),
     organization_id: z.string(),
     provider: ExternalCredentialSummaryProvider$inboundSchema,
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "organization_id": "organizationId",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      organization_id: "organizationId",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function externalCredentialSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ExternalCredentialSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ExternalCredentialSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ExternalCredentialSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ExternalCredentialSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=externalcredentialsummary.js.map

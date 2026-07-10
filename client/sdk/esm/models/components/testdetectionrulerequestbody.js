@@ -4,17 +4,26 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const TestDetectionRuleRequestBody$outboundSchema = z.pipe(z.object({
+export const TestDetectionRuleRequestBody$outboundSchema = z.pipe(
+  z.object({
     detectionExpr: z.optional(z.string()),
     ruleId: z.string(),
     text: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        detectionExpr: "detection_expr",
-        ruleId: "rule_id",
+      detectionExpr: "detection_expr",
+      ruleId: "rule_id",
     });
-}));
-export function testDetectionRuleRequestBodyToJSON(testDetectionRuleRequestBody) {
-    return JSON.stringify(TestDetectionRuleRequestBody$outboundSchema.parse(testDetectionRuleRequestBody));
+  }),
+);
+export function testDetectionRuleRequestBodyToJSON(
+  testDetectionRuleRequestBody,
+) {
+  return JSON.stringify(
+    TestDetectionRuleRequestBody$outboundSchema.parse(
+      testDetectionRuleRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=testdetectionrulerequestbody.js.map

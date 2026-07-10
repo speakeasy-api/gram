@@ -14,7 +14,7 @@ let value: TUMPeriodDay = {
 
 ## Fields
 
-| Field                                        | Type                                         | Required                                     | Description                                  |
-| -------------------------------------------- | -------------------------------------------- | -------------------------------------------- | -------------------------------------------- |
-| `date`                                       | [RFCDate](../../types/rfcdate.md)            | :heavy_check_mark:                           | The UTC day                                  |
-| `tokens`                                     | *number*                                     | :heavy_check_mark:                           | Tokens under management consumed on this day |
+| Field    | Type                              | Required           | Description                                  |
+| -------- | --------------------------------- | ------------------ | -------------------------------------------- |
+| `date`   | [RFCDate](../../types/rfcdate.md) | :heavy_check_mark: | The UTC day                                  |
+| `tokens` | _number_                          | :heavy_check_mark: | Tokens under management consumed on this day |

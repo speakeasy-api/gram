@@ -4,29 +4,46 @@
 import { externalCredentialsGetAwsIam } from "../funcs/externalCredentialsGetAwsIam.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchGetAwsIamCredential(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildGetAwsIamCredentialQuery(client$, request, security, options),
-    });
+export function prefetchGetAwsIamCredential(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildGetAwsIamCredentialQuery(client$, request, security, options),
+  });
 }
-export function buildGetAwsIamCredentialQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyGetAwsIamCredential({
-            id: request.id,
-            gramSession: request.gramSession,
-        }),
-        queryFn: async function getAwsIamCredentialQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(externalCredentialsGetAwsIam(client$, request, security, mergedOptions));
-        },
-    };
+export function buildGetAwsIamCredentialQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyGetAwsIamCredential({
+      id: request.id,
+      gramSession: request.gramSession,
+    }),
+    queryFn: async function getAwsIamCredentialQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        externalCredentialsGetAwsIam(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyGetAwsIamCredential(parameters) {
-    return ["@gram/client", "externalCredentials", "getAwsIam", parameters];
+  return ["@gram/client", "externalCredentials", "getAwsIam", parameters];
 }
 //# sourceMappingURL=getAwsIamCredential.core.js.map

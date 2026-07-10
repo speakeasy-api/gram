@@ -4,72 +4,119 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ListRemoteSessionIssuersResult$inboundSchema, } from "../components/listremotesessionissuersresult.js";
+import { ListRemoteSessionIssuersResult$inboundSchema } from "../components/listremotesessionissuersresult.js";
 /** @internal */
-export const ListRemoteSessionIssuersSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListRemoteSessionIssuersSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listRemoteSessionIssuersSecurityOption1ToJSON(listRemoteSessionIssuersSecurityOption1) {
-    return JSON.stringify(ListRemoteSessionIssuersSecurityOption1$outboundSchema.parse(listRemoteSessionIssuersSecurityOption1));
+  }),
+);
+export function listRemoteSessionIssuersSecurityOption1ToJSON(
+  listRemoteSessionIssuersSecurityOption1,
+) {
+  return JSON.stringify(
+    ListRemoteSessionIssuersSecurityOption1$outboundSchema.parse(
+      listRemoteSessionIssuersSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListRemoteSessionIssuersSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListRemoteSessionIssuersSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listRemoteSessionIssuersSecurityOption2ToJSON(listRemoteSessionIssuersSecurityOption2) {
-    return JSON.stringify(ListRemoteSessionIssuersSecurityOption2$outboundSchema.parse(listRemoteSessionIssuersSecurityOption2));
+  }),
+);
+export function listRemoteSessionIssuersSecurityOption2ToJSON(
+  listRemoteSessionIssuersSecurityOption2,
+) {
+  return JSON.stringify(
+    ListRemoteSessionIssuersSecurityOption2$outboundSchema.parse(
+      listRemoteSessionIssuersSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListRemoteSessionIssuersSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListRemoteSessionIssuersSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListRemoteSessionIssuersSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListRemoteSessionIssuersSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListRemoteSessionIssuersSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListRemoteSessionIssuersSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function listRemoteSessionIssuersSecurityToJSON(listRemoteSessionIssuersSecurity) {
-    return JSON.stringify(ListRemoteSessionIssuersSecurity$outboundSchema.parse(listRemoteSessionIssuersSecurity));
+  }),
+);
+export function listRemoteSessionIssuersSecurityToJSON(
+  listRemoteSessionIssuersSecurity,
+) {
+  return JSON.stringify(
+    ListRemoteSessionIssuersSecurity$outboundSchema.parse(
+      listRemoteSessionIssuersSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListRemoteSessionIssuersRequest$outboundSchema = z.pipe(z.object({
+export const ListRemoteSessionIssuersRequest$outboundSchema = z.pipe(
+  z.object({
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
     });
-}));
-export function listRemoteSessionIssuersRequestToJSON(listRemoteSessionIssuersRequest) {
-    return JSON.stringify(ListRemoteSessionIssuersRequest$outboundSchema.parse(listRemoteSessionIssuersRequest));
+  }),
+);
+export function listRemoteSessionIssuersRequestToJSON(
+  listRemoteSessionIssuersRequest,
+) {
+  return JSON.stringify(
+    ListRemoteSessionIssuersRequest$outboundSchema.parse(
+      listRemoteSessionIssuersRequest,
+    ),
+  );
 }
 /** @internal */
-export const ListRemoteSessionIssuersResponse$inboundSchema = z.pipe(z.object({
+export const ListRemoteSessionIssuersResponse$inboundSchema = z.pipe(
+  z.object({
     Result: ListRemoteSessionIssuersResult$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Result": "result",
+      Result: "result",
     });
-}));
+  }),
+);
 export function listRemoteSessionIssuersResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListRemoteSessionIssuersResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListRemoteSessionIssuersResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListRemoteSessionIssuersResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListRemoteSessionIssuersResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=listremotesessionissuers.js.map

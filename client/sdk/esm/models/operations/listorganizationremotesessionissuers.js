@@ -4,44 +4,77 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ListOrganizationRemoteSessionIssuersResult$inboundSchema, } from "../components/listorganizationremotesessionissuersresult.js";
+import { ListOrganizationRemoteSessionIssuersResult$inboundSchema } from "../components/listorganizationremotesessionissuersresult.js";
 /** @internal */
-export const ListOrganizationRemoteSessionIssuersSecurity$outboundSchema = z.pipe(z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
-    apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const ListOrganizationRemoteSessionIssuersSecurity$outboundSchema =
+  z.pipe(
+    z.object({
+      sessionHeaderGramSession: z.optional(z.string()),
+      apikeyHeaderGramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         sessionHeaderGramSession: "session_header_Gram-Session",
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    });
-}));
-export function listOrganizationRemoteSessionIssuersSecurityToJSON(listOrganizationRemoteSessionIssuersSecurity) {
-    return JSON.stringify(ListOrganizationRemoteSessionIssuersSecurity$outboundSchema.parse(listOrganizationRemoteSessionIssuersSecurity));
+      });
+    }),
+  );
+export function listOrganizationRemoteSessionIssuersSecurityToJSON(
+  listOrganizationRemoteSessionIssuersSecurity,
+) {
+  return JSON.stringify(
+    ListOrganizationRemoteSessionIssuersSecurity$outboundSchema.parse(
+      listOrganizationRemoteSessionIssuersSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListOrganizationRemoteSessionIssuersRequest$outboundSchema = z.pipe(z.object({
-    cursor: z.optional(z.string()),
-    limit: z.optional(z.int()),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const ListOrganizationRemoteSessionIssuersRequest$outboundSchema =
+  z.pipe(
+    z.object({
+      cursor: z.optional(z.string()),
+      limit: z.optional(z.int()),
+      gramSession: z.optional(z.string()),
+      gramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
-    });
-}));
-export function listOrganizationRemoteSessionIssuersRequestToJSON(listOrganizationRemoteSessionIssuersRequest) {
-    return JSON.stringify(ListOrganizationRemoteSessionIssuersRequest$outboundSchema.parse(listOrganizationRemoteSessionIssuersRequest));
+      });
+    }),
+  );
+export function listOrganizationRemoteSessionIssuersRequestToJSON(
+  listOrganizationRemoteSessionIssuersRequest,
+) {
+  return JSON.stringify(
+    ListOrganizationRemoteSessionIssuersRequest$outboundSchema.parse(
+      listOrganizationRemoteSessionIssuersRequest,
+    ),
+  );
 }
 /** @internal */
-export const ListOrganizationRemoteSessionIssuersResponse$inboundSchema = z.pipe(z.object({
-    Result: ListOrganizationRemoteSessionIssuersResult$inboundSchema,
-}), z.transform((v) => {
-    return remap$(v, {
-        "Result": "result",
-    });
-}));
-export function listOrganizationRemoteSessionIssuersResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListOrganizationRemoteSessionIssuersResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListOrganizationRemoteSessionIssuersResponse' from JSON`);
+export const ListOrganizationRemoteSessionIssuersResponse$inboundSchema =
+  z.pipe(
+    z.object({
+      Result: ListOrganizationRemoteSessionIssuersResult$inboundSchema,
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        Result: "result",
+      });
+    }),
+  );
+export function listOrganizationRemoteSessionIssuersResponseFromJSON(
+  jsonString,
+) {
+  return safeParse(
+    jsonString,
+    (x) =>
+      ListOrganizationRemoteSessionIssuersResponse$inboundSchema.parse(
+        JSON.parse(x),
+      ),
+    `Failed to parse 'ListOrganizationRemoteSessionIssuersResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=listorganizationremotesessionissuers.js.map

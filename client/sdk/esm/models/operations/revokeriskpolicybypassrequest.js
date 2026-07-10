@@ -3,61 +3,103 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { RiskIDRequestBody$outboundSchema, } from "../components/riskidrequestbody.js";
+import { RiskIDRequestBody$outboundSchema } from "../components/riskidrequestbody.js";
 /** @internal */
-export const RevokeRiskPolicyBypassRequestSecurityOption1$outboundSchema = z.pipe(z.object({
-    apikeyHeaderGramKey: z.string(),
-    projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
-    return remap$(v, {
+export const RevokeRiskPolicyBypassRequestSecurityOption1$outboundSchema =
+  z.pipe(
+    z.object({
+      apikeyHeaderGramKey: z.string(),
+      projectSlugHeaderGramProject: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
         projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    });
-}));
-export function revokeRiskPolicyBypassRequestSecurityOption1ToJSON(revokeRiskPolicyBypassRequestSecurityOption1) {
-    return JSON.stringify(RevokeRiskPolicyBypassRequestSecurityOption1$outboundSchema.parse(revokeRiskPolicyBypassRequestSecurityOption1));
+      });
+    }),
+  );
+export function revokeRiskPolicyBypassRequestSecurityOption1ToJSON(
+  revokeRiskPolicyBypassRequestSecurityOption1,
+) {
+  return JSON.stringify(
+    RevokeRiskPolicyBypassRequestSecurityOption1$outboundSchema.parse(
+      revokeRiskPolicyBypassRequestSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const RevokeRiskPolicyBypassRequestSecurityOption2$outboundSchema = z.pipe(z.object({
-    projectSlugHeaderGramProject: z.string(),
-    sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
-    return remap$(v, {
+export const RevokeRiskPolicyBypassRequestSecurityOption2$outboundSchema =
+  z.pipe(
+    z.object({
+      projectSlugHeaderGramProject: z.string(),
+      sessionHeaderGramSession: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
         sessionHeaderGramSession: "session_header_Gram-Session",
-    });
-}));
-export function revokeRiskPolicyBypassRequestSecurityOption2ToJSON(revokeRiskPolicyBypassRequestSecurityOption2) {
-    return JSON.stringify(RevokeRiskPolicyBypassRequestSecurityOption2$outboundSchema.parse(revokeRiskPolicyBypassRequestSecurityOption2));
+      });
+    }),
+  );
+export function revokeRiskPolicyBypassRequestSecurityOption2ToJSON(
+  revokeRiskPolicyBypassRequestSecurityOption2,
+) {
+  return JSON.stringify(
+    RevokeRiskPolicyBypassRequestSecurityOption2$outboundSchema.parse(
+      revokeRiskPolicyBypassRequestSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const RevokeRiskPolicyBypassRequestSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => RevokeRiskPolicyBypassRequestSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => RevokeRiskPolicyBypassRequestSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const RevokeRiskPolicyBypassRequestSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => RevokeRiskPolicyBypassRequestSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => RevokeRiskPolicyBypassRequestSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function revokeRiskPolicyBypassRequestSecurityToJSON(revokeRiskPolicyBypassRequestSecurity) {
-    return JSON.stringify(RevokeRiskPolicyBypassRequestSecurity$outboundSchema.parse(revokeRiskPolicyBypassRequestSecurity));
+  }),
+);
+export function revokeRiskPolicyBypassRequestSecurityToJSON(
+  revokeRiskPolicyBypassRequestSecurity,
+) {
+  return JSON.stringify(
+    RevokeRiskPolicyBypassRequestSecurity$outboundSchema.parse(
+      revokeRiskPolicyBypassRequestSecurity,
+    ),
+  );
 }
 /** @internal */
-export const RevokeRiskPolicyBypassRequestRequest$outboundSchema = z.pipe(z.object({
+export const RevokeRiskPolicyBypassRequestRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     riskIDRequestBody: RiskIDRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        riskIDRequestBody: "RiskIDRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      riskIDRequestBody: "RiskIDRequestBody",
     });
-}));
-export function revokeRiskPolicyBypassRequestRequestToJSON(revokeRiskPolicyBypassRequestRequest) {
-    return JSON.stringify(RevokeRiskPolicyBypassRequestRequest$outboundSchema.parse(revokeRiskPolicyBypassRequestRequest));
+  }),
+);
+export function revokeRiskPolicyBypassRequestRequestToJSON(
+  revokeRiskPolicyBypassRequestRequest,
+) {
+  return JSON.stringify(
+    RevokeRiskPolicyBypassRequestRequest$outboundSchema.parse(
+      revokeRiskPolicyBypassRequestRequest,
+    ),
+  );
 }
 //# sourceMappingURL=revokeriskpolicybypassrequest.js.map

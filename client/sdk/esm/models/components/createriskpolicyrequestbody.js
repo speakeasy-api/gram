@@ -3,38 +3,37 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { RiskPolicyModelConfig$outboundSchema, } from "./riskpolicymodelconfig.js";
+import { RiskPolicyModelConfig$outboundSchema } from "./riskpolicymodelconfig.js";
 /**
  * Policy action: flag or block.
  */
 export const Action = {
-    Flag: "flag",
-    Block: "block",
+  Flag: "flag",
+  Block: "block",
 };
 /**
  * Policy audience type: everyone or targeted.
  */
 export const AudienceType = {
-    Everyone: "everyone",
-    Targeted: "targeted",
+  Everyone: "everyone",
+  Targeted: "targeted",
 };
 /**
  * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.
  */
 export const PolicyType = {
-    Standard: "standard",
-    PromptBased: "prompt_based",
+  Standard: "standard",
+  PromptBased: "prompt_based",
 };
 /** @internal */
 export const Action$outboundSchema = z.enum(Action);
 /** @internal */
-export const AudienceType$outboundSchema = z
-    .enum(AudienceType);
+export const AudienceType$outboundSchema = z.enum(AudienceType);
 /** @internal */
-export const PolicyType$outboundSchema = z
-    .enum(PolicyType);
+export const PolicyType$outboundSchema = z.enum(PolicyType);
 /** @internal */
-export const CreateRiskPolicyRequestBody$outboundSchema = z.pipe(z.object({
+export const CreateRiskPolicyRequestBody$outboundSchema = z.pipe(
+  z.object({
     action: z._default(Action$outboundSchema, "flag"),
     approvedEmailDomains: z.optional(z.array(z.string())),
     audiencePrincipalUrns: z.optional(z.array(z.string())),
@@ -55,26 +54,32 @@ export const CreateRiskPolicyRequestBody$outboundSchema = z.pipe(z.object({
     scopeInclude: z.optional(z.string()),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        approvedEmailDomains: "approved_email_domains",
-        audiencePrincipalUrns: "audience_principal_urns",
-        audienceType: "audience_type",
-        autoName: "auto_name",
-        customRuleIds: "custom_rule_ids",
-        disabledRules: "disabled_rules",
-        messageTypes: "message_types",
-        modelConfig: "model_config",
-        policyType: "policy_type",
-        presidioEntities: "presidio_entities",
-        presidioScoreThreshold: "presidio_score_threshold",
-        promptInjectionRules: "prompt_injection_rules",
-        scopeExempt: "scope_exempt",
-        scopeInclude: "scope_include",
-        userMessage: "user_message",
+      approvedEmailDomains: "approved_email_domains",
+      audiencePrincipalUrns: "audience_principal_urns",
+      audienceType: "audience_type",
+      autoName: "auto_name",
+      customRuleIds: "custom_rule_ids",
+      disabledRules: "disabled_rules",
+      messageTypes: "message_types",
+      modelConfig: "model_config",
+      policyType: "policy_type",
+      presidioEntities: "presidio_entities",
+      presidioScoreThreshold: "presidio_score_threshold",
+      promptInjectionRules: "prompt_injection_rules",
+      scopeExempt: "scope_exempt",
+      scopeInclude: "scope_include",
+      userMessage: "user_message",
     });
-}));
+  }),
+);
 export function createRiskPolicyRequestBodyToJSON(createRiskPolicyRequestBody) {
-    return JSON.stringify(CreateRiskPolicyRequestBody$outboundSchema.parse(createRiskPolicyRequestBody));
+  return JSON.stringify(
+    CreateRiskPolicyRequestBody$outboundSchema.parse(
+      createRiskPolicyRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=createriskpolicyrequestbody.js.map

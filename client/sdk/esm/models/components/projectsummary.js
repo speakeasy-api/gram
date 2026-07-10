@@ -7,7 +7,8 @@ import { safeParse } from "../../lib/schemas.js";
 import { ModelUsage$inboundSchema } from "./modelusage.js";
 import { ToolUsage$inboundSchema } from "./toolusage.js";
 /** @internal */
-export const ProjectSummary$inboundSchema = z.pipe(z.object({
+export const ProjectSummary$inboundSchema = z.pipe(
+  z.object({
     avg_chat_duration_ms: z.number(),
     avg_chat_resolution_score: z.number(),
     avg_tokens_per_request: z.number(),
@@ -35,36 +36,42 @@ export const ProjectSummary$inboundSchema = z.pipe(z.object({
     total_output_tokens: z.int(),
     total_tokens: z.int(),
     total_tool_calls: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "avg_chat_duration_ms": "avgChatDurationMs",
-        "avg_chat_resolution_score": "avgChatResolutionScore",
-        "avg_tokens_per_request": "avgTokensPerRequest",
-        "avg_tool_duration_ms": "avgToolDurationMs",
-        "cache_creation_input_tokens": "cacheCreationInputTokens",
-        "cache_read_input_tokens": "cacheReadInputTokens",
-        "chat_resolution_abandoned": "chatResolutionAbandoned",
-        "chat_resolution_failure": "chatResolutionFailure",
-        "chat_resolution_partial": "chatResolutionPartial",
-        "chat_resolution_success": "chatResolutionSuccess",
-        "distinct_models": "distinctModels",
-        "distinct_providers": "distinctProviders",
-        "finish_reason_stop": "finishReasonStop",
-        "finish_reason_tool_calls": "finishReasonToolCalls",
-        "first_seen_unix_nano": "firstSeenUnixNano",
-        "last_seen_unix_nano": "lastSeenUnixNano",
-        "tool_call_failure": "toolCallFailure",
-        "tool_call_success": "toolCallSuccess",
-        "total_chat_requests": "totalChatRequests",
-        "total_chats": "totalChats",
-        "total_cost": "totalCost",
-        "total_input_tokens": "totalInputTokens",
-        "total_output_tokens": "totalOutputTokens",
-        "total_tokens": "totalTokens",
-        "total_tool_calls": "totalToolCalls",
+      avg_chat_duration_ms: "avgChatDurationMs",
+      avg_chat_resolution_score: "avgChatResolutionScore",
+      avg_tokens_per_request: "avgTokensPerRequest",
+      avg_tool_duration_ms: "avgToolDurationMs",
+      cache_creation_input_tokens: "cacheCreationInputTokens",
+      cache_read_input_tokens: "cacheReadInputTokens",
+      chat_resolution_abandoned: "chatResolutionAbandoned",
+      chat_resolution_failure: "chatResolutionFailure",
+      chat_resolution_partial: "chatResolutionPartial",
+      chat_resolution_success: "chatResolutionSuccess",
+      distinct_models: "distinctModels",
+      distinct_providers: "distinctProviders",
+      finish_reason_stop: "finishReasonStop",
+      finish_reason_tool_calls: "finishReasonToolCalls",
+      first_seen_unix_nano: "firstSeenUnixNano",
+      last_seen_unix_nano: "lastSeenUnixNano",
+      tool_call_failure: "toolCallFailure",
+      tool_call_success: "toolCallSuccess",
+      total_chat_requests: "totalChatRequests",
+      total_chats: "totalChats",
+      total_cost: "totalCost",
+      total_input_tokens: "totalInputTokens",
+      total_output_tokens: "totalOutputTokens",
+      total_tokens: "totalTokens",
+      total_tool_calls: "totalToolCalls",
     });
-}));
+  }),
+);
 export function projectSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ProjectSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ProjectSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ProjectSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ProjectSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=projectsummary.js.map

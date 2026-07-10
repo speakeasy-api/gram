@@ -5,9 +5,13 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const WorkflowAgentTextFormat$inboundSchema = z.object({
-    type: z.string(),
+  type: z.string(),
 });
 export function workflowAgentTextFormatFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => WorkflowAgentTextFormat$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'WorkflowAgentTextFormat' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => WorkflowAgentTextFormat$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'WorkflowAgentTextFormat' from JSON`,
+  );
 }
 //# sourceMappingURL=workflowagenttextformat.js.map

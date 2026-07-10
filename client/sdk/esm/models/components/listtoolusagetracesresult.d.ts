@@ -6,16 +6,21 @@ import { ToolUsageTraceSummary } from "./toolusagetracesummary.js";
  * Result of listing target-aware MCP and tool usage traces
  */
 export type ListToolUsageTracesResult = {
-    /**
-     * Cursor for next page
-     */
-    nextCursor?: string | undefined;
-    /**
-     * Target-aware tool usage trace rows
-     */
-    traces: Array<ToolUsageTraceSummary>;
+  /**
+   * Cursor for next page
+   */
+  nextCursor?: string | undefined;
+  /**
+   * Target-aware tool usage trace rows
+   */
+  traces: Array<ToolUsageTraceSummary>;
 };
 /** @internal */
-export declare const ListToolUsageTracesResult$inboundSchema: z.ZodMiniType<ListToolUsageTracesResult, unknown>;
-export declare function listToolUsageTracesResultFromJSON(jsonString: string): SafeParseResult<ListToolUsageTracesResult, SDKValidationError>;
+export declare const ListToolUsageTracesResult$inboundSchema: z.ZodMiniType<
+  ListToolUsageTracesResult,
+  unknown
+>;
+export declare function listToolUsageTracesResultFromJSON(
+  jsonString: string,
+): SafeParseResult<ListToolUsageTracesResult, SDKValidationError>;
 //# sourceMappingURL=listtoolusagetracesresult.d.ts.map

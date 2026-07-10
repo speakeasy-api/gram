@@ -6,9 +6,14 @@ import { Environment } from "./environment.js";
  * Result type for listing environments
  */
 export type ListEnvironmentsResult = {
-    environments: Array<Environment>;
+  environments: Array<Environment>;
 };
 /** @internal */
-export declare const ListEnvironmentsResult$inboundSchema: z.ZodMiniType<ListEnvironmentsResult, unknown>;
-export declare function listEnvironmentsResultFromJSON(jsonString: string): SafeParseResult<ListEnvironmentsResult, SDKValidationError>;
+export declare const ListEnvironmentsResult$inboundSchema: z.ZodMiniType<
+  ListEnvironmentsResult,
+  unknown
+>;
+export declare function listEnvironmentsResultFromJSON(
+  jsonString: string,
+): SafeParseResult<ListEnvironmentsResult, SDKValidationError>;
 //# sourceMappingURL=listenvironmentsresult.d.ts.map

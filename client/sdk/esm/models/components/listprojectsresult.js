@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { ProjectEntry$inboundSchema } from "./projectentry.js";
 /** @internal */
 export const ListProjectsResult$inboundSchema = z.object({
-    projects: z.array(ProjectEntry$inboundSchema),
+  projects: z.array(ProjectEntry$inboundSchema),
 });
 export function listProjectsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListProjectsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListProjectsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListProjectsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListProjectsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listprojectsresult.js.map

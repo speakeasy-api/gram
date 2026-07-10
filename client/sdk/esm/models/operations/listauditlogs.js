@@ -4,22 +4,28 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ListAuditLogsResult$inboundSchema, } from "../components/listauditlogsresult.js";
+import { ListAuditLogsResult$inboundSchema } from "../components/listauditlogsresult.js";
 /** @internal */
-export const ListAuditLogsSecurity$outboundSchema = z.pipe(z.object({
+export const ListAuditLogsSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function listAuditLogsSecurityToJSON(listAuditLogsSecurity) {
-    return JSON.stringify(ListAuditLogsSecurity$outboundSchema.parse(listAuditLogsSecurity));
+  return JSON.stringify(
+    ListAuditLogsSecurity$outboundSchema.parse(listAuditLogsSecurity),
+  );
 }
 /** @internal */
-export const ListAuditLogsRequest$outboundSchema = z.pipe(z.object({
+export const ListAuditLogsRequest$outboundSchema = z.pipe(
+  z.object({
     cursor: z.optional(z.string()),
     projectSlug: z.optional(z.string()),
     actorId: z.optional(z.string()),
@@ -28,28 +34,39 @@ export const ListAuditLogsRequest$outboundSchema = z.pipe(z.object({
     subjectId: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlug: "project_slug",
-        actorId: "actor_id",
-        subjectType: "subject_type",
-        subjectId: "subject_id",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
+      projectSlug: "project_slug",
+      actorId: "actor_id",
+      subjectType: "subject_type",
+      subjectId: "subject_id",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function listAuditLogsRequestToJSON(listAuditLogsRequest) {
-    return JSON.stringify(ListAuditLogsRequest$outboundSchema.parse(listAuditLogsRequest));
+  return JSON.stringify(
+    ListAuditLogsRequest$outboundSchema.parse(listAuditLogsRequest),
+  );
 }
 /** @internal */
-export const ListAuditLogsResponse$inboundSchema = z.pipe(z.object({
+export const ListAuditLogsResponse$inboundSchema = z.pipe(
+  z.object({
     Result: ListAuditLogsResult$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Result": "result",
+      Result: "result",
     });
-}));
+  }),
+);
 export function listAuditLogsResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListAuditLogsResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListAuditLogsResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListAuditLogsResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListAuditLogsResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=listauditlogs.js.map

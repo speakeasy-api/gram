@@ -13,5 +13,5 @@ let value: ToolTypes = "http";
 ## Values
 
 ```typescript
-"http" | "prompt" | "function" | "platform" | "externalmcp"
+"http" | "prompt" | "function" | "platform" | "externalmcp";
 ```

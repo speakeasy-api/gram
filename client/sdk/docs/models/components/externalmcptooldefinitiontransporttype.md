@@ -13,5 +13,5 @@ let value: ExternalMCPToolDefinitionTransportType = "streamable-http";
 ## Values
 
 ```typescript
-"streamable-http" | "sse"
+"streamable-http" | "sse";
 ```

@@ -7,24 +7,38 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Tool usage filter option type
  */
 export const OptionTypes = {
-    HostedServers: "hosted_servers",
-    ShadowServers: "shadow_servers",
-    Users: "users",
+  HostedServers: "hosted_servers",
+  ShadowServers: "shadow_servers",
+  Users: "users",
 };
 /** @internal */
-export const OptionTypes$outboundSchema = z
-    .enum(OptionTypes);
+export const OptionTypes$outboundSchema = z.enum(OptionTypes);
 /** @internal */
-export const GetToolUsageFilterOptionsPayload$outboundSchema = z.pipe(z.object({
-    from: z.pipe(z.date(), z.transform(v => v.toISOString())),
+export const GetToolUsageFilterOptionsPayload$outboundSchema = z.pipe(
+  z.object({
+    from: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
     optionTypes: z.optional(z.array(OptionTypes$outboundSchema)),
-    to: z.pipe(z.date(), z.transform(v => v.toISOString())),
-}), z.transform((v) => {
+    to: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        optionTypes: "option_types",
+      optionTypes: "option_types",
     });
-}));
-export function getToolUsageFilterOptionsPayloadToJSON(getToolUsageFilterOptionsPayload) {
-    return JSON.stringify(GetToolUsageFilterOptionsPayload$outboundSchema.parse(getToolUsageFilterOptionsPayload));
+  }),
+);
+export function getToolUsageFilterOptionsPayloadToJSON(
+  getToolUsageFilterOptionsPayload,
+) {
+  return JSON.stringify(
+    GetToolUsageFilterOptionsPayload$outboundSchema.parse(
+      getToolUsageFilterOptionsPayload,
+    ),
+  );
 }
 //# sourceMappingURL=gettoolusagefilteroptionspayload.js.map

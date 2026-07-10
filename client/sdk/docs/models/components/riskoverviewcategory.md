@@ -13,7 +13,7 @@ let value: RiskOverviewCategory = {
 
 ## Fields
 
-| Field                            | Type                             | Required                         | Description                      |
-| -------------------------------- | -------------------------------- | -------------------------------- | -------------------------------- |
-| `category`                       | *string*                         | :heavy_check_mark:               | Policy category key.             |
-| `findings`                       | *number*                         | :heavy_check_mark:               | Finding count for this category. |
+| Field      | Type     | Required           | Description                      |
+| ---------- | -------- | ------------------ | -------------------------------- |
+| `category` | _string_ | :heavy_check_mark: | Policy category key.             |
+| `findings` | _number_ | :heavy_check_mark: | Finding count for this category. |

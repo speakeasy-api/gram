@@ -3,29 +3,49 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { SetOrganizationWhitelistRequestBody$outboundSchema, } from "../components/setorganizationwhitelistrequestbody.js";
+import { SetOrganizationWhitelistRequestBody$outboundSchema } from "../components/setorganizationwhitelistrequestbody.js";
 /** @internal */
-export const SetOrganizationWhitelistSecurity$outboundSchema = z.pipe(z.object({
+export const SetOrganizationWhitelistSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
     });
-}));
-export function setOrganizationWhitelistSecurityToJSON(setOrganizationWhitelistSecurity) {
-    return JSON.stringify(SetOrganizationWhitelistSecurity$outboundSchema.parse(setOrganizationWhitelistSecurity));
+  }),
+);
+export function setOrganizationWhitelistSecurityToJSON(
+  setOrganizationWhitelistSecurity,
+) {
+  return JSON.stringify(
+    SetOrganizationWhitelistSecurity$outboundSchema.parse(
+      setOrganizationWhitelistSecurity,
+    ),
+  );
 }
 /** @internal */
-export const SetOrganizationWhitelistRequest$outboundSchema = z.pipe(z.object({
+export const SetOrganizationWhitelistRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
-    setOrganizationWhitelistRequestBody: SetOrganizationWhitelistRequestBody$outboundSchema,
-}), z.transform((v) => {
+    setOrganizationWhitelistRequestBody:
+      SetOrganizationWhitelistRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        setOrganizationWhitelistRequestBody: "SetOrganizationWhitelistRequestBody",
+      gramKey: "Gram-Key",
+      setOrganizationWhitelistRequestBody:
+        "SetOrganizationWhitelistRequestBody",
     });
-}));
-export function setOrganizationWhitelistRequestToJSON(setOrganizationWhitelistRequest) {
-    return JSON.stringify(SetOrganizationWhitelistRequest$outboundSchema.parse(setOrganizationWhitelistRequest));
+  }),
+);
+export function setOrganizationWhitelistRequestToJSON(
+  setOrganizationWhitelistRequest,
+) {
+  return JSON.stringify(
+    SetOrganizationWhitelistRequest$outboundSchema.parse(
+      setOrganizationWhitelistRequest,
+    ),
+  );
 }
 //# sourceMappingURL=setorganizationwhitelist.js.map

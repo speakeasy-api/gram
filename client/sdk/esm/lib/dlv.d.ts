@@ -10,5 +10,11 @@
  * @example
  * dlv(object, "foo.bar.baz", "Hello, default value!")
  */
-export declare function dlv<T = any>(obj: any, key: string | string[], def?: T, p?: number, undef?: never): T | undefined;
+export declare function dlv<T = any>(
+  obj: any,
+  key: string | string[],
+  def?: T,
+  p?: number,
+  undef?: never,
+): T | undefined;
 //# sourceMappingURL=dlv.d.ts.map

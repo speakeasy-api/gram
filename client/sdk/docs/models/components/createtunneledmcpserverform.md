@@ -14,6 +14,6 @@ let value: CreateTunneledMcpServerForm = {
 
 ## Fields
 
-| Field                                                   | Type                                                    | Required                                                | Description                                             |
-| ------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------- |
-| `name`                                                  | *string*                                                | :heavy_check_mark:                                      | Human-readable display name for the tunneled MCP server |
+| Field  | Type     | Required           | Description                                             |
+| ------ | -------- | ------------------ | ------------------------------------------------------- |
+| `name` | _string_ | :heavy_check_mark: | Human-readable display name for the tunneled MCP server |

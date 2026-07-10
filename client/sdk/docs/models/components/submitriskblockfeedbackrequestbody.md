@@ -13,7 +13,7 @@ let value: SubmitRiskBlockFeedbackRequestBody = {
 
 ## Fields
 
-| Field                                                        | Type                                                         | Required                                                     | Description                                                  |
-| ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| `id`                                                         | *string*                                                     | :heavy_check_mark:                                           | The block ID (the underlying risk result ID).                |
-| `sentiment`                                                  | [components.Sentiment](../../models/components/sentiment.md) | :heavy_check_mark:                                           | Feedback sentiment.                                          |
+| Field       | Type                                                         | Required           | Description                                   |
+| ----------- | ------------------------------------------------------------ | ------------------ | --------------------------------------------- |
+| `id`        | _string_                                                     | :heavy_check_mark: | The block ID (the underlying risk result ID). |
+| `sentiment` | [components.Sentiment](../../models/components/sentiment.md) | :heavy_check_mark: | Feedback sentiment.                           |

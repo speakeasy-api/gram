@@ -4,10 +4,10 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const OTELScope$outboundSchema = z.object({
-    name: z.optional(z.string()),
-    version: z.optional(z.string()),
+  name: z.optional(z.string()),
+  version: z.optional(z.string()),
 });
 export function otelScopeToJSON(otelScope) {
-    return JSON.stringify(OTELScope$outboundSchema.parse(otelScope));
+  return JSON.stringify(OTELScope$outboundSchema.parse(otelScope));
 }
 //# sourceMappingURL=otelscope.js.map

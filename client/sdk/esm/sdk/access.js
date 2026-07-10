@@ -27,212 +27,234 @@ import { accessUpdateShadowMCPAccessRule } from "../funcs/accessUpdateShadowMCPA
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Access extends ClientSDK {
-    /**
-     * approveShadowMCPApprovalRequest access
-     *
-     * @remarks
-     * Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.
-     */
-    async approveShadowMCPApprovalRequest(request, security, options) {
-        return unwrapAsync(accessApproveShadowMCPApprovalRequest(this, request, security, options));
-    }
-    /**
-     * createRole access
-     *
-     * @remarks
-     * Create a new custom role.
-     */
-    async createRole(request, security, options) {
-        return unwrapAsync(accessCreateRole(this, request, security, options));
-    }
-    /**
-     * createShadowMCPApprovalRequest access
-     *
-     * @remarks
-     * Create or return an active Shadow MCP approval request.
-     */
-    async createShadowMCPApprovalRequest(request, security, options) {
-        return unwrapAsync(accessCreateShadowMCPApprovalRequest(this, request, security, options));
-    }
-    /**
-     * createShadowMCPAccessRule access
-     *
-     * @remarks
-     * Create a managed Shadow MCP access rule.
-     */
-    async createShadowMCPAccessRule(request, security, options) {
-        return unwrapAsync(accessCreateShadowMCPAccessRule(this, request, security, options));
-    }
-    /**
-     * deleteRole access
-     *
-     * @remarks
-     * Delete a custom role (system roles cannot be deleted).
-     */
-    async deleteRole(request, security, options) {
-        return unwrapAsync(accessDeleteRole(this, request, security, options));
-    }
-    /**
-     * deleteShadowMCPAccessRule access
-     *
-     * @remarks
-     * Delete a managed Shadow MCP access rule.
-     */
-    async deleteShadowMCPAccessRule(request, security, options) {
-        return unwrapAsync(accessDeleteShadowMCPAccessRule(this, request, security, options));
-    }
-    /**
-     * denyShadowMCPApprovalRequest access
-     *
-     * @remarks
-     * Deny a Shadow MCP request and optionally create a deny rule.
-     */
-    async denyShadowMCPApprovalRequest(request, security, options) {
-        return unwrapAsync(accessDenyShadowMCPApprovalRequest(this, request, security, options));
-    }
-    /**
-     * disableRBAC access
-     *
-     * @remarks
-     * Disable RBAC enforcement for the current organization.
-     */
-    async disableRBAC(request, security, options) {
-        return unwrapAsync(accessDisableRBAC(this, request, security, options));
-    }
-    /**
-     * enableRBAC access
-     *
-     * @remarks
-     * Enable RBAC for the current organization. Seeds default grants for system roles.
-     */
-    async enableRBAC(request, security, options) {
-        return unwrapAsync(accessEnableRBAC(this, request, security, options));
-    }
-    /**
-     * getRBACStatus access
-     *
-     * @remarks
-     * Returns whether RBAC is currently enabled for the current organization.
-     */
-    async getRBACStatus(request, security, options) {
-        return unwrapAsync(accessGetRBACStatus(this, request, security, options));
-    }
-    /**
-     * getRole access
-     *
-     * @remarks
-     * Get a role by ID.
-     */
-    async getRole(request, security, options) {
-        return unwrapAsync(accessGetRole(this, request, security, options));
-    }
-    /**
-     * listChallengeBuckets access
-     *
-     * @remarks
-     * List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
-     */
-    async listChallengeBuckets(request, security, options) {
-        return unwrapAsync(accessListChallengeBuckets(this, request, security, options));
-    }
-    /**
-     * listChallenges access
-     *
-     * @remarks
-     * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
-     */
-    async listChallenges(request, security, options) {
-        return unwrapAsync(accessListChallenges(this, request, security, options));
-    }
-    /**
-     * listGrants access
-     *
-     * @remarks
-     * List the current user's effective grants, including inherited role grants.
-     */
-    async listGrants(request, security, options) {
-        return unwrapAsync(accessListGrants(this, request, security, options));
-    }
-    /**
-     * listMembers access
-     *
-     * @remarks
-     * List all team members with their role assignments.
-     */
-    async listMembers(request, security, options) {
-        return unwrapAsync(accessListMembers(this, request, security, options));
-    }
-    /**
-     * listRoles access
-     *
-     * @remarks
-     * List all roles for the current organization.
-     */
-    async listRoles(request, security, options) {
-        return unwrapAsync(accessListRoles(this, request, security, options));
-    }
-    /**
-     * listScopes access
-     *
-     * @remarks
-     * List all available scopes and their resource types.
-     */
-    async listScopes(request, security, options) {
-        return unwrapAsync(accessListScopes(this, request, security, options));
-    }
-    /**
-     * listShadowMCPApprovalRequests access
-     *
-     * @remarks
-     * List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.
-     */
-    async listShadowMCPApprovalRequests(request, security, options) {
-        return unwrapAsync(accessListShadowMCPApprovalRequests(this, request, security, options));
-    }
-    /**
-     * listShadowMCPAccessRules access
-     *
-     * @remarks
-     * List managed Shadow MCP allow and deny rules.
-     */
-    async listShadowMCPAccessRules(request, security, options) {
-        return unwrapAsync(accessListShadowMCPAccessRules(this, request, security, options));
-    }
-    /**
-     * resolveChallenge access
-     *
-     * @remarks
-     * Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
-     */
-    async resolveChallenge(request, security, options) {
-        return unwrapAsync(accessResolveChallenge(this, request, security, options));
-    }
-    /**
-     * updateMemberRoles access
-     *
-     * @remarks
-     * Update a team member's role assignments.
-     */
-    async updateMemberRoles(request, security, options) {
-        return unwrapAsync(accessUpdateMemberRoles(this, request, security, options));
-    }
-    /**
-     * updateRole access
-     *
-     * @remarks
-     * Update an existing custom role.
-     */
-    async updateRole(request, security, options) {
-        return unwrapAsync(accessUpdateRole(this, request, security, options));
-    }
-    /**
-     * updateShadowMCPAccessRule access
-     *
-     * @remarks
-     * Update a managed Shadow MCP access rule.
-     */
-    async updateShadowMCPAccessRule(request, security, options) {
-        return unwrapAsync(accessUpdateShadowMCPAccessRule(this, request, security, options));
-    }
+  /**
+   * approveShadowMCPApprovalRequest access
+   *
+   * @remarks
+   * Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.
+   */
+  async approveShadowMCPApprovalRequest(request, security, options) {
+    return unwrapAsync(
+      accessApproveShadowMCPApprovalRequest(this, request, security, options),
+    );
+  }
+  /**
+   * createRole access
+   *
+   * @remarks
+   * Create a new custom role.
+   */
+  async createRole(request, security, options) {
+    return unwrapAsync(accessCreateRole(this, request, security, options));
+  }
+  /**
+   * createShadowMCPApprovalRequest access
+   *
+   * @remarks
+   * Create or return an active Shadow MCP approval request.
+   */
+  async createShadowMCPApprovalRequest(request, security, options) {
+    return unwrapAsync(
+      accessCreateShadowMCPApprovalRequest(this, request, security, options),
+    );
+  }
+  /**
+   * createShadowMCPAccessRule access
+   *
+   * @remarks
+   * Create a managed Shadow MCP access rule.
+   */
+  async createShadowMCPAccessRule(request, security, options) {
+    return unwrapAsync(
+      accessCreateShadowMCPAccessRule(this, request, security, options),
+    );
+  }
+  /**
+   * deleteRole access
+   *
+   * @remarks
+   * Delete a custom role (system roles cannot be deleted).
+   */
+  async deleteRole(request, security, options) {
+    return unwrapAsync(accessDeleteRole(this, request, security, options));
+  }
+  /**
+   * deleteShadowMCPAccessRule access
+   *
+   * @remarks
+   * Delete a managed Shadow MCP access rule.
+   */
+  async deleteShadowMCPAccessRule(request, security, options) {
+    return unwrapAsync(
+      accessDeleteShadowMCPAccessRule(this, request, security, options),
+    );
+  }
+  /**
+   * denyShadowMCPApprovalRequest access
+   *
+   * @remarks
+   * Deny a Shadow MCP request and optionally create a deny rule.
+   */
+  async denyShadowMCPApprovalRequest(request, security, options) {
+    return unwrapAsync(
+      accessDenyShadowMCPApprovalRequest(this, request, security, options),
+    );
+  }
+  /**
+   * disableRBAC access
+   *
+   * @remarks
+   * Disable RBAC enforcement for the current organization.
+   */
+  async disableRBAC(request, security, options) {
+    return unwrapAsync(accessDisableRBAC(this, request, security, options));
+  }
+  /**
+   * enableRBAC access
+   *
+   * @remarks
+   * Enable RBAC for the current organization. Seeds default grants for system roles.
+   */
+  async enableRBAC(request, security, options) {
+    return unwrapAsync(accessEnableRBAC(this, request, security, options));
+  }
+  /**
+   * getRBACStatus access
+   *
+   * @remarks
+   * Returns whether RBAC is currently enabled for the current organization.
+   */
+  async getRBACStatus(request, security, options) {
+    return unwrapAsync(accessGetRBACStatus(this, request, security, options));
+  }
+  /**
+   * getRole access
+   *
+   * @remarks
+   * Get a role by ID.
+   */
+  async getRole(request, security, options) {
+    return unwrapAsync(accessGetRole(this, request, security, options));
+  }
+  /**
+   * listChallengeBuckets access
+   *
+   * @remarks
+   * List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
+   */
+  async listChallengeBuckets(request, security, options) {
+    return unwrapAsync(
+      accessListChallengeBuckets(this, request, security, options),
+    );
+  }
+  /**
+   * listChallenges access
+   *
+   * @remarks
+   * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
+   */
+  async listChallenges(request, security, options) {
+    return unwrapAsync(accessListChallenges(this, request, security, options));
+  }
+  /**
+   * listGrants access
+   *
+   * @remarks
+   * List the current user's effective grants, including inherited role grants.
+   */
+  async listGrants(request, security, options) {
+    return unwrapAsync(accessListGrants(this, request, security, options));
+  }
+  /**
+   * listMembers access
+   *
+   * @remarks
+   * List all team members with their role assignments.
+   */
+  async listMembers(request, security, options) {
+    return unwrapAsync(accessListMembers(this, request, security, options));
+  }
+  /**
+   * listRoles access
+   *
+   * @remarks
+   * List all roles for the current organization.
+   */
+  async listRoles(request, security, options) {
+    return unwrapAsync(accessListRoles(this, request, security, options));
+  }
+  /**
+   * listScopes access
+   *
+   * @remarks
+   * List all available scopes and their resource types.
+   */
+  async listScopes(request, security, options) {
+    return unwrapAsync(accessListScopes(this, request, security, options));
+  }
+  /**
+   * listShadowMCPApprovalRequests access
+   *
+   * @remarks
+   * List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.
+   */
+  async listShadowMCPApprovalRequests(request, security, options) {
+    return unwrapAsync(
+      accessListShadowMCPApprovalRequests(this, request, security, options),
+    );
+  }
+  /**
+   * listShadowMCPAccessRules access
+   *
+   * @remarks
+   * List managed Shadow MCP allow and deny rules.
+   */
+  async listShadowMCPAccessRules(request, security, options) {
+    return unwrapAsync(
+      accessListShadowMCPAccessRules(this, request, security, options),
+    );
+  }
+  /**
+   * resolveChallenge access
+   *
+   * @remarks
+   * Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
+   */
+  async resolveChallenge(request, security, options) {
+    return unwrapAsync(
+      accessResolveChallenge(this, request, security, options),
+    );
+  }
+  /**
+   * updateMemberRoles access
+   *
+   * @remarks
+   * Update a team member's role assignments.
+   */
+  async updateMemberRoles(request, security, options) {
+    return unwrapAsync(
+      accessUpdateMemberRoles(this, request, security, options),
+    );
+  }
+  /**
+   * updateRole access
+   *
+   * @remarks
+   * Update an existing custom role.
+   */
+  async updateRole(request, security, options) {
+    return unwrapAsync(accessUpdateRole(this, request, security, options));
+  }
+  /**
+   * updateShadowMCPAccessRule access
+   *
+   * @remarks
+   * Update a managed Shadow MCP access rule.
+   */
+  async updateShadowMCPAccessRule(request, security, options) {
+    return unwrapAsync(
+      accessUpdateShadowMCPAccessRule(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=access.js.map

@@ -24,7 +24,7 @@ let value: GetEmployeeDataFlowGraphResult = {
 
 ## Fields
 
-| Field                                                                                | Type                                                                                 | Required                                                                             | Description                                                                          |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| `edges`                                                                              | [components.EmployeeDataFlowEdge](../../models/components/employeedataflowedge.md)[] | :heavy_check_mark:                                                                   | Weighted graph edges between adjacent populated tiers                                |
-| `nodes`                                                                              | [components.EmployeeDataFlowNode](../../models/components/employeedataflownode.md)[] | :heavy_check_mark:                                                                   | Graph nodes grouped by tier                                                          |
+| Field   | Type                                                                                 | Required           | Description                                           |
+| ------- | ------------------------------------------------------------------------------------ | ------------------ | ----------------------------------------------------- |
+| `edges` | [components.EmployeeDataFlowEdge](../../models/components/employeedataflowedge.md)[] | :heavy_check_mark: | Weighted graph edges between adjacent populated tiers |
+| `nodes` | [components.EmployeeDataFlowNode](../../models/components/employeedataflownode.md)[] | :heavy_check_mark: | Graph nodes grouped by tier                           |

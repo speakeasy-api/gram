@@ -4,36 +4,48 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 export const DenyShadowMCPApprovalRequestFormMatchBreadth = {
-    FullUrl: "full_url",
-    UrlHost: "url_host",
+  FullUrl: "full_url",
+  UrlHost: "url_host",
 };
 /** @internal */
-export const DenyShadowMCPApprovalRequestFormMatchBreadth$outboundSchema = z.enum(DenyShadowMCPApprovalRequestFormMatchBreadth);
+export const DenyShadowMCPApprovalRequestFormMatchBreadth$outboundSchema =
+  z.enum(DenyShadowMCPApprovalRequestFormMatchBreadth);
 /** @internal */
-export const DenyShadowMCPApprovalRequestForm$outboundSchema = z.pipe(z.object({
+export const DenyShadowMCPApprovalRequestForm$outboundSchema = z.pipe(
+  z.object({
     createDenyRule: z.boolean(),
     displayName: z.optional(z.string()),
     id: z.string(),
-    matchBreadth: z.optional(DenyShadowMCPApprovalRequestFormMatchBreadth$outboundSchema),
+    matchBreadth: z.optional(
+      DenyShadowMCPApprovalRequestFormMatchBreadth$outboundSchema,
+    ),
     matchValue: z.optional(z.string()),
     observedFullUrl: z.optional(z.string()),
     observedServerIdentity: z.optional(z.string()),
     observedUrlHost: z.optional(z.string()),
     projectIds: z.optional(z.array(z.string())),
     reason: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        createDenyRule: "create_deny_rule",
-        displayName: "display_name",
-        matchBreadth: "match_breadth",
-        matchValue: "match_value",
-        observedFullUrl: "observed_full_url",
-        observedServerIdentity: "observed_server_identity",
-        observedUrlHost: "observed_url_host",
-        projectIds: "project_ids",
+      createDenyRule: "create_deny_rule",
+      displayName: "display_name",
+      matchBreadth: "match_breadth",
+      matchValue: "match_value",
+      observedFullUrl: "observed_full_url",
+      observedServerIdentity: "observed_server_identity",
+      observedUrlHost: "observed_url_host",
+      projectIds: "project_ids",
     });
-}));
-export function denyShadowMCPApprovalRequestFormToJSON(denyShadowMCPApprovalRequestForm) {
-    return JSON.stringify(DenyShadowMCPApprovalRequestForm$outboundSchema.parse(denyShadowMCPApprovalRequestForm));
+  }),
+);
+export function denyShadowMCPApprovalRequestFormToJSON(
+  denyShadowMCPApprovalRequestForm,
+) {
+  return JSON.stringify(
+    DenyShadowMCPApprovalRequestForm$outboundSchema.parse(
+      denyShadowMCPApprovalRequestForm,
+    ),
+  );
 }
 //# sourceMappingURL=denyshadowmcpapprovalrequestform.js.map

@@ -9,9 +9,9 @@ import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import { TokensUnderManagement$inboundSchema, } from "../models/components/tokensundermanagement.js";
-import { ServiceError$inboundSchema, } from "../models/errors/serviceerror.js";
-import { GetTokensUnderManagementRequest$outboundSchema, } from "../models/operations/gettokensundermanagement.js";
+import { TokensUnderManagement$inboundSchema } from "../models/components/tokensundermanagement.js";
+import { ServiceError$inboundSchema } from "../models/errors/serviceerror.js";
+import { GetTokensUnderManagementRequest$outboundSchema } from "../models/operations/gettokensundermanagement.js";
 import { APIPromise } from "../types/async.js";
 /**
  * getTokensUnderManagement usage
@@ -19,74 +19,99 @@ import { APIPromise } from "../types/async.js";
  * @remarks
  * Get tokens under management for the active billing cycle alongside the contracted terms
  */
-export function usageGetTokensUnderManagement(client, request, security, options) {
-    return new APIPromise($do(client, request, security, options));
+export function usageGetTokensUnderManagement(
+  client,
+  request,
+  security,
+  options,
+) {
+  return new APIPromise($do(client, request, security, options));
 }
 async function $do(client, request, security, options) {
-    const parsed = safeParse(request, (value) => z.parse(z.optional(GetTokensUnderManagementRequest$outboundSchema), value), "Input validation failed");
-    if (!parsed.ok) {
-        return [parsed, { status: "invalid" }];
-    }
-    const payload = parsed.value;
-    const body = null;
-    const path = pathToFunc("/rpc/usage.getTokensUnderManagement")();
-    const headers = new Headers(compactMap({
-        Accept: "application/json",
-        "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
-            explode: false,
-            charEncoding: "none",
-        }),
-    }));
-    const requestSecurity = resolveSecurity([
-        {
-            fieldName: "Gram-Session",
-            type: "apiKey:header",
-            value: security?.sessionHeaderGramSession,
-        },
-    ]);
-    const context = {
-        options: client._options,
-        baseURL: options?.serverURL ?? client._baseURL ?? "",
-        operationID: "getTokensUnderManagement",
-        oAuth2Scopes: null,
-        resolvedSecurity: requestSecurity,
-        securitySource: security,
-        retryConfig: options?.retries
-            || client._options.retryConfig
-            || { strategy: "none" },
-        retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"],
-    };
-    const requestRes = client._createRequest(context, {
-        security: requestSecurity,
-        method: "GET",
-        baseURL: options?.serverURL,
-        path: path,
-        headers: headers,
-        body: body,
-        userAgent: client._options.userAgent,
-        timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
-    }, options);
-    if (!requestRes.ok) {
-        return [requestRes, { status: "invalid" }];
-    }
-    const req = requestRes.value;
-    const doResult = await client._do(req, {
-        context,
-        isErrorStatusCode: (statusCode) => matchStatusCode({ status: statusCode }, ["4XX", "5XX"]),
-        retryConfig: context.retryConfig,
-        retryCodes: context.retryCodes,
-    });
-    if (!doResult.ok) {
-        return [doResult, { status: "request-error", request: req }];
-    }
-    const response = doResult.value;
-    const responseFields = {
-        HttpMeta: { Response: response, Request: req },
-    };
-    const [result] = await M.match(M.json(200, TokensUnderManagement$inboundSchema), M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema), M.jsonErr([500, 502], ServiceError$inboundSchema), M.fail("4XX"), M.fail("5XX"))(response, req, { extraFields: responseFields });
-    if (!result.ok) {
-        return [result, { status: "complete", request: req, response }];
-    }
+  const parsed = safeParse(
+    request,
+    (value) =>
+      z.parse(
+        z.optional(GetTokensUnderManagementRequest$outboundSchema),
+        value,
+      ),
+    "Input validation failed",
+  );
+  if (!parsed.ok) {
+    return [parsed, { status: "invalid" }];
+  }
+  const payload = parsed.value;
+  const body = null;
+  const path = pathToFunc("/rpc/usage.getTokensUnderManagement")();
+  const headers = new Headers(
+    compactMap({
+      Accept: "application/json",
+      "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+        explode: false,
+        charEncoding: "none",
+      }),
+    }),
+  );
+  const requestSecurity = resolveSecurity([
+    {
+      fieldName: "Gram-Session",
+      type: "apiKey:header",
+      value: security?.sessionHeaderGramSession,
+    },
+  ]);
+  const context = {
+    options: client._options,
+    baseURL: options?.serverURL ?? client._baseURL ?? "",
+    operationID: "getTokensUnderManagement",
+    oAuth2Scopes: null,
+    resolvedSecurity: requestSecurity,
+    securitySource: security,
+    retryConfig: options?.retries ||
+      client._options.retryConfig || { strategy: "none" },
+    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"],
+  };
+  const requestRes = client._createRequest(
+    context,
+    {
+      security: requestSecurity,
+      method: "GET",
+      baseURL: options?.serverURL,
+      path: path,
+      headers: headers,
+      body: body,
+      userAgent: client._options.userAgent,
+      timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
+    },
+    options,
+  );
+  if (!requestRes.ok) {
+    return [requestRes, { status: "invalid" }];
+  }
+  const req = requestRes.value;
+  const doResult = await client._do(req, {
+    context,
+    isErrorStatusCode: (statusCode) =>
+      matchStatusCode({ status: statusCode }, ["4XX", "5XX"]),
+    retryConfig: context.retryConfig,
+    retryCodes: context.retryCodes,
+  });
+  if (!doResult.ok) {
+    return [doResult, { status: "request-error", request: req }];
+  }
+  const response = doResult.value;
+  const responseFields = {
+    HttpMeta: { Response: response, Request: req },
+  };
+  const [result] = await M.match(
+    M.json(200, TokensUnderManagement$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
+    M.fail("4XX"),
+    M.fail("5XX"),
+  )(response, req, { extraFields: responseFields });
+  if (!result.ok) {
     return [result, { status: "complete", request: req, response }];
+  }
+  return [result, { status: "complete", request: req, response }];
 }
 //# sourceMappingURL=usageGetTokensUnderManagement.js.map

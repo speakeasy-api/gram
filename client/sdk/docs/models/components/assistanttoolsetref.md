@@ -12,7 +12,7 @@ let value: AssistantToolsetRef = {
 
 ## Fields
 
-| Field                                                     | Type                                                      | Required                                                  | Description                                               |
-| --------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------- |
-| `environmentSlug`                                         | *string*                                                  | :heavy_minus_sign:                                        | Optional environment slug used when invoking the toolset. |
-| `toolsetSlug`                                             | *string*                                                  | :heavy_check_mark:                                        | The toolset slug exposed to the assistant.                |
+| Field             | Type     | Required           | Description                                               |
+| ----------------- | -------- | ------------------ | --------------------------------------------------------- |
+| `environmentSlug` | _string_ | :heavy_minus_sign: | Optional environment slug used when invoking the toolset. |
+| `toolsetSlug`     | _string_ | :heavy_check_mark: | The toolset slug exposed to the assistant.                |

@@ -4,12 +4,15 @@
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ServiceInfo$inboundSchema = z
-    .object({
-    name: z.string(),
-    version: z.optional(z.string()),
+export const ServiceInfo$inboundSchema = z.object({
+  name: z.string(),
+  version: z.optional(z.string()),
 });
 export function serviceInfoFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ServiceInfo$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ServiceInfo' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ServiceInfo$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ServiceInfo' from JSON`,
+  );
 }
 //# sourceMappingURL=serviceinfo.js.map

@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { OrganizationUser$inboundSchema, } from "./organizationuser.js";
+import { OrganizationUser$inboundSchema } from "./organizationuser.js";
 /** @internal */
 export const ListUsersResult$inboundSchema = z.object({
-    users: z.array(OrganizationUser$inboundSchema),
+  users: z.array(OrganizationUser$inboundSchema),
 });
 export function listUsersResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListUsersResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListUsersResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListUsersResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListUsersResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listusersresult.js.map

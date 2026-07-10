@@ -4,17 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { SessionSummary$inboundSchema, } from "./sessionsummary.js";
+import { SessionSummary$inboundSchema } from "./sessionsummary.js";
 /** @internal */
-export const ListSessionsResult$inboundSchema = z.pipe(z.object({
+export const ListSessionsResult$inboundSchema = z.pipe(
+  z.object({
     next_cursor: z.optional(z.string()),
     sessions: z.array(SessionSummary$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function listSessionsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListSessionsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListSessionsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListSessionsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListSessionsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listsessionsresult.js.map

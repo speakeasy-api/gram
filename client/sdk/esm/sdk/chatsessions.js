@@ -6,23 +6,23 @@ import { chatSessionsRevoke } from "../funcs/chatSessionsRevoke.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class ChatSessions extends ClientSDK {
-    /**
-     * create chatSessions
-     *
-     * @remarks
-     * Creates a new chat session token
-     */
-    async create(request, security, options) {
-        return unwrapAsync(chatSessionsCreate(this, request, security, options));
-    }
-    /**
-     * revoke chatSessions
-     *
-     * @remarks
-     * Revokes an existing chat session token
-     */
-    async revoke(request, security, options) {
-        return unwrapAsync(chatSessionsRevoke(this, request, security, options));
-    }
+  /**
+   * create chatSessions
+   *
+   * @remarks
+   * Creates a new chat session token
+   */
+  async create(request, security, options) {
+    return unwrapAsync(chatSessionsCreate(this, request, security, options));
+  }
+  /**
+   * revoke chatSessions
+   *
+   * @remarks
+   * Revokes an existing chat session token
+   */
+  async revoke(request, security, options) {
+    return unwrapAsync(chatSessionsRevoke(this, request, security, options));
+  }
 }
 //# sourceMappingURL=chatsessions.js.map

@@ -4,27 +4,37 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const RevokeInviteSecurity$outboundSchema = z.pipe(z.object({
+export const RevokeInviteSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function revokeInviteSecurityToJSON(revokeInviteSecurity) {
-    return JSON.stringify(RevokeInviteSecurity$outboundSchema.parse(revokeInviteSecurity));
+  return JSON.stringify(
+    RevokeInviteSecurity$outboundSchema.parse(revokeInviteSecurity),
+  );
 }
 /** @internal */
-export const RevokeInviteRequest$outboundSchema = z.pipe(z.object({
+export const RevokeInviteRequest$outboundSchema = z.pipe(
+  z.object({
     invitationId: z.string(),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        invitationId: "invitation_id",
-        gramSession: "Gram-Session",
+      invitationId: "invitation_id",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function revokeInviteRequestToJSON(revokeInviteRequest) {
-    return JSON.stringify(RevokeInviteRequest$outboundSchema.parse(revokeInviteRequest));
+  return JSON.stringify(
+    RevokeInviteRequest$outboundSchema.parse(revokeInviteRequest),
+  );
 }
 //# sourceMappingURL=revokeinvite.js.map

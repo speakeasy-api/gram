@@ -10,8 +10,8 @@ import { safeParse } from "../lib/schemas.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import { Chat$inboundSchema } from "../models/components/chat.js";
-import { ServiceError$inboundSchema, } from "../models/errors/serviceerror.js";
-import { LoadChatRequest$outboundSchema, } from "../models/operations/loadchat.js";
+import { ServiceError$inboundSchema } from "../models/errors/serviceerror.js";
+import { LoadChatRequest$outboundSchema } from "../models/operations/loadchat.js";
 import { APIPromise } from "../types/async.js";
 /**
  * loadChat chat
@@ -20,100 +20,123 @@ import { APIPromise } from "../types/async.js";
  * Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).
  */
 export function chatLoad(client, request, security, options) {
-    return new APIPromise($do(client, request, security, options));
+  return new APIPromise($do(client, request, security, options));
 }
 async function $do(client, request, security, options) {
-    const parsed = safeParse(request, (value) => z.parse(LoadChatRequest$outboundSchema, value), "Input validation failed");
-    if (!parsed.ok) {
-        return [parsed, { status: "invalid" }];
-    }
-    const payload = parsed.value;
-    const body = null;
-    const path = pathToFunc("/rpc/chat.load")();
-    const query = encodeFormQuery({
-        "after_seq": payload.after_seq,
-        "before_seq": payload.before_seq,
-        "from_start": payload.from_start,
-        "generation": payload.generation,
-        "id": payload.id,
-        "limit": payload.limit,
-        "query": payload.query,
-        "risk_only": payload.risk_only,
-    });
-    const headers = new Headers(compactMap({
-        Accept: "application/json",
-        "Gram-Chat-Session": encodeSimple("Gram-Chat-Session", payload["Gram-Chat-Session"], { explode: false, charEncoding: "none" }),
-        "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
-            explode: false,
-            charEncoding: "none",
-        }),
-        "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
-            explode: false,
-            charEncoding: "none",
-        }),
-    }));
-    const requestSecurity = resolveSecurity([
-        {
-            fieldName: "Gram-Project",
-            type: "apiKey:header",
-            value: security?.option1?.projectSlugHeaderGramProject,
-        },
-        {
-            fieldName: "Gram-Session",
-            type: "apiKey:header",
-            value: security?.option1?.sessionHeaderGramSession,
-        },
-    ], [
-        {
-            fieldName: "Authorization",
-            type: "http:bearer",
-            value: security?.option2?.chatSessionsTokenHeaderGramChatSession,
-        },
-    ]);
-    const context = {
-        options: client._options,
-        baseURL: options?.serverURL ?? client._baseURL ?? "",
-        operationID: "loadChat",
-        oAuth2Scopes: null,
-        resolvedSecurity: requestSecurity,
-        securitySource: security,
-        retryConfig: options?.retries
-            || client._options.retryConfig
-            || { strategy: "none" },
-        retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"],
-    };
-    const requestRes = client._createRequest(context, {
-        security: requestSecurity,
-        method: "GET",
-        baseURL: options?.serverURL,
-        path: path,
-        headers: headers,
-        query: query,
-        body: body,
-        userAgent: client._options.userAgent,
-        timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
-    }, options);
-    if (!requestRes.ok) {
-        return [requestRes, { status: "invalid" }];
-    }
-    const req = requestRes.value;
-    const doResult = await client._do(req, {
-        context,
-        isErrorStatusCode: (statusCode) => matchStatusCode({ status: statusCode }, ["4XX", "5XX"]),
-        retryConfig: context.retryConfig,
-        retryCodes: context.retryCodes,
-    });
-    if (!doResult.ok) {
-        return [doResult, { status: "request-error", request: req }];
-    }
-    const response = doResult.value;
-    const responseFields = {
-        HttpMeta: { Response: response, Request: req },
-    };
-    const [result] = await M.match(M.json(200, Chat$inboundSchema), M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema), M.jsonErr([500, 502], ServiceError$inboundSchema), M.fail("4XX"), M.fail("5XX"))(response, req, { extraFields: responseFields });
-    if (!result.ok) {
-        return [result, { status: "complete", request: req, response }];
-    }
+  const parsed = safeParse(
+    request,
+    (value) => z.parse(LoadChatRequest$outboundSchema, value),
+    "Input validation failed",
+  );
+  if (!parsed.ok) {
+    return [parsed, { status: "invalid" }];
+  }
+  const payload = parsed.value;
+  const body = null;
+  const path = pathToFunc("/rpc/chat.load")();
+  const query = encodeFormQuery({
+    after_seq: payload.after_seq,
+    before_seq: payload.before_seq,
+    from_start: payload.from_start,
+    generation: payload.generation,
+    id: payload.id,
+    limit: payload.limit,
+    query: payload.query,
+    risk_only: payload.risk_only,
+  });
+  const headers = new Headers(
+    compactMap({
+      Accept: "application/json",
+      "Gram-Chat-Session": encodeSimple(
+        "Gram-Chat-Session",
+        payload["Gram-Chat-Session"],
+        { explode: false, charEncoding: "none" },
+      ),
+      "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+        explode: false,
+        charEncoding: "none",
+      }),
+      "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+        explode: false,
+        charEncoding: "none",
+      }),
+    }),
+  );
+  const requestSecurity = resolveSecurity(
+    [
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option1?.projectSlugHeaderGramProject,
+      },
+      {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.option1?.sessionHeaderGramSession,
+      },
+    ],
+    [
+      {
+        fieldName: "Authorization",
+        type: "http:bearer",
+        value: security?.option2?.chatSessionsTokenHeaderGramChatSession,
+      },
+    ],
+  );
+  const context = {
+    options: client._options,
+    baseURL: options?.serverURL ?? client._baseURL ?? "",
+    operationID: "loadChat",
+    oAuth2Scopes: null,
+    resolvedSecurity: requestSecurity,
+    securitySource: security,
+    retryConfig: options?.retries ||
+      client._options.retryConfig || { strategy: "none" },
+    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"],
+  };
+  const requestRes = client._createRequest(
+    context,
+    {
+      security: requestSecurity,
+      method: "GET",
+      baseURL: options?.serverURL,
+      path: path,
+      headers: headers,
+      query: query,
+      body: body,
+      userAgent: client._options.userAgent,
+      timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
+    },
+    options,
+  );
+  if (!requestRes.ok) {
+    return [requestRes, { status: "invalid" }];
+  }
+  const req = requestRes.value;
+  const doResult = await client._do(req, {
+    context,
+    isErrorStatusCode: (statusCode) =>
+      matchStatusCode({ status: statusCode }, ["4XX", "5XX"]),
+    retryConfig: context.retryConfig,
+    retryCodes: context.retryCodes,
+  });
+  if (!doResult.ok) {
+    return [doResult, { status: "request-error", request: req }];
+  }
+  const response = doResult.value;
+  const responseFields = {
+    HttpMeta: { Response: response, Request: req },
+  };
+  const [result] = await M.match(
+    M.json(200, Chat$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
+    M.fail("4XX"),
+    M.fail("5XX"),
+  )(response, req, { extraFields: responseFields });
+  if (!result.ok) {
     return [result, { status: "complete", request: req, response }];
+  }
+  return [result, { status: "complete", request: req, response }];
 }
 //# sourceMappingURL=chatLoad.js.map

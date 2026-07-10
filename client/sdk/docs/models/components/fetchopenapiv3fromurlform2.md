@@ -12,6 +12,6 @@ let value: FetchOpenAPIv3FromURLForm2 = {
 
 ## Fields
 
-| Field                                      | Type                                       | Required                                   | Description                                |
-| ------------------------------------------ | ------------------------------------------ | ------------------------------------------ | ------------------------------------------ |
-| `url`                                      | *string*                                   | :heavy_check_mark:                         | The URL to fetch the OpenAPI document from |
+| Field | Type     | Required           | Description                                |
+| ----- | -------- | ------------------ | ------------------------------------------ |
+| `url` | _string_ | :heavy_check_mark: | The URL to fetch the OpenAPI document from |

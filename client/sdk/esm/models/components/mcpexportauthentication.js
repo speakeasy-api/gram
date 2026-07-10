@@ -3,13 +3,17 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { McpExportAuthHeader$inboundSchema, } from "./mcpexportauthheader.js";
+import { McpExportAuthHeader$inboundSchema } from "./mcpexportauthheader.js";
 /** @internal */
 export const McpExportAuthentication$inboundSchema = z.object({
-    headers: z.array(McpExportAuthHeader$inboundSchema),
-    required: z.boolean(),
+  headers: z.array(McpExportAuthHeader$inboundSchema),
+  required: z.boolean(),
 });
 export function mcpExportAuthenticationFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => McpExportAuthentication$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'McpExportAuthentication' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => McpExportAuthentication$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'McpExportAuthentication' from JSON`,
+  );
 }
 //# sourceMappingURL=mcpexportauthentication.js.map

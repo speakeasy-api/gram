@@ -5,19 +5,26 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ExternalMCPRemoteHeader$inboundSchema = z.pipe(z.object({
+export const ExternalMCPRemoteHeader$inboundSchema = z.pipe(
+  z.object({
     description: z.optional(z.string()),
     is_required: z.optional(z.boolean()),
     is_secret: z.optional(z.boolean()),
     name: z.string(),
     placeholder: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "is_required": "isRequired",
-        "is_secret": "isSecret",
+      is_required: "isRequired",
+      is_secret: "isSecret",
     });
-}));
+  }),
+);
 export function externalMCPRemoteHeaderFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ExternalMCPRemoteHeader$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ExternalMCPRemoteHeader' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ExternalMCPRemoteHeader$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ExternalMCPRemoteHeader' from JSON`,
+  );
 }
 //# sourceMappingURL=externalmcpremoteheader.js.map

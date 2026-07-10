@@ -3,19 +3,24 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { HeaderInput$outboundSchema, } from "./headerinput.js";
+import { HeaderInput$outboundSchema } from "./headerinput.js";
 /** @internal */
-export const CreateServerForm$outboundSchema = z.pipe(z.object({
+export const CreateServerForm$outboundSchema = z.pipe(
+  z.object({
     headers: z.array(HeaderInput$outboundSchema),
     name: z.optional(z.string()),
     transportType: z.string(),
     url: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        transportType: "transport_type",
+      transportType: "transport_type",
     });
-}));
+  }),
+);
 export function createServerFormToJSON(createServerForm) {
-    return JSON.stringify(CreateServerForm$outboundSchema.parse(createServerForm));
+  return JSON.stringify(
+    CreateServerForm$outboundSchema.parse(createServerForm),
+  );
 }
 //# sourceMappingURL=createserverform.js.map

@@ -12,9 +12,9 @@ let value: ListVersionsRequest = {
 
 ## Fields
 
-| Field                   | Type                    | Required                | Description             |
-| ----------------------- | ----------------------- | ----------------------- | ----------------------- |
-| `name`                  | *string*                | :heavy_check_mark:      | The name of the package |
-| `gramKey`               | *string*                | :heavy_minus_sign:      | API Key header          |
-| `gramSession`           | *string*                | :heavy_minus_sign:      | Session header          |
-| `gramProject`           | *string*                | :heavy_minus_sign:      | project header          |
+| Field         | Type     | Required           | Description             |
+| ------------- | -------- | ------------------ | ----------------------- |
+| `name`        | _string_ | :heavy_check_mark: | The name of the package |
+| `gramKey`     | _string_ | :heavy_minus_sign: | API Key header          |
+| `gramSession` | _string_ | :heavy_minus_sign: | Session header          |
+| `gramProject` | _string_ | :heavy_minus_sign: | project header          |

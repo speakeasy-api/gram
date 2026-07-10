@@ -12,6 +12,6 @@ let value: RiskIDRequestBody = {
 
 ## Fields
 
-| Field              | Type               | Required           | Description        |
-| ------------------ | ------------------ | ------------------ | ------------------ |
-| `id`               | *string*           | :heavy_check_mark: | The resource ID.   |
+| Field | Type     | Required           | Description      |
+| ----- | -------- | ------------------ | ---------------- |
+| `id`  | _string_ | :heavy_check_mark: | The resource ID. |

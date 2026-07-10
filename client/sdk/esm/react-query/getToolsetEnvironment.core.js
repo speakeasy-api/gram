@@ -4,30 +4,47 @@
 import { environmentsGetByToolset } from "../funcs/environmentsGetByToolset.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchGetToolsetEnvironment(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildGetToolsetEnvironmentQuery(client$, request, security, options),
-    });
+export function prefetchGetToolsetEnvironment(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildGetToolsetEnvironmentQuery(client$, request, security, options),
+  });
 }
-export function buildGetToolsetEnvironmentQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyGetToolsetEnvironment({
-            toolsetId: request.toolsetId,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function getToolsetEnvironmentQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(environmentsGetByToolset(client$, request, security, mergedOptions));
-        },
-    };
+export function buildGetToolsetEnvironmentQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyGetToolsetEnvironment({
+      toolsetId: request.toolsetId,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function getToolsetEnvironmentQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        environmentsGetByToolset(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyGetToolsetEnvironment(parameters) {
-    return ["@gram/client", "environments", "getByToolset", parameters];
+  return ["@gram/client", "environments", "getByToolset", parameters];
 }
 //# sourceMappingURL=getToolsetEnvironment.core.js.map

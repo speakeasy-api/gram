@@ -8,17 +8,23 @@ import { safeParse } from "../../lib/schemas.js";
  * How match_value is interpreted: exact (finding text), regex (RE2 pattern over finding text), rule_id, source, or entity_type (presidio entity, matched as rule_id 'pii.<entity>').
  */
 export const RiskExclusionMatchType = {
-    Exact: "exact",
-    Regex: "regex",
-    RuleId: "rule_id",
-    Source: "source",
-    EntityType: "entity_type",
+  Exact: "exact",
+  Regex: "regex",
+  RuleId: "rule_id",
+  Source: "source",
+  EntityType: "entity_type",
 };
 /** @internal */
-export const RiskExclusionMatchType$inboundSchema = z.enum(RiskExclusionMatchType);
+export const RiskExclusionMatchType$inboundSchema = z.enum(
+  RiskExclusionMatchType,
+);
 /** @internal */
-export const RiskExclusion$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const RiskExclusion$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     enabled: z.boolean(),
     id: z.string(),
     match_type: RiskExclusionMatchType$inboundSchema,
@@ -27,20 +33,29 @@ export const RiskExclusion$inboundSchema = z.pipe(z.object({
     risk_policy_id: z.optional(z.string()),
     rule_id_filter: z.string(),
     source_filter: z.string(),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "match_type": "matchType",
-        "match_value": "matchValue",
-        "project_id": "projectId",
-        "risk_policy_id": "riskPolicyId",
-        "rule_id_filter": "ruleIdFilter",
-        "source_filter": "sourceFilter",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      match_type: "matchType",
+      match_value: "matchValue",
+      project_id: "projectId",
+      risk_policy_id: "riskPolicyId",
+      rule_id_filter: "ruleIdFilter",
+      source_filter: "sourceFilter",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function riskExclusionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskExclusion$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskExclusion' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskExclusion$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskExclusion' from JSON`,
+  );
 }
 //# sourceMappingURL=riskexclusion.js.map

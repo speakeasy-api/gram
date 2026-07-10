@@ -4,19 +4,26 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { OnboardingHookEvent$inboundSchema, } from "./onboardinghookevent.js";
+import { OnboardingHookEvent$inboundSchema } from "./onboardinghookevent.js";
 /** @internal */
-export const VerifyOnboardingHooksSetupResult$inboundSchema = z.pipe(z.object({
+export const VerifyOnboardingHooksSetupResult$inboundSchema = z.pipe(
+  z.object({
     events: z.array(OnboardingHookEvent$inboundSchema),
     latest_unix_nano: z.string(),
     total_count: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "latest_unix_nano": "latestUnixNano",
-        "total_count": "totalCount",
+      latest_unix_nano: "latestUnixNano",
+      total_count: "totalCount",
     });
-}));
+  }),
+);
 export function verifyOnboardingHooksSetupResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => VerifyOnboardingHooksSetupResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'VerifyOnboardingHooksSetupResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => VerifyOnboardingHooksSetupResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'VerifyOnboardingHooksSetupResult' from JSON`,
+  );
 }
 //# sourceMappingURL=verifyonboardinghookssetupresult.js.map

@@ -6,23 +6,25 @@ import { riskBlocksSubmitFeedback } from "../funcs/riskBlocksSubmitFeedback.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Blocks extends ClientSDK {
-    /**
-     * getRiskBlock risk
-     *
-     * @remarks
-     * Get a tool call block by its risk result ID for the durable block page.
-     */
-    async get(request, security, options) {
-        return unwrapAsync(riskBlocksGet(this, request, security, options));
-    }
-    /**
-     * submitRiskBlockFeedback risk
-     *
-     * @remarks
-     * Record thumbs-up/thumbs-down feedback for a tool call block from the block page.
-     */
-    async submitFeedback(request, security, options) {
-        return unwrapAsync(riskBlocksSubmitFeedback(this, request, security, options));
-    }
+  /**
+   * getRiskBlock risk
+   *
+   * @remarks
+   * Get a tool call block by its risk result ID for the durable block page.
+   */
+  async get(request, security, options) {
+    return unwrapAsync(riskBlocksGet(this, request, security, options));
+  }
+  /**
+   * submitRiskBlockFeedback risk
+   *
+   * @remarks
+   * Record thumbs-up/thumbs-down feedback for a tool call block from the block page.
+   */
+  async submitFeedback(request, security, options) {
+    return unwrapAsync(
+      riskBlocksSubmitFeedback(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=blocks.js.map

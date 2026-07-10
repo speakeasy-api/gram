@@ -13,5 +13,5 @@ let value: OptionTypes = "shadow_servers";
 ## Values
 
 ```typescript
-"hosted_servers" | "shadow_servers" | "users"
+"hosted_servers" | "shadow_servers" | "users";
 ```

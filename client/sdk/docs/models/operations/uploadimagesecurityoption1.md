@@ -13,7 +13,7 @@ let value: UploadImageSecurityOption1 = {
 
 ## Fields
 
-| Field                          | Type                           | Required                       | Description                    |
-| ------------------------------ | ------------------------------ | ------------------------------ | ------------------------------ |
-| `apikeyHeaderGramKey`          | *string*                       | :heavy_check_mark:             | N/A                            |
-| `projectSlugHeaderGramProject` | *string*                       | :heavy_check_mark:             | N/A                            |
+| Field                          | Type     | Required           | Description |
+| ------------------------------ | -------- | ------------------ | ----------- |
+| `apikeyHeaderGramKey`          | _string_ | :heavy_check_mark: | N/A         |
+| `projectSlugHeaderGramProject` | _string_ | :heavy_check_mark: | N/A         |

@@ -4,14 +4,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CreateShadowMCPApprovalRequestForm$outboundSchema = z.pipe(z.object({
+export const CreateShadowMCPApprovalRequestForm$outboundSchema = z.pipe(
+  z.object({
     requestToken: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        requestToken: "request_token",
+      requestToken: "request_token",
     });
-}));
-export function createShadowMCPApprovalRequestFormToJSON(createShadowMCPApprovalRequestForm) {
-    return JSON.stringify(CreateShadowMCPApprovalRequestForm$outboundSchema.parse(createShadowMCPApprovalRequestForm));
+  }),
+);
+export function createShadowMCPApprovalRequestFormToJSON(
+  createShadowMCPApprovalRequestForm,
+) {
+  return JSON.stringify(
+    CreateShadowMCPApprovalRequestForm$outboundSchema.parse(
+      createShadowMCPApprovalRequestForm,
+    ),
+  );
 }
 //# sourceMappingURL=createshadowmcpapprovalrequestform.js.map

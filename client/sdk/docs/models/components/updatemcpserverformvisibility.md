@@ -13,5 +13,5 @@ let value: UpdateMcpServerFormVisibility = "private";
 ## Values
 
 ```typescript
-"disabled" | "private" | "public"
+"disabled" | "private" | "public";
 ```

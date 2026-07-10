@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ToolsetSummary$inboundSchema, } from "./toolsetsummary.js";
+import { ToolsetSummary$inboundSchema } from "./toolsetsummary.js";
 /** @internal */
 export const ListToolsetSummariesResult$inboundSchema = z.object({
-    toolsets: z.array(ToolsetSummary$inboundSchema),
+  toolsets: z.array(ToolsetSummary$inboundSchema),
 });
 export function listToolsetSummariesResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListToolsetSummariesResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListToolsetSummariesResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListToolsetSummariesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListToolsetSummariesResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listtoolsetsummariesresult.js.map

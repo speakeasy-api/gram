@@ -12,7 +12,7 @@ let value: OTELScopeLog = {};
 
 ## Fields
 
-| Field                                                                  | Type                                                                   | Required                                                               | Description                                                            |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `logRecords`                                                           | [components.OTELLogRecord](../../models/components/otellogrecord.md)[] | :heavy_minus_sign:                                                     | Array of log records                                                   |
-| `scope`                                                                | [components.OTELScope](../../models/components/otelscope.md)           | :heavy_minus_sign:                                                     | OTEL instrumentation scope                                             |
+| Field        | Type                                                                   | Required           | Description                |
+| ------------ | ---------------------------------------------------------------------- | ------------------ | -------------------------- |
+| `logRecords` | [components.OTELLogRecord](../../models/components/otellogrecord.md)[] | :heavy_minus_sign: | Array of log records       |
+| `scope`      | [components.OTELScope](../../models/components/otelscope.md)           | :heavy_minus_sign: | OTEL instrumentation scope |

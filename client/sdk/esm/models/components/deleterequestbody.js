@@ -4,14 +4,19 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteRequestBody$outboundSchema = z.pipe(z.object({
+export const DeleteRequestBody$outboundSchema = z.pipe(
+  z.object({
     overrideId: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        overrideId: "override_id",
+      overrideId: "override_id",
     });
-}));
+  }),
+);
 export function deleteRequestBodyToJSON(deleteRequestBody) {
-    return JSON.stringify(DeleteRequestBody$outboundSchema.parse(deleteRequestBody));
+  return JSON.stringify(
+    DeleteRequestBody$outboundSchema.parse(deleteRequestBody),
+  );
 }
 //# sourceMappingURL=deleterequestbody.js.map

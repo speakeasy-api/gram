@@ -4,17 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { DeploymentSummary$inboundSchema, } from "./deploymentsummary.js";
+import { DeploymentSummary$inboundSchema } from "./deploymentsummary.js";
 /** @internal */
-export const ListDeploymentResult$inboundSchema = z.pipe(z.object({
+export const ListDeploymentResult$inboundSchema = z.pipe(
+  z.object({
     items: z.array(DeploymentSummary$inboundSchema),
     next_cursor: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function listDeploymentResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListDeploymentResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListDeploymentResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListDeploymentResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListDeploymentResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listdeploymentresult.js.map

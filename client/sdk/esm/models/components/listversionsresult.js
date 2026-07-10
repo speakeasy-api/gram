@@ -4,13 +4,17 @@
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 import { Package$inboundSchema } from "./package.js";
-import { PackageVersion$inboundSchema, } from "./packageversion.js";
+import { PackageVersion$inboundSchema } from "./packageversion.js";
 /** @internal */
 export const ListVersionsResult$inboundSchema = z.object({
-    package: Package$inboundSchema,
-    versions: z.array(PackageVersion$inboundSchema),
+  package: Package$inboundSchema,
+  versions: z.array(PackageVersion$inboundSchema),
 });
 export function listVersionsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListVersionsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListVersionsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListVersionsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListVersionsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listversionsresult.js.map

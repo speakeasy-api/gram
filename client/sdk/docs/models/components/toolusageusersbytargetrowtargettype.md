@@ -13,5 +13,9 @@ let value: ToolUsageUsersByTargetRowTargetType = "local_tool";
 ## Values
 
 ```typescript
-"hosted_mcp_server" | "tunneled_mcp_server" | "shadow_mcp_server" | "local_tool" | "skill"
+"hosted_mcp_server" |
+  "tunneled_mcp_server" |
+  "shadow_mcp_server" |
+  "local_tool" |
+  "skill";
 ```

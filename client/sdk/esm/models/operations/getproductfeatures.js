@@ -4,25 +4,35 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetProductFeaturesSecurity$outboundSchema = z.pipe(z.object({
+export const GetProductFeaturesSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function getProductFeaturesSecurityToJSON(getProductFeaturesSecurity) {
-    return JSON.stringify(GetProductFeaturesSecurity$outboundSchema.parse(getProductFeaturesSecurity));
+  return JSON.stringify(
+    GetProductFeaturesSecurity$outboundSchema.parse(getProductFeaturesSecurity),
+  );
 }
 /** @internal */
-export const GetProductFeaturesRequest$outboundSchema = z.pipe(z.object({
+export const GetProductFeaturesRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function getProductFeaturesRequestToJSON(getProductFeaturesRequest) {
-    return JSON.stringify(GetProductFeaturesRequest$outboundSchema.parse(getProductFeaturesRequest));
+  return JSON.stringify(
+    GetProductFeaturesRequest$outboundSchema.parse(getProductFeaturesRequest),
+  );
 }
 //# sourceMappingURL=getproductfeatures.js.map

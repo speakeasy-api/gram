@@ -4,15 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const SuggestCustomDetectionRuleRequestBody$outboundSchema = z.pipe(z.object({
+export const SuggestCustomDetectionRuleRequestBody$outboundSchema = z.pipe(
+  z.object({
     existingRuleIds: z.optional(z.array(z.string())),
     prompt: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        existingRuleIds: "existing_rule_ids",
+      existingRuleIds: "existing_rule_ids",
     });
-}));
-export function suggestCustomDetectionRuleRequestBodyToJSON(suggestCustomDetectionRuleRequestBody) {
-    return JSON.stringify(SuggestCustomDetectionRuleRequestBody$outboundSchema.parse(suggestCustomDetectionRuleRequestBody));
+  }),
+);
+export function suggestCustomDetectionRuleRequestBodyToJSON(
+  suggestCustomDetectionRuleRequestBody,
+) {
+  return JSON.stringify(
+    SuggestCustomDetectionRuleRequestBody$outboundSchema.parse(
+      suggestCustomDetectionRuleRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=suggestcustomdetectionrulerequestbody.js.map

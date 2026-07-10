@@ -12,8 +12,8 @@ let value: DownloadObservabilityPluginRequest = {
 
 ## Fields
 
-| Field                                                      | Type                                                       | Required                                                   | Description                                                |
-| ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
-| `platform`                                                 | [operations.Platform](../../models/operations/platform.md) | :heavy_check_mark:                                         | Target platform.                                           |
-| `gramSession`                                              | *string*                                                   | :heavy_minus_sign:                                         | Session header                                             |
-| `gramProject`                                              | *string*                                                   | :heavy_minus_sign:                                         | project header                                             |
+| Field         | Type                                                       | Required           | Description      |
+| ------------- | ---------------------------------------------------------- | ------------------ | ---------------- |
+| `platform`    | [operations.Platform](../../models/operations/platform.md) | :heavy_check_mark: | Target platform. |
+| `gramSession` | _string_                                                   | :heavy_minus_sign: | Session header   |
+| `gramProject` | _string_                                                   | :heavy_minus_sign: | project header   |

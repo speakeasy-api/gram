@@ -14,8 +14,8 @@ let value: AuditLogFacetOption = {
 
 ## Fields
 
-| Field                                         | Type                                          | Required                                      | Description                                   |
-| --------------------------------------------- | --------------------------------------------- | --------------------------------------------- | --------------------------------------------- |
-| `count`                                       | *number*                                      | :heavy_check_mark:                            | The number of audit logs for this facet value |
-| `displayName`                                 | *string*                                      | :heavy_check_mark:                            | The display label shown for the facet value   |
-| `value`                                       | *string*                                      | :heavy_check_mark:                            | The facet value used for filtering            |
+| Field         | Type     | Required           | Description                                   |
+| ------------- | -------- | ------------------ | --------------------------------------------- |
+| `count`       | _number_ | :heavy_check_mark: | The number of audit logs for this facet value |
+| `displayName` | _string_ | :heavy_check_mark: | The display label shown for the facet value   |
+| `value`       | _string_ | :heavy_check_mark: | The facet value used for filtering            |

@@ -5,10 +5,14 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const RiskUnmaskResultResult$inboundSchema = z.object({
-    id: z.string(),
-    match: z.string(),
+  id: z.string(),
+  match: z.string(),
 });
 export function riskUnmaskResultResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskUnmaskResultResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskUnmaskResultResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskUnmaskResultResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskUnmaskResultResult' from JSON`,
+  );
 }
 //# sourceMappingURL=riskunmaskresultresult.js.map

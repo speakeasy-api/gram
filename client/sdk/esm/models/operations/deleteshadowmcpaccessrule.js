@@ -4,26 +4,44 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteShadowMCPAccessRuleSecurity$outboundSchema = z.pipe(z.object({
+export const DeleteShadowMCPAccessRuleSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function deleteShadowMCPAccessRuleSecurityToJSON(deleteShadowMCPAccessRuleSecurity) {
-    return JSON.stringify(DeleteShadowMCPAccessRuleSecurity$outboundSchema.parse(deleteShadowMCPAccessRuleSecurity));
+  }),
+);
+export function deleteShadowMCPAccessRuleSecurityToJSON(
+  deleteShadowMCPAccessRuleSecurity,
+) {
+  return JSON.stringify(
+    DeleteShadowMCPAccessRuleSecurity$outboundSchema.parse(
+      deleteShadowMCPAccessRuleSecurity,
+    ),
+  );
 }
 /** @internal */
-export const DeleteShadowMCPAccessRuleRequest$outboundSchema = z.pipe(z.object({
+export const DeleteShadowMCPAccessRuleRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
-export function deleteShadowMCPAccessRuleRequestToJSON(deleteShadowMCPAccessRuleRequest) {
-    return JSON.stringify(DeleteShadowMCPAccessRuleRequest$outboundSchema.parse(deleteShadowMCPAccessRuleRequest));
+  }),
+);
+export function deleteShadowMCPAccessRuleRequestToJSON(
+  deleteShadowMCPAccessRuleRequest,
+) {
+  return JSON.stringify(
+    DeleteShadowMCPAccessRuleRequest$outboundSchema.parse(
+      deleteShadowMCPAccessRuleRequest,
+    ),
+  );
 }
 //# sourceMappingURL=deleteshadowmcpaccessrule.js.map

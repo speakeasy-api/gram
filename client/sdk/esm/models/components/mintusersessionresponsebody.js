@@ -5,16 +5,23 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const MintUserSessionResponseBody$inboundSchema = z.pipe(z.object({
+export const MintUserSessionResponseBody$inboundSchema = z.pipe(
+  z.object({
     access_token: z.string(),
     expires_in: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "access_token": "accessToken",
-        "expires_in": "expiresIn",
+      access_token: "accessToken",
+      expires_in: "expiresIn",
     });
-}));
+  }),
+);
 export function mintUserSessionResponseBodyFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => MintUserSessionResponseBody$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'MintUserSessionResponseBody' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => MintUserSessionResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'MintUserSessionResponseBody' from JSON`,
+  );
 }
 //# sourceMappingURL=mintusersessionresponsebody.js.map

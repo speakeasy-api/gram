@@ -4,13 +4,20 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ChatResolution$inboundSchema, } from "./chatresolution.js";
+import { ChatResolution$inboundSchema } from "./chatresolution.js";
 /** @internal */
-export const ChatOverviewWithResolutions$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const ChatOverviewWithResolutions$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     external_user_id: z.optional(z.string()),
     id: z.string(),
-    last_message_timestamp: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    last_message_timestamp: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     num_messages: z.int(),
     resolutions: z.array(ChatResolution$inboundSchema),
     risk_findings_count: z.optional(z.int()),
@@ -20,24 +27,33 @@ export const ChatOverviewWithResolutions$inboundSchema = z.pipe(z.object({
     total_input_tokens: z.optional(z.int()),
     total_output_tokens: z.optional(z.int()),
     total_tokens: z.optional(z.int()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     user_id: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "external_user_id": "externalUserId",
-        "last_message_timestamp": "lastMessageTimestamp",
-        "num_messages": "numMessages",
-        "risk_findings_count": "riskFindingsCount",
-        "total_cost": "totalCost",
-        "total_input_tokens": "totalInputTokens",
-        "total_output_tokens": "totalOutputTokens",
-        "total_tokens": "totalTokens",
-        "updated_at": "updatedAt",
-        "user_id": "userId",
+      created_at: "createdAt",
+      external_user_id: "externalUserId",
+      last_message_timestamp: "lastMessageTimestamp",
+      num_messages: "numMessages",
+      risk_findings_count: "riskFindingsCount",
+      total_cost: "totalCost",
+      total_input_tokens: "totalInputTokens",
+      total_output_tokens: "totalOutputTokens",
+      total_tokens: "totalTokens",
+      updated_at: "updatedAt",
+      user_id: "userId",
     });
-}));
+  }),
+);
 export function chatOverviewWithResolutionsFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ChatOverviewWithResolutions$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ChatOverviewWithResolutions' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ChatOverviewWithResolutions$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ChatOverviewWithResolutions' from JSON`,
+  );
 }
 //# sourceMappingURL=chatoverviewwithresolutions.js.map

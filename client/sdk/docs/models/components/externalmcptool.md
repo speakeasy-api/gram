@@ -10,9 +10,9 @@ let value: ExternalMCPTool = {};
 
 ## Fields
 
-| Field                     | Type                      | Required                  | Description               |
-| ------------------------- | ------------------------- | ------------------------- | ------------------------- |
-| `annotations`             | *any*                     | :heavy_minus_sign:        | Annotations for the tool  |
-| `description`             | *string*                  | :heavy_minus_sign:        | Description of the tool   |
-| `inputSchema`             | *any*                     | :heavy_minus_sign:        | Input schema for the tool |
-| `name`                    | *string*                  | :heavy_minus_sign:        | Name of the tool          |
+| Field         | Type     | Required           | Description               |
+| ------------- | -------- | ------------------ | ------------------------- |
+| `annotations` | _any_    | :heavy_minus_sign: | Annotations for the tool  |
+| `description` | _string_ | :heavy_minus_sign: | Description of the tool   |
+| `inputSchema` | _any_    | :heavy_minus_sign: | Input schema for the tool |
+| `name`        | _string_ | :heavy_minus_sign: | Name of the tool          |

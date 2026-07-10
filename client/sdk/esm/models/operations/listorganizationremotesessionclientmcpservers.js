@@ -4,31 +4,51 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListOrganizationRemoteSessionClientMcpServersSecurity$outboundSchema = z.pipe(z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
-    apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const ListOrganizationRemoteSessionClientMcpServersSecurity$outboundSchema =
+  z.pipe(
+    z.object({
+      sessionHeaderGramSession: z.optional(z.string()),
+      apikeyHeaderGramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         sessionHeaderGramSession: "session_header_Gram-Session",
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    });
-}));
-export function listOrganizationRemoteSessionClientMcpServersSecurityToJSON(listOrganizationRemoteSessionClientMcpServersSecurity) {
-    return JSON.stringify(ListOrganizationRemoteSessionClientMcpServersSecurity$outboundSchema.parse(listOrganizationRemoteSessionClientMcpServersSecurity));
+      });
+    }),
+  );
+export function listOrganizationRemoteSessionClientMcpServersSecurityToJSON(
+  listOrganizationRemoteSessionClientMcpServersSecurity,
+) {
+  return JSON.stringify(
+    ListOrganizationRemoteSessionClientMcpServersSecurity$outboundSchema.parse(
+      listOrganizationRemoteSessionClientMcpServersSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListOrganizationRemoteSessionClientMcpServersRequest$outboundSchema = z.pipe(z.object({
-    clientId: z.string(),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const ListOrganizationRemoteSessionClientMcpServersRequest$outboundSchema =
+  z.pipe(
+    z.object({
+      clientId: z.string(),
+      gramSession: z.optional(z.string()),
+      gramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         clientId: "client_id",
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
-    });
-}));
-export function listOrganizationRemoteSessionClientMcpServersRequestToJSON(listOrganizationRemoteSessionClientMcpServersRequest) {
-    return JSON.stringify(ListOrganizationRemoteSessionClientMcpServersRequest$outboundSchema.parse(listOrganizationRemoteSessionClientMcpServersRequest));
+      });
+    }),
+  );
+export function listOrganizationRemoteSessionClientMcpServersRequestToJSON(
+  listOrganizationRemoteSessionClientMcpServersRequest,
+) {
+  return JSON.stringify(
+    ListOrganizationRemoteSessionClientMcpServersRequest$outboundSchema.parse(
+      listOrganizationRemoteSessionClientMcpServersRequest,
+    ),
+  );
 }
 //# sourceMappingURL=listorganizationremotesessionclientmcpservers.js.map

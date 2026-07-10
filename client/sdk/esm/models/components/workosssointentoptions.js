@@ -4,16 +4,21 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const WorkOSSSOIntentOptions$outboundSchema = z.pipe(z.object({
+export const WorkOSSSOIntentOptions$outboundSchema = z.pipe(
+  z.object({
     bookmarkSlug: z.optional(z.string()),
     providerType: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        bookmarkSlug: "bookmark_slug",
-        providerType: "provider_type",
+      bookmarkSlug: "bookmark_slug",
+      providerType: "provider_type",
     });
-}));
+  }),
+);
 export function workOSSSOIntentOptionsToJSON(workOSSSOIntentOptions) {
-    return JSON.stringify(WorkOSSSOIntentOptions$outboundSchema.parse(workOSSSOIntentOptions));
+  return JSON.stringify(
+    WorkOSSSOIntentOptions$outboundSchema.parse(workOSSSOIntentOptions),
+  );
 }
 //# sourceMappingURL=workosssointentoptions.js.map

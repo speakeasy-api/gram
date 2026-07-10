@@ -15,7 +15,7 @@ let value: McpExportAuthHeader = {
 
 ## Fields
 
-| Field                                      | Type                                       | Required                                   | Description                                |
-| ------------------------------------------ | ------------------------------------------ | ------------------------------------------ | ------------------------------------------ |
-| `displayName`                              | *string*                                   | :heavy_check_mark:                         | User-friendly display name (e.g., API Key) |
-| `name`                                     | *string*                                   | :heavy_check_mark:                         | The HTTP header name (e.g., Authorization) |
+| Field         | Type     | Required           | Description                                |
+| ------------- | -------- | ------------------ | ------------------------------------------ |
+| `displayName` | _string_ | :heavy_check_mark: | User-friendly display name (e.g., API Key) |
+| `name`        | _string_ | :heavy_check_mark: | The HTTP header name (e.g., Authorization) |

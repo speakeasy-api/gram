@@ -11,5 +11,5 @@ let value: ShadowMCPAccessRuleAccessScope = "project";
 ## Values
 
 ```typescript
-"organization" | "project"
+"organization" | "project";
 ```

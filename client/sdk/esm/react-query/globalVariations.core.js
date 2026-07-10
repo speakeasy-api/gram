@@ -4,30 +4,47 @@
 import { variationsListGlobal } from "../funcs/variationsListGlobal.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchGlobalVariations(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildGlobalVariationsQuery(client$, request, security, options),
-    });
+export function prefetchGlobalVariations(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildGlobalVariationsQuery(client$, request, security, options),
+  });
 }
-export function buildGlobalVariationsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyGlobalVariations({
-            gramSession: request?.gramSession,
-            gramKey: request?.gramKey,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function globalVariationsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(variationsListGlobal(client$, request, security, mergedOptions));
-        },
-    };
+export function buildGlobalVariationsQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyGlobalVariations({
+      gramSession: request?.gramSession,
+      gramKey: request?.gramKey,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function globalVariationsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        variationsListGlobal(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyGlobalVariations(parameters) {
-    return ["@gram/client", "variations", "listGlobal", parameters];
+  return ["@gram/client", "variations", "listGlobal", parameters];
 }
 //# sourceMappingURL=globalVariations.core.js.map

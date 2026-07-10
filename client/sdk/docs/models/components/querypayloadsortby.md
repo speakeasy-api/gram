@@ -13,5 +13,12 @@ let value: QueryPayloadSortBy = "cache_creation_input_tokens";
 ## Values
 
 ```typescript
-"total_cost" | "total_tokens" | "total_input_tokens" | "total_output_tokens" | "cache_read_input_tokens" | "cache_creation_input_tokens" | "total_tool_calls" | "total_chats"
+"total_cost" |
+  "total_tokens" |
+  "total_input_tokens" |
+  "total_output_tokens" |
+  "cache_read_input_tokens" |
+  "cache_creation_input_tokens" |
+  "total_tool_calls" |
+  "total_chats";
 ```

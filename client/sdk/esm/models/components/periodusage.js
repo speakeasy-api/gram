@@ -5,8 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const PeriodUsage$inboundSchema = z
-    .pipe(z.object({
+export const PeriodUsage$inboundSchema = z.pipe(
+  z.object({
     actual_enabled_server_count: z.int(),
     credits: z.int(),
     has_active_subscription: z.boolean(),
@@ -15,17 +15,23 @@ export const PeriodUsage$inboundSchema = z
     included_tool_calls: z.int(),
     servers: z.int(),
     tool_calls: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "actual_enabled_server_count": "actualEnabledServerCount",
-        "has_active_subscription": "hasActiveSubscription",
-        "included_credits": "includedCredits",
-        "included_servers": "includedServers",
-        "included_tool_calls": "includedToolCalls",
-        "tool_calls": "toolCalls",
+      actual_enabled_server_count: "actualEnabledServerCount",
+      has_active_subscription: "hasActiveSubscription",
+      included_credits: "includedCredits",
+      included_servers: "includedServers",
+      included_tool_calls: "includedToolCalls",
+      tool_calls: "toolCalls",
     });
-}));
+  }),
+);
 export function periodUsageFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => PeriodUsage$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'PeriodUsage' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => PeriodUsage$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'PeriodUsage' from JSON`,
+  );
 }
 //# sourceMappingURL=periodusage.js.map

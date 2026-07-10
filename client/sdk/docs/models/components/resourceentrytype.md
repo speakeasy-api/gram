@@ -11,5 +11,5 @@ let value: ResourceEntryType = "function";
 ## Values
 
 ```typescript
-"function"
+"function";
 ```

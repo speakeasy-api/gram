@@ -14,8 +14,8 @@ let value: UpdateAssistantRequest = {
 
 ## Fields
 
-| Field                                                                            | Type                                                                             | Required                                                                         | Description                                                                      |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `gramSession`                                                                    | *string*                                                                         | :heavy_minus_sign:                                                               | Session header                                                                   |
-| `gramProject`                                                                    | *string*                                                                         | :heavy_minus_sign:                                                               | project header                                                                   |
-| `updateAssistantForm`                                                            | [components.UpdateAssistantForm](../../models/components/updateassistantform.md) | :heavy_check_mark:                                                               | N/A                                                                              |
+| Field                 | Type                                                                             | Required           | Description    |
+| --------------------- | -------------------------------------------------------------------------------- | ------------------ | -------------- |
+| `gramSession`         | _string_                                                                         | :heavy_minus_sign: | Session header |
+| `gramProject`         | _string_                                                                         | :heavy_minus_sign: | project header |
+| `updateAssistantForm` | [components.UpdateAssistantForm](../../models/components/updateassistantform.md) | :heavy_check_mark: | N/A            |

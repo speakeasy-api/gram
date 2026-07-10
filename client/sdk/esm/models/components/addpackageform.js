@@ -4,10 +4,10 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const AddPackageForm$outboundSchema = z.object({
-    name: z.string(),
-    version: z.optional(z.string()),
+  name: z.string(),
+  version: z.optional(z.string()),
 });
 export function addPackageFormToJSON(addPackageForm) {
-    return JSON.stringify(AddPackageForm$outboundSchema.parse(addPackageForm));
+  return JSON.stringify(AddPackageForm$outboundSchema.parse(addPackageForm));
 }
 //# sourceMappingURL=addpackageform.js.map

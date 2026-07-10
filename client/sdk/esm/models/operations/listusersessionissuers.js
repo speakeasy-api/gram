@@ -4,72 +4,119 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ListUserSessionIssuersResult$inboundSchema, } from "../components/listusersessionissuersresult.js";
+import { ListUserSessionIssuersResult$inboundSchema } from "../components/listusersessionissuersresult.js";
 /** @internal */
-export const ListUserSessionIssuersSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListUserSessionIssuersSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listUserSessionIssuersSecurityOption1ToJSON(listUserSessionIssuersSecurityOption1) {
-    return JSON.stringify(ListUserSessionIssuersSecurityOption1$outboundSchema.parse(listUserSessionIssuersSecurityOption1));
+  }),
+);
+export function listUserSessionIssuersSecurityOption1ToJSON(
+  listUserSessionIssuersSecurityOption1,
+) {
+  return JSON.stringify(
+    ListUserSessionIssuersSecurityOption1$outboundSchema.parse(
+      listUserSessionIssuersSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListUserSessionIssuersSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListUserSessionIssuersSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listUserSessionIssuersSecurityOption2ToJSON(listUserSessionIssuersSecurityOption2) {
-    return JSON.stringify(ListUserSessionIssuersSecurityOption2$outboundSchema.parse(listUserSessionIssuersSecurityOption2));
+  }),
+);
+export function listUserSessionIssuersSecurityOption2ToJSON(
+  listUserSessionIssuersSecurityOption2,
+) {
+  return JSON.stringify(
+    ListUserSessionIssuersSecurityOption2$outboundSchema.parse(
+      listUserSessionIssuersSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListUserSessionIssuersSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListUserSessionIssuersSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListUserSessionIssuersSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListUserSessionIssuersSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListUserSessionIssuersSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListUserSessionIssuersSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function listUserSessionIssuersSecurityToJSON(listUserSessionIssuersSecurity) {
-    return JSON.stringify(ListUserSessionIssuersSecurity$outboundSchema.parse(listUserSessionIssuersSecurity));
+  }),
+);
+export function listUserSessionIssuersSecurityToJSON(
+  listUserSessionIssuersSecurity,
+) {
+  return JSON.stringify(
+    ListUserSessionIssuersSecurity$outboundSchema.parse(
+      listUserSessionIssuersSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListUserSessionIssuersRequest$outboundSchema = z.pipe(z.object({
+export const ListUserSessionIssuersRequest$outboundSchema = z.pipe(
+  z.object({
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
     });
-}));
-export function listUserSessionIssuersRequestToJSON(listUserSessionIssuersRequest) {
-    return JSON.stringify(ListUserSessionIssuersRequest$outboundSchema.parse(listUserSessionIssuersRequest));
+  }),
+);
+export function listUserSessionIssuersRequestToJSON(
+  listUserSessionIssuersRequest,
+) {
+  return JSON.stringify(
+    ListUserSessionIssuersRequest$outboundSchema.parse(
+      listUserSessionIssuersRequest,
+    ),
+  );
 }
 /** @internal */
-export const ListUserSessionIssuersResponse$inboundSchema = z.pipe(z.object({
+export const ListUserSessionIssuersResponse$inboundSchema = z.pipe(
+  z.object({
     Result: ListUserSessionIssuersResult$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Result": "result",
+      Result: "result",
     });
-}));
+  }),
+);
 export function listUserSessionIssuersResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListUserSessionIssuersResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListUserSessionIssuersResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListUserSessionIssuersResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListUserSessionIssuersResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=listusersessionissuers.js.map

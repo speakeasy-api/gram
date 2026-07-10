@@ -4,30 +4,36 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetRoleSecurity$outboundSchema = z.pipe(z.object({
+export const GetRoleSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function getRoleSecurityToJSON(getRoleSecurity) {
-    return JSON.stringify(GetRoleSecurity$outboundSchema.parse(getRoleSecurity));
+  return JSON.stringify(GetRoleSecurity$outboundSchema.parse(getRoleSecurity));
 }
 /** @internal */
-export const GetRoleRequest$outboundSchema = z.pipe(z.object({
+export const GetRoleRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function getRoleRequestToJSON(getRoleRequest) {
-    return JSON.stringify(GetRoleRequest$outboundSchema.parse(getRoleRequest));
+  return JSON.stringify(GetRoleRequest$outboundSchema.parse(getRoleRequest));
 }
 //# sourceMappingURL=getrole.js.map

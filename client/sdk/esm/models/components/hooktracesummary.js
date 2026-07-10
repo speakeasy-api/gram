@@ -8,16 +8,16 @@ import { safeParse } from "../../lib/schemas.js";
  * Hook execution status
  */
 export const HookStatus = {
-    Success: "success",
-    Failure: "failure",
-    Pending: "pending",
-    Blocked: "blocked",
+  Success: "success",
+  Failure: "failure",
+  Pending: "pending",
+  Blocked: "blocked",
 };
 /** @internal */
-export const HookStatus$inboundSchema = z
-    .enum(HookStatus);
+export const HookStatus$inboundSchema = z.enum(HookStatus);
 /** @internal */
-export const HookTraceSummary$inboundSchema = z.pipe(z.object({
+export const HookTraceSummary$inboundSchema = z.pipe(
+  z.object({
     block_reason: z.optional(z.string()),
     event_source: z.optional(z.string()),
     gram_urn: z.string(),
@@ -30,23 +30,29 @@ export const HookTraceSummary$inboundSchema = z.pipe(z.object({
     tool_source: z.optional(z.string()),
     trace_id: z.string(),
     user_email: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "block_reason": "blockReason",
-        "event_source": "eventSource",
-        "gram_urn": "gramUrn",
-        "hook_source": "hookSource",
-        "hook_status": "hookStatus",
-        "log_count": "logCount",
-        "skill_name": "skillName",
-        "start_time_unix_nano": "startTimeUnixNano",
-        "tool_name": "toolName",
-        "tool_source": "toolSource",
-        "trace_id": "traceId",
-        "user_email": "userEmail",
+      block_reason: "blockReason",
+      event_source: "eventSource",
+      gram_urn: "gramUrn",
+      hook_source: "hookSource",
+      hook_status: "hookStatus",
+      log_count: "logCount",
+      skill_name: "skillName",
+      start_time_unix_nano: "startTimeUnixNano",
+      tool_name: "toolName",
+      tool_source: "toolSource",
+      trace_id: "traceId",
+      user_email: "userEmail",
     });
-}));
+  }),
+);
 export function hookTraceSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => HookTraceSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'HookTraceSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => HookTraceSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'HookTraceSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=hooktracesummary.js.map

@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { TriggerInstance$inboundSchema, } from "./triggerinstance.js";
+import { TriggerInstance$inboundSchema } from "./triggerinstance.js";
 /** @internal */
 export const ListTriggerInstancesResult$inboundSchema = z.object({
-    triggers: z.array(TriggerInstance$inboundSchema),
+  triggers: z.array(TriggerInstance$inboundSchema),
 });
 export function listTriggerInstancesResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListTriggerInstancesResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListTriggerInstancesResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListTriggerInstancesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListTriggerInstancesResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listtriggerinstancesresult.js.map

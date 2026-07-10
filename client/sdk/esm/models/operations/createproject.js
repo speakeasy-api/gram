@@ -3,33 +3,43 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateProjectRequestBody$outboundSchema, } from "../components/createprojectrequestbody.js";
+import { CreateProjectRequestBody$outboundSchema } from "../components/createprojectrequestbody.js";
 /** @internal */
-export const CreateProjectSecurity$outboundSchema = z.pipe(z.object({
+export const CreateProjectSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function createProjectSecurityToJSON(createProjectSecurity) {
-    return JSON.stringify(CreateProjectSecurity$outboundSchema.parse(createProjectSecurity));
+  return JSON.stringify(
+    CreateProjectSecurity$outboundSchema.parse(createProjectSecurity),
+  );
 }
 /** @internal */
-export const CreateProjectRequest$outboundSchema = z.pipe(z.object({
+export const CreateProjectRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     createProjectRequestBody: CreateProjectRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        createProjectRequestBody: "CreateProjectRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      createProjectRequestBody: "CreateProjectRequestBody",
     });
-}));
+  }),
+);
 export function createProjectRequestToJSON(createProjectRequest) {
-    return JSON.stringify(CreateProjectRequest$outboundSchema.parse(createProjectRequest));
+  return JSON.stringify(
+    CreateProjectRequest$outboundSchema.parse(createProjectRequest),
+  );
 }
 //# sourceMappingURL=createproject.js.map

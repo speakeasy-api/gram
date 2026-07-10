@@ -8,13 +8,14 @@ import { safeParse } from "../../lib/schemas.js";
  * Chat session status
  */
 export const SessionSummaryStatus = {
-    Success: "success",
-    Error: "error",
+  Success: "success",
+  Error: "error",
 };
 /** @internal */
 export const SessionSummaryStatus$inboundSchema = z.enum(SessionSummaryStatus);
 /** @internal */
-export const SessionSummary$inboundSchema = z.pipe(z.object({
+export const SessionSummary$inboundSchema = z.pipe(
+  z.object({
     duration_seconds: z.number(),
     end_time_unix_nano: z.string(),
     gram_chat_id: z.string(),
@@ -31,24 +32,30 @@ export const SessionSummary$inboundSchema = z.pipe(z.object({
     total_output_tokens: z.int(),
     total_tokens: z.int(),
     user_email: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "duration_seconds": "durationSeconds",
-        "end_time_unix_nano": "endTimeUnixNano",
-        "gram_chat_id": "gramChatId",
-        "hook_source": "hookSource",
-        "message_count": "messageCount",
-        "project_id": "projectId",
-        "start_time_unix_nano": "startTimeUnixNano",
-        "tool_call_count": "toolCallCount",
-        "total_cost": "totalCost",
-        "total_input_tokens": "totalInputTokens",
-        "total_output_tokens": "totalOutputTokens",
-        "total_tokens": "totalTokens",
-        "user_email": "userEmail",
+      duration_seconds: "durationSeconds",
+      end_time_unix_nano: "endTimeUnixNano",
+      gram_chat_id: "gramChatId",
+      hook_source: "hookSource",
+      message_count: "messageCount",
+      project_id: "projectId",
+      start_time_unix_nano: "startTimeUnixNano",
+      tool_call_count: "toolCallCount",
+      total_cost: "totalCost",
+      total_input_tokens: "totalInputTokens",
+      total_output_tokens: "totalOutputTokens",
+      total_tokens: "totalTokens",
+      user_email: "userEmail",
     });
-}));
+  }),
+);
 export function sessionSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SessionSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SessionSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SessionSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SessionSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=sessionsummary.js.map

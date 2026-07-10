@@ -4,30 +4,47 @@
 import { collectionsListServers } from "../funcs/collectionsListServers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchCollectionsListServers(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildCollectionsListServersQuery(client$, request, security, options),
-    });
+export function prefetchCollectionsListServers(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildCollectionsListServersQuery(client$, request, security, options),
+  });
 }
-export function buildCollectionsListServersQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyCollectionsListServers({
-            collectionSlug: request.collectionSlug,
-            gramSession: request.gramSession,
-            gramKey: request.gramKey,
-        }),
-        queryFn: async function collectionsListServersQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(collectionsListServers(client$, request, security, mergedOptions));
-        },
-    };
+export function buildCollectionsListServersQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyCollectionsListServers({
+      collectionSlug: request.collectionSlug,
+      gramSession: request.gramSession,
+      gramKey: request.gramKey,
+    }),
+    queryFn: async function collectionsListServersQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        collectionsListServers(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyCollectionsListServers(parameters) {
-    return ["@gram/client", "collections", "listServers", parameters];
+  return ["@gram/client", "collections", "listServers", parameters];
 }
 //# sourceMappingURL=collectionsListServers.core.js.map

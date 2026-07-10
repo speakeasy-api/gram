@@ -13,5 +13,11 @@ let value: SortBy = "duration_seconds";
 ## Values
 
 ```typescript
-"total_cost" | "total_tokens" | "total_input_tokens" | "total_output_tokens" | "tool_call_count" | "message_count" | "duration_seconds"
+"total_cost" |
+  "total_tokens" |
+  "total_input_tokens" |
+  "total_output_tokens" |
+  "tool_call_count" |
+  "message_count" |
+  "duration_seconds";
 ```

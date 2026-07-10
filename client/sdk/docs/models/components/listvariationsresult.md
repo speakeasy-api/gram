@@ -21,6 +21,6 @@ let value: ListVariationsResult = {
 
 ## Fields
 
-| Field                                                                  | Type                                                                   | Required                                                               | Description                                                            |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `variations`                                                           | [components.ToolVariation](../../models/components/toolvariation.md)[] | :heavy_check_mark:                                                     | N/A                                                                    |
+| Field        | Type                                                                   | Required           | Description |
+| ------------ | ---------------------------------------------------------------------- | ------------------ | ----------- |
+| `variations` | [components.ToolVariation](../../models/components/toolvariation.md)[] | :heavy_check_mark: | N/A         |

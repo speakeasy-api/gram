@@ -6,14 +6,21 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { McpEndpoint$inboundSchema } from "./mcpendpoint.js";
 /** @internal */
-export const ListMcpEndpointsResult$inboundSchema = z.pipe(z.object({
+export const ListMcpEndpointsResult$inboundSchema = z.pipe(
+  z.object({
     mcp_endpoints: z.array(McpEndpoint$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "mcp_endpoints": "mcpEndpoints",
+      mcp_endpoints: "mcpEndpoints",
     });
-}));
+  }),
+);
 export function listMcpEndpointsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListMcpEndpointsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListMcpEndpointsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListMcpEndpointsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListMcpEndpointsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listmcpendpointsresult.js.map

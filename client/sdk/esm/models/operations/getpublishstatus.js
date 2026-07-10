@@ -4,29 +4,39 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetPublishStatusSecurity$outboundSchema = z.pipe(z.object({
+export const GetPublishStatusSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function getPublishStatusSecurityToJSON(getPublishStatusSecurity) {
-    return JSON.stringify(GetPublishStatusSecurity$outboundSchema.parse(getPublishStatusSecurity));
+  return JSON.stringify(
+    GetPublishStatusSecurity$outboundSchema.parse(getPublishStatusSecurity),
+  );
 }
 /** @internal */
-export const GetPublishStatusRequest$outboundSchema = z.pipe(z.object({
+export const GetPublishStatusRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function getPublishStatusRequestToJSON(getPublishStatusRequest) {
-    return JSON.stringify(GetPublishStatusRequest$outboundSchema.parse(getPublishStatusRequest));
+  return JSON.stringify(
+    GetPublishStatusRequest$outboundSchema.parse(getPublishStatusRequest),
+  );
 }
 //# sourceMappingURL=getpublishstatus.js.map

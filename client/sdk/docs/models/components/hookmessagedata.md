@@ -12,8 +12,8 @@ let value: HookMessageData = {};
 
 ## Fields
 
-| Field                                                              | Type                                                               | Required                                                           | Description                                                        |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `durationMs`                                                       | *number*                                                           | :heavy_minus_sign:                                                 | Message or thinking-block duration in milliseconds, when reported. |
-| `role`                                                             | *string*                                                           | :heavy_minus_sign:                                                 | Message role, e.g. assistant or user.                              |
-| `text`                                                             | *string*                                                           | :heavy_minus_sign:                                                 | Message text.                                                      |
+| Field        | Type     | Required           | Description                                                        |
+| ------------ | -------- | ------------------ | ------------------------------------------------------------------ |
+| `durationMs` | _number_ | :heavy_minus_sign: | Message or thinking-block duration in milliseconds, when reported. |
+| `role`       | _string_ | :heavy_minus_sign: | Message role, e.g. assistant or user.                              |
+| `text`       | _string_ | :heavy_minus_sign: | Message text.                                                      |

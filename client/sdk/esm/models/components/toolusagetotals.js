@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ToolUsageTotals$inboundSchema = z.pipe(z.object({
+export const ToolUsageTotals$inboundSchema = z.pipe(
+  z.object({
     event_count: z.int(),
     failure_count: z.int(),
     failure_rate: z.number(),
@@ -13,18 +14,24 @@ export const ToolUsageTotals$inboundSchema = z.pipe(z.object({
     unique_targets: z.int(),
     unique_tools: z.int(),
     unique_users: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "event_count": "eventCount",
-        "failure_count": "failureCount",
-        "failure_rate": "failureRate",
-        "success_count": "successCount",
-        "unique_targets": "uniqueTargets",
-        "unique_tools": "uniqueTools",
-        "unique_users": "uniqueUsers",
+      event_count: "eventCount",
+      failure_count: "failureCount",
+      failure_rate: "failureRate",
+      success_count: "successCount",
+      unique_targets: "uniqueTargets",
+      unique_tools: "uniqueTools",
+      unique_users: "uniqueUsers",
     });
-}));
+  }),
+);
 export function toolUsageTotalsFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolUsageTotals$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolUsageTotals' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolUsageTotals$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolUsageTotals' from JSON`,
+  );
 }
 //# sourceMappingURL=toolusagetotals.js.map

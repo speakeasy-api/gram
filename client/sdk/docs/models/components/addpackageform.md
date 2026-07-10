@@ -12,7 +12,7 @@ let value: AddPackageForm = {
 
 ## Fields
 
-| Field                                                                           | Type                                                                            | Required                                                                        | Description                                                                     |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `name`                                                                          | *string*                                                                        | :heavy_check_mark:                                                              | The name of the package to add.                                                 |
-| `version`                                                                       | *string*                                                                        | :heavy_minus_sign:                                                              | The version of the package to add. If omitted, the latest version will be used. |
+| Field     | Type     | Required           | Description                                                                     |
+| --------- | -------- | ------------------ | ------------------------------------------------------------------------------- |
+| `name`    | _string_ | :heavy_check_mark: | The name of the package to add.                                                 |
+| `version` | _string_ | :heavy_minus_sign: | The version of the package to add. If omitted, the latest version will be used. |

@@ -4,20 +4,25 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const AddFunctionsForm$outboundSchema = z.pipe(z.object({
+export const AddFunctionsForm$outboundSchema = z.pipe(
+  z.object({
     assetId: z.string(),
     memoryMib: z.optional(z.int()),
     name: z.string(),
     runtime: z.string(),
     scale: z.optional(z.int()),
     slug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        assetId: "asset_id",
-        memoryMib: "memory_mib",
+      assetId: "asset_id",
+      memoryMib: "memory_mib",
     });
-}));
+  }),
+);
 export function addFunctionsFormToJSON(addFunctionsForm) {
-    return JSON.stringify(AddFunctionsForm$outboundSchema.parse(addFunctionsForm));
+  return JSON.stringify(
+    AddFunctionsForm$outboundSchema.parse(addFunctionsForm),
+  );
 }
 //# sourceMappingURL=addfunctionsform.js.map

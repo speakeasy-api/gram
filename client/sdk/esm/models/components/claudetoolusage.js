@@ -5,22 +5,29 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ClaudeToolUsage$inboundSchema = z.pipe(z.object({
+export const ClaudeToolUsage$inboundSchema = z.pipe(
+  z.object({
     input_size_bytes: z.int(),
     prompt_id: z.string(),
     result_size_bytes: z.int(),
     tool_name: z.string(),
     tool_use_id: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "input_size_bytes": "inputSizeBytes",
-        "prompt_id": "promptId",
-        "result_size_bytes": "resultSizeBytes",
-        "tool_name": "toolName",
-        "tool_use_id": "toolUseId",
+      input_size_bytes: "inputSizeBytes",
+      prompt_id: "promptId",
+      result_size_bytes: "resultSizeBytes",
+      tool_name: "toolName",
+      tool_use_id: "toolUseId",
     });
-}));
+  }),
+);
 export function claudeToolUsageFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ClaudeToolUsage$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ClaudeToolUsage' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ClaudeToolUsage$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ClaudeToolUsage' from JSON`,
+  );
 }
 //# sourceMappingURL=claudetoolusage.js.map

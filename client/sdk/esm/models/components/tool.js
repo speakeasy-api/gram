@@ -4,28 +4,37 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ExternalMCPToolDefinition$inboundSchema, } from "./externalmcptooldefinition.js";
-import { FunctionToolDefinition$inboundSchema, } from "./functiontooldefinition.js";
-import { HTTPToolDefinition$inboundSchema, } from "./httptooldefinition.js";
-import { PlatformToolDefinition$inboundSchema, } from "./platformtooldefinition.js";
-import { PromptTemplate$inboundSchema, } from "./prompttemplate.js";
+import { ExternalMCPToolDefinition$inboundSchema } from "./externalmcptooldefinition.js";
+import { FunctionToolDefinition$inboundSchema } from "./functiontooldefinition.js";
+import { HTTPToolDefinition$inboundSchema } from "./httptooldefinition.js";
+import { PlatformToolDefinition$inboundSchema } from "./platformtooldefinition.js";
+import { PromptTemplate$inboundSchema } from "./prompttemplate.js";
 /** @internal */
-export const Tool$inboundSchema = z.pipe(z.object({
-    external_mcp_tool_definition: z.optional(ExternalMCPToolDefinition$inboundSchema),
+export const Tool$inboundSchema = z.pipe(
+  z.object({
+    external_mcp_tool_definition: z.optional(
+      ExternalMCPToolDefinition$inboundSchema,
+    ),
     function_tool_definition: z.optional(FunctionToolDefinition$inboundSchema),
     http_tool_definition: z.optional(HTTPToolDefinition$inboundSchema),
     platform_tool_definition: z.optional(PlatformToolDefinition$inboundSchema),
     prompt_template: z.optional(PromptTemplate$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "external_mcp_tool_definition": "externalMcpToolDefinition",
-        "function_tool_definition": "functionToolDefinition",
-        "http_tool_definition": "httpToolDefinition",
-        "platform_tool_definition": "platformToolDefinition",
-        "prompt_template": "promptTemplate",
+      external_mcp_tool_definition: "externalMcpToolDefinition",
+      function_tool_definition: "functionToolDefinition",
+      http_tool_definition: "httpToolDefinition",
+      platform_tool_definition: "platformToolDefinition",
+      prompt_template: "promptTemplate",
     });
-}));
+  }),
+);
 export function toolFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => Tool$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'Tool' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => Tool$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'Tool' from JSON`,
+  );
 }
 //# sourceMappingURL=tool.js.map

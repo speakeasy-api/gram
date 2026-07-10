@@ -4,25 +4,35 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const EnableWebhooksSecurity$outboundSchema = z.pipe(z.object({
+export const EnableWebhooksSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function enableWebhooksSecurityToJSON(enableWebhooksSecurity) {
-    return JSON.stringify(EnableWebhooksSecurity$outboundSchema.parse(enableWebhooksSecurity));
+  return JSON.stringify(
+    EnableWebhooksSecurity$outboundSchema.parse(enableWebhooksSecurity),
+  );
 }
 /** @internal */
-export const EnableWebhooksRequest$outboundSchema = z.pipe(z.object({
+export const EnableWebhooksRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function enableWebhooksRequestToJSON(enableWebhooksRequest) {
-    return JSON.stringify(EnableWebhooksRequest$outboundSchema.parse(enableWebhooksRequest));
+  return JSON.stringify(
+    EnableWebhooksRequest$outboundSchema.parse(enableWebhooksRequest),
+  );
 }
 //# sourceMappingURL=enablewebhooks.js.map

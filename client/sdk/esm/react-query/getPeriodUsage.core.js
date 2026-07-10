@@ -4,26 +4,38 @@
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchGetPeriodUsage(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildGetPeriodUsageQuery(client$, request, security, options),
-    });
+export function prefetchGetPeriodUsage(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildGetPeriodUsageQuery(client$, request, security, options),
+  });
 }
 export function buildGetPeriodUsageQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyGetPeriodUsage({ gramSession: request?.gramSession }),
-        queryFn: async function getPeriodUsageQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(usageGetPeriodUsage(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyGetPeriodUsage({ gramSession: request?.gramSession }),
+    queryFn: async function getPeriodUsageQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        usageGetPeriodUsage(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyGetPeriodUsage(parameters) {
-    return ["@gram/client", "usage", "getPeriodUsage", parameters];
+  return ["@gram/client", "usage", "getPeriodUsage", parameters];
 }
 //# sourceMappingURL=getPeriodUsage.core.js.map

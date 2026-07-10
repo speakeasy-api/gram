@@ -5,19 +5,26 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ExternalMCPHeaderDefinition$inboundSchema = z.pipe(z.object({
+export const ExternalMCPHeaderDefinition$inboundSchema = z.pipe(
+  z.object({
     description: z.optional(z.string()),
     header_name: z.string(),
     name: z.string(),
     placeholder: z.optional(z.string()),
     required: z.boolean(),
     secret: z.boolean(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "header_name": "headerName",
+      header_name: "headerName",
     });
-}));
+  }),
+);
 export function externalMCPHeaderDefinitionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ExternalMCPHeaderDefinition$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ExternalMCPHeaderDefinition' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ExternalMCPHeaderDefinition$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ExternalMCPHeaderDefinition' from JSON`,
+  );
 }
 //# sourceMappingURL=externalmcpheaderdefinition.js.map

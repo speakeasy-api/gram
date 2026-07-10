@@ -15,7 +15,7 @@ let value: UpdateTunneledMcpServerForm = {
 
 ## Fields
 
-| Field                                                   | Type                                                    | Required                                                | Description                                             |
-| ------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------- |
-| `id`                                                    | *string*                                                | :heavy_check_mark:                                      | The ID of the tunneled MCP server to update             |
-| `name`                                                  | *string*                                                | :heavy_check_mark:                                      | Human-readable display name for the tunneled MCP server |
+| Field  | Type     | Required           | Description                                             |
+| ------ | -------- | ------------------ | ------------------------------------------------------- |
+| `id`   | _string_ | :heavy_check_mark: | The ID of the tunneled MCP server to update             |
+| `name` | _string_ | :heavy_check_mark: | Human-readable display name for the tunneled MCP server |

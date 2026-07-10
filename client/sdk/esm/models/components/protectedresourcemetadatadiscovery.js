@@ -4,20 +4,28 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ProtectedResourceMetadata$inboundSchema, } from "./protectedresourcemetadata.js";
-import { ProtectedResourceMetadataUnavailable$inboundSchema, } from "./protectedresourcemetadataunavailable.js";
+import { ProtectedResourceMetadata$inboundSchema } from "./protectedresourcemetadata.js";
+import { ProtectedResourceMetadataUnavailable$inboundSchema } from "./protectedresourcemetadataunavailable.js";
 /** @internal */
-export const ProtectedResourceMetadataDiscovery$inboundSchema = z.pipe(z.object({
+export const ProtectedResourceMetadataDiscovery$inboundSchema = z.pipe(
+  z.object({
     available: z.boolean(),
     discovery_warnings: z.array(z.string()),
     metadata: z.optional(ProtectedResourceMetadata$inboundSchema),
     unavailable: z.optional(ProtectedResourceMetadataUnavailable$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "discovery_warnings": "discoveryWarnings",
+      discovery_warnings: "discoveryWarnings",
     });
-}));
+  }),
+);
 export function protectedResourceMetadataDiscoveryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ProtectedResourceMetadataDiscovery$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ProtectedResourceMetadataDiscovery' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) =>
+      ProtectedResourceMetadataDiscovery$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ProtectedResourceMetadataDiscovery' from JSON`,
+  );
 }
 //# sourceMappingURL=protectedresourcemetadatadiscovery.js.map

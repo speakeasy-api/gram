@@ -13,5 +13,5 @@ let value: PluginServerPolicy = "required";
 ## Values
 
 ```typescript
-"required" | "optional"
+"required" | "optional";
 ```

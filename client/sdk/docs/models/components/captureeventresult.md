@@ -14,6 +14,6 @@ let value: CaptureEventResult = {
 
 ## Fields
 
-| Field                                       | Type                                        | Required                                    | Description                                 |
-| ------------------------------------------- | ------------------------------------------- | ------------------------------------------- | ------------------------------------------- |
-| `success`                                   | *boolean*                                   | :heavy_check_mark:                          | Whether the event was successfully captured |
+| Field     | Type      | Required           | Description                                 |
+| --------- | --------- | ------------------ | ------------------------------------------- |
+| `success` | _boolean_ | :heavy_check_mark: | Whether the event was successfully captured |

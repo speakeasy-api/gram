@@ -5,16 +5,26 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const RiskOverviewTimeSeriesFinding$inboundSchema = z.pipe(z.object({
-    bucket_start: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const RiskOverviewTimeSeriesFinding$inboundSchema = z.pipe(
+  z.object({
+    bucket_start: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     category: z.string(),
     findings: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "bucket_start": "bucketStart",
+      bucket_start: "bucketStart",
     });
-}));
+  }),
+);
 export function riskOverviewTimeSeriesFindingFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskOverviewTimeSeriesFinding$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskOverviewTimeSeriesFinding' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskOverviewTimeSeriesFinding$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskOverviewTimeSeriesFinding' from JSON`,
+  );
 }
 //# sourceMappingURL=riskoverviewtimeseriesfinding.js.map

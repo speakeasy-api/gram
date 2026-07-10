@@ -13,7 +13,7 @@ let value: IntegrationVersion = {
 
 ## Fields
 
-| Field                                                                                         | Type                                                                                          | Required                                                                                      | Description                                                                                   |
-| --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `createdAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | N/A                                                                                           |
-| `version`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
+| Field       | Type                                                                                          | Required           | Description |
+| ----------- | --------------------------------------------------------------------------------------------- | ------------------ | ----------- |
+| `createdAt` | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark: | N/A         |
+| `version`   | _string_                                                                                      | :heavy_check_mark: | N/A         |

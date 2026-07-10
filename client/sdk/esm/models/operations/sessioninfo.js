@@ -4,40 +4,57 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { InfoResponseBody$inboundSchema, } from "../components/inforesponsebody.js";
+import { InfoResponseBody$inboundSchema } from "../components/inforesponsebody.js";
 /** @internal */
-export const SessionInfoSecurity$outboundSchema = z.pipe(z.object({
+export const SessionInfoSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function sessionInfoSecurityToJSON(sessionInfoSecurity) {
-    return JSON.stringify(SessionInfoSecurity$outboundSchema.parse(sessionInfoSecurity));
+  return JSON.stringify(
+    SessionInfoSecurity$outboundSchema.parse(sessionInfoSecurity),
+  );
 }
 /** @internal */
-export const SessionInfoRequest$outboundSchema = z.pipe(z.object({
+export const SessionInfoRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function sessionInfoRequestToJSON(sessionInfoRequest) {
-    return JSON.stringify(SessionInfoRequest$outboundSchema.parse(sessionInfoRequest));
+  return JSON.stringify(
+    SessionInfoRequest$outboundSchema.parse(sessionInfoRequest),
+  );
 }
 /** @internal */
-export const SessionInfoResponse$inboundSchema = z.pipe(z.object({
+export const SessionInfoResponse$inboundSchema = z.pipe(
+  z.object({
     Headers: z._default(z.record(z.string(), z.array(z.string())), {}),
     Result: InfoResponseBody$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Headers": "headers",
-        "Result": "result",
+      Headers: "headers",
+      Result: "result",
     });
-}));
+  }),
+);
 export function sessionInfoResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SessionInfoResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SessionInfoResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SessionInfoResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SessionInfoResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=sessioninfo.js.map

@@ -6,9 +6,14 @@ import { TunneledMcpServer } from "./tunneledmcpserver.js";
  * Result type for listing tunneled MCP servers
  */
 export type ListTunneledMcpServersResult = {
-    tunneledMcpServers: Array<TunneledMcpServer>;
+  tunneledMcpServers: Array<TunneledMcpServer>;
 };
 /** @internal */
-export declare const ListTunneledMcpServersResult$inboundSchema: z.ZodMiniType<ListTunneledMcpServersResult, unknown>;
-export declare function listTunneledMcpServersResultFromJSON(jsonString: string): SafeParseResult<ListTunneledMcpServersResult, SDKValidationError>;
+export declare const ListTunneledMcpServersResult$inboundSchema: z.ZodMiniType<
+  ListTunneledMcpServersResult,
+  unknown
+>;
+export declare function listTunneledMcpServersResultFromJSON(
+  jsonString: string,
+): SafeParseResult<ListTunneledMcpServersResult, SDKValidationError>;
 //# sourceMappingURL=listtunneledmcpserversresult.d.ts.map

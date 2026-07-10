@@ -5,16 +5,23 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const LLMClientUsage$inboundSchema = z.pipe(z.object({
+export const LLMClientUsage$inboundSchema = z.pipe(
+  z.object({
     activity_count: z.int(),
     client_name: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "activity_count": "activityCount",
-        "client_name": "clientName",
+      activity_count: "activityCount",
+      client_name: "clientName",
     });
-}));
+  }),
+);
 export function llmClientUsageFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => LLMClientUsage$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'LLMClientUsage' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => LLMClientUsage$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'LLMClientUsage' from JSON`,
+  );
 }
 //# sourceMappingURL=llmclientusage.js.map

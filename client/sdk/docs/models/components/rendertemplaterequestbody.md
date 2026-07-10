@@ -7,7 +7,7 @@ import { RenderTemplateRequestBody } from "@gram/client/models/components/render
 
 let value: RenderTemplateRequestBody = {
   arguments: {
-    "key": "<value>",
+    key: "<value>",
   },
   engine: "mustache",
   kind: "prompt",
@@ -17,9 +17,9 @@ let value: RenderTemplateRequestBody = {
 
 ## Fields
 
-| Field                                                                                                    | Type                                                                                                     | Required                                                                                                 | Description                                                                                              |
-| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `arguments`                                                                                              | Record<string, *any*>                                                                                    | :heavy_check_mark:                                                                                       | The input data to render the template with                                                               |
-| `engine`                                                                                                 | [components.RenderTemplateRequestBodyEngine](../../models/components/rendertemplaterequestbodyengine.md) | :heavy_check_mark:                                                                                       | The template engine                                                                                      |
-| `kind`                                                                                                   | [components.RenderTemplateRequestBodyKind](../../models/components/rendertemplaterequestbodykind.md)     | :heavy_check_mark:                                                                                       | The kind of prompt the template is used for                                                              |
-| `prompt`                                                                                                 | *string*                                                                                                 | :heavy_check_mark:                                                                                       | The template content to render                                                                           |
+| Field       | Type                                                                                                     | Required           | Description                                 |
+| ----------- | -------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------- |
+| `arguments` | Record<string, _any_>                                                                                    | :heavy_check_mark: | The input data to render the template with  |
+| `engine`    | [components.RenderTemplateRequestBodyEngine](../../models/components/rendertemplaterequestbodyengine.md) | :heavy_check_mark: | The template engine                         |
+| `kind`      | [components.RenderTemplateRequestBodyKind](../../models/components/rendertemplaterequestbodykind.md)     | :heavy_check_mark: | The kind of prompt the template is used for |
+| `prompt`    | _string_                                                                                                 | :heavy_check_mark: | The template content to render              |

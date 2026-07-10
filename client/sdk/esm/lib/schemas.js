@@ -10,15 +10,14 @@ import { ERR, OK } from "../types/fp.js";
  * leak Zod implementation details to user code.
  */
 export function parse(rawValue, fn, errorMessage) {
-    try {
-        return fn(rawValue);
+  try {
+    return fn(rawValue);
+  } catch (err) {
+    if (err instanceof z.core.$ZodError) {
+      throw new SDKValidationError(errorMessage, err, rawValue);
     }
-    catch (err) {
-        if (err instanceof z.core.$ZodError) {
-            throw new SDKValidationError(errorMessage, err, rawValue);
-        }
-        throw err;
-    }
+    throw err;
+  }
 }
 /**
  * Utility function that executes some code which may result in a ZodError. It
@@ -26,32 +25,34 @@ export function parse(rawValue, fn, errorMessage) {
  * leak Zod implementation details to user code.
  */
 export function safeParse(rawValue, fn, errorMessage) {
-    try {
-        return OK(fn(rawValue));
-    }
-    catch (err) {
-        return ERR(new SDKValidationError(errorMessage, err, rawValue));
-    }
+  try {
+    return OK(fn(rawValue));
+  } catch (err) {
+    return ERR(new SDKValidationError(errorMessage, err, rawValue));
+  }
 }
 export function collectExtraKeys(obj, extrasKey, optional) {
-    return z.pipe(obj, z.transform((val) => {
-        const extras = {};
-        const { shape } = obj;
-        for (const [key] of Object.entries(val)) {
-            if (key in shape) {
-                continue;
-            }
-            const v = val[key];
-            if (typeof v === "undefined") {
-                continue;
-            }
-            extras[key] = v;
-            delete val[key];
+  return z.pipe(
+    obj,
+    z.transform((val) => {
+      const extras = {};
+      const { shape } = obj;
+      for (const [key] of Object.entries(val)) {
+        if (key in shape) {
+          continue;
         }
-        if (optional && Object.keys(extras).length === 0) {
-            return val;
+        const v = val[key];
+        if (typeof v === "undefined") {
+          continue;
         }
-        return { ...val, [extrasKey]: extras };
-    }));
+        extras[key] = v;
+        delete val[key];
+      }
+      if (optional && Object.keys(extras).length === 0) {
+        return val;
+      }
+      return { ...val, [extrasKey]: extras };
+    }),
+  );
 }
 //# sourceMappingURL=schemas.js.map

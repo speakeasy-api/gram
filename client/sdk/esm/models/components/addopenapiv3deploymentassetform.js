@@ -4,16 +4,25 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const AddOpenAPIv3DeploymentAssetForm$outboundSchema = z.pipe(z.object({
+export const AddOpenAPIv3DeploymentAssetForm$outboundSchema = z.pipe(
+  z.object({
     assetId: z.string(),
     name: z.string(),
     slug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        assetId: "asset_id",
+      assetId: "asset_id",
     });
-}));
-export function addOpenAPIv3DeploymentAssetFormToJSON(addOpenAPIv3DeploymentAssetForm) {
-    return JSON.stringify(AddOpenAPIv3DeploymentAssetForm$outboundSchema.parse(addOpenAPIv3DeploymentAssetForm));
+  }),
+);
+export function addOpenAPIv3DeploymentAssetFormToJSON(
+  addOpenAPIv3DeploymentAssetForm,
+) {
+  return JSON.stringify(
+    AddOpenAPIv3DeploymentAssetForm$outboundSchema.parse(
+      addOpenAPIv3DeploymentAssetForm,
+    ),
+  );
 }
 //# sourceMappingURL=addopenapiv3deploymentassetform.js.map

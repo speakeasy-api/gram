@@ -7,27 +7,38 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Change how the client authenticates at the issuer's token endpoint.
  */
 export const UpdateRemoteSessionClientFormTokenEndpointAuthMethod = {
-    ClientSecretBasic: "client_secret_basic",
-    ClientSecretPost: "client_secret_post",
-    None: "none",
+  ClientSecretBasic: "client_secret_basic",
+  ClientSecretPost: "client_secret_post",
+  None: "none",
 };
 /** @internal */
-export const UpdateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema = z
-    .enum(UpdateRemoteSessionClientFormTokenEndpointAuthMethod);
+export const UpdateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema =
+  z.enum(UpdateRemoteSessionClientFormTokenEndpointAuthMethod);
 /** @internal */
-export const UpdateRemoteSessionClientForm$outboundSchema = z.pipe(z.object({
+export const UpdateRemoteSessionClientForm$outboundSchema = z.pipe(
+  z.object({
     audience: z.optional(z.string()),
     clientSecret: z.optional(z.string()),
     id: z.string(),
     scope: z.optional(z.array(z.string())),
-    tokenEndpointAuthMethod: z.optional(UpdateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema),
-}), z.transform((v) => {
+    tokenEndpointAuthMethod: z.optional(
+      UpdateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        clientSecret: "client_secret",
-        tokenEndpointAuthMethod: "token_endpoint_auth_method",
+      clientSecret: "client_secret",
+      tokenEndpointAuthMethod: "token_endpoint_auth_method",
     });
-}));
-export function updateRemoteSessionClientFormToJSON(updateRemoteSessionClientForm) {
-    return JSON.stringify(UpdateRemoteSessionClientForm$outboundSchema.parse(updateRemoteSessionClientForm));
+  }),
+);
+export function updateRemoteSessionClientFormToJSON(
+  updateRemoteSessionClientForm,
+) {
+  return JSON.stringify(
+    UpdateRemoteSessionClientForm$outboundSchema.parse(
+      updateRemoteSessionClientForm,
+    ),
+  );
 }
 //# sourceMappingURL=updateremotesessionclientform.js.map

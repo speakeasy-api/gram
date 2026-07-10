@@ -4,26 +4,38 @@
 import { featuresGet } from "../funcs/featuresGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchFeaturesGet(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildFeaturesGetQuery(client$, request, security, options),
-    });
+export function prefetchFeaturesGet(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildFeaturesGetQuery(client$, request, security, options),
+  });
 }
 export function buildFeaturesGetQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyFeaturesGet({ gramSession: request?.gramSession }),
-        queryFn: async function featuresGetQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(featuresGet(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyFeaturesGet({ gramSession: request?.gramSession }),
+    queryFn: async function featuresGetQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        featuresGet(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyFeaturesGet(parameters) {
-    return ["@gram/client", "features", "get", parameters];
+  return ["@gram/client", "features", "get", parameters];
 }
 //# sourceMappingURL=featuresGet.core.js.map

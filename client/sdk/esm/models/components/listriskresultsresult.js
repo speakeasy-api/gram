@@ -6,17 +6,24 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { RiskResult$inboundSchema } from "./riskresult.js";
 /** @internal */
-export const ListRiskResultsResult$inboundSchema = z.pipe(z.object({
+export const ListRiskResultsResult$inboundSchema = z.pipe(
+  z.object({
     next_cursor: z.optional(z.string()),
     results: z.array(RiskResult$inboundSchema),
     total_count: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
-        "total_count": "totalCount",
+      next_cursor: "nextCursor",
+      total_count: "totalCount",
     });
-}));
+  }),
+);
 export function listRiskResultsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListRiskResultsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListRiskResultsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListRiskResultsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListRiskResultsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listriskresultsresult.js.map

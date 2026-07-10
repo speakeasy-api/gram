@@ -5,17 +5,24 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const OpenAPIv3DeploymentAsset$inboundSchema = z.pipe(z.object({
+export const OpenAPIv3DeploymentAsset$inboundSchema = z.pipe(
+  z.object({
     asset_id: z.string(),
     id: z.string(),
     name: z.string(),
     slug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "asset_id": "assetId",
+      asset_id: "assetId",
     });
-}));
+  }),
+);
 export function openAPIv3DeploymentAssetFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => OpenAPIv3DeploymentAsset$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'OpenAPIv3DeploymentAsset' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => OpenAPIv3DeploymentAsset$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'OpenAPIv3DeploymentAsset' from JSON`,
+  );
 }
 //# sourceMappingURL=openapiv3deploymentasset.js.map

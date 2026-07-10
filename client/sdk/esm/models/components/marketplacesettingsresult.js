@@ -5,18 +5,25 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const MarketplaceSettingsResult$inboundSchema = z.pipe(z.object({
+export const MarketplaceSettingsResult$inboundSchema = z.pipe(
+  z.object({
     default_name: z.string(),
     effective_name: z.string(),
     marketplace_name: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "default_name": "defaultName",
-        "effective_name": "effectiveName",
-        "marketplace_name": "marketplaceName",
+      default_name: "defaultName",
+      effective_name: "effectiveName",
+      marketplace_name: "marketplaceName",
     });
-}));
+  }),
+);
 export function marketplaceSettingsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => MarketplaceSettingsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'MarketplaceSettingsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => MarketplaceSettingsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'MarketplaceSettingsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=marketplacesettingsresult.js.map

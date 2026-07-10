@@ -13,10 +13,10 @@ let value: DeleteRiskEvalReviewRequest = {
 
 ## Fields
 
-| Field                                    | Type                                     | Required                                 | Description                              |
-| ---------------------------------------- | ---------------------------------------- | ---------------------------------------- | ---------------------------------------- |
-| `policyId`                               | *string*                                 | :heavy_check_mark:                       | The policy the verdict belongs to.       |
-| `chatId`                                 | *string*                                 | :heavy_check_mark:                       | The chat session whose verdict to clear. |
-| `gramKey`                                | *string*                                 | :heavy_minus_sign:                       | API Key header                           |
-| `gramSession`                            | *string*                                 | :heavy_minus_sign:                       | Session header                           |
-| `gramProject`                            | *string*                                 | :heavy_minus_sign:                       | project header                           |
+| Field         | Type     | Required           | Description                              |
+| ------------- | -------- | ------------------ | ---------------------------------------- |
+| `policyId`    | _string_ | :heavy_check_mark: | The policy the verdict belongs to.       |
+| `chatId`      | _string_ | :heavy_check_mark: | The chat session whose verdict to clear. |
+| `gramKey`     | _string_ | :heavy_minus_sign: | API Key header                           |
+| `gramSession` | _string_ | :heavy_minus_sign: | Session header                           |
+| `gramProject` | _string_ | :heavy_minus_sign: | project header                           |

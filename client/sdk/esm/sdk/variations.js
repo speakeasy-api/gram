@@ -9,50 +9,56 @@ import { variationsUpsertGlobal } from "../funcs/variationsUpsertGlobal.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Variations extends ClientSDK {
-    /**
-     * createGlobal variations
-     *
-     * @remarks
-     * Ensure the project-default (global) tool variation group exists, returning it. Idempotent: returns the existing group unchanged when present, otherwise creates it. Takes no parameters and only manages the single project-default group.
-     */
-    async createGlobal(request, security, options) {
-        return unwrapAsync(variationsCreateGlobal(this, request, security, options));
-    }
-    /**
-     * deleteGlobal variations
-     *
-     * @remarks
-     * Create or update a globally defined tool variation.
-     */
-    async deleteGlobal(request, security, options) {
-        return unwrapAsync(variationsDeleteGlobal(this, request, security, options));
-    }
-    /**
-     * listGlobal variations
-     *
-     * @remarks
-     * List globally defined tool variations.
-     */
-    async listGlobal(request, security, options) {
-        return unwrapAsync(variationsListGlobal(this, request, security, options));
-    }
-    /**
-     * listGroups variations
-     *
-     * @remarks
-     * List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.
-     */
-    async listGroups(request, security, options) {
-        return unwrapAsync(variationsListGroups(this, request, security, options));
-    }
-    /**
-     * upsertGlobal variations
-     *
-     * @remarks
-     * Create or update a globally defined tool variation.
-     */
-    async upsertGlobal(request, security, options) {
-        return unwrapAsync(variationsUpsertGlobal(this, request, security, options));
-    }
+  /**
+   * createGlobal variations
+   *
+   * @remarks
+   * Ensure the project-default (global) tool variation group exists, returning it. Idempotent: returns the existing group unchanged when present, otherwise creates it. Takes no parameters and only manages the single project-default group.
+   */
+  async createGlobal(request, security, options) {
+    return unwrapAsync(
+      variationsCreateGlobal(this, request, security, options),
+    );
+  }
+  /**
+   * deleteGlobal variations
+   *
+   * @remarks
+   * Create or update a globally defined tool variation.
+   */
+  async deleteGlobal(request, security, options) {
+    return unwrapAsync(
+      variationsDeleteGlobal(this, request, security, options),
+    );
+  }
+  /**
+   * listGlobal variations
+   *
+   * @remarks
+   * List globally defined tool variations.
+   */
+  async listGlobal(request, security, options) {
+    return unwrapAsync(variationsListGlobal(this, request, security, options));
+  }
+  /**
+   * listGroups variations
+   *
+   * @remarks
+   * List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.
+   */
+  async listGroups(request, security, options) {
+    return unwrapAsync(variationsListGroups(this, request, security, options));
+  }
+  /**
+   * upsertGlobal variations
+   *
+   * @remarks
+   * Create or update a globally defined tool variation.
+   */
+  async upsertGlobal(request, security, options) {
+    return unwrapAsync(
+      variationsUpsertGlobal(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=variations.js.map

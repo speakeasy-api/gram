@@ -3,33 +3,43 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateRoleForm$outboundSchema, } from "../components/createroleform.js";
+import { CreateRoleForm$outboundSchema } from "../components/createroleform.js";
 /** @internal */
-export const CreateRoleSecurity$outboundSchema = z.pipe(z.object({
+export const CreateRoleSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function createRoleSecurityToJSON(createRoleSecurity) {
-    return JSON.stringify(CreateRoleSecurity$outboundSchema.parse(createRoleSecurity));
+  return JSON.stringify(
+    CreateRoleSecurity$outboundSchema.parse(createRoleSecurity),
+  );
 }
 /** @internal */
-export const CreateRoleRequest$outboundSchema = z.pipe(z.object({
+export const CreateRoleRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     createRoleForm: CreateRoleForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        createRoleForm: "CreateRoleForm",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      createRoleForm: "CreateRoleForm",
     });
-}));
+  }),
+);
 export function createRoleRequestToJSON(createRoleRequest) {
-    return JSON.stringify(CreateRoleRequest$outboundSchema.parse(createRoleRequest));
+  return JSON.stringify(
+    CreateRoleRequest$outboundSchema.parse(createRoleRequest),
+  );
 }
 //# sourceMappingURL=createrole.js.map

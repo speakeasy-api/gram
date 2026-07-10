@@ -3,12 +3,13 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { AddDeploymentPackageForm$outboundSchema, } from "./adddeploymentpackageform.js";
-import { AddExternalMCPForm$outboundSchema, } from "./addexternalmcpform.js";
-import { AddFunctionsForm$outboundSchema, } from "./addfunctionsform.js";
-import { AddOpenAPIv3DeploymentAssetForm$outboundSchema, } from "./addopenapiv3deploymentassetform.js";
+import { AddDeploymentPackageForm$outboundSchema } from "./adddeploymentpackageform.js";
+import { AddExternalMCPForm$outboundSchema } from "./addexternalmcpform.js";
+import { AddFunctionsForm$outboundSchema } from "./addfunctionsform.js";
+import { AddOpenAPIv3DeploymentAssetForm$outboundSchema } from "./addopenapiv3deploymentassetform.js";
 /** @internal */
-export const CreateDeploymentRequestBody$outboundSchema = z.pipe(z.object({
+export const CreateDeploymentRequestBody$outboundSchema = z.pipe(
+  z.object({
     externalId: z.optional(z.string()),
     externalMcps: z.optional(z.array(AddExternalMCPForm$outboundSchema)),
     externalUrl: z.optional(z.string()),
@@ -17,21 +18,29 @@ export const CreateDeploymentRequestBody$outboundSchema = z.pipe(z.object({
     githubRepo: z.optional(z.string()),
     githubSha: z.optional(z.string()),
     nonBlocking: z.optional(z.boolean()),
-    openapiv3Assets: z.optional(z.array(AddOpenAPIv3DeploymentAssetForm$outboundSchema)),
+    openapiv3Assets: z.optional(
+      z.array(AddOpenAPIv3DeploymentAssetForm$outboundSchema),
+    ),
     packages: z.optional(z.array(AddDeploymentPackageForm$outboundSchema)),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        externalId: "external_id",
-        externalMcps: "external_mcps",
-        externalUrl: "external_url",
-        githubPr: "github_pr",
-        githubRepo: "github_repo",
-        githubSha: "github_sha",
-        nonBlocking: "non_blocking",
-        openapiv3Assets: "openapiv3_assets",
+      externalId: "external_id",
+      externalMcps: "external_mcps",
+      externalUrl: "external_url",
+      githubPr: "github_pr",
+      githubRepo: "github_repo",
+      githubSha: "github_sha",
+      nonBlocking: "non_blocking",
+      openapiv3Assets: "openapiv3_assets",
     });
-}));
+  }),
+);
 export function createDeploymentRequestBodyToJSON(createDeploymentRequestBody) {
-    return JSON.stringify(CreateDeploymentRequestBody$outboundSchema.parse(createDeploymentRequestBody));
+  return JSON.stringify(
+    CreateDeploymentRequestBody$outboundSchema.parse(
+      createDeploymentRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=createdeploymentrequestbody.js.map

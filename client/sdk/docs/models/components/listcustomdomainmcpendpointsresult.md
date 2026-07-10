@@ -23,6 +23,6 @@ let value: ListCustomDomainMcpEndpointsResult = {
 
 ## Fields
 
-| Field                                                                                      | Type                                                                                       | Required                                                                                   | Description                                                                                |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `mcpEndpoints`                                                                             | [components.CustomDomainMcpEndpoint](../../models/components/customdomainmcpendpoint.md)[] | :heavy_check_mark:                                                                         | N/A                                                                                        |
+| Field          | Type                                                                                       | Required           | Description |
+| -------------- | ------------------------------------------------------------------------------------------ | ------------------ | ----------- |
+| `mcpEndpoints` | [components.CustomDomainMcpEndpoint](../../models/components/customdomainmcpendpoint.md)[] | :heavy_check_mark: | N/A         |

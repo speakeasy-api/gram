@@ -3,61 +3,101 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpdateRemoteSessionClientForm$outboundSchema, } from "../components/updateremotesessionclientform.js";
+import { UpdateRemoteSessionClientForm$outboundSchema } from "../components/updateremotesessionclientform.js";
 /** @internal */
-export const UpdateRemoteSessionClientSecurityOption1$outboundSchema = z.pipe(z.object({
+export const UpdateRemoteSessionClientSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function updateRemoteSessionClientSecurityOption1ToJSON(updateRemoteSessionClientSecurityOption1) {
-    return JSON.stringify(UpdateRemoteSessionClientSecurityOption1$outboundSchema.parse(updateRemoteSessionClientSecurityOption1));
+  }),
+);
+export function updateRemoteSessionClientSecurityOption1ToJSON(
+  updateRemoteSessionClientSecurityOption1,
+) {
+  return JSON.stringify(
+    UpdateRemoteSessionClientSecurityOption1$outboundSchema.parse(
+      updateRemoteSessionClientSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const UpdateRemoteSessionClientSecurityOption2$outboundSchema = z.pipe(z.object({
+export const UpdateRemoteSessionClientSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function updateRemoteSessionClientSecurityOption2ToJSON(updateRemoteSessionClientSecurityOption2) {
-    return JSON.stringify(UpdateRemoteSessionClientSecurityOption2$outboundSchema.parse(updateRemoteSessionClientSecurityOption2));
+  }),
+);
+export function updateRemoteSessionClientSecurityOption2ToJSON(
+  updateRemoteSessionClientSecurityOption2,
+) {
+  return JSON.stringify(
+    UpdateRemoteSessionClientSecurityOption2$outboundSchema.parse(
+      updateRemoteSessionClientSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const UpdateRemoteSessionClientSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => UpdateRemoteSessionClientSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => UpdateRemoteSessionClientSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const UpdateRemoteSessionClientSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => UpdateRemoteSessionClientSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => UpdateRemoteSessionClientSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function updateRemoteSessionClientSecurityToJSON(updateRemoteSessionClientSecurity) {
-    return JSON.stringify(UpdateRemoteSessionClientSecurity$outboundSchema.parse(updateRemoteSessionClientSecurity));
+  }),
+);
+export function updateRemoteSessionClientSecurityToJSON(
+  updateRemoteSessionClientSecurity,
+) {
+  return JSON.stringify(
+    UpdateRemoteSessionClientSecurity$outboundSchema.parse(
+      updateRemoteSessionClientSecurity,
+    ),
+  );
 }
 /** @internal */
-export const UpdateRemoteSessionClientRequest$outboundSchema = z.pipe(z.object({
+export const UpdateRemoteSessionClientRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     updateRemoteSessionClientForm: UpdateRemoteSessionClientForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        updateRemoteSessionClientForm: "UpdateRemoteSessionClientForm",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      updateRemoteSessionClientForm: "UpdateRemoteSessionClientForm",
     });
-}));
-export function updateRemoteSessionClientRequestToJSON(updateRemoteSessionClientRequest) {
-    return JSON.stringify(UpdateRemoteSessionClientRequest$outboundSchema.parse(updateRemoteSessionClientRequest));
+  }),
+);
+export function updateRemoteSessionClientRequestToJSON(
+  updateRemoteSessionClientRequest,
+) {
+  return JSON.stringify(
+    UpdateRemoteSessionClientRequest$outboundSchema.parse(
+      updateRemoteSessionClientRequest,
+    ),
+  );
 }
 //# sourceMappingURL=updateremotesessionclient.js.map

@@ -4,57 +4,97 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListServerNameOverridesSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListServerNameOverridesSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listServerNameOverridesSecurityOption1ToJSON(listServerNameOverridesSecurityOption1) {
-    return JSON.stringify(ListServerNameOverridesSecurityOption1$outboundSchema.parse(listServerNameOverridesSecurityOption1));
+  }),
+);
+export function listServerNameOverridesSecurityOption1ToJSON(
+  listServerNameOverridesSecurityOption1,
+) {
+  return JSON.stringify(
+    ListServerNameOverridesSecurityOption1$outboundSchema.parse(
+      listServerNameOverridesSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListServerNameOverridesSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListServerNameOverridesSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listServerNameOverridesSecurityOption2ToJSON(listServerNameOverridesSecurityOption2) {
-    return JSON.stringify(ListServerNameOverridesSecurityOption2$outboundSchema.parse(listServerNameOverridesSecurityOption2));
+  }),
+);
+export function listServerNameOverridesSecurityOption2ToJSON(
+  listServerNameOverridesSecurityOption2,
+) {
+  return JSON.stringify(
+    ListServerNameOverridesSecurityOption2$outboundSchema.parse(
+      listServerNameOverridesSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListServerNameOverridesSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListServerNameOverridesSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListServerNameOverridesSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListServerNameOverridesSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListServerNameOverridesSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListServerNameOverridesSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function listServerNameOverridesSecurityToJSON(listServerNameOverridesSecurity) {
-    return JSON.stringify(ListServerNameOverridesSecurity$outboundSchema.parse(listServerNameOverridesSecurity));
+  }),
+);
+export function listServerNameOverridesSecurityToJSON(
+  listServerNameOverridesSecurity,
+) {
+  return JSON.stringify(
+    ListServerNameOverridesSecurity$outboundSchema.parse(
+      listServerNameOverridesSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListServerNameOverridesRequest$outboundSchema = z.pipe(z.object({
+export const ListServerNameOverridesRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
-export function listServerNameOverridesRequestToJSON(listServerNameOverridesRequest) {
-    return JSON.stringify(ListServerNameOverridesRequest$outboundSchema.parse(listServerNameOverridesRequest));
+  }),
+);
+export function listServerNameOverridesRequestToJSON(
+  listServerNameOverridesRequest,
+) {
+  return JSON.stringify(
+    ListServerNameOverridesRequest$outboundSchema.parse(
+      listServerNameOverridesRequest,
+    ),
+  );
 }
 //# sourceMappingURL=listservernameoverrides.js.map

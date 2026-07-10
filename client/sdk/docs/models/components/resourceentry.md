@@ -16,10 +16,10 @@ let value: ResourceEntry = {
 
 ## Fields
 
-| Field                                                                        | Type                                                                         | Required                                                                     | Description                                                                  |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `id`                                                                         | *string*                                                                     | :heavy_check_mark:                                                           | The ID of the resource                                                       |
-| `name`                                                                       | *string*                                                                     | :heavy_check_mark:                                                           | The name of the resource                                                     |
-| `resourceUrn`                                                                | *string*                                                                     | :heavy_check_mark:                                                           | The URN of the resource                                                      |
-| `type`                                                                       | [components.ResourceEntryType](../../models/components/resourceentrytype.md) | :heavy_check_mark:                                                           | N/A                                                                          |
-| `uri`                                                                        | *string*                                                                     | :heavy_check_mark:                                                           | The uri of the resource                                                      |
+| Field         | Type                                                                         | Required           | Description              |
+| ------------- | ---------------------------------------------------------------------------- | ------------------ | ------------------------ |
+| `id`          | _string_                                                                     | :heavy_check_mark: | The ID of the resource   |
+| `name`        | _string_                                                                     | :heavy_check_mark: | The name of the resource |
+| `resourceUrn` | _string_                                                                     | :heavy_check_mark: | The URN of the resource  |
+| `type`        | [components.ResourceEntryType](../../models/components/resourceentrytype.md) | :heavy_check_mark: | N/A                      |
+| `uri`         | _string_                                                                     | :heavy_check_mark: | The uri of the resource  |

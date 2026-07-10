@@ -13,9 +13,9 @@ let value: RemovePluginServerRequest = {
 
 ## Fields
 
-| Field                           | Type                            | Required                        | Description                     |
-| ------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- |
-| `id`                            | *string*                        | :heavy_check_mark:              | The plugin server ID to remove. |
-| `pluginId`                      | *string*                        | :heavy_check_mark:              | N/A                             |
-| `gramSession`                   | *string*                        | :heavy_minus_sign:              | Session header                  |
-| `gramProject`                   | *string*                        | :heavy_minus_sign:              | project header                  |
+| Field         | Type     | Required           | Description                     |
+| ------------- | -------- | ------------------ | ------------------------------- |
+| `id`          | _string_ | :heavy_check_mark: | The plugin server ID to remove. |
+| `pluginId`    | _string_ | :heavy_check_mark: | N/A                             |
+| `gramSession` | _string_ | :heavy_minus_sign: | Session header                  |
+| `gramProject` | _string_ | :heavy_minus_sign: | project header                  |

@@ -4,17 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { TunneledMcpServer$inboundSchema, } from "./tunneledmcpserver.js";
+import { TunneledMcpServer$inboundSchema } from "./tunneledmcpserver.js";
 /** @internal */
-export const CreateTunneledMcpServerResult$inboundSchema = z.pipe(z.object({
+export const CreateTunneledMcpServerResult$inboundSchema = z.pipe(
+  z.object({
     server: TunneledMcpServer$inboundSchema,
     tunnel_key: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "tunnel_key": "tunnelKey",
+      tunnel_key: "tunnelKey",
     });
-}));
+  }),
+);
 export function createTunneledMcpServerResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => CreateTunneledMcpServerResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'CreateTunneledMcpServerResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => CreateTunneledMcpServerResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CreateTunneledMcpServerResult' from JSON`,
+  );
 }
 //# sourceMappingURL=createtunneledmcpserverresult.js.map

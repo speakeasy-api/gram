@@ -7,27 +7,37 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Type of filter to list options for
  */
 export const FilterType = {
-    ApiKey: "api_key",
-    User: "user",
-    InternalUser: "internal_user",
-    Agent: "agent",
+  ApiKey: "api_key",
+  User: "user",
+  InternalUser: "internal_user",
+  Agent: "agent",
 };
 /** @internal */
-export const FilterType$outboundSchema = z
-    .enum(FilterType);
+export const FilterType$outboundSchema = z.enum(FilterType);
 /** @internal */
-export const ListFilterOptionsPayload$outboundSchema = z.pipe(z.object({
+export const ListFilterOptionsPayload$outboundSchema = z.pipe(
+  z.object({
     eventSource: z.optional(z.string()),
     filterType: FilterType$outboundSchema,
-    from: z.pipe(z.date(), z.transform(v => v.toISOString())),
-    to: z.pipe(z.date(), z.transform(v => v.toISOString())),
-}), z.transform((v) => {
+    from: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
+    to: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        eventSource: "event_source",
-        filterType: "filter_type",
+      eventSource: "event_source",
+      filterType: "filter_type",
     });
-}));
+  }),
+);
 export function listFilterOptionsPayloadToJSON(listFilterOptionsPayload) {
-    return JSON.stringify(ListFilterOptionsPayload$outboundSchema.parse(listFilterOptionsPayload));
+  return JSON.stringify(
+    ListFilterOptionsPayload$outboundSchema.parse(listFilterOptionsPayload),
+  );
 }
 //# sourceMappingURL=listfilteroptionspayload.js.map

@@ -7,14 +7,15 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * The confirmation mode for the tool variation
  */
 export const Confirm = {
-    Always: "always",
-    Never: "never",
-    Session: "session",
+  Always: "always",
+  Never: "never",
+  Session: "session",
 };
 /** @internal */
 export const Confirm$outboundSchema = z.enum(Confirm);
 /** @internal */
-export const UpsertGlobalToolVariationForm$outboundSchema = z.pipe(z.object({
+export const UpsertGlobalToolVariationForm$outboundSchema = z.pipe(
+  z.object({
     confirm: z.optional(Confirm$outboundSchema),
     confirmPrompt: z.optional(z.string()),
     description: z.optional(z.string()),
@@ -29,18 +30,26 @@ export const UpsertGlobalToolVariationForm$outboundSchema = z.pipe(z.object({
     summary: z.optional(z.string()),
     tags: z.optional(z.array(z.string())),
     title: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        confirmPrompt: "confirm_prompt",
-        destructiveHint: "destructive_hint",
-        idempotentHint: "idempotent_hint",
-        openWorldHint: "open_world_hint",
-        readOnlyHint: "read_only_hint",
-        srcToolName: "src_tool_name",
-        srcToolUrn: "src_tool_urn",
+      confirmPrompt: "confirm_prompt",
+      destructiveHint: "destructive_hint",
+      idempotentHint: "idempotent_hint",
+      openWorldHint: "open_world_hint",
+      readOnlyHint: "read_only_hint",
+      srcToolName: "src_tool_name",
+      srcToolUrn: "src_tool_urn",
     });
-}));
-export function upsertGlobalToolVariationFormToJSON(upsertGlobalToolVariationForm) {
-    return JSON.stringify(UpsertGlobalToolVariationForm$outboundSchema.parse(upsertGlobalToolVariationForm));
+  }),
+);
+export function upsertGlobalToolVariationFormToJSON(
+  upsertGlobalToolVariationForm,
+) {
+  return JSON.stringify(
+    UpsertGlobalToolVariationForm$outboundSchema.parse(
+      upsertGlobalToolVariationForm,
+    ),
+  );
 }
 //# sourceMappingURL=upsertglobaltoolvariationform.js.map

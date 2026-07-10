@@ -3,29 +3,35 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { QueryPayload$outboundSchema, } from "../components/querypayload.js";
+import { QueryPayload$outboundSchema } from "../components/querypayload.js";
 /** @internal */
-export const QuerySecurity$outboundSchema = z.pipe(z.object({
+export const QuerySecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function querySecurityToJSON(querySecurity) {
-    return JSON.stringify(QuerySecurity$outboundSchema.parse(querySecurity));
+  return JSON.stringify(QuerySecurity$outboundSchema.parse(querySecurity));
 }
 /** @internal */
-export const QueryRequest$outboundSchema = z.pipe(z.object({
+export const QueryRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     queryPayload: QueryPayload$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        queryPayload: "QueryPayload",
+      gramSession: "Gram-Session",
+      queryPayload: "QueryPayload",
     });
-}));
+  }),
+);
 export function queryRequestToJSON(queryRequest) {
-    return JSON.stringify(QueryRequest$outboundSchema.parse(queryRequest));
+  return JSON.stringify(QueryRequest$outboundSchema.parse(queryRequest));
 }
 //# sourceMappingURL=query.js.map

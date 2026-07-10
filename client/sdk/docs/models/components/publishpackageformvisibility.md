@@ -13,5 +13,5 @@ let value: PublishPackageFormVisibility = "public";
 ## Values
 
 ```typescript
-"public" | "private"
+"public" | "private";
 ```

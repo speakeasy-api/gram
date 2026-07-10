@@ -11,5 +11,5 @@ let value: Status = "approved";
 ## Values
 
 ```typescript
-"requested" | "approved" | "denied"
+"requested" | "approved" | "denied";
 ```

@@ -11,5 +11,5 @@ let value: UpdateShadowMCPAccessRuleFormAccessScope = "project";
 ## Values
 
 ```typescript
-"organization" | "project"
+"organization" | "project";
 ```

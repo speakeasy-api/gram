@@ -5,29 +5,41 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const AssistantToolsetRef$inboundSchema = z.pipe(z.object({
+export const AssistantToolsetRef$inboundSchema = z.pipe(
+  z.object({
     environment_slug: z.optional(z.string()),
     toolset_slug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "environment_slug": "environmentSlug",
-        "toolset_slug": "toolsetSlug",
+      environment_slug: "environmentSlug",
+      toolset_slug: "toolsetSlug",
     });
-}));
+  }),
+);
 /** @internal */
-export const AssistantToolsetRef$outboundSchema = z.pipe(z.object({
+export const AssistantToolsetRef$outboundSchema = z.pipe(
+  z.object({
     environmentSlug: z.optional(z.string()),
     toolsetSlug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        environmentSlug: "environment_slug",
-        toolsetSlug: "toolset_slug",
+      environmentSlug: "environment_slug",
+      toolsetSlug: "toolset_slug",
     });
-}));
+  }),
+);
 export function assistantToolsetRefToJSON(assistantToolsetRef) {
-    return JSON.stringify(AssistantToolsetRef$outboundSchema.parse(assistantToolsetRef));
+  return JSON.stringify(
+    AssistantToolsetRef$outboundSchema.parse(assistantToolsetRef),
+  );
 }
 export function assistantToolsetRefFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => AssistantToolsetRef$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'AssistantToolsetRef' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => AssistantToolsetRef$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AssistantToolsetRef' from JSON`,
+  );
 }
 //# sourceMappingURL=assistanttoolsetref.js.map

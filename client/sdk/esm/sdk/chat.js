@@ -12,77 +12,77 @@ import { chatSubmitFeedback } from "../funcs/chatSubmitFeedback.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Chat extends ClientSDK {
-    /**
-     * creditUsage chat
-     *
-     * @remarks
-     * Get the total number of chat credits and usage for the current billing period
-     */
-    async creditUsage(request, security, options) {
-        return unwrapAsync(chatCreditUsage(this, request, security, options));
-    }
-    /**
-     * deleteChat chat
-     *
-     * @remarks
-     * Soft-delete a chat by its ID
-     */
-    async delete(request, security, options) {
-        return unwrapAsync(chatDelete(this, request, security, options));
-    }
-    /**
-     * generateTitle chat
-     *
-     * @remarks
-     * Read or set a chat's title. Omit `title` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `title` to set a manual title that auto-generation will never overwrite; provide an empty `title` to clear the manual title and re-enable auto-generation.
-     */
-    async generateTitle(request, security, options) {
-        return unwrapAsync(chatGenerateTitle(this, request, security, options));
-    }
-    /**
-     * listChats chat
-     *
-     * @remarks
-     * List all chats for a project
-     */
-    async list(request, security, options) {
-        return unwrapAsync(chatList(this, request, security, options));
-    }
-    /**
-     * listSources chat
-     *
-     * @remarks
-     * List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.
-     */
-    async listSources(request, security, options) {
-        return unwrapAsync(chatListSources(this, request, security, options));
-    }
-    /**
-     * loadChat chat
-     *
-     * @remarks
-     * Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).
-     */
-    async load(request, security, options) {
-        return unwrapAsync(chatLoad(this, request, security, options));
-    }
-    /**
-     * setPinned chat
-     *
-     * @remarks
-     * Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.
-     */
-    async setPinned(request, security, options) {
-        return unwrapAsync(chatSetPinned(this, request, security, options));
-    }
-    /**
-     * submitFeedback chat
-     *
-     * @remarks
-     * Submit user feedback for a chat (success/failure)
-     */
-    async submitFeedback(request, security, options) {
-        return unwrapAsync(chatSubmitFeedback(this, request, security, options));
-    }
+  /**
+   * creditUsage chat
+   *
+   * @remarks
+   * Get the total number of chat credits and usage for the current billing period
+   */
+  async creditUsage(request, security, options) {
+    return unwrapAsync(chatCreditUsage(this, request, security, options));
+  }
+  /**
+   * deleteChat chat
+   *
+   * @remarks
+   * Soft-delete a chat by its ID
+   */
+  async delete(request, security, options) {
+    return unwrapAsync(chatDelete(this, request, security, options));
+  }
+  /**
+   * generateTitle chat
+   *
+   * @remarks
+   * Read or set a chat's title. Omit `title` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `title` to set a manual title that auto-generation will never overwrite; provide an empty `title` to clear the manual title and re-enable auto-generation.
+   */
+  async generateTitle(request, security, options) {
+    return unwrapAsync(chatGenerateTitle(this, request, security, options));
+  }
+  /**
+   * listChats chat
+   *
+   * @remarks
+   * List all chats for a project
+   */
+  async list(request, security, options) {
+    return unwrapAsync(chatList(this, request, security, options));
+  }
+  /**
+   * listSources chat
+   *
+   * @remarks
+   * List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.
+   */
+  async listSources(request, security, options) {
+    return unwrapAsync(chatListSources(this, request, security, options));
+  }
+  /**
+   * loadChat chat
+   *
+   * @remarks
+   * Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).
+   */
+  async load(request, security, options) {
+    return unwrapAsync(chatLoad(this, request, security, options));
+  }
+  /**
+   * setPinned chat
+   *
+   * @remarks
+   * Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.
+   */
+  async setPinned(request, security, options) {
+    return unwrapAsync(chatSetPinned(this, request, security, options));
+  }
+  /**
+   * submitFeedback chat
+   *
+   * @remarks
+   * Submit user feedback for a chat (success/failure)
+   */
+  async submitFeedback(request, security, options) {
+    return unwrapAsync(chatSubmitFeedback(this, request, security, options));
+  }
 }
 //# sourceMappingURL=chat.js.map

@@ -12,7 +12,7 @@ let value: ListShadowMCPAccessRulesResult = {
 
 ## Fields
 
-| Field                                                                              | Type                                                                               | Required                                                                           | Description                                                                        |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `nextCursor`                                                                       | *string*                                                                           | :heavy_minus_sign:                                                                 | Cursor for the next page of results.                                               |
-| `rules`                                                                            | [components.ShadowMCPAccessRule](../../models/components/shadowmcpaccessrule.md)[] | :heavy_check_mark:                                                                 | N/A                                                                                |
+| Field        | Type                                                                               | Required           | Description                          |
+| ------------ | ---------------------------------------------------------------------------------- | ------------------ | ------------------------------------ |
+| `nextCursor` | _string_                                                                           | :heavy_minus_sign: | Cursor for the next page of results. |
+| `rules`      | [components.ShadowMCPAccessRule](../../models/components/shadowmcpaccessrule.md)[] | :heavy_check_mark: | N/A                                  |

@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { ToolsetEntry$inboundSchema } from "./toolsetentry.js";
 /** @internal */
 export const ListToolsetsResult$inboundSchema = z.object({
-    toolsets: z.array(ToolsetEntry$inboundSchema),
+  toolsets: z.array(ToolsetEntry$inboundSchema),
 });
 export function listToolsetsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListToolsetsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListToolsetsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListToolsetsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListToolsetsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listtoolsetsresult.js.map

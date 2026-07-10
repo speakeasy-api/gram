@@ -12,6 +12,6 @@ let value: GetSignedAssetURLForm = {
 
 ## Fields
 
-| Field                        | Type                         | Required                     | Description                  |
-| ---------------------------- | ---------------------------- | ---------------------------- | ---------------------------- |
-| `assetId`                    | *string*                     | :heavy_check_mark:           | The ID of the function asset |
+| Field     | Type     | Required           | Description                  |
+| --------- | -------- | ------------------ | ---------------------------- |
+| `assetId` | _string_ | :heavy_check_mark: | The ID of the function asset |

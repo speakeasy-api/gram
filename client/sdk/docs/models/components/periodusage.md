@@ -19,13 +19,13 @@ let value: PeriodUsage = {
 
 ## Fields
 
-| Field                                                    | Type                                                     | Required                                                 | Description                                              |
-| -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
-| `actualEnabledServerCount`                               | *number*                                                 | :heavy_check_mark:                                       | The number of servers enabled at the time of the request |
-| `credits`                                                | *number*                                                 | :heavy_check_mark:                                       | The number of credits used                               |
-| `hasActiveSubscription`                                  | *boolean*                                                | :heavy_check_mark:                                       | Whether the project has an active subscription           |
-| `includedCredits`                                        | *number*                                                 | :heavy_check_mark:                                       | The number of credits included in the tier               |
-| `includedServers`                                        | *number*                                                 | :heavy_check_mark:                                       | The number of servers included in the tier               |
-| `includedToolCalls`                                      | *number*                                                 | :heavy_check_mark:                                       | The number of tool calls included in the tier            |
-| `servers`                                                | *number*                                                 | :heavy_check_mark:                                       | The number of servers used, according to the Polar meter |
-| `toolCalls`                                              | *number*                                                 | :heavy_check_mark:                                       | The number of tool calls used                            |
+| Field                      | Type      | Required           | Description                                              |
+| -------------------------- | --------- | ------------------ | -------------------------------------------------------- |
+| `actualEnabledServerCount` | _number_  | :heavy_check_mark: | The number of servers enabled at the time of the request |
+| `credits`                  | _number_  | :heavy_check_mark: | The number of credits used                               |
+| `hasActiveSubscription`    | _boolean_ | :heavy_check_mark: | Whether the project has an active subscription           |
+| `includedCredits`          | _number_  | :heavy_check_mark: | The number of credits included in the tier               |
+| `includedServers`          | _number_  | :heavy_check_mark: | The number of servers included in the tier               |
+| `includedToolCalls`        | _number_  | :heavy_check_mark: | The number of tool calls included in the tier            |
+| `servers`                  | _number_  | :heavy_check_mark: | The number of servers used, according to the Polar meter |
+| `toolCalls`                | _number_  | :heavy_check_mark: | The number of tool calls used                            |

@@ -3,35 +3,46 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { QueryFilter$outboundSchema, } from "./queryfilter.js";
+import { QueryFilter$outboundSchema } from "./queryfilter.js";
 /**
  * Measure used to rank sessions. Defaults to total_cost.
  */
 export const SortBy = {
-    TotalCost: "total_cost",
-    TotalTokens: "total_tokens",
-    TotalInputTokens: "total_input_tokens",
-    TotalOutputTokens: "total_output_tokens",
-    ToolCallCount: "tool_call_count",
-    MessageCount: "message_count",
-    DurationSeconds: "duration_seconds",
+  TotalCost: "total_cost",
+  TotalTokens: "total_tokens",
+  TotalInputTokens: "total_input_tokens",
+  TotalOutputTokens: "total_output_tokens",
+  ToolCallCount: "tool_call_count",
+  MessageCount: "message_count",
+  DurationSeconds: "duration_seconds",
 };
 /** @internal */
 export const SortBy$outboundSchema = z.enum(SortBy);
 /** @internal */
-export const ListSessionsPayload$outboundSchema = z.pipe(z.object({
+export const ListSessionsPayload$outboundSchema = z.pipe(
+  z.object({
     cursor: z.optional(z.string()),
     filters: z.optional(z.array(QueryFilter$outboundSchema)),
-    from: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    from: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
     limit: z._default(z.int(), 50),
     sortBy: z._default(SortBy$outboundSchema, "total_cost"),
-    to: z.pipe(z.date(), z.transform(v => v.toISOString())),
-}), z.transform((v) => {
+    to: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sortBy: "sort_by",
+      sortBy: "sort_by",
     });
-}));
+  }),
+);
 export function listSessionsPayloadToJSON(listSessionsPayload) {
-    return JSON.stringify(ListSessionsPayload$outboundSchema.parse(listSessionsPayload));
+  return JSON.stringify(
+    ListSessionsPayload$outboundSchema.parse(listSessionsPayload),
+  );
 }
 //# sourceMappingURL=listsessionspayload.js.map

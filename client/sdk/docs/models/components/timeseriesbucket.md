@@ -29,21 +29,21 @@ let value: TimeSeriesBucket = {
 
 ## Fields
 
-| Field                                                           | Type                                                            | Required                                                        | Description                                                     |
-| --------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
-| `abandonedChats`                                                | *number*                                                        | :heavy_check_mark:                                              | Abandoned chat sessions in this bucket                          |
-| `avgSessionDurationMs`                                          | *number*                                                        | :heavy_check_mark:                                              | Average session duration in milliseconds                        |
-| `avgToolLatencyMs`                                              | *number*                                                        | :heavy_check_mark:                                              | Average tool latency in milliseconds                            |
-| `bucketTimeUnixNano`                                            | *string*                                                        | :heavy_check_mark:                                              | Bucket start time in Unix nanoseconds (string for JS precision) |
-| `cacheCreationInputTokens`                                      | *number*                                                        | :heavy_check_mark:                                              | Sum of cache creation input tokens in this bucket               |
-| `cacheReadInputTokens`                                          | *number*                                                        | :heavy_check_mark:                                              | Sum of cache read input tokens in this bucket                   |
-| `failedChats`                                                   | *number*                                                        | :heavy_check_mark:                                              | Failed chat sessions in this bucket                             |
-| `failedToolCalls`                                               | *number*                                                        | :heavy_check_mark:                                              | Failed tool calls in this bucket                                |
-| `partialChats`                                                  | *number*                                                        | :heavy_check_mark:                                              | Partially resolved chat sessions in this bucket                 |
-| `resolvedChats`                                                 | *number*                                                        | :heavy_check_mark:                                              | Resolved chat sessions in this bucket                           |
-| `totalChats`                                                    | *number*                                                        | :heavy_check_mark:                                              | Total chat sessions in this bucket                              |
-| `totalCost`                                                     | *number*                                                        | :heavy_check_mark:                                              | Total cost in this bucket                                       |
-| `totalInputTokens`                                              | *number*                                                        | :heavy_check_mark:                                              | Sum of input tokens in this bucket                              |
-| `totalOutputTokens`                                             | *number*                                                        | :heavy_check_mark:                                              | Sum of output tokens in this bucket                             |
-| `totalTokens`                                                   | *number*                                                        | :heavy_check_mark:                                              | Sum of all tokens in this bucket                                |
-| `totalToolCalls`                                                | *number*                                                        | :heavy_check_mark:                                              | Total tool calls in this bucket                                 |
+| Field                      | Type     | Required           | Description                                                     |
+| -------------------------- | -------- | ------------------ | --------------------------------------------------------------- |
+| `abandonedChats`           | _number_ | :heavy_check_mark: | Abandoned chat sessions in this bucket                          |
+| `avgSessionDurationMs`     | _number_ | :heavy_check_mark: | Average session duration in milliseconds                        |
+| `avgToolLatencyMs`         | _number_ | :heavy_check_mark: | Average tool latency in milliseconds                            |
+| `bucketTimeUnixNano`       | _string_ | :heavy_check_mark: | Bucket start time in Unix nanoseconds (string for JS precision) |
+| `cacheCreationInputTokens` | _number_ | :heavy_check_mark: | Sum of cache creation input tokens in this bucket               |
+| `cacheReadInputTokens`     | _number_ | :heavy_check_mark: | Sum of cache read input tokens in this bucket                   |
+| `failedChats`              | _number_ | :heavy_check_mark: | Failed chat sessions in this bucket                             |
+| `failedToolCalls`          | _number_ | :heavy_check_mark: | Failed tool calls in this bucket                                |
+| `partialChats`             | _number_ | :heavy_check_mark: | Partially resolved chat sessions in this bucket                 |
+| `resolvedChats`            | _number_ | :heavy_check_mark: | Resolved chat sessions in this bucket                           |
+| `totalChats`               | _number_ | :heavy_check_mark: | Total chat sessions in this bucket                              |
+| `totalCost`                | _number_ | :heavy_check_mark: | Total cost in this bucket                                       |
+| `totalInputTokens`         | _number_ | :heavy_check_mark: | Sum of input tokens in this bucket                              |
+| `totalOutputTokens`        | _number_ | :heavy_check_mark: | Sum of output tokens in this bucket                             |
+| `totalTokens`              | _number_ | :heavy_check_mark: | Sum of all tokens in this bucket                                |
+| `totalToolCalls`           | _number_ | :heavy_check_mark: | Total tool calls in this bucket                                 |

@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ChallengeResolution$inboundSchema, } from "./challengeresolution.js";
+import { ChallengeResolution$inboundSchema } from "./challengeresolution.js";
 /** @internal */
 export const ResolveChallengesResult$inboundSchema = z.object({
-    resolutions: z.array(ChallengeResolution$inboundSchema),
+  resolutions: z.array(ChallengeResolution$inboundSchema),
 });
 export function resolveChallengesResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ResolveChallengesResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ResolveChallengesResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ResolveChallengesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ResolveChallengesResult' from JSON`,
+  );
 }
 //# sourceMappingURL=resolvechallengesresult.js.map

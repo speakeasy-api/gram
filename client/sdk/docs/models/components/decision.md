@@ -13,5 +13,5 @@ let value: Decision = "allow";
 ## Values
 
 ```typescript
-"allow" | "deny"
+"allow" | "deny";
 ```

@@ -13,8 +13,8 @@ let value: SendMessageResult = {
 
 ## Fields
 
-| Field                                                                           | Type                                                                            | Required                                                                        | Description                                                                     |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `accepted`                                                                      | *boolean*                                                                       | :heavy_check_mark:                                                              | Whether the message was accepted and enqueued for processing.                   |
-| `chatId`                                                                        | *string*                                                                        | :heavy_check_mark:                                                              | The chat to poll for the assistant's reply.                                     |
-| `threadId`                                                                      | *string*                                                                        | :heavy_minus_sign:                                                              | The assistant thread the message was enqueued on, when the ingest produced one. |
+| Field      | Type      | Required           | Description                                                                     |
+| ---------- | --------- | ------------------ | ------------------------------------------------------------------------------- |
+| `accepted` | _boolean_ | :heavy_check_mark: | Whether the message was accepted and enqueued for processing.                   |
+| `chatId`   | _string_  | :heavy_check_mark: | The chat to poll for the assistant's reply.                                     |
+| `threadId` | _string_  | :heavy_minus_sign: | The assistant thread the message was enqueued on, when the ingest produced one. |

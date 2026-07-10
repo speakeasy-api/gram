@@ -4,15 +4,16 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { HooksBreakdownRow$inboundSchema, } from "./hooksbreakdownrow.js";
-import { HooksServerSummary$inboundSchema, } from "./hooksserversummary.js";
-import { HooksTimeSeriesPoint$inboundSchema, } from "./hookstimeseriespoint.js";
-import { HooksUserSummary$inboundSchema, } from "./hooksusersummary.js";
-import { SkillBreakdownRow$inboundSchema, } from "./skillbreakdownrow.js";
+import { HooksBreakdownRow$inboundSchema } from "./hooksbreakdownrow.js";
+import { HooksServerSummary$inboundSchema } from "./hooksserversummary.js";
+import { HooksTimeSeriesPoint$inboundSchema } from "./hookstimeseriespoint.js";
+import { HooksUserSummary$inboundSchema } from "./hooksusersummary.js";
+import { SkillBreakdownRow$inboundSchema } from "./skillbreakdownrow.js";
 import { SkillSummary$inboundSchema } from "./skillsummary.js";
-import { SkillTimeSeriesPoint$inboundSchema, } from "./skilltimeseriespoint.js";
+import { SkillTimeSeriesPoint$inboundSchema } from "./skilltimeseriespoint.js";
 /** @internal */
-export const GetHooksSummaryResult$inboundSchema = z.pipe(z.object({
+export const GetHooksSummaryResult$inboundSchema = z.pipe(
+  z.object({
     breakdown: z.array(HooksBreakdownRow$inboundSchema),
     servers: z.array(HooksServerSummary$inboundSchema),
     skill_breakdown: z.array(SkillBreakdownRow$inboundSchema),
@@ -22,16 +23,22 @@ export const GetHooksSummaryResult$inboundSchema = z.pipe(z.object({
     total_events: z.int(),
     total_sessions: z.int(),
     users: z.array(HooksUserSummary$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "skill_breakdown": "skillBreakdown",
-        "skill_time_series": "skillTimeSeries",
-        "time_series": "timeSeries",
-        "total_events": "totalEvents",
-        "total_sessions": "totalSessions",
+      skill_breakdown: "skillBreakdown",
+      skill_time_series: "skillTimeSeries",
+      time_series: "timeSeries",
+      total_events: "totalEvents",
+      total_sessions: "totalSessions",
     });
-}));
+  }),
+);
 export function getHooksSummaryResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GetHooksSummaryResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GetHooksSummaryResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => GetHooksSummaryResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetHooksSummaryResult' from JSON`,
+  );
 }
 //# sourceMappingURL=gethookssummaryresult.js.map

@@ -14,7 +14,7 @@ let value: SearchChatsResult = {
 
 ## Fields
 
-| Field                                                              | Type                                                               | Required                                                           | Description                                                        |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `chats`                                                            | [components.ChatSummary](../../models/components/chatsummary.md)[] | :heavy_check_mark:                                                 | List of chat session summaries                                     |
-| `nextCursor`                                                       | *string*                                                           | :heavy_minus_sign:                                                 | Cursor for next page                                               |
+| Field        | Type                                                               | Required           | Description                    |
+| ------------ | ------------------------------------------------------------------ | ------------------ | ------------------------------ |
+| `chats`      | [components.ChatSummary](../../models/components/chatsummary.md)[] | :heavy_check_mark: | List of chat session summaries |
+| `nextCursor` | _string_                                                           | :heavy_minus_sign: | Cursor for next page           |

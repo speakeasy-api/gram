@@ -18,10 +18,10 @@ let value: HooksTimeSeriesPoint = {
 
 ## Fields
 
-| Field                                                                 | Type                                                                  | Required                                                              | Description                                                           |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `bucketStartNs`                                                       | *string*                                                              | :heavy_check_mark:                                                    | Bucket start time in Unix nanoseconds (string for JS int64 precision) |
-| `eventCount`                                                          | *number*                                                              | :heavy_check_mark:                                                    | Number of events in this bucket                                       |
-| `failureCount`                                                        | *number*                                                              | :heavy_check_mark:                                                    | Number of failed hook events in this bucket                           |
-| `serverName`                                                          | *string*                                                              | :heavy_check_mark:                                                    | Server name                                                           |
-| `userEmail`                                                           | *string*                                                              | :heavy_check_mark:                                                    | User email address                                                    |
+| Field           | Type     | Required           | Description                                                           |
+| --------------- | -------- | ------------------ | --------------------------------------------------------------------- |
+| `bucketStartNs` | _string_ | :heavy_check_mark: | Bucket start time in Unix nanoseconds (string for JS int64 precision) |
+| `eventCount`    | _number_ | :heavy_check_mark: | Number of events in this bucket                                       |
+| `failureCount`  | _number_ | :heavy_check_mark: | Number of failed hook events in this bucket                           |
+| `serverName`    | _string_ | :heavy_check_mark: | Server name                                                           |
+| `userEmail`     | _string_ | :heavy_check_mark: | User email address                                                    |

@@ -4,18 +4,21 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CreateCimdForm$outboundSchema = z.pipe(z.object({
+export const CreateCimdForm$outboundSchema = z.pipe(
+  z.object({
     audience: z.optional(z.string()),
     remoteSessionIssuerId: z.string(),
     scope: z.optional(z.array(z.string())),
     userSessionIssuerIds: z.optional(z.array(z.string())),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        remoteSessionIssuerId: "remote_session_issuer_id",
-        userSessionIssuerIds: "user_session_issuer_ids",
+      remoteSessionIssuerId: "remote_session_issuer_id",
+      userSessionIssuerIds: "user_session_issuer_ids",
     });
-}));
+  }),
+);
 export function createCimdFormToJSON(createCimdForm) {
-    return JSON.stringify(CreateCimdForm$outboundSchema.parse(createCimdForm));
+  return JSON.stringify(CreateCimdForm$outboundSchema.parse(createCimdForm));
 }
 //# sourceMappingURL=createcimdform.js.map

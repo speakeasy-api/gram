@@ -4,60 +4,92 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetDeploymentLogsSecurityOption1$outboundSchema = z.pipe(z.object({
+export const GetDeploymentLogsSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function getDeploymentLogsSecurityOption1ToJSON(getDeploymentLogsSecurityOption1) {
-    return JSON.stringify(GetDeploymentLogsSecurityOption1$outboundSchema.parse(getDeploymentLogsSecurityOption1));
+  }),
+);
+export function getDeploymentLogsSecurityOption1ToJSON(
+  getDeploymentLogsSecurityOption1,
+) {
+  return JSON.stringify(
+    GetDeploymentLogsSecurityOption1$outboundSchema.parse(
+      getDeploymentLogsSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const GetDeploymentLogsSecurityOption2$outboundSchema = z.pipe(z.object({
+export const GetDeploymentLogsSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function getDeploymentLogsSecurityOption2ToJSON(getDeploymentLogsSecurityOption2) {
-    return JSON.stringify(GetDeploymentLogsSecurityOption2$outboundSchema.parse(getDeploymentLogsSecurityOption2));
+  }),
+);
+export function getDeploymentLogsSecurityOption2ToJSON(
+  getDeploymentLogsSecurityOption2,
+) {
+  return JSON.stringify(
+    GetDeploymentLogsSecurityOption2$outboundSchema.parse(
+      getDeploymentLogsSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const GetDeploymentLogsSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => GetDeploymentLogsSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => GetDeploymentLogsSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const GetDeploymentLogsSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => GetDeploymentLogsSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => GetDeploymentLogsSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function getDeploymentLogsSecurityToJSON(getDeploymentLogsSecurity) {
-    return JSON.stringify(GetDeploymentLogsSecurity$outboundSchema.parse(getDeploymentLogsSecurity));
+  return JSON.stringify(
+    GetDeploymentLogsSecurity$outboundSchema.parse(getDeploymentLogsSecurity),
+  );
 }
 /** @internal */
-export const GetDeploymentLogsRequest$outboundSchema = z.pipe(z.object({
+export const GetDeploymentLogsRequest$outboundSchema = z.pipe(
+  z.object({
     deploymentId: z.string(),
     cursor: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        deploymentId: "deployment_id",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      deploymentId: "deployment_id",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function getDeploymentLogsRequestToJSON(getDeploymentLogsRequest) {
-    return JSON.stringify(GetDeploymentLogsRequest$outboundSchema.parse(getDeploymentLogsRequest));
+  return JSON.stringify(
+    GetDeploymentLogsRequest$outboundSchema.parse(getDeploymentLogsRequest),
+  );
 }
 //# sourceMappingURL=getdeploymentlogs.js.map

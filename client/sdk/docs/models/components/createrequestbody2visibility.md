@@ -13,5 +13,5 @@ let value: CreateRequestBody2Visibility = "public";
 ## Values
 
 ```typescript
-"public" | "private"
+"public" | "private";
 ```

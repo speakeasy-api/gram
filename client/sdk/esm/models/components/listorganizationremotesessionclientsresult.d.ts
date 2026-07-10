@@ -6,13 +6,21 @@ import { OrganizationRemoteSessionClient } from "./organizationremotesessionclie
  * Result type for the organization-administrator client listing for a single issuer.
  */
 export type ListOrganizationRemoteSessionClientsResult = {
-    items: Array<OrganizationRemoteSessionClient>;
-    /**
-     * Cursor for the next page; empty when exhausted.
-     */
-    nextCursor?: string | undefined;
+  items: Array<OrganizationRemoteSessionClient>;
+  /**
+   * Cursor for the next page; empty when exhausted.
+   */
+  nextCursor?: string | undefined;
 };
 /** @internal */
-export declare const ListOrganizationRemoteSessionClientsResult$inboundSchema: z.ZodMiniType<ListOrganizationRemoteSessionClientsResult, unknown>;
-export declare function listOrganizationRemoteSessionClientsResultFromJSON(jsonString: string): SafeParseResult<ListOrganizationRemoteSessionClientsResult, SDKValidationError>;
+export declare const ListOrganizationRemoteSessionClientsResult$inboundSchema: z.ZodMiniType<
+  ListOrganizationRemoteSessionClientsResult,
+  unknown
+>;
+export declare function listOrganizationRemoteSessionClientsResultFromJSON(
+  jsonString: string,
+): SafeParseResult<
+  ListOrganizationRemoteSessionClientsResult,
+  SDKValidationError
+>;
 //# sourceMappingURL=listorganizationremotesessionclientsresult.d.ts.map

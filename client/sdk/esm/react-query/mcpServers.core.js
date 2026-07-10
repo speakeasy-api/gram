@@ -4,33 +4,45 @@
 import { mcpServersList } from "../funcs/mcpServersList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchMcpServers(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildMcpServersQuery(client$, request, security, options),
-    });
+export function prefetchMcpServers(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildMcpServersQuery(client$, request, security, options),
+  });
 }
 export function buildMcpServersQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyMcpServers({
-            remoteMcpServerId: request?.remoteMcpServerId,
-            tunneledMcpServerId: request?.tunneledMcpServerId,
-            toolsetId: request?.toolsetId,
-            gramSession: request?.gramSession,
-            gramKey: request?.gramKey,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function mcpServersQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(mcpServersList(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyMcpServers({
+      remoteMcpServerId: request?.remoteMcpServerId,
+      tunneledMcpServerId: request?.tunneledMcpServerId,
+      toolsetId: request?.toolsetId,
+      gramSession: request?.gramSession,
+      gramKey: request?.gramKey,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function mcpServersQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        mcpServersList(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyMcpServers(parameters) {
-    return ["@gram/client", "mcpServers", "list", parameters];
+  return ["@gram/client", "mcpServers", "list", parameters];
 }
 //# sourceMappingURL=mcpServers.core.js.map

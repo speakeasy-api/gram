@@ -12,9 +12,7 @@ let value: EvolveDeploymentRequest = {
       {
         name: "My Slack Integration",
         registryServerSpecifier: "slack",
-        selectedRemotes: [
-          "https://mcp.example.com/sse",
-        ],
+        selectedRemotes: ["https://mcp.example.com/sse"],
         slug: "<value>",
       },
     ],
@@ -24,9 +22,9 @@ let value: EvolveDeploymentRequest = {
 
 ## Fields
 
-| Field                                                          | Type                                                           | Required                                                       | Description                                                    |
-| -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
-| `gramKey`                                                      | *string*                                                       | :heavy_minus_sign:                                             | API Key header                                                 |
-| `gramSession`                                                  | *string*                                                       | :heavy_minus_sign:                                             | Session header                                                 |
-| `gramProject`                                                  | *string*                                                       | :heavy_minus_sign:                                             | project header                                                 |
-| `evolveForm`                                                   | [components.EvolveForm](../../models/components/evolveform.md) | :heavy_check_mark:                                             | N/A                                                            |
+| Field         | Type                                                           | Required           | Description    |
+| ------------- | -------------------------------------------------------------- | ------------------ | -------------- |
+| `gramKey`     | _string_                                                       | :heavy_minus_sign: | API Key header |
+| `gramSession` | _string_                                                       | :heavy_minus_sign: | Session header |
+| `gramProject` | _string_                                                       | :heavy_minus_sign: | project header |
+| `evolveForm`  | [components.EvolveForm](../../models/components/evolveform.md) | :heavy_check_mark: | N/A            |

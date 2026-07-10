@@ -4,26 +4,41 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetUserMetricsSummaryPayload$outboundSchema = z.pipe(z.object({
+export const GetUserMetricsSummaryPayload$outboundSchema = z.pipe(
+  z.object({
     accountType: z.optional(z.string()),
     eventSource: z.optional(z.string()),
     externalOrgId: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
-    from: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    from: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
     hookSource: z.optional(z.string()),
-    to: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    to: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
     userId: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        accountType: "account_type",
-        eventSource: "event_source",
-        externalOrgId: "external_org_id",
-        externalUserId: "external_user_id",
-        hookSource: "hook_source",
-        userId: "user_id",
+      accountType: "account_type",
+      eventSource: "event_source",
+      externalOrgId: "external_org_id",
+      externalUserId: "external_user_id",
+      hookSource: "hook_source",
+      userId: "user_id",
     });
-}));
-export function getUserMetricsSummaryPayloadToJSON(getUserMetricsSummaryPayload) {
-    return JSON.stringify(GetUserMetricsSummaryPayload$outboundSchema.parse(getUserMetricsSummaryPayload));
+  }),
+);
+export function getUserMetricsSummaryPayloadToJSON(
+  getUserMetricsSummaryPayload,
+) {
+  return JSON.stringify(
+    GetUserMetricsSummaryPayload$outboundSchema.parse(
+      getUserMetricsSummaryPayload,
+    ),
+  );
 }
 //# sourceMappingURL=getusermetricssummarypayload.js.map

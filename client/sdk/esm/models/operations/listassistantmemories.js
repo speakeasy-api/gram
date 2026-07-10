@@ -4,22 +4,32 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ListAssistantMemoriesResult$inboundSchema, } from "../components/listassistantmemoriesresult.js";
+import { ListAssistantMemoriesResult$inboundSchema } from "../components/listassistantmemoriesresult.js";
 /** @internal */
-export const ListAssistantMemoriesSecurity$outboundSchema = z.pipe(z.object({
+export const ListAssistantMemoriesSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listAssistantMemoriesSecurityToJSON(listAssistantMemoriesSecurity) {
-    return JSON.stringify(ListAssistantMemoriesSecurity$outboundSchema.parse(listAssistantMemoriesSecurity));
+  }),
+);
+export function listAssistantMemoriesSecurityToJSON(
+  listAssistantMemoriesSecurity,
+) {
+  return JSON.stringify(
+    ListAssistantMemoriesSecurity$outboundSchema.parse(
+      listAssistantMemoriesSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListAssistantMemoriesRequest$outboundSchema = z.pipe(z.object({
+export const ListAssistantMemoriesRequest$outboundSchema = z.pipe(
+  z.object({
     assistantId: z.string(),
     tags: z.optional(z.array(z.string())),
     includeDeleted: z._default(z.boolean(), false),
@@ -27,26 +37,41 @@ export const ListAssistantMemoriesRequest$outboundSchema = z.pipe(z.object({
     limit: z._default(z.int(), 50),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        assistantId: "assistant_id",
-        includeDeleted: "include_deleted",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      assistantId: "assistant_id",
+      includeDeleted: "include_deleted",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
-export function listAssistantMemoriesRequestToJSON(listAssistantMemoriesRequest) {
-    return JSON.stringify(ListAssistantMemoriesRequest$outboundSchema.parse(listAssistantMemoriesRequest));
+  }),
+);
+export function listAssistantMemoriesRequestToJSON(
+  listAssistantMemoriesRequest,
+) {
+  return JSON.stringify(
+    ListAssistantMemoriesRequest$outboundSchema.parse(
+      listAssistantMemoriesRequest,
+    ),
+  );
 }
 /** @internal */
-export const ListAssistantMemoriesResponse$inboundSchema = z.pipe(z.object({
+export const ListAssistantMemoriesResponse$inboundSchema = z.pipe(
+  z.object({
     Result: ListAssistantMemoriesResult$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Result": "result",
+      Result: "result",
     });
-}));
+  }),
+);
 export function listAssistantMemoriesResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListAssistantMemoriesResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListAssistantMemoriesResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListAssistantMemoriesResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListAssistantMemoriesResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=listassistantmemories.js.map

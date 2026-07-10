@@ -5,18 +5,25 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ToolUsageHostedServerFilterOption$inboundSchema = z.pipe(z.object({
+export const ToolUsageHostedServerFilterOption$inboundSchema = z.pipe(
+  z.object({
     event_count: z.int(),
     toolset_name: z.string(),
     toolset_slug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "event_count": "eventCount",
-        "toolset_name": "toolsetName",
-        "toolset_slug": "toolsetSlug",
+      event_count: "eventCount",
+      toolset_name: "toolsetName",
+      toolset_slug: "toolsetSlug",
     });
-}));
+  }),
+);
 export function toolUsageHostedServerFilterOptionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolUsageHostedServerFilterOption$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolUsageHostedServerFilterOption' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolUsageHostedServerFilterOption$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolUsageHostedServerFilterOption' from JSON`,
+  );
 }
 //# sourceMappingURL=toolusagehostedserverfilteroption.js.map

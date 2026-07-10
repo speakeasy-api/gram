@@ -4,30 +4,40 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteProjectSecurity$outboundSchema = z.pipe(z.object({
+export const DeleteProjectSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function deleteProjectSecurityToJSON(deleteProjectSecurity) {
-    return JSON.stringify(DeleteProjectSecurity$outboundSchema.parse(deleteProjectSecurity));
+  return JSON.stringify(
+    DeleteProjectSecurity$outboundSchema.parse(deleteProjectSecurity),
+  );
 }
 /** @internal */
-export const DeleteProjectRequest$outboundSchema = z.pipe(z.object({
+export const DeleteProjectRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function deleteProjectRequestToJSON(deleteProjectRequest) {
-    return JSON.stringify(DeleteProjectRequest$outboundSchema.parse(deleteProjectRequest));
+  return JSON.stringify(
+    DeleteProjectRequest$outboundSchema.parse(deleteProjectRequest),
+  );
 }
 //# sourceMappingURL=deleteproject.js.map

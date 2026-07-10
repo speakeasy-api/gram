@@ -4,16 +4,25 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const RemoveClientFromMcpServerRequestBody$outboundSchema = z.pipe(z.object({
+export const RemoveClientFromMcpServerRequestBody$outboundSchema = z.pipe(
+  z.object({
     clientId: z.string(),
     mcpServerId: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        clientId: "client_id",
-        mcpServerId: "mcp_server_id",
+      clientId: "client_id",
+      mcpServerId: "mcp_server_id",
     });
-}));
-export function removeClientFromMcpServerRequestBodyToJSON(removeClientFromMcpServerRequestBody) {
-    return JSON.stringify(RemoveClientFromMcpServerRequestBody$outboundSchema.parse(removeClientFromMcpServerRequestBody));
+  }),
+);
+export function removeClientFromMcpServerRequestBodyToJSON(
+  removeClientFromMcpServerRequestBody,
+) {
+  return JSON.stringify(
+    RemoveClientFromMcpServerRequestBody$outboundSchema.parse(
+      removeClientFromMcpServerRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=removeclientfrommcpserverrequestbody.js.map

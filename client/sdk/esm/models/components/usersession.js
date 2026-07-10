@@ -5,37 +5,60 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const UserSession$inboundSchema = z
-    .pipe(z.object({
+export const UserSession$inboundSchema = z.pipe(
+  z.object({
     client_name: z.optional(z.string()),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-    expires_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+    expires_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     id: z.string(),
     issuer_slug: z.string(),
     jti: z.string(),
-    refresh_expires_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-    revoked_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
+    refresh_expires_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+    revoked_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
     subject_display_name: z.optional(z.string()),
     subject_type: z.string(),
     subject_urn: z.string(),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     user_session_issuer_id: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "client_name": "clientName",
-        "created_at": "createdAt",
-        "expires_at": "expiresAt",
-        "issuer_slug": "issuerSlug",
-        "refresh_expires_at": "refreshExpiresAt",
-        "revoked_at": "revokedAt",
-        "subject_display_name": "subjectDisplayName",
-        "subject_type": "subjectType",
-        "subject_urn": "subjectUrn",
-        "updated_at": "updatedAt",
-        "user_session_issuer_id": "userSessionIssuerId",
+      client_name: "clientName",
+      created_at: "createdAt",
+      expires_at: "expiresAt",
+      issuer_slug: "issuerSlug",
+      refresh_expires_at: "refreshExpiresAt",
+      revoked_at: "revokedAt",
+      subject_display_name: "subjectDisplayName",
+      subject_type: "subjectType",
+      subject_urn: "subjectUrn",
+      updated_at: "updatedAt",
+      user_session_issuer_id: "userSessionIssuerId",
     });
-}));
+  }),
+);
 export function userSessionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => UserSession$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'UserSession' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => UserSession$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UserSession' from JSON`,
+  );
 }
 //# sourceMappingURL=usersession.js.map

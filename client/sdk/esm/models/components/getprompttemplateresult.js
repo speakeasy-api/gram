@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { PromptTemplate$inboundSchema, } from "./prompttemplate.js";
+import { PromptTemplate$inboundSchema } from "./prompttemplate.js";
 /** @internal */
 export const GetPromptTemplateResult$inboundSchema = z.object({
-    template: PromptTemplate$inboundSchema,
+  template: PromptTemplate$inboundSchema,
 });
 export function getPromptTemplateResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GetPromptTemplateResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GetPromptTemplateResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => GetPromptTemplateResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetPromptTemplateResult' from JSON`,
+  );
 }
 //# sourceMappingURL=getprompttemplateresult.js.map

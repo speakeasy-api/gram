@@ -3,15 +3,19 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { AgentMarketplace$inboundSchema, } from "./agentmarketplace.js";
+import { AgentMarketplace$inboundSchema } from "./agentmarketplace.js";
 import { AgentPlugin$inboundSchema } from "./agentplugin.js";
 /** @internal */
 export const GetPluginsResult$inboundSchema = z.object({
-    etag: z.string(),
-    marketplaces: z.array(AgentMarketplace$inboundSchema),
-    plugins: z.array(AgentPlugin$inboundSchema),
+  etag: z.string(),
+  marketplaces: z.array(AgentMarketplace$inboundSchema),
+  plugins: z.array(AgentPlugin$inboundSchema),
 });
 export function getPluginsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GetPluginsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GetPluginsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => GetPluginsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetPluginsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=getpluginsresult.js.map

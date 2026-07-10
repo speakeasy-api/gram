@@ -4,30 +4,47 @@
 import { telemetryListFilterOptions } from "../funcs/telemetryListFilterOptions.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchListFilterOptions(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildListFilterOptionsQuery(client$, request, security, options),
-    });
+export function prefetchListFilterOptions(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildListFilterOptionsQuery(client$, request, security, options),
+  });
 }
-export function buildListFilterOptionsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyListFilterOptions({
-            gramKey: request.gramKey,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function listFilterOptionsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(telemetryListFilterOptions(client$, request, security, mergedOptions));
-        },
-    };
+export function buildListFilterOptionsQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyListFilterOptions({
+      gramKey: request.gramKey,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function listFilterOptionsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        telemetryListFilterOptions(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyListFilterOptions(parameters) {
-    return ["@gram/client", "telemetry", "listFilterOptions", parameters];
+  return ["@gram/client", "telemetry", "listFilterOptions", parameters];
 }
 //# sourceMappingURL=listFilterOptions.core.js.map

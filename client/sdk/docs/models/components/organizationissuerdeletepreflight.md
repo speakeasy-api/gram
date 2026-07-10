@@ -9,15 +9,13 @@ import { OrganizationIssuerDeletePreflight } from "@gram/client/models/component
 
 let value: OrganizationIssuerDeletePreflight = {
   clientCount: 410781,
-  mcpServerNames: [
-    "<value 1>",
-  ],
+  mcpServerNames: ["<value 1>"],
 };
 ```
 
 ## Fields
 
-| Field                                                                     | Type                                                                      | Required                                                                  | Description                                                               |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `clientCount`                                                             | *number*                                                                  | :heavy_check_mark:                                                        | Number of non-deleted remote_session_clients registered with this issuer. |
-| `mcpServerNames`                                                          | *string*[]                                                                | :heavy_check_mark:                                                        | Display names of MCP servers attached to this issuer's clients.           |
+| Field            | Type       | Required           | Description                                                               |
+| ---------------- | ---------- | ------------------ | ------------------------------------------------------------------------- |
+| `clientCount`    | _number_   | :heavy_check_mark: | Number of non-deleted remote_session_clients registered with this issuer. |
+| `mcpServerNames` | _string_[] | :heavy_check_mark: | Display names of MCP servers attached to this issuer's clients.           |

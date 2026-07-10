@@ -4,32 +4,49 @@
 import { userSessionIssuersGet } from "../funcs/userSessionIssuersGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchUserSessionIssuer(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildUserSessionIssuerQuery(client$, request, security, options),
-    });
+export function prefetchUserSessionIssuer(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildUserSessionIssuerQuery(client$, request, security, options),
+  });
 }
-export function buildUserSessionIssuerQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyUserSessionIssuer({
-            id: request?.id,
-            slug: request?.slug,
-            gramSession: request?.gramSession,
-            gramKey: request?.gramKey,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function userSessionIssuerQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(userSessionIssuersGet(client$, request, security, mergedOptions));
-        },
-    };
+export function buildUserSessionIssuerQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyUserSessionIssuer({
+      id: request?.id,
+      slug: request?.slug,
+      gramSession: request?.gramSession,
+      gramKey: request?.gramKey,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function userSessionIssuerQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        userSessionIssuersGet(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyUserSessionIssuer(parameters) {
-    return ["@gram/client", "userSessionIssuers", "get", parameters];
+  return ["@gram/client", "userSessionIssuers", "get", parameters];
 }
 //# sourceMappingURL=userSessionIssuer.core.js.map

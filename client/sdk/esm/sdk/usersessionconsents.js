@@ -7,23 +7,27 @@ import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 import { unwrapResultIterator } from "../types/operations.js";
 export class UserSessionConsents extends ClientSDK {
-    /**
-     * listUserSessionConsents userSessionConsents
-     *
-     * @remarks
-     * List consent records for the caller's project.
-     */
-    async list(request, security, options) {
-        return unwrapResultIterator(userSessionConsentsList(this, request, security, options));
-    }
-    /**
-     * revokeUserSessionConsent userSessionConsents
-     *
-     * @remarks
-     * Withdraw consent. Subsequent authorization requests for matching (subject, user_session_client) pairs re-prompt.
-     */
-    async revoke(request, security, options) {
-        return unwrapAsync(userSessionConsentsRevoke(this, request, security, options));
-    }
+  /**
+   * listUserSessionConsents userSessionConsents
+   *
+   * @remarks
+   * List consent records for the caller's project.
+   */
+  async list(request, security, options) {
+    return unwrapResultIterator(
+      userSessionConsentsList(this, request, security, options),
+    );
+  }
+  /**
+   * revokeUserSessionConsent userSessionConsents
+   *
+   * @remarks
+   * Withdraw consent. Subsequent authorization requests for matching (subject, user_session_client) pairs re-prompt.
+   */
+  async revoke(request, security, options) {
+    return unwrapAsync(
+      userSessionConsentsRevoke(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=usersessionconsents.js.map

@@ -6,12 +6,17 @@ import { FilterOption } from "./filteroption.js";
  * Result of listing filter options
  */
 export type ListFilterOptionsResult = {
-    /**
-     * List of filter options
-     */
-    options: Array<FilterOption>;
+  /**
+   * List of filter options
+   */
+  options: Array<FilterOption>;
 };
 /** @internal */
-export declare const ListFilterOptionsResult$inboundSchema: z.ZodMiniType<ListFilterOptionsResult, unknown>;
-export declare function listFilterOptionsResultFromJSON(jsonString: string): SafeParseResult<ListFilterOptionsResult, SDKValidationError>;
+export declare const ListFilterOptionsResult$inboundSchema: z.ZodMiniType<
+  ListFilterOptionsResult,
+  unknown
+>;
+export declare function listFilterOptionsResultFromJSON(
+  jsonString: string,
+): SafeParseResult<ListFilterOptionsResult, SDKValidationError>;
 //# sourceMappingURL=listfilteroptionsresult.d.ts.map

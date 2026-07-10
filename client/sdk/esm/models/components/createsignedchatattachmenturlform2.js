@@ -4,17 +4,26 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CreateSignedChatAttachmentURLForm2$outboundSchema = z.pipe(z.object({
+export const CreateSignedChatAttachmentURLForm2$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     projectId: z.string(),
     ttlSeconds: z.optional(z.int()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectId: "project_id",
-        ttlSeconds: "ttl_seconds",
+      projectId: "project_id",
+      ttlSeconds: "ttl_seconds",
     });
-}));
-export function createSignedChatAttachmentURLForm2ToJSON(createSignedChatAttachmentURLForm2) {
-    return JSON.stringify(CreateSignedChatAttachmentURLForm2$outboundSchema.parse(createSignedChatAttachmentURLForm2));
+  }),
+);
+export function createSignedChatAttachmentURLForm2ToJSON(
+  createSignedChatAttachmentURLForm2,
+) {
+  return JSON.stringify(
+    CreateSignedChatAttachmentURLForm2$outboundSchema.parse(
+      createSignedChatAttachmentURLForm2,
+    ),
+  );
 }
 //# sourceMappingURL=createsignedchatattachmenturlform2.js.map

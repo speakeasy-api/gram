@@ -3,29 +3,47 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateGcpIamCredentialForm$outboundSchema, } from "../components/creategcpiamcredentialform.js";
+import { CreateGcpIamCredentialForm$outboundSchema } from "../components/creategcpiamcredentialform.js";
 /** @internal */
-export const CreateGcpIamCredentialSecurity$outboundSchema = z.pipe(z.object({
+export const CreateGcpIamCredentialSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function createGcpIamCredentialSecurityToJSON(createGcpIamCredentialSecurity) {
-    return JSON.stringify(CreateGcpIamCredentialSecurity$outboundSchema.parse(createGcpIamCredentialSecurity));
+  }),
+);
+export function createGcpIamCredentialSecurityToJSON(
+  createGcpIamCredentialSecurity,
+) {
+  return JSON.stringify(
+    CreateGcpIamCredentialSecurity$outboundSchema.parse(
+      createGcpIamCredentialSecurity,
+    ),
+  );
 }
 /** @internal */
-export const CreateGcpIamCredentialRequest$outboundSchema = z.pipe(z.object({
+export const CreateGcpIamCredentialRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     createGcpIamCredentialForm: CreateGcpIamCredentialForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        createGcpIamCredentialForm: "CreateGcpIamCredentialForm",
+      gramSession: "Gram-Session",
+      createGcpIamCredentialForm: "CreateGcpIamCredentialForm",
     });
-}));
-export function createGcpIamCredentialRequestToJSON(createGcpIamCredentialRequest) {
-    return JSON.stringify(CreateGcpIamCredentialRequest$outboundSchema.parse(createGcpIamCredentialRequest));
+  }),
+);
+export function createGcpIamCredentialRequestToJSON(
+  createGcpIamCredentialRequest,
+) {
+  return JSON.stringify(
+    CreateGcpIamCredentialRequest$outboundSchema.parse(
+      createGcpIamCredentialRequest,
+    ),
+  );
 }
 //# sourceMappingURL=creategcpiamcredential.js.map

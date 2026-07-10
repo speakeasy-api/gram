@@ -4,17 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ShadowMCPAccessRule$inboundSchema, } from "./shadowmcpaccessrule.js";
+import { ShadowMCPAccessRule$inboundSchema } from "./shadowmcpaccessrule.js";
 /** @internal */
-export const ListShadowMCPAccessRulesResult$inboundSchema = z.pipe(z.object({
+export const ListShadowMCPAccessRulesResult$inboundSchema = z.pipe(
+  z.object({
     next_cursor: z.optional(z.string()),
     rules: z.array(ShadowMCPAccessRule$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function listShadowMCPAccessRulesResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListShadowMCPAccessRulesResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListShadowMCPAccessRulesResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListShadowMCPAccessRulesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListShadowMCPAccessRulesResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listshadowmcpaccessrulesresult.js.map

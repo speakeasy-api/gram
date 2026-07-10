@@ -7,24 +7,34 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * chain | interactive.
  */
 export const UpdateUserSessionIssuerFormAuthnChallengeMode = {
-    Chain: "chain",
-    Interactive: "interactive",
+  Chain: "chain",
+  Interactive: "interactive",
 };
 /** @internal */
-export const UpdateUserSessionIssuerFormAuthnChallengeMode$outboundSchema = z.enum(UpdateUserSessionIssuerFormAuthnChallengeMode);
+export const UpdateUserSessionIssuerFormAuthnChallengeMode$outboundSchema =
+  z.enum(UpdateUserSessionIssuerFormAuthnChallengeMode);
 /** @internal */
-export const UpdateUserSessionIssuerForm$outboundSchema = z.pipe(z.object({
-    authnChallengeMode: z.optional(UpdateUserSessionIssuerFormAuthnChallengeMode$outboundSchema),
+export const UpdateUserSessionIssuerForm$outboundSchema = z.pipe(
+  z.object({
+    authnChallengeMode: z.optional(
+      UpdateUserSessionIssuerFormAuthnChallengeMode$outboundSchema,
+    ),
     id: z.string(),
     sessionDurationHours: z.optional(z.int()),
     slug: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        authnChallengeMode: "authn_challenge_mode",
-        sessionDurationHours: "session_duration_hours",
+      authnChallengeMode: "authn_challenge_mode",
+      sessionDurationHours: "session_duration_hours",
     });
-}));
+  }),
+);
 export function updateUserSessionIssuerFormToJSON(updateUserSessionIssuerForm) {
-    return JSON.stringify(UpdateUserSessionIssuerForm$outboundSchema.parse(updateUserSessionIssuerForm));
+  return JSON.stringify(
+    UpdateUserSessionIssuerForm$outboundSchema.parse(
+      updateUserSessionIssuerForm,
+    ),
+  );
 }
 //# sourceMappingURL=updateusersessionissuerform.js.map

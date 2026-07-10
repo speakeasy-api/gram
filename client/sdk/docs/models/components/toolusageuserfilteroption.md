@@ -17,9 +17,9 @@ let value: ToolUsageUserFilterOption = {
 
 ## Fields
 
-| Field                                                      | Type                                                       | Required                                                   | Description                                                |
-| ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
-| `eventCount`                                               | *number*                                                   | :heavy_check_mark:                                         | Number of tool usage events observed for the user identity |
-| `userKey`                                                  | *string*                                                   | :heavy_check_mark:                                         | Stable user identity value used by filters                 |
-| `userKind`                                                 | [components.UserKind](../../models/components/userkind.md) | :heavy_check_mark:                                         | Tool usage user identity kind                              |
-| `userLabel`                                                | *string*                                                   | :heavy_check_mark:                                         | User-facing label for the user identity                    |
+| Field        | Type                                                       | Required           | Description                                                |
+| ------------ | ---------------------------------------------------------- | ------------------ | ---------------------------------------------------------- |
+| `eventCount` | _number_                                                   | :heavy_check_mark: | Number of tool usage events observed for the user identity |
+| `userKey`    | _string_                                                   | :heavy_check_mark: | Stable user identity value used by filters                 |
+| `userKind`   | [components.UserKind](../../models/components/userkind.md) | :heavy_check_mark: | Tool usage user identity kind                              |
+| `userLabel`  | _string_                                                   | :heavy_check_mark: | User-facing label for the user identity                    |

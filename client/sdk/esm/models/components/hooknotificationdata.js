@@ -4,11 +4,13 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const HookNotificationData$outboundSchema = z.object({
-    message: z.optional(z.string()),
-    title: z.optional(z.string()),
-    type: z.optional(z.string()),
+  message: z.optional(z.string()),
+  title: z.optional(z.string()),
+  type: z.optional(z.string()),
 });
 export function hookNotificationDataToJSON(hookNotificationData) {
-    return JSON.stringify(HookNotificationData$outboundSchema.parse(hookNotificationData));
+  return JSON.stringify(
+    HookNotificationData$outboundSchema.parse(hookNotificationData),
+  );
 }
 //# sourceMappingURL=hooknotificationdata.js.map

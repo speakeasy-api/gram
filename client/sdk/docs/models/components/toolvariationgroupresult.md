@@ -17,6 +17,6 @@ let value: ToolVariationGroupResult = {
 
 ## Fields
 
-| Field                                                                          | Type                                                                           | Required                                                                       | Description                                                                    |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `group`                                                                        | [components.ToolVariationGroup](../../models/components/toolvariationgroup.md) | :heavy_check_mark:                                                             | N/A                                                                            |
+| Field   | Type                                                                           | Required           | Description |
+| ------- | ------------------------------------------------------------------------------ | ------------------ | ----------- |
+| `group` | [components.ToolVariationGroup](../../models/components/toolvariationgroup.md) | :heavy_check_mark: | N/A         |

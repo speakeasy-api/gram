@@ -4,18 +4,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CreateRequestBody$outboundSchema = z.pipe(z.object({
+export const CreateRequestBody$outboundSchema = z.pipe(
+  z.object({
     embedOrigin: z.string(),
     expiresAfter: z._default(z.int(), 3600),
     userIdentifier: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        embedOrigin: "embed_origin",
-        expiresAfter: "expires_after",
-        userIdentifier: "user_identifier",
+      embedOrigin: "embed_origin",
+      expiresAfter: "expires_after",
+      userIdentifier: "user_identifier",
     });
-}));
+  }),
+);
 export function createRequestBodyToJSON(createRequestBody) {
-    return JSON.stringify(CreateRequestBody$outboundSchema.parse(createRequestBody));
+  return JSON.stringify(
+    CreateRequestBody$outboundSchema.parse(createRequestBody),
+  );
 }
 //# sourceMappingURL=createrequestbody.js.map

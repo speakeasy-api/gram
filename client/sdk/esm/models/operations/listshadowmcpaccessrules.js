@@ -4,46 +4,62 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 export const Disposition = {
-    Allowed: "allowed",
-    Denied: "denied",
+  Allowed: "allowed",
+  Denied: "denied",
 };
 export const AccessScope = {
-    Organization: "organization",
-    Project: "project",
+  Organization: "organization",
+  Project: "project",
 };
 /** @internal */
-export const ListShadowMCPAccessRulesSecurity$outboundSchema = z.pipe(z.object({
+export const ListShadowMCPAccessRulesSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listShadowMCPAccessRulesSecurityToJSON(listShadowMCPAccessRulesSecurity) {
-    return JSON.stringify(ListShadowMCPAccessRulesSecurity$outboundSchema.parse(listShadowMCPAccessRulesSecurity));
+  }),
+);
+export function listShadowMCPAccessRulesSecurityToJSON(
+  listShadowMCPAccessRulesSecurity,
+) {
+  return JSON.stringify(
+    ListShadowMCPAccessRulesSecurity$outboundSchema.parse(
+      listShadowMCPAccessRulesSecurity,
+    ),
+  );
 }
 /** @internal */
-export const Disposition$outboundSchema = z
-    .enum(Disposition);
+export const Disposition$outboundSchema = z.enum(Disposition);
 /** @internal */
-export const AccessScope$outboundSchema = z
-    .enum(AccessScope);
+export const AccessScope$outboundSchema = z.enum(AccessScope);
 /** @internal */
-export const ListShadowMCPAccessRulesRequest$outboundSchema = z.pipe(z.object({
+export const ListShadowMCPAccessRulesRequest$outboundSchema = z.pipe(
+  z.object({
     disposition: z.optional(Disposition$outboundSchema),
     accessScope: z.optional(AccessScope$outboundSchema),
     projectId: z.optional(z.string()),
     limit: z._default(z.int(), 50),
     cursor: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        accessScope: "access_scope",
-        projectId: "project_id",
-        gramSession: "Gram-Session",
+      accessScope: "access_scope",
+      projectId: "project_id",
+      gramSession: "Gram-Session",
     });
-}));
-export function listShadowMCPAccessRulesRequestToJSON(listShadowMCPAccessRulesRequest) {
-    return JSON.stringify(ListShadowMCPAccessRulesRequest$outboundSchema.parse(listShadowMCPAccessRulesRequest));
+  }),
+);
+export function listShadowMCPAccessRulesRequestToJSON(
+  listShadowMCPAccessRulesRequest,
+) {
+  return JSON.stringify(
+    ListShadowMCPAccessRulesRequest$outboundSchema.parse(
+      listShadowMCPAccessRulesRequest,
+    ),
+  );
 }
 //# sourceMappingURL=listshadowmcpaccessrules.js.map

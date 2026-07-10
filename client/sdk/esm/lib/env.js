@@ -3,41 +3,40 @@
  */
 import * as z from "zod/v4-mini";
 export const envSchema = z.object({
-    GRAM_DEBUG: z.optional(z.coerce.boolean()),
+  GRAM_DEBUG: z.optional(z.coerce.boolean()),
 });
 /**
  * Checks for the existence of the Deno global object to determine the environment.
  * @returns {boolean} True if the runtime is Deno, false otherwise.
  */
 function isDeno() {
-    if ("Deno" in globalThis) {
-        return true;
-    }
-    return false;
+  if ("Deno" in globalThis) {
+    return true;
+  }
+  return false;
 }
 let envMemo = undefined;
 /**
  * Reads and validates environment variables.
  */
 export function env() {
-    if (envMemo) {
-        return envMemo;
-    }
-    const globals = globalThis;
-    let envObject = {};
-    if (isDeno()) {
-        envObject = globals.Deno?.env?.toObject?.() ?? {};
-    }
-    else {
-        envObject = globals.process?.env ?? {};
-    }
-    envMemo = envSchema.parse(envObject);
+  if (envMemo) {
     return envMemo;
+  }
+  const globals = globalThis;
+  let envObject = {};
+  if (isDeno()) {
+    envObject = globals.Deno?.env?.toObject?.() ?? {};
+  } else {
+    envObject = globals.process?.env ?? {};
+  }
+  envMemo = envSchema.parse(envObject);
+  return envMemo;
 }
 /**
  * Clears the cached env object. Useful for testing with a fresh environment.
  */
 export function resetEnv() {
-    envMemo = undefined;
+  envMemo = undefined;
 }
 //# sourceMappingURL=env.js.map

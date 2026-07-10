@@ -16,8 +16,8 @@ let value: ServerNameOverride = {
 
 ## Fields
 
-| Field                           | Type                            | Required                        | Description                     |
-| ------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- |
-| `displayName`                   | *string*                        | :heavy_check_mark:              | User-friendly display name      |
-| `id`                            | *string*                        | :heavy_check_mark:              | Override ID                     |
-| `rawServerName`                 | *string*                        | :heavy_check_mark:              | Original server name from hooks |
+| Field           | Type     | Required           | Description                     |
+| --------------- | -------- | ------------------ | ------------------------------- |
+| `displayName`   | _string_ | :heavy_check_mark: | User-friendly display name      |
+| `id`            | _string_ | :heavy_check_mark: | Override ID                     |
+| `rawServerName` | _string_ | :heavy_check_mark: | Original server name from hooks |

@@ -10,59 +10,59 @@ import { authSwitchScopes } from "../funcs/authSwitchScopes.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Auth extends ClientSDK {
-    /**
-     * callback auth
-     *
-     * @remarks
-     * Handles the authentication callback.
-     */
-    async callback(request, options) {
-        return unwrapAsync(authCallback(this, request, options));
-    }
-    /**
-     * info auth
-     *
-     * @remarks
-     * Provides information about the current authentication status.
-     */
-    async info(request, security, options) {
-        return unwrapAsync(authInfo(this, request, security, options));
-    }
-    /**
-     * login auth
-     *
-     * @remarks
-     * Proxies to auth login through speakeasy oidc.
-     */
-    async login(request, options) {
-        return unwrapAsync(authLogin(this, request, options));
-    }
-    /**
-     * logout auth
-     *
-     * @remarks
-     * Logs out the current user by clearing their session.
-     */
-    async logout(request, security, options) {
-        return unwrapAsync(authLogout(this, request, security, options));
-    }
-    /**
-     * register auth
-     *
-     * @remarks
-     * Register a new org for a user with their session information.
-     */
-    async register(request, security, options) {
-        return unwrapAsync(authRegister(this, request, security, options));
-    }
-    /**
-     * switchScopes auth
-     *
-     * @remarks
-     * Switches the authentication scope to a different organization.
-     */
-    async switchScopes(request, security, options) {
-        return unwrapAsync(authSwitchScopes(this, request, security, options));
-    }
+  /**
+   * callback auth
+   *
+   * @remarks
+   * Handles the authentication callback.
+   */
+  async callback(request, options) {
+    return unwrapAsync(authCallback(this, request, options));
+  }
+  /**
+   * info auth
+   *
+   * @remarks
+   * Provides information about the current authentication status.
+   */
+  async info(request, security, options) {
+    return unwrapAsync(authInfo(this, request, security, options));
+  }
+  /**
+   * login auth
+   *
+   * @remarks
+   * Proxies to auth login through speakeasy oidc.
+   */
+  async login(request, options) {
+    return unwrapAsync(authLogin(this, request, options));
+  }
+  /**
+   * logout auth
+   *
+   * @remarks
+   * Logs out the current user by clearing their session.
+   */
+  async logout(request, security, options) {
+    return unwrapAsync(authLogout(this, request, security, options));
+  }
+  /**
+   * register auth
+   *
+   * @remarks
+   * Register a new org for a user with their session information.
+   */
+  async register(request, security, options) {
+    return unwrapAsync(authRegister(this, request, security, options));
+  }
+  /**
+   * switchScopes auth
+   *
+   * @remarks
+   * Switches the authentication scope to a different organization.
+   */
+  async switchScopes(request, security, options) {
+    return unwrapAsync(authSwitchScopes(this, request, security, options));
+  }
 }
 //# sourceMappingURL=auth.js.map

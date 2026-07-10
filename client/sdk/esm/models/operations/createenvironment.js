@@ -3,33 +3,43 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateEnvironmentForm$outboundSchema, } from "../components/createenvironmentform.js";
+import { CreateEnvironmentForm$outboundSchema } from "../components/createenvironmentform.js";
 /** @internal */
-export const CreateEnvironmentSecurity$outboundSchema = z.pipe(z.object({
+export const CreateEnvironmentSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function createEnvironmentSecurityToJSON(createEnvironmentSecurity) {
-    return JSON.stringify(CreateEnvironmentSecurity$outboundSchema.parse(createEnvironmentSecurity));
+  return JSON.stringify(
+    CreateEnvironmentSecurity$outboundSchema.parse(createEnvironmentSecurity),
+  );
 }
 /** @internal */
-export const CreateEnvironmentRequest$outboundSchema = z.pipe(z.object({
+export const CreateEnvironmentRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     createEnvironmentForm: CreateEnvironmentForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        createEnvironmentForm: "CreateEnvironmentForm",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      createEnvironmentForm: "CreateEnvironmentForm",
     });
-}));
+  }),
+);
 export function createEnvironmentRequestToJSON(createEnvironmentRequest) {
-    return JSON.stringify(CreateEnvironmentRequest$outboundSchema.parse(createEnvironmentRequest));
+  return JSON.stringify(
+    CreateEnvironmentRequest$outboundSchema.parse(createEnvironmentRequest),
+  );
 }
 //# sourceMappingURL=createenvironment.js.map

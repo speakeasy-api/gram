@@ -13,5 +13,5 @@ let value: MetricsMode = "session";
 ## Values
 
 ```typescript
-"session" | "tool_call"
+"session" | "tool_call";
 ```

@@ -4,30 +4,47 @@
 import { otelForwardingGetDestination } from "../funcs/otelForwardingGetDestination.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchOtelForwardingDestination(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildOtelForwardingDestinationQuery(client$, request, security, options),
-    });
+export function prefetchOtelForwardingDestination(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildOtelForwardingDestinationQuery(client$, request, security, options),
+  });
 }
-export function buildOtelForwardingDestinationQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyOtelForwardingDestination({
-            id: request.id,
-            gramKey: request.gramKey,
-            gramSession: request.gramSession,
-        }),
-        queryFn: async function otelForwardingDestinationQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(otelForwardingGetDestination(client$, request, security, mergedOptions));
-        },
-    };
+export function buildOtelForwardingDestinationQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyOtelForwardingDestination({
+      id: request.id,
+      gramKey: request.gramKey,
+      gramSession: request.gramSession,
+    }),
+    queryFn: async function otelForwardingDestinationQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        otelForwardingGetDestination(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyOtelForwardingDestination(parameters) {
-    return ["@gram/client", "otelForwarding", "getDestination", parameters];
+  return ["@gram/client", "otelForwarding", "getDestination", parameters];
 }
 //# sourceMappingURL=otelForwardingDestination.core.js.map

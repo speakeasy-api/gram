@@ -3,19 +3,22 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { AssistantMCPServerRef$outboundSchema, } from "./assistantmcpserverref.js";
-import { AssistantToolsetRef$outboundSchema, } from "./assistanttoolsetref.js";
+import { AssistantMCPServerRef$outboundSchema } from "./assistantmcpserverref.js";
+import { AssistantToolsetRef$outboundSchema } from "./assistanttoolsetref.js";
 /**
  * The assistant status.
  */
 export const UpdateAssistantFormStatus = {
-    Active: "active",
-    Paused: "paused",
+  Active: "active",
+  Paused: "paused",
 };
 /** @internal */
-export const UpdateAssistantFormStatus$outboundSchema = z.enum(UpdateAssistantFormStatus);
+export const UpdateAssistantFormStatus$outboundSchema = z.enum(
+  UpdateAssistantFormStatus,
+);
 /** @internal */
-export const UpdateAssistantForm$outboundSchema = z.pipe(z.object({
+export const UpdateAssistantForm$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     instructions: z.optional(z.string()),
     maxConcurrency: z.optional(z.int()),
@@ -25,14 +28,18 @@ export const UpdateAssistantForm$outboundSchema = z.pipe(z.object({
     status: z.optional(UpdateAssistantFormStatus$outboundSchema),
     toolsets: z.optional(z.array(AssistantToolsetRef$outboundSchema)),
     warmTtlSeconds: z.optional(z.int()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        maxConcurrency: "max_concurrency",
-        mcpServers: "mcp_servers",
-        warmTtlSeconds: "warm_ttl_seconds",
+      maxConcurrency: "max_concurrency",
+      mcpServers: "mcp_servers",
+      warmTtlSeconds: "warm_ttl_seconds",
     });
-}));
+  }),
+);
 export function updateAssistantFormToJSON(updateAssistantForm) {
-    return JSON.stringify(UpdateAssistantForm$outboundSchema.parse(updateAssistantForm));
+  return JSON.stringify(
+    UpdateAssistantForm$outboundSchema.parse(updateAssistantForm),
+  );
 }
 //# sourceMappingURL=updateassistantform.js.map

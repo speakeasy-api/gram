@@ -3,59 +3,92 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { SubmitFeedbackRequestBody$outboundSchema, } from "../components/submitfeedbackrequestbody.js";
+import { SubmitFeedbackRequestBody$outboundSchema } from "../components/submitfeedbackrequestbody.js";
 /** @internal */
-export const SubmitFeedbackSecurityOption1$outboundSchema = z.pipe(z.object({
+export const SubmitFeedbackSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function submitFeedbackSecurityOption1ToJSON(submitFeedbackSecurityOption1) {
-    return JSON.stringify(SubmitFeedbackSecurityOption1$outboundSchema.parse(submitFeedbackSecurityOption1));
+  }),
+);
+export function submitFeedbackSecurityOption1ToJSON(
+  submitFeedbackSecurityOption1,
+) {
+  return JSON.stringify(
+    SubmitFeedbackSecurityOption1$outboundSchema.parse(
+      submitFeedbackSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const SubmitFeedbackSecurityOption2$outboundSchema = z.pipe(z.object({
+export const SubmitFeedbackSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     chatSessionsTokenHeaderGramChatSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        chatSessionsTokenHeaderGramChatSession: "chat_sessions_token_header_Gram-Chat-Session",
+      chatSessionsTokenHeaderGramChatSession:
+        "chat_sessions_token_header_Gram-Chat-Session",
     });
-}));
-export function submitFeedbackSecurityOption2ToJSON(submitFeedbackSecurityOption2) {
-    return JSON.stringify(SubmitFeedbackSecurityOption2$outboundSchema.parse(submitFeedbackSecurityOption2));
+  }),
+);
+export function submitFeedbackSecurityOption2ToJSON(
+  submitFeedbackSecurityOption2,
+) {
+  return JSON.stringify(
+    SubmitFeedbackSecurityOption2$outboundSchema.parse(
+      submitFeedbackSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const SubmitFeedbackSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => SubmitFeedbackSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => SubmitFeedbackSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const SubmitFeedbackSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => SubmitFeedbackSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => SubmitFeedbackSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function submitFeedbackSecurityToJSON(submitFeedbackSecurity) {
-    return JSON.stringify(SubmitFeedbackSecurity$outboundSchema.parse(submitFeedbackSecurity));
+  return JSON.stringify(
+    SubmitFeedbackSecurity$outboundSchema.parse(submitFeedbackSecurity),
+  );
 }
 /** @internal */
-export const SubmitFeedbackRequest$outboundSchema = z.pipe(z.object({
+export const SubmitFeedbackRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
     submitFeedbackRequestBody: SubmitFeedbackRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        gramChatSession: "Gram-Chat-Session",
-        submitFeedbackRequestBody: "SubmitFeedbackRequestBody",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      gramChatSession: "Gram-Chat-Session",
+      submitFeedbackRequestBody: "SubmitFeedbackRequestBody",
     });
-}));
+  }),
+);
 export function submitFeedbackRequestToJSON(submitFeedbackRequest) {
-    return JSON.stringify(SubmitFeedbackRequest$outboundSchema.parse(submitFeedbackRequest));
+  return JSON.stringify(
+    SubmitFeedbackRequest$outboundSchema.parse(submitFeedbackRequest),
+  );
 }
 //# sourceMappingURL=submitfeedback.js.map

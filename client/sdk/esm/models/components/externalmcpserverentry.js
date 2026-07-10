@@ -4,9 +4,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ExternalMCPRemote$inboundSchema, } from "./externalmcpremote.js";
+import { ExternalMCPRemote$inboundSchema } from "./externalmcpremote.js";
 /** @internal */
-export const ExternalMCPServerEntry$inboundSchema = z.pipe(z.object({
+export const ExternalMCPServerEntry$inboundSchema = z.pipe(
+  z.object({
     description: z.string(),
     icon_url: z.optional(z.string()),
     is_read_only: z.boolean(),
@@ -21,20 +22,27 @@ export const ExternalMCPServerEntry$inboundSchema = z.pipe(z.object({
     tool_count: z.int(),
     toolset_id: z.optional(z.string()),
     version: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "icon_url": "iconUrl",
-        "is_read_only": "isReadOnly",
-        "mcp_server_id": "mcpServerId",
-        "organization_mcp_collection_registry_id": "organizationMcpCollectionRegistryId",
-        "registry_id": "registryId",
-        "registry_specifier": "registrySpecifier",
-        "supports_dcr": "supportsDcr",
-        "tool_count": "toolCount",
-        "toolset_id": "toolsetId",
+      icon_url: "iconUrl",
+      is_read_only: "isReadOnly",
+      mcp_server_id: "mcpServerId",
+      organization_mcp_collection_registry_id:
+        "organizationMcpCollectionRegistryId",
+      registry_id: "registryId",
+      registry_specifier: "registrySpecifier",
+      supports_dcr: "supportsDcr",
+      tool_count: "toolCount",
+      toolset_id: "toolsetId",
     });
-}));
+  }),
+);
 export function externalMCPServerEntryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ExternalMCPServerEntry$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ExternalMCPServerEntry' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ExternalMCPServerEntry$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ExternalMCPServerEntry' from JSON`,
+  );
 }
 //# sourceMappingURL=externalmcpserverentry.js.map

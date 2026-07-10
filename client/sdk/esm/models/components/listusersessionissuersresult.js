@@ -4,17 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { UserSessionIssuer$inboundSchema, } from "./usersessionissuer.js";
+import { UserSessionIssuer$inboundSchema } from "./usersessionissuer.js";
 /** @internal */
-export const ListUserSessionIssuersResult$inboundSchema = z.pipe(z.object({
+export const ListUserSessionIssuersResult$inboundSchema = z.pipe(
+  z.object({
     items: z.array(UserSessionIssuer$inboundSchema),
     next_cursor: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function listUserSessionIssuersResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListUserSessionIssuersResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListUserSessionIssuersResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListUserSessionIssuersResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListUserSessionIssuersResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listusersessionissuersresult.js.map

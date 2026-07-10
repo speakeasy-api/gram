@@ -20,6 +20,6 @@ let value: ListPluginsResult = {
 
 ## Fields
 
-| Field                                                    | Type                                                     | Required                                                 | Description                                              |
-| -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
-| `plugins`                                                | [components.Plugin](../../models/components/plugin.md)[] | :heavy_check_mark:                                       | The plugins in the organization.                         |
+| Field     | Type                                                     | Required           | Description                      |
+| --------- | -------------------------------------------------------- | ------------------ | -------------------------------- |
+| `plugins` | [components.Plugin](../../models/components/plugin.md)[] | :heavy_check_mark: | The plugins in the organization. |

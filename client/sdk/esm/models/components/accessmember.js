@@ -5,23 +5,33 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const AccessMember$inboundSchema = z.pipe(z.object({
+export const AccessMember$inboundSchema = z.pipe(
+  z.object({
     email: z.string(),
     id: z.string(),
-    joined_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    joined_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     name: z.string(),
     photo_url: z.optional(z.string()),
     principal_urn: z.string(),
     role_ids: z.array(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "joined_at": "joinedAt",
-        "photo_url": "photoUrl",
-        "principal_urn": "principalUrn",
-        "role_ids": "roleIds",
+      joined_at: "joinedAt",
+      photo_url: "photoUrl",
+      principal_urn: "principalUrn",
+      role_ids: "roleIds",
     });
-}));
+  }),
+);
 export function accessMemberFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => AccessMember$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'AccessMember' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => AccessMember$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AccessMember' from JSON`,
+  );
 }
 //# sourceMappingURL=accessmember.js.map

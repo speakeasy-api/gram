@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { IntegrationEntry$inboundSchema, } from "./integrationentry.js";
+import { IntegrationEntry$inboundSchema } from "./integrationentry.js";
 /** @internal */
 export const ListIntegrationsResult$inboundSchema = z.object({
-    integrations: z.optional(z.array(IntegrationEntry$inboundSchema)),
+  integrations: z.optional(z.array(IntegrationEntry$inboundSchema)),
 });
 export function listIntegrationsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListIntegrationsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListIntegrationsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListIntegrationsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListIntegrationsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listintegrationsresult.js.map

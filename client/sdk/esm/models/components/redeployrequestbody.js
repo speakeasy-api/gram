@@ -4,14 +4,19 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const RedeployRequestBody$outboundSchema = z.pipe(z.object({
+export const RedeployRequestBody$outboundSchema = z.pipe(
+  z.object({
     deploymentId: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        deploymentId: "deployment_id",
+      deploymentId: "deployment_id",
     });
-}));
+  }),
+);
 export function redeployRequestBodyToJSON(redeployRequestBody) {
-    return JSON.stringify(RedeployRequestBody$outboundSchema.parse(redeployRequestBody));
+  return JSON.stringify(
+    RedeployRequestBody$outboundSchema.parse(redeployRequestBody),
+  );
 }
 //# sourceMappingURL=redeployrequestbody.js.map

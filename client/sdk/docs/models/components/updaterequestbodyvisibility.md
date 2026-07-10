@@ -13,5 +13,5 @@ let value: UpdateRequestBodyVisibility = "public";
 ## Values
 
 ```typescript
-"public" | "private"
+"public" | "private";
 ```

@@ -15,7 +15,7 @@ let value: MigrateLegacyGramRegistrationsForm = {
 
 ## Fields
 
-| Field                                                                       | Type                                                                        | Required                                                                    | Description                                                                 |
-| --------------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `oauthProxyProviderId`                                                      | *string*                                                                    | :heavy_check_mark:                                                          | The gram-type oauth_proxy_provider whose Redis registrations are migrated.  |
-| `userSessionIssuerId`                                                       | *string*                                                                    | :heavy_check_mark:                                                          | The target user_session_issuer the migrated user_session_clients attach to. |
+| Field                  | Type     | Required           | Description                                                                 |
+| ---------------------- | -------- | ------------------ | --------------------------------------------------------------------------- |
+| `oauthProxyProviderId` | _string_ | :heavy_check_mark: | The gram-type oauth_proxy_provider whose Redis registrations are migrated.  |
+| `userSessionIssuerId`  | _string_ | :heavy_check_mark: | The target user_session_issuer the migrated user_session_clients attach to. |

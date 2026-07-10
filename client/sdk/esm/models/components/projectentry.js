@@ -5,11 +5,15 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const ProjectEntry$inboundSchema = z.object({
-    id: z.string(),
-    name: z.string(),
-    slug: z.string(),
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
 });
 export function projectEntryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ProjectEntry$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ProjectEntry' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ProjectEntry$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ProjectEntry' from JSON`,
+  );
 }
 //# sourceMappingURL=projectentry.js.map

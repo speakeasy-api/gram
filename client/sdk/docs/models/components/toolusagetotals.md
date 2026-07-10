@@ -20,12 +20,12 @@ let value: ToolUsageTotals = {
 
 ## Fields
 
-| Field                                               | Type                                                | Required                                            | Description                                         |
-| --------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------- |
-| `eventCount`                                        | *number*                                            | :heavy_check_mark:                                  | Total number of tool usage events                   |
-| `failureCount`                                      | *number*                                            | :heavy_check_mark:                                  | Number of failed tool usage events                  |
-| `failureRate`                                       | *number*                                            | :heavy_check_mark:                                  | Fraction of completed tool usage events that failed |
-| `successCount`                                      | *number*                                            | :heavy_check_mark:                                  | Number of successful tool usage events              |
-| `uniqueTargets`                                     | *number*                                            | :heavy_check_mark:                                  | Number of distinct usage targets observed           |
-| `uniqueTools`                                       | *number*                                            | :heavy_check_mark:                                  | Number of distinct tools observed                   |
-| `uniqueUsers`                                       | *number*                                            | :heavy_check_mark:                                  | Number of distinct user identities observed         |
+| Field           | Type     | Required           | Description                                         |
+| --------------- | -------- | ------------------ | --------------------------------------------------- |
+| `eventCount`    | _number_ | :heavy_check_mark: | Total number of tool usage events                   |
+| `failureCount`  | _number_ | :heavy_check_mark: | Number of failed tool usage events                  |
+| `failureRate`   | _number_ | :heavy_check_mark: | Fraction of completed tool usage events that failed |
+| `successCount`  | _number_ | :heavy_check_mark: | Number of successful tool usage events              |
+| `uniqueTargets` | _number_ | :heavy_check_mark: | Number of distinct usage targets observed           |
+| `uniqueTools`   | _number_ | :heavy_check_mark: | Number of distinct tools observed                   |
+| `uniqueUsers`   | _number_ | :heavy_check_mark: | Number of distinct user identities observed         |

@@ -5,11 +5,15 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const PromptTemplateEntry$inboundSchema = z.object({
-    id: z.string(),
-    kind: z.optional(z.string()),
-    name: z.string(),
+  id: z.string(),
+  kind: z.optional(z.string()),
+  name: z.string(),
 });
 export function promptTemplateEntryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => PromptTemplateEntry$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'PromptTemplateEntry' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => PromptTemplateEntry$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'PromptTemplateEntry' from JSON`,
+  );
 }
 //# sourceMappingURL=prompttemplateentry.js.map

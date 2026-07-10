@@ -13,5 +13,5 @@ let value: SearchUsersPayloadGroupBy = "employee";
 ## Values
 
 ```typescript
-"employee" | "role"
+"employee" | "role";
 ```

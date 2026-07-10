@@ -3,62 +3,103 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { AddExternalOAuthServerRequestBody$outboundSchema, } from "../components/addexternaloauthserverrequestbody.js";
+import { AddExternalOAuthServerRequestBody$outboundSchema } from "../components/addexternaloauthserverrequestbody.js";
 /** @internal */
-export const AddExternalOAuthServerSecurityOption1$outboundSchema = z.pipe(z.object({
+export const AddExternalOAuthServerSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function addExternalOAuthServerSecurityOption1ToJSON(addExternalOAuthServerSecurityOption1) {
-    return JSON.stringify(AddExternalOAuthServerSecurityOption1$outboundSchema.parse(addExternalOAuthServerSecurityOption1));
+  }),
+);
+export function addExternalOAuthServerSecurityOption1ToJSON(
+  addExternalOAuthServerSecurityOption1,
+) {
+  return JSON.stringify(
+    AddExternalOAuthServerSecurityOption1$outboundSchema.parse(
+      addExternalOAuthServerSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const AddExternalOAuthServerSecurityOption2$outboundSchema = z.pipe(z.object({
+export const AddExternalOAuthServerSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function addExternalOAuthServerSecurityOption2ToJSON(addExternalOAuthServerSecurityOption2) {
-    return JSON.stringify(AddExternalOAuthServerSecurityOption2$outboundSchema.parse(addExternalOAuthServerSecurityOption2));
+  }),
+);
+export function addExternalOAuthServerSecurityOption2ToJSON(
+  addExternalOAuthServerSecurityOption2,
+) {
+  return JSON.stringify(
+    AddExternalOAuthServerSecurityOption2$outboundSchema.parse(
+      addExternalOAuthServerSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const AddExternalOAuthServerSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => AddExternalOAuthServerSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => AddExternalOAuthServerSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const AddExternalOAuthServerSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => AddExternalOAuthServerSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => AddExternalOAuthServerSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function addExternalOAuthServerSecurityToJSON(addExternalOAuthServerSecurity) {
-    return JSON.stringify(AddExternalOAuthServerSecurity$outboundSchema.parse(addExternalOAuthServerSecurity));
+  }),
+);
+export function addExternalOAuthServerSecurityToJSON(
+  addExternalOAuthServerSecurity,
+) {
+  return JSON.stringify(
+    AddExternalOAuthServerSecurity$outboundSchema.parse(
+      addExternalOAuthServerSecurity,
+    ),
+  );
 }
 /** @internal */
-export const AddExternalOAuthServerRequest$outboundSchema = z.pipe(z.object({
+export const AddExternalOAuthServerRequest$outboundSchema = z.pipe(
+  z.object({
     slug: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    addExternalOAuthServerRequestBody: AddExternalOAuthServerRequestBody$outboundSchema,
-}), z.transform((v) => {
+    addExternalOAuthServerRequestBody:
+      AddExternalOAuthServerRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        addExternalOAuthServerRequestBody: "AddExternalOAuthServerRequestBody",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      addExternalOAuthServerRequestBody: "AddExternalOAuthServerRequestBody",
     });
-}));
-export function addExternalOAuthServerRequestToJSON(addExternalOAuthServerRequest) {
-    return JSON.stringify(AddExternalOAuthServerRequest$outboundSchema.parse(addExternalOAuthServerRequest));
+  }),
+);
+export function addExternalOAuthServerRequestToJSON(
+  addExternalOAuthServerRequest,
+) {
+  return JSON.stringify(
+    AddExternalOAuthServerRequest$outboundSchema.parse(
+      addExternalOAuthServerRequest,
+    ),
+  );
 }
 //# sourceMappingURL=addexternaloauthserver.js.map

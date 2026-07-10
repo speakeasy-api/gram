@@ -4,38 +4,48 @@
 import { chatLoad } from "../funcs/chatLoad.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchLoadChat(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildLoadChatQuery(client$, request, security, options),
-    });
+export function prefetchLoadChat(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildLoadChatQuery(client$, request, security, options),
+  });
 }
 export function buildLoadChatQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyLoadChat({
-            id: request.id,
-            generation: request.generation,
-            limit: request.limit,
-            beforeSeq: request.beforeSeq,
-            afterSeq: request.afterSeq,
-            fromStart: request.fromStart,
-            riskOnly: request.riskOnly,
-            query: request.query,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-            gramChatSession: request.gramChatSession,
-        }),
-        queryFn: async function loadChatQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(chatLoad(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyLoadChat({
+      id: request.id,
+      generation: request.generation,
+      limit: request.limit,
+      beforeSeq: request.beforeSeq,
+      afterSeq: request.afterSeq,
+      fromStart: request.fromStart,
+      riskOnly: request.riskOnly,
+      query: request.query,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+      gramChatSession: request.gramChatSession,
+    }),
+    queryFn: async function loadChatQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(chatLoad(client$, request, security, mergedOptions));
+    },
+  };
 }
 export function queryKeyLoadChat(parameters) {
-    return ["@gram/client", "chat", "load", parameters];
+  return ["@gram/client", "chat", "load", parameters];
 }
 //# sourceMappingURL=loadChat.core.js.map

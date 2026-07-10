@@ -6,7 +6,8 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { ProjectEntry$inboundSchema } from "./projectentry.js";
 /** @internal */
-export const OrganizationEntry$inboundSchema = z.pipe(z.object({
+export const OrganizationEntry$inboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     name: z.string(),
     projects: z.array(ProjectEntry$inboundSchema),
@@ -14,14 +15,20 @@ export const OrganizationEntry$inboundSchema = z.pipe(z.object({
     slug: z.string(),
     sso_enabled: z.optional(z.boolean()),
     user_workspace_slugs: z.optional(z.array(z.string())),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "scim_enabled": "scimEnabled",
-        "sso_enabled": "ssoEnabled",
-        "user_workspace_slugs": "userWorkspaceSlugs",
+      scim_enabled: "scimEnabled",
+      sso_enabled: "ssoEnabled",
+      user_workspace_slugs: "userWorkspaceSlugs",
     });
-}));
+  }),
+);
 export function organizationEntryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => OrganizationEntry$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'OrganizationEntry' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => OrganizationEntry$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'OrganizationEntry' from JSON`,
+  );
 }
 //# sourceMappingURL=organizationentry.js.map

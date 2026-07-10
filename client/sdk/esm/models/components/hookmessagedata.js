@@ -4,16 +4,19 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const HookMessageData$outboundSchema = z.pipe(z.object({
+export const HookMessageData$outboundSchema = z.pipe(
+  z.object({
     durationMs: z.optional(z.number()),
     role: z.optional(z.string()),
     text: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        durationMs: "duration_ms",
+      durationMs: "duration_ms",
     });
-}));
+  }),
+);
 export function hookMessageDataToJSON(hookMessageData) {
-    return JSON.stringify(HookMessageData$outboundSchema.parse(hookMessageData));
+  return JSON.stringify(HookMessageData$outboundSchema.parse(hookMessageData));
 }
 //# sourceMappingURL=hookmessagedata.js.map

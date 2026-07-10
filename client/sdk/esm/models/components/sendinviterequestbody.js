@@ -4,15 +4,20 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const SendInviteRequestBody$outboundSchema = z.pipe(z.object({
+export const SendInviteRequestBody$outboundSchema = z.pipe(
+  z.object({
     email: z.string(),
     roleId: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        roleId: "role_id",
+      roleId: "role_id",
     });
-}));
+  }),
+);
 export function sendInviteRequestBodyToJSON(sendInviteRequestBody) {
-    return JSON.stringify(SendInviteRequestBody$outboundSchema.parse(sendInviteRequestBody));
+  return JSON.stringify(
+    SendInviteRequestBody$outboundSchema.parse(sendInviteRequestBody),
+  );
 }
 //# sourceMappingURL=sendinviterequestbody.js.map

@@ -6,15 +6,22 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { UserSession$inboundSchema } from "./usersession.js";
 /** @internal */
-export const ListUserSessionsResult$inboundSchema = z.pipe(z.object({
+export const ListUserSessionsResult$inboundSchema = z.pipe(
+  z.object({
     items: z.array(UserSession$inboundSchema),
     next_cursor: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function listUserSessionsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListUserSessionsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListUserSessionsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListUserSessionsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListUserSessionsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listusersessionsresult.js.map

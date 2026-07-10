@@ -4,18 +4,28 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CreateCimdOrganizationRemoteSessionClientForm$outboundSchema = z.pipe(z.object({
-    audience: z.optional(z.string()),
-    projectId: z.optional(z.string()),
-    remoteSessionIssuerId: z.string(),
-    scope: z.optional(z.array(z.string())),
-}), z.transform((v) => {
-    return remap$(v, {
+export const CreateCimdOrganizationRemoteSessionClientForm$outboundSchema =
+  z.pipe(
+    z.object({
+      audience: z.optional(z.string()),
+      projectId: z.optional(z.string()),
+      remoteSessionIssuerId: z.string(),
+      scope: z.optional(z.array(z.string())),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         projectId: "project_id",
         remoteSessionIssuerId: "remote_session_issuer_id",
-    });
-}));
-export function createCimdOrganizationRemoteSessionClientFormToJSON(createCimdOrganizationRemoteSessionClientForm) {
-    return JSON.stringify(CreateCimdOrganizationRemoteSessionClientForm$outboundSchema.parse(createCimdOrganizationRemoteSessionClientForm));
+      });
+    }),
+  );
+export function createCimdOrganizationRemoteSessionClientFormToJSON(
+  createCimdOrganizationRemoteSessionClientForm,
+) {
+  return JSON.stringify(
+    CreateCimdOrganizationRemoteSessionClientForm$outboundSchema.parse(
+      createCimdOrganizationRemoteSessionClientForm,
+    ),
+  );
 }
 //# sourceMappingURL=createcimdorganizationremotesessionclientform.js.map

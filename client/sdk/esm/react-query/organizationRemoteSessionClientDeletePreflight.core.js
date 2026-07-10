@@ -4,35 +4,67 @@
 import { organizationRemoteSessionClientsGetDeletePreflight } from "../funcs/organizationRemoteSessionClientsGetDeletePreflight.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchOrganizationRemoteSessionClientDeletePreflight(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildOrganizationRemoteSessionClientDeletePreflightQuery(client$, request, security, options),
-    });
+export function prefetchOrganizationRemoteSessionClientDeletePreflight(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildOrganizationRemoteSessionClientDeletePreflightQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+  });
 }
-export function buildOrganizationRemoteSessionClientDeletePreflightQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyOrganizationRemoteSessionClientDeletePreflight({
-            id: request.id,
-            gramSession: request.gramSession,
-            gramKey: request.gramKey,
-        }),
-        queryFn: async function organizationRemoteSessionClientDeletePreflightQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(organizationRemoteSessionClientsGetDeletePreflight(client$, request, security, mergedOptions));
-        },
-    };
+export function buildOrganizationRemoteSessionClientDeletePreflightQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyOrganizationRemoteSessionClientDeletePreflight({
+      id: request.id,
+      gramSession: request.gramSession,
+      gramKey: request.gramKey,
+    }),
+    queryFn:
+      async function organizationRemoteSessionClientDeletePreflightQueryFn(
+        ctx,
+      ) {
+        const sig = combineSignals(
+          ctx.signal,
+          options?.signal,
+          options?.fetchOptions?.signal,
+        );
+        const mergedOptions = {
+          ...options?.fetchOptions,
+          ...options,
+          signal: sig,
+        };
+        return unwrapAsync(
+          organizationRemoteSessionClientsGetDeletePreflight(
+            client$,
+            request,
+            security,
+            mergedOptions,
+          ),
+        );
+      },
+  };
 }
-export function queryKeyOrganizationRemoteSessionClientDeletePreflight(parameters) {
-    return [
-        "@gram/client",
-        "organizationRemoteSessionClients",
-        "getDeletePreflight",
-        parameters,
-    ];
+export function queryKeyOrganizationRemoteSessionClientDeletePreflight(
+  parameters,
+) {
+  return [
+    "@gram/client",
+    "organizationRemoteSessionClients",
+    "getDeletePreflight",
+    parameters,
+  ];
 }
 //# sourceMappingURL=organizationRemoteSessionClientDeletePreflight.core.js.map

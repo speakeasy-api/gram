@@ -13,7 +13,7 @@ let value: UpsertRequestBody = {
 
 ## Fields
 
-| Field                           | Type                            | Required                        | Description                     |
-| ------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- |
-| `displayName`                   | *string*                        | :heavy_check_mark:              | User-friendly display name      |
-| `rawServerName`                 | *string*                        | :heavy_check_mark:              | Original server name from hooks |
+| Field           | Type     | Required           | Description                     |
+| --------------- | -------- | ------------------ | ------------------------------- |
+| `displayName`   | _string_ | :heavy_check_mark: | User-friendly display name      |
+| `rawServerName` | _string_ | :heavy_check_mark: | Original server name from hooks |

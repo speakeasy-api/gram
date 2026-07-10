@@ -5,9 +5,13 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const InstanceMcpServer$inboundSchema = z.object({
-    url: z.string(),
+  url: z.string(),
 });
 export function instanceMcpServerFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => InstanceMcpServer$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'InstanceMcpServer' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => InstanceMcpServer$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'InstanceMcpServer' from JSON`,
+  );
 }
 //# sourceMappingURL=instancemcpserver.js.map

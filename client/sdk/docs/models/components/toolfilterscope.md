@@ -16,8 +16,8 @@ let value: ToolFilterScope = {
 
 ## Fields
 
-| Field                                                                    | Type                                                                     | Required                                                                 | Description                                                              |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| `tag`                                                                    | *string*                                                                 | :heavy_check_mark:                                                       | The filter tag                                                           |
-| `toolCount`                                                              | *number*                                                                 | :heavy_check_mark:                                                       | The number of tools under this scope                                     |
-| `tools`                                                                  | [components.ToolFilterTool](../../models/components/toolfiltertool.md)[] | :heavy_check_mark:                                                       | The tools under this scope                                               |
+| Field       | Type                                                                     | Required           | Description                          |
+| ----------- | ------------------------------------------------------------------------ | ------------------ | ------------------------------------ |
+| `tag`       | _string_                                                                 | :heavy_check_mark: | The filter tag                       |
+| `toolCount` | _number_                                                                 | :heavy_check_mark: | The number of tools under this scope |
+| `tools`     | [components.ToolFilterTool](../../models/components/toolfiltertool.md)[] | :heavy_check_mark: | The tools under this scope           |

@@ -14,86 +14,119 @@ import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 import { unwrapResultIterator } from "../types/operations.js";
 export class RemoteSessionClients extends ClientSDK {
-    /**
-     * attachUserSessionIssuer remoteSessionClients
-     *
-     * @remarks
-     * Attach a user_session_issuer to a remote_session_client by recording the binding in the join table. Rejected when another client is already bound to the same user_session_issuer for this client's remote_session_issuer.
-     */
-    async attachUserSessionIssuer(request, security, options) {
-        return unwrapAsync(remoteSessionClientsAttachUserSessionIssuer(this, request, security, options));
-    }
-    /**
-     * cloneClientFromOAuthProxyProvider remoteSessionClients
-     *
-     * @remarks
-     * Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider's stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.
-     */
-    async cloneClientFromOAuthProxyProvider(request, security, options) {
-        return unwrapAsync(remoteSessionClientsCloneClientFromOAuthProxyProvider(this, request, security, options));
-    }
-    /**
-     * createRemoteSessionClient remoteSessionClients
-     *
-     * @remarks
-     * Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.
-     */
-    async create(request, security, options) {
-        return unwrapAsync(remoteSessionClientsCreate(this, request, security, options));
-    }
-    /**
-     * createCimd remoteSessionClients
-     *
-     * @remarks
-     * Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.
-     */
-    async createCimd(request, security, options) {
-        return unwrapAsync(remoteSessionClientsCreateCimd(this, request, security, options));
-    }
-    /**
-     * deleteRemoteSessionClient remoteSessionClients
-     *
-     * @remarks
-     * Soft-delete a remote_session_client. Cascades to remote_sessions rows pointing at this client; affected principals are forced to re-authenticate.
-     */
-    async delete(request, security, options) {
-        return unwrapAsync(remoteSessionClientsDelete(this, request, security, options));
-    }
-    /**
-     * detachUserSessionIssuer remoteSessionClients
-     *
-     * @remarks
-     * Detach a user_session_issuer from a remote_session_client by removing the binding from the join table. A no-op when the binding does not exist.
-     */
-    async detachUserSessionIssuer(request, security, options) {
-        return unwrapAsync(remoteSessionClientsDetachUserSessionIssuer(this, request, security, options));
-    }
-    /**
-     * getRemoteSessionClient remoteSessionClients
-     *
-     * @remarks
-     * Get a remote_session_client by id.
-     */
-    async get(request, security, options) {
-        return unwrapAsync(remoteSessionClientsGet(this, request, security, options));
-    }
-    /**
-     * listRemoteSessionClients remoteSessionClients
-     *
-     * @remarks
-     * List remote_session_clients in the caller's project.
-     */
-    async list(request, security, options) {
-        return unwrapResultIterator(remoteSessionClientsList(this, request, security, options));
-    }
-    /**
-     * updateRemoteSessionClient remoteSessionClients
-     *
-     * @remarks
-     * Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.
-     */
-    async update(request, security, options) {
-        return unwrapAsync(remoteSessionClientsUpdate(this, request, security, options));
-    }
+  /**
+   * attachUserSessionIssuer remoteSessionClients
+   *
+   * @remarks
+   * Attach a user_session_issuer to a remote_session_client by recording the binding in the join table. Rejected when another client is already bound to the same user_session_issuer for this client's remote_session_issuer.
+   */
+  async attachUserSessionIssuer(request, security, options) {
+    return unwrapAsync(
+      remoteSessionClientsAttachUserSessionIssuer(
+        this,
+        request,
+        security,
+        options,
+      ),
+    );
+  }
+  /**
+   * cloneClientFromOAuthProxyProvider remoteSessionClients
+   *
+   * @remarks
+   * Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider's stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.
+   */
+  async cloneClientFromOAuthProxyProvider(request, security, options) {
+    return unwrapAsync(
+      remoteSessionClientsCloneClientFromOAuthProxyProvider(
+        this,
+        request,
+        security,
+        options,
+      ),
+    );
+  }
+  /**
+   * createRemoteSessionClient remoteSessionClients
+   *
+   * @remarks
+   * Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.
+   */
+  async create(request, security, options) {
+    return unwrapAsync(
+      remoteSessionClientsCreate(this, request, security, options),
+    );
+  }
+  /**
+   * createCimd remoteSessionClients
+   *
+   * @remarks
+   * Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.
+   */
+  async createCimd(request, security, options) {
+    return unwrapAsync(
+      remoteSessionClientsCreateCimd(this, request, security, options),
+    );
+  }
+  /**
+   * deleteRemoteSessionClient remoteSessionClients
+   *
+   * @remarks
+   * Soft-delete a remote_session_client. Cascades to remote_sessions rows pointing at this client; affected principals are forced to re-authenticate.
+   */
+  async delete(request, security, options) {
+    return unwrapAsync(
+      remoteSessionClientsDelete(this, request, security, options),
+    );
+  }
+  /**
+   * detachUserSessionIssuer remoteSessionClients
+   *
+   * @remarks
+   * Detach a user_session_issuer from a remote_session_client by removing the binding from the join table. A no-op when the binding does not exist.
+   */
+  async detachUserSessionIssuer(request, security, options) {
+    return unwrapAsync(
+      remoteSessionClientsDetachUserSessionIssuer(
+        this,
+        request,
+        security,
+        options,
+      ),
+    );
+  }
+  /**
+   * getRemoteSessionClient remoteSessionClients
+   *
+   * @remarks
+   * Get a remote_session_client by id.
+   */
+  async get(request, security, options) {
+    return unwrapAsync(
+      remoteSessionClientsGet(this, request, security, options),
+    );
+  }
+  /**
+   * listRemoteSessionClients remoteSessionClients
+   *
+   * @remarks
+   * List remote_session_clients in the caller's project.
+   */
+  async list(request, security, options) {
+    return unwrapResultIterator(
+      remoteSessionClientsList(this, request, security, options),
+    );
+  }
+  /**
+   * updateRemoteSessionClient remoteSessionClients
+   *
+   * @remarks
+   * Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.
+   */
+  async update(request, security, options) {
+    return unwrapAsync(
+      remoteSessionClientsUpdate(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=remotesessionclients.js.map

@@ -5,9 +5,13 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const CaptureEventResult$inboundSchema = z.object({
-    success: z.boolean(),
+  success: z.boolean(),
 });
 export function captureEventResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => CaptureEventResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'CaptureEventResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => CaptureEventResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CaptureEventResult' from JSON`,
+  );
 }
 //# sourceMappingURL=captureeventresult.js.map

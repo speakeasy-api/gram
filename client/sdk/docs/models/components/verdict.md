@@ -13,5 +13,5 @@ let value: Verdict = "correct";
 ## Values
 
 ```typescript
-"correct" | "false_positive" | "missed"
+"correct" | "false_positive" | "missed";
 ```

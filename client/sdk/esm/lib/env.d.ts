@@ -1,6 +1,6 @@
 import * as z from "zod/v4-mini";
 export interface Env {
-    GRAM_DEBUG?: boolean | undefined;
+  GRAM_DEBUG?: boolean | undefined;
 }
 export declare const envSchema: z.ZodMiniType<Env, unknown>;
 /**

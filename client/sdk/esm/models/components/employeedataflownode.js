@@ -8,38 +8,44 @@ import { safeParse } from "../../lib/schemas.js";
  * Server classification, present for MCP server nodes
  */
 export const ServerClass = {
-    Gram: "gram",
-    External: "external",
-    Local: "local",
+  Gram: "gram",
+  External: "external",
+  Local: "local",
 };
 /**
  * Graph tier. Origin nodes identify the hostname or client context that started the call, not the MCP server URL.
  */
 export const Tier = {
-    Origin: "origin",
-    Client: "client",
-    Server: "server",
-    Tool: "tool",
+  Origin: "origin",
+  Client: "client",
+  Server: "server",
+  Tool: "tool",
 };
 /** @internal */
-export const ServerClass$inboundSchema = z
-    .enum(ServerClass);
+export const ServerClass$inboundSchema = z.enum(ServerClass);
 /** @internal */
 export const Tier$inboundSchema = z.enum(Tier);
 /** @internal */
-export const EmployeeDataFlowNode$inboundSchema = z.pipe(z.object({
+export const EmployeeDataFlowNode$inboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     label: z.string(),
     server_class: z.optional(ServerClass$inboundSchema),
     tier: Tier$inboundSchema,
     total_calls: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "server_class": "serverClass",
-        "total_calls": "totalCalls",
+      server_class: "serverClass",
+      total_calls: "totalCalls",
     });
-}));
+  }),
+);
 export function employeeDataFlowNodeFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => EmployeeDataFlowNode$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'EmployeeDataFlowNode' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => EmployeeDataFlowNode$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'EmployeeDataFlowNode' from JSON`,
+  );
 }
 //# sourceMappingURL=employeedataflownode.js.map

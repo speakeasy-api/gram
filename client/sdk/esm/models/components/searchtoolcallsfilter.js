@@ -4,22 +4,37 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const SearchToolCallsFilter$outboundSchema = z.pipe(z.object({
+export const SearchToolCallsFilter$outboundSchema = z.pipe(
+  z.object({
     deploymentId: z.optional(z.string()),
     eventSource: z.optional(z.string()),
-    from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    from: z.optional(
+      z.pipe(
+        z.date(),
+        z.transform((v) => v.toISOString()),
+      ),
+    ),
     functionId: z.optional(z.string()),
     gramUrn: z.optional(z.string()),
-    to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
-}), z.transform((v) => {
+    to: z.optional(
+      z.pipe(
+        z.date(),
+        z.transform((v) => v.toISOString()),
+      ),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        deploymentId: "deployment_id",
-        eventSource: "event_source",
-        functionId: "function_id",
-        gramUrn: "gram_urn",
+      deploymentId: "deployment_id",
+      eventSource: "event_source",
+      functionId: "function_id",
+      gramUrn: "gram_urn",
     });
-}));
+  }),
+);
 export function searchToolCallsFilterToJSON(searchToolCallsFilter) {
-    return JSON.stringify(SearchToolCallsFilter$outboundSchema.parse(searchToolCallsFilter));
+  return JSON.stringify(
+    SearchToolCallsFilter$outboundSchema.parse(searchToolCallsFilter),
+  );
 }
 //# sourceMappingURL=searchtoolcallsfilter.js.map

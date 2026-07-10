@@ -19,11 +19,11 @@ let value: ToolMetric = {
 
 ## Fields
 
-| Field                           | Type                            | Required                        | Description                     |
-| ------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- |
-| `avgLatencyMs`                  | *number*                        | :heavy_check_mark:              | Average latency in milliseconds |
-| `callCount`                     | *number*                        | :heavy_check_mark:              | Total number of calls           |
-| `failureCount`                  | *number*                        | :heavy_check_mark:              | Number of failed calls          |
-| `failureRate`                   | *number*                        | :heavy_check_mark:              | Failure rate (0.0 to 1.0)       |
-| `gramUrn`                       | *string*                        | :heavy_check_mark:              | Tool URN                        |
-| `successCount`                  | *number*                        | :heavy_check_mark:              | Number of successful calls      |
+| Field          | Type     | Required           | Description                     |
+| -------------- | -------- | ------------------ | ------------------------------- |
+| `avgLatencyMs` | _number_ | :heavy_check_mark: | Average latency in milliseconds |
+| `callCount`    | _number_ | :heavy_check_mark: | Total number of calls           |
+| `failureCount` | _number_ | :heavy_check_mark: | Number of failed calls          |
+| `failureRate`  | _number_ | :heavy_check_mark: | Failure rate (0.0 to 1.0)       |
+| `gramUrn`      | _string_ | :heavy_check_mark: | Tool URN                        |
+| `successCount` | _number_ | :heavy_check_mark: | Number of successful calls      |

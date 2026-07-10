@@ -9,66 +9,73 @@ import { Selector$inboundSchema } from "./selector.js";
  * The scope slug this grant applies to.
  */
 export const ListRoleGrantScope = {
-    OrgRead: "org:read",
-    OrgBlockedRead: "org:blocked_read",
-    OrgAdmin: "org:admin",
-    OrgBlockedAdmin: "org:blocked_admin",
-    ProjectRead: "project:read",
-    ProjectBlockedRead: "project:blocked_read",
-    ProjectWrite: "project:write",
-    ProjectBlockedWrite: "project:blocked_write",
-    McpRead: "mcp:read",
-    McpBlockedRead: "mcp:blocked_read",
-    McpWrite: "mcp:write",
-    McpBlockedWrite: "mcp:blocked_write",
-    McpConnect: "mcp:connect",
-    McpBlockedConnect: "mcp:blocked_connect",
-    EnvironmentRead: "environment:read",
-    EnvironmentBlockedRead: "environment:blocked_read",
-    EnvironmentWrite: "environment:write",
-    EnvironmentBlockedWrite: "environment:blocked_write",
-    RiskPolicyEvaluate: "risk_policy:evaluate",
-    RiskPolicyBypass: "risk_policy:bypass",
-    ChatRead: "chat:read",
+  OrgRead: "org:read",
+  OrgBlockedRead: "org:blocked_read",
+  OrgAdmin: "org:admin",
+  OrgBlockedAdmin: "org:blocked_admin",
+  ProjectRead: "project:read",
+  ProjectBlockedRead: "project:blocked_read",
+  ProjectWrite: "project:write",
+  ProjectBlockedWrite: "project:blocked_write",
+  McpRead: "mcp:read",
+  McpBlockedRead: "mcp:blocked_read",
+  McpWrite: "mcp:write",
+  McpBlockedWrite: "mcp:blocked_write",
+  McpConnect: "mcp:connect",
+  McpBlockedConnect: "mcp:blocked_connect",
+  EnvironmentRead: "environment:read",
+  EnvironmentBlockedRead: "environment:blocked_read",
+  EnvironmentWrite: "environment:write",
+  EnvironmentBlockedWrite: "environment:blocked_write",
+  RiskPolicyEvaluate: "risk_policy:evaluate",
+  RiskPolicyBypass: "risk_policy:bypass",
+  ChatRead: "chat:read",
 };
 export const SubScopes = {
-    OrgRead: "org:read",
-    OrgBlockedRead: "org:blocked_read",
-    OrgAdmin: "org:admin",
-    OrgBlockedAdmin: "org:blocked_admin",
-    ProjectRead: "project:read",
-    ProjectBlockedRead: "project:blocked_read",
-    ProjectWrite: "project:write",
-    ProjectBlockedWrite: "project:blocked_write",
-    McpRead: "mcp:read",
-    McpBlockedRead: "mcp:blocked_read",
-    McpWrite: "mcp:write",
-    McpBlockedWrite: "mcp:blocked_write",
-    McpConnect: "mcp:connect",
-    McpBlockedConnect: "mcp:blocked_connect",
-    EnvironmentRead: "environment:read",
-    EnvironmentBlockedRead: "environment:blocked_read",
-    EnvironmentWrite: "environment:write",
-    EnvironmentBlockedWrite: "environment:blocked_write",
-    RiskPolicyEvaluate: "risk_policy:evaluate",
-    RiskPolicyBypass: "risk_policy:bypass",
-    ChatRead: "chat:read",
+  OrgRead: "org:read",
+  OrgBlockedRead: "org:blocked_read",
+  OrgAdmin: "org:admin",
+  OrgBlockedAdmin: "org:blocked_admin",
+  ProjectRead: "project:read",
+  ProjectBlockedRead: "project:blocked_read",
+  ProjectWrite: "project:write",
+  ProjectBlockedWrite: "project:blocked_write",
+  McpRead: "mcp:read",
+  McpBlockedRead: "mcp:blocked_read",
+  McpWrite: "mcp:write",
+  McpBlockedWrite: "mcp:blocked_write",
+  McpConnect: "mcp:connect",
+  McpBlockedConnect: "mcp:blocked_connect",
+  EnvironmentRead: "environment:read",
+  EnvironmentBlockedRead: "environment:blocked_read",
+  EnvironmentWrite: "environment:write",
+  EnvironmentBlockedWrite: "environment:blocked_write",
+  RiskPolicyEvaluate: "risk_policy:evaluate",
+  RiskPolicyBypass: "risk_policy:bypass",
+  ChatRead: "chat:read",
 };
 /** @internal */
 export const ListRoleGrantScope$inboundSchema = z.enum(ListRoleGrantScope);
 /** @internal */
 export const SubScopes$inboundSchema = z.enum(SubScopes);
 /** @internal */
-export const ListRoleGrant$inboundSchema = z.pipe(z.object({
+export const ListRoleGrant$inboundSchema = z.pipe(
+  z.object({
     scope: ListRoleGrantScope$inboundSchema,
     selectors: z.optional(z.array(Selector$inboundSchema)),
     sub_scopes: z.optional(z.array(SubScopes$inboundSchema)),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "sub_scopes": "subScopes",
+      sub_scopes: "subScopes",
     });
-}));
+  }),
+);
 export function listRoleGrantFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListRoleGrant$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListRoleGrant' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListRoleGrant$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListRoleGrant' from JSON`,
+  );
 }
 //# sourceMappingURL=listrolegrant.js.map

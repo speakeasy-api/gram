@@ -4,33 +4,43 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListResourcesSecurity$outboundSchema = z.pipe(z.object({
+export const ListResourcesSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function listResourcesSecurityToJSON(listResourcesSecurity) {
-    return JSON.stringify(ListResourcesSecurity$outboundSchema.parse(listResourcesSecurity));
+  return JSON.stringify(
+    ListResourcesSecurity$outboundSchema.parse(listResourcesSecurity),
+  );
 }
 /** @internal */
-export const ListResourcesRequest$outboundSchema = z.pipe(z.object({
+export const ListResourcesRequest$outboundSchema = z.pipe(
+  z.object({
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     deploymentId: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        deploymentId: "deployment_id",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      deploymentId: "deployment_id",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function listResourcesRequestToJSON(listResourcesRequest) {
-    return JSON.stringify(ListResourcesRequest$outboundSchema.parse(listResourcesRequest));
+  return JSON.stringify(
+    ListResourcesRequest$outboundSchema.parse(listResourcesRequest),
+  );
 }
 //# sourceMappingURL=listresources.js.map

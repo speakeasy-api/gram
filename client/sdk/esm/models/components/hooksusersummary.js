@@ -5,24 +5,31 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const HooksUserSummary$inboundSchema = z.pipe(z.object({
+export const HooksUserSummary$inboundSchema = z.pipe(
+  z.object({
     event_count: z.int(),
     failure_count: z.int(),
     failure_rate: z.number(),
     success_count: z.int(),
     unique_tools: z.int(),
     user_email: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "event_count": "eventCount",
-        "failure_count": "failureCount",
-        "failure_rate": "failureRate",
-        "success_count": "successCount",
-        "unique_tools": "uniqueTools",
-        "user_email": "userEmail",
+      event_count: "eventCount",
+      failure_count: "failureCount",
+      failure_rate: "failureRate",
+      success_count: "successCount",
+      unique_tools: "uniqueTools",
+      user_email: "userEmail",
     });
-}));
+  }),
+);
 export function hooksUserSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => HooksUserSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'HooksUserSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => HooksUserSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'HooksUserSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=hooksusersummary.js.map

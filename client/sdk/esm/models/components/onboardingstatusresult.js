@@ -5,16 +5,23 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const OnboardingStatusResult$inboundSchema = z.pipe(z.object({
+export const OnboardingStatusResult$inboundSchema = z.pipe(
+  z.object({
     dsync_configured: z.boolean(),
     sso_configured: z.boolean(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "dsync_configured": "dsyncConfigured",
-        "sso_configured": "ssoConfigured",
+      dsync_configured: "dsyncConfigured",
+      sso_configured: "ssoConfigured",
     });
-}));
+  }),
+);
 export function onboardingStatusResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => OnboardingStatusResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'OnboardingStatusResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => OnboardingStatusResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'OnboardingStatusResult' from JSON`,
+  );
 }
 //# sourceMappingURL=onboardingstatusresult.js.map

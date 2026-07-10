@@ -3,33 +3,53 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { SetToolsetEnvironmentLinkRequestBody$outboundSchema, } from "../components/settoolsetenvironmentlinkrequestbody.js";
+import { SetToolsetEnvironmentLinkRequestBody$outboundSchema } from "../components/settoolsetenvironmentlinkrequestbody.js";
 /** @internal */
-export const SetToolsetEnvironmentLinkSecurity$outboundSchema = z.pipe(z.object({
+export const SetToolsetEnvironmentLinkSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function setToolsetEnvironmentLinkSecurityToJSON(setToolsetEnvironmentLinkSecurity) {
-    return JSON.stringify(SetToolsetEnvironmentLinkSecurity$outboundSchema.parse(setToolsetEnvironmentLinkSecurity));
+  }),
+);
+export function setToolsetEnvironmentLinkSecurityToJSON(
+  setToolsetEnvironmentLinkSecurity,
+) {
+  return JSON.stringify(
+    SetToolsetEnvironmentLinkSecurity$outboundSchema.parse(
+      setToolsetEnvironmentLinkSecurity,
+    ),
+  );
 }
 /** @internal */
-export const SetToolsetEnvironmentLinkRequest$outboundSchema = z.pipe(z.object({
+export const SetToolsetEnvironmentLinkRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    setToolsetEnvironmentLinkRequestBody: SetToolsetEnvironmentLinkRequestBody$outboundSchema,
-}), z.transform((v) => {
+    setToolsetEnvironmentLinkRequestBody:
+      SetToolsetEnvironmentLinkRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        setToolsetEnvironmentLinkRequestBody: "SetToolsetEnvironmentLinkRequestBody",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      setToolsetEnvironmentLinkRequestBody:
+        "SetToolsetEnvironmentLinkRequestBody",
     });
-}));
-export function setToolsetEnvironmentLinkRequestToJSON(setToolsetEnvironmentLinkRequest) {
-    return JSON.stringify(SetToolsetEnvironmentLinkRequest$outboundSchema.parse(setToolsetEnvironmentLinkRequest));
+  }),
+);
+export function setToolsetEnvironmentLinkRequestToJSON(
+  setToolsetEnvironmentLinkRequest,
+) {
+  return JSON.stringify(
+    SetToolsetEnvironmentLinkRequest$outboundSchema.parse(
+      setToolsetEnvironmentLinkRequest,
+    ),
+  );
 }
 //# sourceMappingURL=settoolsetenvironmentlink.js.map

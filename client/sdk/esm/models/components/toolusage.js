@@ -5,19 +5,25 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ToolUsage$inboundSchema = z
-    .pipe(z.object({
+export const ToolUsage$inboundSchema = z.pipe(
+  z.object({
     count: z.int(),
     failure_count: z.int(),
     success_count: z.int(),
     urn: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "failure_count": "failureCount",
-        "success_count": "successCount",
+      failure_count: "failureCount",
+      success_count: "successCount",
     });
-}));
+  }),
+);
 export function toolUsageFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolUsage$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolUsage' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolUsage$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolUsage' from JSON`,
+  );
 }
 //# sourceMappingURL=toolusage.js.map

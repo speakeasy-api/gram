@@ -4,17 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { TelemetryLogRecord$inboundSchema, } from "./telemetrylogrecord.js";
+import { TelemetryLogRecord$inboundSchema } from "./telemetrylogrecord.js";
 /** @internal */
-export const SearchLogsResult$inboundSchema = z.pipe(z.object({
+export const SearchLogsResult$inboundSchema = z.pipe(
+  z.object({
     logs: z.array(TelemetryLogRecord$inboundSchema),
     next_cursor: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function searchLogsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SearchLogsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SearchLogsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SearchLogsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SearchLogsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=searchlogsresult.js.map

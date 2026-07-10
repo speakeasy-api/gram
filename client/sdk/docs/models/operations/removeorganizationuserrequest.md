@@ -12,7 +12,7 @@ let value: RemoveOrganizationUserRequest = {
 
 ## Fields
 
-| Field                   | Type                    | Required                | Description             |
-| ----------------------- | ----------------------- | ----------------------- | ----------------------- |
-| `userId`                | *string*                | :heavy_check_mark:      | Gram user ID to remove. |
-| `gramSession`           | *string*                | :heavy_minus_sign:      | Session header          |
+| Field         | Type     | Required           | Description             |
+| ------------- | -------- | ------------------ | ----------------------- |
+| `userId`      | _string_ | :heavy_check_mark: | Gram user ID to remove. |
+| `gramSession` | _string_ | :heavy_minus_sign: | Session header          |

@@ -4,46 +4,79 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ListOrganizationRemoteSessionsResult$inboundSchema, } from "../components/listorganizationremotesessionsresult.js";
+import { ListOrganizationRemoteSessionsResult$inboundSchema } from "../components/listorganizationremotesessionsresult.js";
 /** @internal */
-export const ListOrganizationRemoteSessionClientSessionsSecurity$outboundSchema = z.pipe(z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
-    apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const ListOrganizationRemoteSessionClientSessionsSecurity$outboundSchema =
+  z.pipe(
+    z.object({
+      sessionHeaderGramSession: z.optional(z.string()),
+      apikeyHeaderGramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         sessionHeaderGramSession: "session_header_Gram-Session",
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    });
-}));
-export function listOrganizationRemoteSessionClientSessionsSecurityToJSON(listOrganizationRemoteSessionClientSessionsSecurity) {
-    return JSON.stringify(ListOrganizationRemoteSessionClientSessionsSecurity$outboundSchema.parse(listOrganizationRemoteSessionClientSessionsSecurity));
+      });
+    }),
+  );
+export function listOrganizationRemoteSessionClientSessionsSecurityToJSON(
+  listOrganizationRemoteSessionClientSessionsSecurity,
+) {
+  return JSON.stringify(
+    ListOrganizationRemoteSessionClientSessionsSecurity$outboundSchema.parse(
+      listOrganizationRemoteSessionClientSessionsSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListOrganizationRemoteSessionClientSessionsRequest$outboundSchema = z.pipe(z.object({
-    clientId: z.string(),
-    cursor: z.optional(z.string()),
-    limit: z.optional(z.int()),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const ListOrganizationRemoteSessionClientSessionsRequest$outboundSchema =
+  z.pipe(
+    z.object({
+      clientId: z.string(),
+      cursor: z.optional(z.string()),
+      limit: z.optional(z.int()),
+      gramSession: z.optional(z.string()),
+      gramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         clientId: "client_id",
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
-    });
-}));
-export function listOrganizationRemoteSessionClientSessionsRequestToJSON(listOrganizationRemoteSessionClientSessionsRequest) {
-    return JSON.stringify(ListOrganizationRemoteSessionClientSessionsRequest$outboundSchema.parse(listOrganizationRemoteSessionClientSessionsRequest));
+      });
+    }),
+  );
+export function listOrganizationRemoteSessionClientSessionsRequestToJSON(
+  listOrganizationRemoteSessionClientSessionsRequest,
+) {
+  return JSON.stringify(
+    ListOrganizationRemoteSessionClientSessionsRequest$outboundSchema.parse(
+      listOrganizationRemoteSessionClientSessionsRequest,
+    ),
+  );
 }
 /** @internal */
-export const ListOrganizationRemoteSessionClientSessionsResponse$inboundSchema = z.pipe(z.object({
-    Result: ListOrganizationRemoteSessionsResult$inboundSchema,
-}), z.transform((v) => {
-    return remap$(v, {
-        "Result": "result",
-    });
-}));
-export function listOrganizationRemoteSessionClientSessionsResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListOrganizationRemoteSessionClientSessionsResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListOrganizationRemoteSessionClientSessionsResponse' from JSON`);
+export const ListOrganizationRemoteSessionClientSessionsResponse$inboundSchema =
+  z.pipe(
+    z.object({
+      Result: ListOrganizationRemoteSessionsResult$inboundSchema,
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        Result: "result",
+      });
+    }),
+  );
+export function listOrganizationRemoteSessionClientSessionsResponseFromJSON(
+  jsonString,
+) {
+  return safeParse(
+    jsonString,
+    (x) =>
+      ListOrganizationRemoteSessionClientSessionsResponse$inboundSchema.parse(
+        JSON.parse(x),
+      ),
+    `Failed to parse 'ListOrganizationRemoteSessionClientSessionsResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=listorganizationremotesessionclientsessions.js.map

@@ -9,9 +9,9 @@ import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import { AIIntegrationConfig$inboundSchema, } from "../models/components/aiintegrationconfig.js";
-import { ServiceError$inboundSchema, } from "../models/errors/serviceerror.js";
-import { GetAIIntegrationConfigRequest$outboundSchema, } from "../models/operations/getaiintegrationconfig.js";
+import { AIIntegrationConfig$inboundSchema } from "../models/components/aiintegrationconfig.js";
+import { ServiceError$inboundSchema } from "../models/errors/serviceerror.js";
+import { GetAIIntegrationConfigRequest$outboundSchema } from "../models/operations/getaiintegrationconfig.js";
 import { APIPromise } from "../types/async.js";
 /**
  * getConfig aiIntegrations
@@ -20,87 +20,106 @@ import { APIPromise } from "../types/async.js";
  * Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.
  */
 export function aiIntegrationsGetConfig(client, request, security, options) {
-    return new APIPromise($do(client, request, security, options));
+  return new APIPromise($do(client, request, security, options));
 }
 async function $do(client, request, security, options) {
-    const parsed = safeParse(request, (value) => z.parse(GetAIIntegrationConfigRequest$outboundSchema, value), "Input validation failed");
-    if (!parsed.ok) {
-        return [parsed, { status: "invalid" }];
-    }
-    const payload = parsed.value;
-    const body = null;
-    const path = pathToFunc("/rpc/aiIntegrations.getConfig")();
-    const query = encodeFormQuery({
-        "provider": payload.provider,
-    });
-    const headers = new Headers(compactMap({
-        Accept: "application/json",
-        "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
-            explode: false,
-            charEncoding: "none",
-        }),
-        "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
-            explode: false,
-            charEncoding: "none",
-        }),
-    }));
-    const requestSecurity = resolveSecurity([
-        {
-            fieldName: "Gram-Key",
-            type: "apiKey:header",
-            value: security?.apikeyHeaderGramKey,
-        },
-    ], [
-        {
-            fieldName: "Gram-Session",
-            type: "apiKey:header",
-            value: security?.sessionHeaderGramSession,
-        },
-    ]);
-    const context = {
-        options: client._options,
-        baseURL: options?.serverURL ?? client._baseURL ?? "",
-        operationID: "getAIIntegrationConfig",
-        oAuth2Scopes: null,
-        resolvedSecurity: requestSecurity,
-        securitySource: security,
-        retryConfig: options?.retries
-            || client._options.retryConfig
-            || { strategy: "none" },
-        retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"],
-    };
-    const requestRes = client._createRequest(context, {
-        security: requestSecurity,
-        method: "GET",
-        baseURL: options?.serverURL,
-        path: path,
-        headers: headers,
-        query: query,
-        body: body,
-        userAgent: client._options.userAgent,
-        timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
-    }, options);
-    if (!requestRes.ok) {
-        return [requestRes, { status: "invalid" }];
-    }
-    const req = requestRes.value;
-    const doResult = await client._do(req, {
-        context,
-        isErrorStatusCode: (statusCode) => matchStatusCode({ status: statusCode }, ["4XX", "5XX"]),
-        retryConfig: context.retryConfig,
-        retryCodes: context.retryCodes,
-    });
-    if (!doResult.ok) {
-        return [doResult, { status: "request-error", request: req }];
-    }
-    const response = doResult.value;
-    const responseFields = {
-        HttpMeta: { Response: response, Request: req },
-    };
-    const [result] = await M.match(M.json(200, AIIntegrationConfig$inboundSchema), M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema), M.jsonErr([500, 502], ServiceError$inboundSchema), M.fail("4XX"), M.fail("5XX"))(response, req, { extraFields: responseFields });
-    if (!result.ok) {
-        return [result, { status: "complete", request: req, response }];
-    }
+  const parsed = safeParse(
+    request,
+    (value) => z.parse(GetAIIntegrationConfigRequest$outboundSchema, value),
+    "Input validation failed",
+  );
+  if (!parsed.ok) {
+    return [parsed, { status: "invalid" }];
+  }
+  const payload = parsed.value;
+  const body = null;
+  const path = pathToFunc("/rpc/aiIntegrations.getConfig")();
+  const query = encodeFormQuery({
+    provider: payload.provider,
+  });
+  const headers = new Headers(
+    compactMap({
+      Accept: "application/json",
+      "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+        explode: false,
+        charEncoding: "none",
+      }),
+      "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+        explode: false,
+        charEncoding: "none",
+      }),
+    }),
+  );
+  const requestSecurity = resolveSecurity(
+    [
+      {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.apikeyHeaderGramKey,
+      },
+    ],
+    [
+      {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.sessionHeaderGramSession,
+      },
+    ],
+  );
+  const context = {
+    options: client._options,
+    baseURL: options?.serverURL ?? client._baseURL ?? "",
+    operationID: "getAIIntegrationConfig",
+    oAuth2Scopes: null,
+    resolvedSecurity: requestSecurity,
+    securitySource: security,
+    retryConfig: options?.retries ||
+      client._options.retryConfig || { strategy: "none" },
+    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"],
+  };
+  const requestRes = client._createRequest(
+    context,
+    {
+      security: requestSecurity,
+      method: "GET",
+      baseURL: options?.serverURL,
+      path: path,
+      headers: headers,
+      query: query,
+      body: body,
+      userAgent: client._options.userAgent,
+      timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
+    },
+    options,
+  );
+  if (!requestRes.ok) {
+    return [requestRes, { status: "invalid" }];
+  }
+  const req = requestRes.value;
+  const doResult = await client._do(req, {
+    context,
+    isErrorStatusCode: (statusCode) =>
+      matchStatusCode({ status: statusCode }, ["4XX", "5XX"]),
+    retryConfig: context.retryConfig,
+    retryCodes: context.retryCodes,
+  });
+  if (!doResult.ok) {
+    return [doResult, { status: "request-error", request: req }];
+  }
+  const response = doResult.value;
+  const responseFields = {
+    HttpMeta: { Response: response, Request: req },
+  };
+  const [result] = await M.match(
+    M.json(200, AIIntegrationConfig$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
+    M.fail("4XX"),
+    M.fail("5XX"),
+  )(response, req, { extraFields: responseFields });
+  if (!result.ok) {
     return [result, { status: "complete", request: req, response }];
+  }
+  return [result, { status: "complete", request: req, response }];
 }
 //# sourceMappingURL=aiIntegrationsGetConfig.js.map

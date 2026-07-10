@@ -4,32 +4,50 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetOrganizationRemoteSessionClientDeletePreflightSecurity$outboundSchema = z.pipe(z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
-    apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const GetOrganizationRemoteSessionClientDeletePreflightSecurity$outboundSchema =
+  z.pipe(
+    z.object({
+      sessionHeaderGramSession: z.optional(z.string()),
+      apikeyHeaderGramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         sessionHeaderGramSession: "session_header_Gram-Session",
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    });
-}));
-export function getOrganizationRemoteSessionClientDeletePreflightSecurityToJSON(getOrganizationRemoteSessionClientDeletePreflightSecurity) {
-    return JSON.stringify(GetOrganizationRemoteSessionClientDeletePreflightSecurity$outboundSchema
-        .parse(getOrganizationRemoteSessionClientDeletePreflightSecurity));
+      });
+    }),
+  );
+export function getOrganizationRemoteSessionClientDeletePreflightSecurityToJSON(
+  getOrganizationRemoteSessionClientDeletePreflightSecurity,
+) {
+  return JSON.stringify(
+    GetOrganizationRemoteSessionClientDeletePreflightSecurity$outboundSchema.parse(
+      getOrganizationRemoteSessionClientDeletePreflightSecurity,
+    ),
+  );
 }
 /** @internal */
-export const GetOrganizationRemoteSessionClientDeletePreflightRequest$outboundSchema = z.pipe(z.object({
-    id: z.string(),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const GetOrganizationRemoteSessionClientDeletePreflightRequest$outboundSchema =
+  z.pipe(
+    z.object({
+      id: z.string(),
+      gramSession: z.optional(z.string()),
+      gramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
-    });
-}));
-export function getOrganizationRemoteSessionClientDeletePreflightRequestToJSON(getOrganizationRemoteSessionClientDeletePreflightRequest) {
-    return JSON.stringify(GetOrganizationRemoteSessionClientDeletePreflightRequest$outboundSchema
-        .parse(getOrganizationRemoteSessionClientDeletePreflightRequest));
+      });
+    }),
+  );
+export function getOrganizationRemoteSessionClientDeletePreflightRequestToJSON(
+  getOrganizationRemoteSessionClientDeletePreflightRequest,
+) {
+  return JSON.stringify(
+    GetOrganizationRemoteSessionClientDeletePreflightRequest$outboundSchema.parse(
+      getOrganizationRemoteSessionClientDeletePreflightRequest,
+    ),
+  );
 }
 //# sourceMappingURL=getorganizationremotesessionclientdeletepreflight.js.map

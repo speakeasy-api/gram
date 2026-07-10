@@ -4,10 +4,12 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const EnvironmentEntryInput$outboundSchema = z.object({
-    name: z.string(),
-    value: z.string(),
+  name: z.string(),
+  value: z.string(),
 });
 export function environmentEntryInputToJSON(environmentEntryInput) {
-    return JSON.stringify(EnvironmentEntryInput$outboundSchema.parse(environmentEntryInput));
+  return JSON.stringify(
+    EnvironmentEntryInput$outboundSchema.parse(environmentEntryInput),
+  );
 }
 //# sourceMappingURL=environmententryinput.js.map

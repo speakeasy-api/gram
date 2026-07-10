@@ -6,8 +6,12 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { ToolEntry$inboundSchema } from "./toolentry.js";
 /** @internal */
-export const ToolsetSummary$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const ToolsetSummary$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     default_environment_slug: z.optional(z.string()),
     id: z.string(),
     mcp_enabled: z.optional(z.boolean()),
@@ -19,21 +23,30 @@ export const ToolsetSummary$inboundSchema = z.pipe(z.object({
     slug: z.string(),
     tool_selection_mode: z.string(),
     tools: z.array(ToolEntry$inboundSchema),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "default_environment_slug": "defaultEnvironmentSlug",
-        "mcp_enabled": "mcpEnabled",
-        "mcp_is_public": "mcpIsPublic",
-        "mcp_slug": "mcpSlug",
-        "organization_id": "organizationId",
-        "project_id": "projectId",
-        "tool_selection_mode": "toolSelectionMode",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      default_environment_slug: "defaultEnvironmentSlug",
+      mcp_enabled: "mcpEnabled",
+      mcp_is_public: "mcpIsPublic",
+      mcp_slug: "mcpSlug",
+      organization_id: "organizationId",
+      project_id: "projectId",
+      tool_selection_mode: "toolSelectionMode",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function toolsetSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolsetSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolsetSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolsetSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolsetSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=toolsetsummary.js.map

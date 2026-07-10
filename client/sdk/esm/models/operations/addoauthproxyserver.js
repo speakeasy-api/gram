@@ -3,62 +3,97 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { AddOAuthProxyServerRequestBody$outboundSchema, } from "../components/addoauthproxyserverrequestbody.js";
+import { AddOAuthProxyServerRequestBody$outboundSchema } from "../components/addoauthproxyserverrequestbody.js";
 /** @internal */
-export const AddOAuthProxyServerSecurityOption1$outboundSchema = z.pipe(z.object({
+export const AddOAuthProxyServerSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function addOAuthProxyServerSecurityOption1ToJSON(addOAuthProxyServerSecurityOption1) {
-    return JSON.stringify(AddOAuthProxyServerSecurityOption1$outboundSchema.parse(addOAuthProxyServerSecurityOption1));
+  }),
+);
+export function addOAuthProxyServerSecurityOption1ToJSON(
+  addOAuthProxyServerSecurityOption1,
+) {
+  return JSON.stringify(
+    AddOAuthProxyServerSecurityOption1$outboundSchema.parse(
+      addOAuthProxyServerSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const AddOAuthProxyServerSecurityOption2$outboundSchema = z.pipe(z.object({
+export const AddOAuthProxyServerSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function addOAuthProxyServerSecurityOption2ToJSON(addOAuthProxyServerSecurityOption2) {
-    return JSON.stringify(AddOAuthProxyServerSecurityOption2$outboundSchema.parse(addOAuthProxyServerSecurityOption2));
+  }),
+);
+export function addOAuthProxyServerSecurityOption2ToJSON(
+  addOAuthProxyServerSecurityOption2,
+) {
+  return JSON.stringify(
+    AddOAuthProxyServerSecurityOption2$outboundSchema.parse(
+      addOAuthProxyServerSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const AddOAuthProxyServerSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => AddOAuthProxyServerSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => AddOAuthProxyServerSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const AddOAuthProxyServerSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => AddOAuthProxyServerSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => AddOAuthProxyServerSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function addOAuthProxyServerSecurityToJSON(addOAuthProxyServerSecurity) {
-    return JSON.stringify(AddOAuthProxyServerSecurity$outboundSchema.parse(addOAuthProxyServerSecurity));
+  return JSON.stringify(
+    AddOAuthProxyServerSecurity$outboundSchema.parse(
+      addOAuthProxyServerSecurity,
+    ),
+  );
 }
 /** @internal */
-export const AddOAuthProxyServerRequest$outboundSchema = z.pipe(z.object({
+export const AddOAuthProxyServerRequest$outboundSchema = z.pipe(
+  z.object({
     slug: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    addOAuthProxyServerRequestBody: AddOAuthProxyServerRequestBody$outboundSchema,
-}), z.transform((v) => {
+    addOAuthProxyServerRequestBody:
+      AddOAuthProxyServerRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        addOAuthProxyServerRequestBody: "AddOAuthProxyServerRequestBody",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      addOAuthProxyServerRequestBody: "AddOAuthProxyServerRequestBody",
     });
-}));
+  }),
+);
 export function addOAuthProxyServerRequestToJSON(addOAuthProxyServerRequest) {
-    return JSON.stringify(AddOAuthProxyServerRequest$outboundSchema.parse(addOAuthProxyServerRequest));
+  return JSON.stringify(
+    AddOAuthProxyServerRequest$outboundSchema.parse(addOAuthProxyServerRequest),
+  );
 }
 //# sourceMappingURL=addoauthproxyserver.js.map

@@ -14,6 +14,6 @@ let value: ListOrganizationMcpServersResult = {
 
 ## Fields
 
-| Field                                                                                  | Type                                                                                   | Required                                                                               | Description                                                                            |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `items`                                                                                | [components.OrganizationMcpServer](../../models/components/organizationmcpserver.md)[] | :heavy_check_mark:                                                                     | N/A                                                                                    |
+| Field   | Type                                                                                   | Required           | Description |
+| ------- | -------------------------------------------------------------------------------------- | ------------------ | ----------- |
+| `items` | [components.OrganizationMcpServer](../../models/components/organizationmcpserver.md)[] | :heavy_check_mark: | N/A         |

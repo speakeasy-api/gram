@@ -12,6 +12,6 @@ let value: RenderTemplateResult = {
 
 ## Fields
 
-| Field               | Type                | Required            | Description         |
-| ------------------- | ------------------- | ------------------- | ------------------- |
-| `prompt`            | *string*            | :heavy_check_mark:  | The rendered prompt |
+| Field    | Type     | Required           | Description         |
+| -------- | -------- | ------------------ | ------------------- |
+| `prompt` | _string_ | :heavy_check_mark: | The rendered prompt |

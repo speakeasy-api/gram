@@ -15,7 +15,7 @@ let value: ToolUsageTraceLogGroup = {
 
 ## Fields
 
-| Field                                                                                          | Type                                                                                           | Required                                                                                       | Description                                                                                    |
-| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `kind`                                                                                         | [components.ToolUsageTraceLogGroupKind](../../models/components/toolusagetraceloggroupkind.md) | :heavy_check_mark:                                                                             | Child-log lookup strategy for a tool usage trace row                                           |
-| `value`                                                                                        | *string*                                                                                       | :heavy_check_mark:                                                                             | Lookup value                                                                                   |
+| Field   | Type                                                                                           | Required           | Description                                          |
+| ------- | ---------------------------------------------------------------------------------------------- | ------------------ | ---------------------------------------------------- |
+| `kind`  | [components.ToolUsageTraceLogGroupKind](../../models/components/toolusagetraceloggroupkind.md) | :heavy_check_mark: | Child-log lookup strategy for a tool usage trace row |
+| `value` | _string_                                                                                       | :heavy_check_mark: | Lookup value                                         |

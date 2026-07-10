@@ -13,5 +13,5 @@ let value: ResolutionType = "role_assigned";
 ## Values
 
 ```typescript
-"role_assigned" | "dismissed"
+"role_assigned" | "dismissed";
 ```

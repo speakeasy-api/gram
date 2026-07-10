@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ProjectSummary$inboundSchema, } from "./projectsummary.js";
+import { ProjectSummary$inboundSchema } from "./projectsummary.js";
 /** @internal */
 export const GetMetricsSummaryResult$inboundSchema = z.object({
-    metrics: ProjectSummary$inboundSchema,
+  metrics: ProjectSummary$inboundSchema,
 });
 export function getMetricsSummaryResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GetMetricsSummaryResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GetMetricsSummaryResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => GetMetricsSummaryResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetMetricsSummaryResult' from JSON`,
+  );
 }
 //# sourceMappingURL=getmetricssummaryresult.js.map

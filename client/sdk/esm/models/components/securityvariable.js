@@ -6,7 +6,8 @@ import * as b64$ from "../../lib/base64.js";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const SecurityVariable$inboundSchema = z.pipe(z.object({
+export const SecurityVariable$inboundSchema = z.pipe(
+  z.object({
     bearer_format: z.optional(z.string()),
     display_name: z.optional(z.string()),
     env_variables: z.array(z.string()),
@@ -17,17 +18,23 @@ export const SecurityVariable$inboundSchema = z.pipe(z.object({
     oauth_types: z.optional(z.array(z.string())),
     scheme: z.string(),
     type: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "bearer_format": "bearerFormat",
-        "display_name": "displayName",
-        "env_variables": "envVariables",
-        "in_placement": "inPlacement",
-        "oauth_flows": "oauthFlows",
-        "oauth_types": "oauthTypes",
+      bearer_format: "bearerFormat",
+      display_name: "displayName",
+      env_variables: "envVariables",
+      in_placement: "inPlacement",
+      oauth_flows: "oauthFlows",
+      oauth_types: "oauthTypes",
     });
-}));
+  }),
+);
 export function securityVariableFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SecurityVariable$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SecurityVariable' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SecurityVariable$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SecurityVariable' from JSON`,
+  );
 }
 //# sourceMappingURL=securityvariable.js.map

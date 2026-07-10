@@ -4,18 +4,25 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { MarketplaceSettingsResult$inboundSchema, } from "./marketplacesettingsresult.js";
+import { MarketplaceSettingsResult$inboundSchema } from "./marketplacesettingsresult.js";
 /** @internal */
-export const UpdateMarketplaceSettingsResult$inboundSchema = z.pipe(z.object({
+export const UpdateMarketplaceSettingsResult$inboundSchema = z.pipe(
+  z.object({
     hooks_update_deferred: z.optional(z.boolean()),
     republished: z.boolean(),
     settings: MarketplaceSettingsResult$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "hooks_update_deferred": "hooksUpdateDeferred",
+      hooks_update_deferred: "hooksUpdateDeferred",
     });
-}));
+  }),
+);
 export function updateMarketplaceSettingsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => UpdateMarketplaceSettingsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'UpdateMarketplaceSettingsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => UpdateMarketplaceSettingsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UpdateMarketplaceSettingsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=updatemarketplacesettingsresult.js.map

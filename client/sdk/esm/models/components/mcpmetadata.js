@@ -4,13 +4,18 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { McpEnvironmentConfig$inboundSchema, } from "./mcpenvironmentconfig.js";
+import { McpEnvironmentConfig$inboundSchema } from "./mcpenvironmentconfig.js";
 /** @internal */
-export const McpMetadata$inboundSchema = z
-    .pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const McpMetadata$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     default_environment_id: z.optional(z.string()),
-    environment_configs: z.optional(z.array(McpEnvironmentConfig$inboundSchema)),
+    environment_configs: z.optional(
+      z.array(McpEnvironmentConfig$inboundSchema),
+    ),
     external_documentation_text: z.optional(z.string()),
     external_documentation_url: z.optional(z.string()),
     id: z.string(),
@@ -19,22 +24,31 @@ export const McpMetadata$inboundSchema = z
     logo_asset_id: z.optional(z.string()),
     mcp_server_id: z.optional(z.string()),
     toolset_id: z.optional(z.string()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "default_environment_id": "defaultEnvironmentId",
-        "environment_configs": "environmentConfigs",
-        "external_documentation_text": "externalDocumentationText",
-        "external_documentation_url": "externalDocumentationUrl",
-        "installation_override_url": "installationOverrideUrl",
-        "logo_asset_id": "logoAssetId",
-        "mcp_server_id": "mcpServerId",
-        "toolset_id": "toolsetId",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      default_environment_id: "defaultEnvironmentId",
+      environment_configs: "environmentConfigs",
+      external_documentation_text: "externalDocumentationText",
+      external_documentation_url: "externalDocumentationUrl",
+      installation_override_url: "installationOverrideUrl",
+      logo_asset_id: "logoAssetId",
+      mcp_server_id: "mcpServerId",
+      toolset_id: "toolsetId",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function mcpMetadataFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => McpMetadata$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'McpMetadata' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => McpMetadata$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'McpMetadata' from JSON`,
+  );
 }
 //# sourceMappingURL=mcpmetadata.js.map

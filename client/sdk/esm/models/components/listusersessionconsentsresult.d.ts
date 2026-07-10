@@ -6,13 +6,18 @@ import { UserSessionConsent } from "./usersessionconsent.js";
  * Result type for listing user_session_consents.
  */
 export type ListUserSessionConsentsResult = {
-    items: Array<UserSessionConsent>;
-    /**
-     * Cursor for the next page; empty when exhausted.
-     */
-    nextCursor?: string | undefined;
+  items: Array<UserSessionConsent>;
+  /**
+   * Cursor for the next page; empty when exhausted.
+   */
+  nextCursor?: string | undefined;
 };
 /** @internal */
-export declare const ListUserSessionConsentsResult$inboundSchema: z.ZodMiniType<ListUserSessionConsentsResult, unknown>;
-export declare function listUserSessionConsentsResultFromJSON(jsonString: string): SafeParseResult<ListUserSessionConsentsResult, SDKValidationError>;
+export declare const ListUserSessionConsentsResult$inboundSchema: z.ZodMiniType<
+  ListUserSessionConsentsResult,
+  unknown
+>;
+export declare function listUserSessionConsentsResultFromJSON(
+  jsonString: string,
+): SafeParseResult<ListUserSessionConsentsResult, SDKValidationError>;
 //# sourceMappingURL=listusersessionconsentsresult.d.ts.map

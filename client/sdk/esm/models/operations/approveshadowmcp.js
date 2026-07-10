@@ -5,59 +5,92 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 /** @internal */
-export const ApproveShadowMCPSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ApproveShadowMCPSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function approveShadowMCPSecurityOption1ToJSON(approveShadowMCPSecurityOption1) {
-    return JSON.stringify(ApproveShadowMCPSecurityOption1$outboundSchema.parse(approveShadowMCPSecurityOption1));
+  }),
+);
+export function approveShadowMCPSecurityOption1ToJSON(
+  approveShadowMCPSecurityOption1,
+) {
+  return JSON.stringify(
+    ApproveShadowMCPSecurityOption1$outboundSchema.parse(
+      approveShadowMCPSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ApproveShadowMCPSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ApproveShadowMCPSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function approveShadowMCPSecurityOption2ToJSON(approveShadowMCPSecurityOption2) {
-    return JSON.stringify(ApproveShadowMCPSecurityOption2$outboundSchema.parse(approveShadowMCPSecurityOption2));
+  }),
+);
+export function approveShadowMCPSecurityOption2ToJSON(
+  approveShadowMCPSecurityOption2,
+) {
+  return JSON.stringify(
+    ApproveShadowMCPSecurityOption2$outboundSchema.parse(
+      approveShadowMCPSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ApproveShadowMCPSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ApproveShadowMCPSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ApproveShadowMCPSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ApproveShadowMCPSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ApproveShadowMCPSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ApproveShadowMCPSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function approveShadowMCPSecurityToJSON(approveShadowMCPSecurity) {
-    return JSON.stringify(ApproveShadowMCPSecurity$outboundSchema.parse(approveShadowMCPSecurity));
+  return JSON.stringify(
+    ApproveShadowMCPSecurity$outboundSchema.parse(approveShadowMCPSecurity),
+  );
 }
 /** @internal */
-export const ApproveShadowMCPRequest$outboundSchema = z.pipe(z.object({
+export const ApproveShadowMCPRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    approveShadowMCPRequestBody: components.ApproveShadowMCPRequestBody$outboundSchema,
-}), z.transform((v) => {
+    approveShadowMCPRequestBody:
+      components.ApproveShadowMCPRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        approveShadowMCPRequestBody: "ApproveShadowMCPRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      approveShadowMCPRequestBody: "ApproveShadowMCPRequestBody",
     });
-}));
+  }),
+);
 export function approveShadowMCPRequestToJSON(approveShadowMCPRequest) {
-    return JSON.stringify(ApproveShadowMCPRequest$outboundSchema.parse(approveShadowMCPRequest));
+  return JSON.stringify(
+    ApproveShadowMCPRequest$outboundSchema.parse(approveShadowMCPRequest),
+  );
 }
 //# sourceMappingURL=approveshadowmcp.js.map

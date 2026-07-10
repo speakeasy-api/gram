@@ -6,8 +6,12 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { RoleGrant$inboundSchema } from "./rolegrant.js";
 /** @internal */
-export const Role$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const Role$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     description: z.string(),
     grants: z.array(RoleGrant$inboundSchema),
     id: z.string(),
@@ -16,17 +20,26 @@ export const Role$inboundSchema = z.pipe(z.object({
     name: z.string(),
     principal_urn: z.string(),
     slug: z.string(),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "is_system": "isSystem",
-        "member_count": "memberCount",
-        "principal_urn": "principalUrn",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      is_system: "isSystem",
+      member_count: "memberCount",
+      principal_urn: "principalUrn",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function roleFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => Role$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'Role' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => Role$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'Role' from JSON`,
+  );
 }
 //# sourceMappingURL=role.js.map

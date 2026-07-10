@@ -4,16 +4,21 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const UpsertRequestBody$outboundSchema = z.pipe(z.object({
+export const UpsertRequestBody$outboundSchema = z.pipe(
+  z.object({
     displayName: z.string(),
     rawServerName: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        displayName: "display_name",
-        rawServerName: "raw_server_name",
+      displayName: "display_name",
+      rawServerName: "raw_server_name",
     });
-}));
+  }),
+);
 export function upsertRequestBodyToJSON(upsertRequestBody) {
-    return JSON.stringify(UpsertRequestBody$outboundSchema.parse(upsertRequestBody));
+  return JSON.stringify(
+    UpsertRequestBody$outboundSchema.parse(upsertRequestBody),
+  );
 }
 //# sourceMappingURL=upsertrequestbody.js.map

@@ -13,5 +13,5 @@ let value: Operator = "exists";
 ## Values
 
 ```typescript
-"eq" | "not_eq" | "contains" | "exists" | "not_exists" | "in"
+"eq" | "not_eq" | "contains" | "exists" | "not_exists" | "in";
 ```

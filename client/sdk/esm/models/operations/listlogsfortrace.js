@@ -4,89 +4,143 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListLogsForTraceSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListLogsForTraceSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listLogsForTraceSecurityOption1ToJSON(listLogsForTraceSecurityOption1) {
-    return JSON.stringify(ListLogsForTraceSecurityOption1$outboundSchema.parse(listLogsForTraceSecurityOption1));
+  }),
+);
+export function listLogsForTraceSecurityOption1ToJSON(
+  listLogsForTraceSecurityOption1,
+) {
+  return JSON.stringify(
+    ListLogsForTraceSecurityOption1$outboundSchema.parse(
+      listLogsForTraceSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListLogsForTraceSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListLogsForTraceSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listLogsForTraceSecurityOption2ToJSON(listLogsForTraceSecurityOption2) {
-    return JSON.stringify(ListLogsForTraceSecurityOption2$outboundSchema.parse(listLogsForTraceSecurityOption2));
+  }),
+);
+export function listLogsForTraceSecurityOption2ToJSON(
+  listLogsForTraceSecurityOption2,
+) {
+  return JSON.stringify(
+    ListLogsForTraceSecurityOption2$outboundSchema.parse(
+      listLogsForTraceSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListLogsForTraceSecurityOption3$outboundSchema = z.pipe(z.object({
+export const ListLogsForTraceSecurityOption3$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listLogsForTraceSecurityOption3ToJSON(listLogsForTraceSecurityOption3) {
-    return JSON.stringify(ListLogsForTraceSecurityOption3$outboundSchema.parse(listLogsForTraceSecurityOption3));
+  }),
+);
+export function listLogsForTraceSecurityOption3ToJSON(
+  listLogsForTraceSecurityOption3,
+) {
+  return JSON.stringify(
+    ListLogsForTraceSecurityOption3$outboundSchema.parse(
+      listLogsForTraceSecurityOption3,
+    ),
+  );
 }
 /** @internal */
-export const ListLogsForTraceSecurityOption4$outboundSchema = z.pipe(z.object({
+export const ListLogsForTraceSecurityOption4$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listLogsForTraceSecurityOption4ToJSON(listLogsForTraceSecurityOption4) {
-    return JSON.stringify(ListLogsForTraceSecurityOption4$outboundSchema.parse(listLogsForTraceSecurityOption4));
+  }),
+);
+export function listLogsForTraceSecurityOption4ToJSON(
+  listLogsForTraceSecurityOption4,
+) {
+  return JSON.stringify(
+    ListLogsForTraceSecurityOption4$outboundSchema.parse(
+      listLogsForTraceSecurityOption4,
+    ),
+  );
 }
 /** @internal */
-export const ListLogsForTraceSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListLogsForTraceSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListLogsForTraceSecurityOption2$outboundSchema)),
-    option3: z.optional(z.lazy(() => ListLogsForTraceSecurityOption3$outboundSchema)),
-    option4: z.optional(z.lazy(() => ListLogsForTraceSecurityOption4$outboundSchema)),
-}), z.transform((v) => {
+export const ListLogsForTraceSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListLogsForTraceSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListLogsForTraceSecurityOption2$outboundSchema),
+    ),
+    option3: z.optional(
+      z.lazy(() => ListLogsForTraceSecurityOption3$outboundSchema),
+    ),
+    option4: z.optional(
+      z.lazy(() => ListLogsForTraceSecurityOption4$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
-        option3: "Option3",
-        option4: "Option4",
+      option1: "Option1",
+      option2: "Option2",
+      option3: "Option3",
+      option4: "Option4",
     });
-}));
+  }),
+);
 export function listLogsForTraceSecurityToJSON(listLogsForTraceSecurity) {
-    return JSON.stringify(ListLogsForTraceSecurity$outboundSchema.parse(listLogsForTraceSecurity));
+  return JSON.stringify(
+    ListLogsForTraceSecurity$outboundSchema.parse(listLogsForTraceSecurity),
+  );
 }
 /** @internal */
-export const ListLogsForTraceRequest$outboundSchema = z.pipe(z.object({
+export const ListLogsForTraceRequest$outboundSchema = z.pipe(
+  z.object({
     traceId: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        traceId: "trace_id",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      traceId: "trace_id",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function listLogsForTraceRequestToJSON(listLogsForTraceRequest) {
-    return JSON.stringify(ListLogsForTraceRequest$outboundSchema.parse(listLogsForTraceRequest));
+  return JSON.stringify(
+    ListLogsForTraceRequest$outboundSchema.parse(listLogsForTraceRequest),
+  );
 }
 //# sourceMappingURL=listlogsfortrace.js.map

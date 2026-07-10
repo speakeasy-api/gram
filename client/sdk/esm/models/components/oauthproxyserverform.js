@@ -7,13 +7,16 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * The type of OAuth provider
  */
 export const OAuthProxyServerFormProviderType = {
-    Custom: "custom",
-    Gram: "gram",
+  Custom: "custom",
+  Gram: "gram",
 };
 /** @internal */
-export const OAuthProxyServerFormProviderType$outboundSchema = z.enum(OAuthProxyServerFormProviderType);
+export const OAuthProxyServerFormProviderType$outboundSchema = z.enum(
+  OAuthProxyServerFormProviderType,
+);
 /** @internal */
-export const OAuthProxyServerForm$outboundSchema = z.pipe(z.object({
+export const OAuthProxyServerForm$outboundSchema = z.pipe(
+  z.object({
     audience: z.optional(z.string()),
     authorizationEndpoint: z.optional(z.string()),
     environmentSlug: z.optional(z.string()),
@@ -22,17 +25,22 @@ export const OAuthProxyServerForm$outboundSchema = z.pipe(z.object({
     slug: z.string(),
     tokenEndpoint: z.optional(z.string()),
     tokenEndpointAuthMethodsSupported: z.optional(z.array(z.string())),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        authorizationEndpoint: "authorization_endpoint",
-        environmentSlug: "environment_slug",
-        providerType: "provider_type",
-        scopesSupported: "scopes_supported",
-        tokenEndpoint: "token_endpoint",
-        tokenEndpointAuthMethodsSupported: "token_endpoint_auth_methods_supported",
+      authorizationEndpoint: "authorization_endpoint",
+      environmentSlug: "environment_slug",
+      providerType: "provider_type",
+      scopesSupported: "scopes_supported",
+      tokenEndpoint: "token_endpoint",
+      tokenEndpointAuthMethodsSupported:
+        "token_endpoint_auth_methods_supported",
     });
-}));
+  }),
+);
 export function oAuthProxyServerFormToJSON(oAuthProxyServerForm) {
-    return JSON.stringify(OAuthProxyServerForm$outboundSchema.parse(oAuthProxyServerForm));
+  return JSON.stringify(
+    OAuthProxyServerForm$outboundSchema.parse(oAuthProxyServerForm),
+  );
 }
 //# sourceMappingURL=oauthproxyserverform.js.map

@@ -4,11 +4,14 @@
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const NotModified$inboundSchema = z
-    .object({
-    location: z.string(),
+export const NotModified$inboundSchema = z.object({
+  location: z.string(),
 });
 export function notModifiedFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => NotModified$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'NotModified' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => NotModified$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'NotModified' from JSON`,
+  );
 }
 //# sourceMappingURL=notmodified.js.map

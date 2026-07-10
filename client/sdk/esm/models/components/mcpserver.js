@@ -8,16 +8,19 @@ import { safeParse } from "../../lib/schemas.js";
  * The visibility of an MCP server
  */
 export const McpServerVisibility = {
-    Disabled: "disabled",
-    Private: "private",
-    Public: "public",
+  Disabled: "disabled",
+  Private: "private",
+  Public: "public",
 };
 /** @internal */
 export const McpServerVisibility$inboundSchema = z.enum(McpServerVisibility);
 /** @internal */
-export const McpServer$inboundSchema = z
-    .pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const McpServer$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     environment_id: z.optional(z.string()),
     id: z.string(),
     name: z.optional(z.string()),
@@ -27,23 +30,32 @@ export const McpServer$inboundSchema = z
     tool_variations_group_id: z.optional(z.string()),
     toolset_id: z.optional(z.string()),
     tunneled_mcp_server_id: z.optional(z.string()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     user_session_issuer_id: z.optional(z.string()),
     visibility: McpServerVisibility$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "environment_id": "environmentId",
-        "project_id": "projectId",
-        "remote_mcp_server_id": "remoteMcpServerId",
-        "tool_variations_group_id": "toolVariationsGroupId",
-        "toolset_id": "toolsetId",
-        "tunneled_mcp_server_id": "tunneledMcpServerId",
-        "updated_at": "updatedAt",
-        "user_session_issuer_id": "userSessionIssuerId",
+      created_at: "createdAt",
+      environment_id: "environmentId",
+      project_id: "projectId",
+      remote_mcp_server_id: "remoteMcpServerId",
+      tool_variations_group_id: "toolVariationsGroupId",
+      toolset_id: "toolsetId",
+      tunneled_mcp_server_id: "tunneledMcpServerId",
+      updated_at: "updatedAt",
+      user_session_issuer_id: "userSessionIssuerId",
     });
-}));
+  }),
+);
 export function mcpServerFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => McpServer$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'McpServer' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => McpServer$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'McpServer' from JSON`,
+  );
 }
 //# sourceMappingURL=mcpserver.js.map

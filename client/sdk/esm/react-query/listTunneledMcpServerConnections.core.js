@@ -4,31 +4,58 @@
 import { tunneledMcpListServerConnections } from "../funcs/tunneledMcpListServerConnections.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchListTunneledMcpServerConnections(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildListTunneledMcpServerConnectionsQuery(client$, request, security, options),
-    });
+export function prefetchListTunneledMcpServerConnections(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildListTunneledMcpServerConnectionsQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+  });
 }
-export function buildListTunneledMcpServerConnectionsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyListTunneledMcpServerConnections({
-            id: request.id,
-            gramSession: request.gramSession,
-            gramKey: request.gramKey,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function listTunneledMcpServerConnectionsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(tunneledMcpListServerConnections(client$, request, security, mergedOptions));
-        },
-    };
+export function buildListTunneledMcpServerConnectionsQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyListTunneledMcpServerConnections({
+      id: request.id,
+      gramSession: request.gramSession,
+      gramKey: request.gramKey,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function listTunneledMcpServerConnectionsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        tunneledMcpListServerConnections(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ),
+      );
+    },
+  };
 }
 export function queryKeyListTunneledMcpServerConnections(parameters) {
-    return ["@gram/client", "tunneledMcp", "listServerConnections", parameters];
+  return ["@gram/client", "tunneledMcp", "listServerConnections", parameters];
 }
 //# sourceMappingURL=listTunneledMcpServerConnections.core.js.map

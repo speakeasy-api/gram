@@ -4,9 +4,15 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const DiscoverRemoteSessionIssuerRequestBody$outboundSchema = z.object({
-    issuer: z.string(),
+  issuer: z.string(),
 });
-export function discoverRemoteSessionIssuerRequestBodyToJSON(discoverRemoteSessionIssuerRequestBody) {
-    return JSON.stringify(DiscoverRemoteSessionIssuerRequestBody$outboundSchema.parse(discoverRemoteSessionIssuerRequestBody));
+export function discoverRemoteSessionIssuerRequestBodyToJSON(
+  discoverRemoteSessionIssuerRequestBody,
+) {
+  return JSON.stringify(
+    DiscoverRemoteSessionIssuerRequestBody$outboundSchema.parse(
+      discoverRemoteSessionIssuerRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=discoverremotesessionissuerrequestbody.js.map

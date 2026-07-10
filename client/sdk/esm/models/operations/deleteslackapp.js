@@ -4,30 +4,40 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteSlackAppSecurity$outboundSchema = z.pipe(z.object({
+export const DeleteSlackAppSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function deleteSlackAppSecurityToJSON(deleteSlackAppSecurity) {
-    return JSON.stringify(DeleteSlackAppSecurity$outboundSchema.parse(deleteSlackAppSecurity));
+  return JSON.stringify(
+    DeleteSlackAppSecurity$outboundSchema.parse(deleteSlackAppSecurity),
+  );
 }
 /** @internal */
-export const DeleteSlackAppRequest$outboundSchema = z.pipe(z.object({
+export const DeleteSlackAppRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function deleteSlackAppRequestToJSON(deleteSlackAppRequest) {
-    return JSON.stringify(DeleteSlackAppRequest$outboundSchema.parse(deleteSlackAppRequest));
+  return JSON.stringify(
+    DeleteSlackAppRequest$outboundSchema.parse(deleteSlackAppRequest),
+  );
 }
 //# sourceMappingURL=deleteslackapp.js.map

@@ -4,25 +4,32 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 export const UpdateShadowMCPAccessRuleFormAccessScope = {
-    Organization: "organization",
-    Project: "project",
+  Organization: "organization",
+  Project: "project",
 };
 export const UpdateShadowMCPAccessRuleFormDisposition = {
-    Allowed: "allowed",
-    Denied: "denied",
+  Allowed: "allowed",
+  Denied: "denied",
 };
 export const UpdateShadowMCPAccessRuleFormMatchBreadth = {
-    FullUrl: "full_url",
-    UrlHost: "url_host",
+  FullUrl: "full_url",
+  UrlHost: "url_host",
 };
 /** @internal */
-export const UpdateShadowMCPAccessRuleFormAccessScope$outboundSchema = z.enum(UpdateShadowMCPAccessRuleFormAccessScope);
+export const UpdateShadowMCPAccessRuleFormAccessScope$outboundSchema = z.enum(
+  UpdateShadowMCPAccessRuleFormAccessScope,
+);
 /** @internal */
-export const UpdateShadowMCPAccessRuleFormDisposition$outboundSchema = z.enum(UpdateShadowMCPAccessRuleFormDisposition);
+export const UpdateShadowMCPAccessRuleFormDisposition$outboundSchema = z.enum(
+  UpdateShadowMCPAccessRuleFormDisposition,
+);
 /** @internal */
-export const UpdateShadowMCPAccessRuleFormMatchBreadth$outboundSchema = z.enum(UpdateShadowMCPAccessRuleFormMatchBreadth);
+export const UpdateShadowMCPAccessRuleFormMatchBreadth$outboundSchema = z.enum(
+  UpdateShadowMCPAccessRuleFormMatchBreadth,
+);
 /** @internal */
-export const UpdateShadowMCPAccessRuleForm$outboundSchema = z.pipe(z.object({
+export const UpdateShadowMCPAccessRuleForm$outboundSchema = z.pipe(
+  z.object({
     accessScope: UpdateShadowMCPAccessRuleFormAccessScope$outboundSchema,
     displayName: z.string(),
     disposition: UpdateShadowMCPAccessRuleFormDisposition$outboundSchema,
@@ -34,19 +41,27 @@ export const UpdateShadowMCPAccessRuleForm$outboundSchema = z.pipe(z.object({
     observedUrlHost: z.optional(z.string()),
     projectId: z.optional(z.string()),
     reason: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        accessScope: "access_scope",
-        displayName: "display_name",
-        matchBreadth: "match_breadth",
-        matchValue: "match_value",
-        observedFullUrl: "observed_full_url",
-        observedServerIdentity: "observed_server_identity",
-        observedUrlHost: "observed_url_host",
-        projectId: "project_id",
+      accessScope: "access_scope",
+      displayName: "display_name",
+      matchBreadth: "match_breadth",
+      matchValue: "match_value",
+      observedFullUrl: "observed_full_url",
+      observedServerIdentity: "observed_server_identity",
+      observedUrlHost: "observed_url_host",
+      projectId: "project_id",
     });
-}));
-export function updateShadowMCPAccessRuleFormToJSON(updateShadowMCPAccessRuleForm) {
-    return JSON.stringify(UpdateShadowMCPAccessRuleForm$outboundSchema.parse(updateShadowMCPAccessRuleForm));
+  }),
+);
+export function updateShadowMCPAccessRuleFormToJSON(
+  updateShadowMCPAccessRuleForm,
+) {
+  return JSON.stringify(
+    UpdateShadowMCPAccessRuleForm$outboundSchema.parse(
+      updateShadowMCPAccessRuleForm,
+    ),
+  );
 }
 //# sourceMappingURL=updateshadowmcpaccessruleform.js.map

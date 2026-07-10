@@ -5,10 +5,14 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const AgentMarketplace$inboundSchema = z.object({
-    name: z.string(),
-    url: z.string(),
+  name: z.string(),
+  url: z.string(),
 });
 export function agentMarketplaceFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => AgentMarketplace$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'AgentMarketplace' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => AgentMarketplace$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AgentMarketplace' from JSON`,
+  );
 }
 //# sourceMappingURL=agentmarketplace.js.map

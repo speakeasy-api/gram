@@ -5,28 +5,41 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 export const AllowedOriginStatus = {
-    Pending: "pending",
-    Approved: "approved",
-    Rejected: "rejected",
+  Pending: "pending",
+  Approved: "approved",
+  Rejected: "rejected",
 };
 /** @internal */
 export const AllowedOriginStatus$inboundSchema = z.enum(AllowedOriginStatus);
 /** @internal */
-export const AllowedOrigin$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const AllowedOrigin$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     id: z.string(),
     origin: z.string(),
     project_id: z.string(),
     status: z._default(AllowedOriginStatus$inboundSchema, "pending"),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "project_id": "projectId",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      project_id: "projectId",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function allowedOriginFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => AllowedOrigin$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'AllowedOrigin' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => AllowedOrigin$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AllowedOrigin' from JSON`,
+  );
 }
 //# sourceMappingURL=allowedorigin.js.map

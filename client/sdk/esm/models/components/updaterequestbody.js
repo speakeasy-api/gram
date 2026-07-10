@@ -7,23 +7,30 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Visibility of the collection
  */
 export const UpdateRequestBodyVisibility = {
-    Public: "public",
-    Private: "private",
+  Public: "public",
+  Private: "private",
 };
 /** @internal */
-export const UpdateRequestBodyVisibility$outboundSchema = z.enum(UpdateRequestBodyVisibility);
+export const UpdateRequestBodyVisibility$outboundSchema = z.enum(
+  UpdateRequestBodyVisibility,
+);
 /** @internal */
-export const UpdateRequestBody$outboundSchema = z.pipe(z.object({
+export const UpdateRequestBody$outboundSchema = z.pipe(
+  z.object({
     collectionId: z.string(),
     description: z.optional(z.string()),
     name: z.optional(z.string()),
     visibility: z.optional(UpdateRequestBodyVisibility$outboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        collectionId: "collection_id",
+      collectionId: "collection_id",
     });
-}));
+  }),
+);
 export function updateRequestBodyToJSON(updateRequestBody) {
-    return JSON.stringify(UpdateRequestBody$outboundSchema.parse(updateRequestBody));
+  return JSON.stringify(
+    UpdateRequestBody$outboundSchema.parse(updateRequestBody),
+  );
 }
 //# sourceMappingURL=updaterequestbody.js.map

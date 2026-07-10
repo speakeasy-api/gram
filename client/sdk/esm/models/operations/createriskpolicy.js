@@ -3,61 +3,93 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateRiskPolicyRequestBody$outboundSchema, } from "../components/createriskpolicyrequestbody.js";
+import { CreateRiskPolicyRequestBody$outboundSchema } from "../components/createriskpolicyrequestbody.js";
 /** @internal */
-export const CreateRiskPolicySecurityOption1$outboundSchema = z.pipe(z.object({
+export const CreateRiskPolicySecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function createRiskPolicySecurityOption1ToJSON(createRiskPolicySecurityOption1) {
-    return JSON.stringify(CreateRiskPolicySecurityOption1$outboundSchema.parse(createRiskPolicySecurityOption1));
+  }),
+);
+export function createRiskPolicySecurityOption1ToJSON(
+  createRiskPolicySecurityOption1,
+) {
+  return JSON.stringify(
+    CreateRiskPolicySecurityOption1$outboundSchema.parse(
+      createRiskPolicySecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const CreateRiskPolicySecurityOption2$outboundSchema = z.pipe(z.object({
+export const CreateRiskPolicySecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function createRiskPolicySecurityOption2ToJSON(createRiskPolicySecurityOption2) {
-    return JSON.stringify(CreateRiskPolicySecurityOption2$outboundSchema.parse(createRiskPolicySecurityOption2));
+  }),
+);
+export function createRiskPolicySecurityOption2ToJSON(
+  createRiskPolicySecurityOption2,
+) {
+  return JSON.stringify(
+    CreateRiskPolicySecurityOption2$outboundSchema.parse(
+      createRiskPolicySecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const CreateRiskPolicySecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => CreateRiskPolicySecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => CreateRiskPolicySecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const CreateRiskPolicySecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => CreateRiskPolicySecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => CreateRiskPolicySecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function createRiskPolicySecurityToJSON(createRiskPolicySecurity) {
-    return JSON.stringify(CreateRiskPolicySecurity$outboundSchema.parse(createRiskPolicySecurity));
+  return JSON.stringify(
+    CreateRiskPolicySecurity$outboundSchema.parse(createRiskPolicySecurity),
+  );
 }
 /** @internal */
-export const CreateRiskPolicyRequest$outboundSchema = z.pipe(z.object({
+export const CreateRiskPolicyRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     createRiskPolicyRequestBody: CreateRiskPolicyRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        createRiskPolicyRequestBody: "CreateRiskPolicyRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      createRiskPolicyRequestBody: "CreateRiskPolicyRequestBody",
     });
-}));
+  }),
+);
 export function createRiskPolicyRequestToJSON(createRiskPolicyRequest) {
-    return JSON.stringify(CreateRiskPolicyRequest$outboundSchema.parse(createRiskPolicyRequest));
+  return JSON.stringify(
+    CreateRiskPolicyRequest$outboundSchema.parse(createRiskPolicyRequest),
+  );
 }
 //# sourceMappingURL=createriskpolicy.js.map

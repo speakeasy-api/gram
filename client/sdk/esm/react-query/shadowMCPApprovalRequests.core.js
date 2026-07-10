@@ -4,37 +4,59 @@
 import { accessListShadowMCPApprovalRequests } from "../funcs/accessListShadowMCPApprovalRequests.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchShadowMCPApprovalRequests(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildShadowMCPApprovalRequestsQuery(client$, request, security, options),
-    });
+export function prefetchShadowMCPApprovalRequests(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildShadowMCPApprovalRequestsQuery(client$, request, security, options),
+  });
 }
-export function buildShadowMCPApprovalRequestsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyShadowMCPApprovalRequests({
-            status: request?.status,
-            projectId: request?.projectId,
-            limit: request?.limit,
-            cursor: request?.cursor,
-            gramSession: request?.gramSession,
-        }),
-        queryFn: async function shadowMCPApprovalRequestsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(accessListShadowMCPApprovalRequests(client$, request, security, mergedOptions));
-        },
-    };
+export function buildShadowMCPApprovalRequestsQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyShadowMCPApprovalRequests({
+      status: request?.status,
+      projectId: request?.projectId,
+      limit: request?.limit,
+      cursor: request?.cursor,
+      gramSession: request?.gramSession,
+    }),
+    queryFn: async function shadowMCPApprovalRequestsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        accessListShadowMCPApprovalRequests(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ),
+      );
+    },
+  };
 }
 export function queryKeyShadowMCPApprovalRequests(parameters) {
-    return [
-        "@gram/client",
-        "access",
-        "listShadowMCPApprovalRequests",
-        parameters,
-    ];
+  return [
+    "@gram/client",
+    "access",
+    "listShadowMCPApprovalRequests",
+    parameters,
+  ];
 }
 //# sourceMappingURL=shadowMCPApprovalRequests.core.js.map

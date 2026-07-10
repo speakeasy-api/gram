@@ -3,14 +3,18 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClaudeToolUsage$inboundSchema, } from "./claudetoolusage.js";
-import { ClaudeTurnUsage$inboundSchema, } from "./claudeturnusage.js";
+import { ClaudeToolUsage$inboundSchema } from "./claudetoolusage.js";
+import { ClaudeTurnUsage$inboundSchema } from "./claudeturnusage.js";
 /** @internal */
 export const ClaudeAgentUsage$inboundSchema = z.object({
-    tools: z.array(ClaudeToolUsage$inboundSchema),
-    turns: z.array(ClaudeTurnUsage$inboundSchema),
+  tools: z.array(ClaudeToolUsage$inboundSchema),
+  turns: z.array(ClaudeTurnUsage$inboundSchema),
 });
 export function claudeAgentUsageFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ClaudeAgentUsage$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ClaudeAgentUsage' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ClaudeAgentUsage$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ClaudeAgentUsage' from JSON`,
+  );
 }
 //# sourceMappingURL=claudeagentusage.js.map

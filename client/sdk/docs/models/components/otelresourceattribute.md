@@ -14,7 +14,7 @@ let value: OTELResourceAttribute = {
 
 ## Fields
 
-| Field                                                                          | Type                                                                           | Required                                                                       | Description                                                                    |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `key`                                                                          | *string*                                                                       | :heavy_check_mark:                                                             | Resource attribute key                                                         |
-| `value`                                                                        | [components.OTELAttributeValue](../../models/components/otelattributevalue.md) | :heavy_minus_sign:                                                             | OTEL attribute value - any of the OTLP/JSON value kinds                        |
+| Field   | Type                                                                           | Required           | Description                                             |
+| ------- | ------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------- |
+| `key`   | _string_                                                                       | :heavy_check_mark: | Resource attribute key                                  |
+| `value` | [components.OTELAttributeValue](../../models/components/otelattributevalue.md) | :heavy_minus_sign: | OTEL attribute value - any of the OTLP/JSON value kinds |

@@ -6,15 +6,23 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { RemoteSession$inboundSchema } from "./remotesession.js";
 /** @internal */
-export const ListOrganizationRemoteSessionsResult$inboundSchema = z.pipe(z.object({
+export const ListOrganizationRemoteSessionsResult$inboundSchema = z.pipe(
+  z.object({
     items: z.array(RemoteSession$inboundSchema),
     next_cursor: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function listOrganizationRemoteSessionsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListOrganizationRemoteSessionsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListOrganizationRemoteSessionsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) =>
+      ListOrganizationRemoteSessionsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListOrganizationRemoteSessionsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listorganizationremotesessionsresult.js.map

@@ -24,6 +24,6 @@ let value: ListAuditLogsResponse = {
 
 ## Fields
 
-| Field                                                                            | Type                                                                             | Required                                                                         | Description                                                                      |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `result`                                                                         | [components.ListAuditLogsResult](../../models/components/listauditlogsresult.md) | :heavy_check_mark:                                                               | N/A                                                                              |
+| Field    | Type                                                                             | Required           | Description |
+| -------- | -------------------------------------------------------------------------------- | ------------------ | ----------- |
+| `result` | [components.ListAuditLogsResult](../../models/components/listauditlogsresult.md) | :heavy_check_mark: | N/A         |

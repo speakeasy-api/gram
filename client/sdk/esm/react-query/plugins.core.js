@@ -4,29 +4,41 @@
 import { pluginsListPlugins } from "../funcs/pluginsListPlugins.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchPlugins(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildPluginsQuery(client$, request, security, options),
-    });
+export function prefetchPlugins(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildPluginsQuery(client$, request, security, options),
+  });
 }
 export function buildPluginsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyPlugins({
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function pluginsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(pluginsListPlugins(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyPlugins({
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function pluginsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        pluginsListPlugins(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyPlugins(parameters) {
-    return ["@gram/client", "plugins", "listPlugins", parameters];
+  return ["@gram/client", "plugins", "listPlugins", parameters];
 }
 //# sourceMappingURL=plugins.core.js.map

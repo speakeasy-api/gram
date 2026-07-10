@@ -4,16 +4,25 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const MigrateLegacyGramRegistrationsForm$outboundSchema = z.pipe(z.object({
+export const MigrateLegacyGramRegistrationsForm$outboundSchema = z.pipe(
+  z.object({
     oauthProxyProviderId: z.string(),
     userSessionIssuerId: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        oauthProxyProviderId: "oauth_proxy_provider_id",
-        userSessionIssuerId: "user_session_issuer_id",
+      oauthProxyProviderId: "oauth_proxy_provider_id",
+      userSessionIssuerId: "user_session_issuer_id",
     });
-}));
-export function migrateLegacyGramRegistrationsFormToJSON(migrateLegacyGramRegistrationsForm) {
-    return JSON.stringify(MigrateLegacyGramRegistrationsForm$outboundSchema.parse(migrateLegacyGramRegistrationsForm));
+  }),
+);
+export function migrateLegacyGramRegistrationsFormToJSON(
+  migrateLegacyGramRegistrationsForm,
+) {
+  return JSON.stringify(
+    MigrateLegacyGramRegistrationsForm$outboundSchema.parse(
+      migrateLegacyGramRegistrationsForm,
+    ),
+  );
 }
 //# sourceMappingURL=migratelegacygramregistrationsform.js.map

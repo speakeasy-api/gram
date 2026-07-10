@@ -5,11 +5,15 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const ValidateKeyOrganization$inboundSchema = z.object({
-    id: z.string(),
-    name: z.string(),
-    slug: z.string(),
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
 });
 export function validateKeyOrganizationFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ValidateKeyOrganization$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ValidateKeyOrganization' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ValidateKeyOrganization$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ValidateKeyOrganization' from JSON`,
+  );
 }
 //# sourceMappingURL=validatekeyorganization.js.map

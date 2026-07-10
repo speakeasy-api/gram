@@ -7,14 +7,17 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * The visibility of an MCP server
  */
 export const CreateMcpServerFormVisibility = {
-    Disabled: "disabled",
-    Private: "private",
-    Public: "public",
+  Disabled: "disabled",
+  Private: "private",
+  Public: "public",
 };
 /** @internal */
-export const CreateMcpServerFormVisibility$outboundSchema = z.enum(CreateMcpServerFormVisibility);
+export const CreateMcpServerFormVisibility$outboundSchema = z.enum(
+  CreateMcpServerFormVisibility,
+);
 /** @internal */
-export const CreateMcpServerForm$outboundSchema = z.pipe(z.object({
+export const CreateMcpServerForm$outboundSchema = z.pipe(
+  z.object({
     environmentId: z.optional(z.string()),
     name: z.string(),
     remoteMcpServerId: z.optional(z.string()),
@@ -23,17 +26,21 @@ export const CreateMcpServerForm$outboundSchema = z.pipe(z.object({
     tunneledMcpServerId: z.optional(z.string()),
     userSessionIssuerId: z.optional(z.string()),
     visibility: CreateMcpServerFormVisibility$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        environmentId: "environment_id",
-        remoteMcpServerId: "remote_mcp_server_id",
-        toolVariationsGroupId: "tool_variations_group_id",
-        toolsetId: "toolset_id",
-        tunneledMcpServerId: "tunneled_mcp_server_id",
-        userSessionIssuerId: "user_session_issuer_id",
+      environmentId: "environment_id",
+      remoteMcpServerId: "remote_mcp_server_id",
+      toolVariationsGroupId: "tool_variations_group_id",
+      toolsetId: "toolset_id",
+      tunneledMcpServerId: "tunneled_mcp_server_id",
+      userSessionIssuerId: "user_session_issuer_id",
     });
-}));
+  }),
+);
 export function createMcpServerFormToJSON(createMcpServerForm) {
-    return JSON.stringify(CreateMcpServerForm$outboundSchema.parse(createMcpServerForm));
+  return JSON.stringify(
+    CreateMcpServerForm$outboundSchema.parse(createMcpServerForm),
+  );
 }
 //# sourceMappingURL=createmcpserverform.js.map

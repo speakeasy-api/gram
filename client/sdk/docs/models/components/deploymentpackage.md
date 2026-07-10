@@ -14,8 +14,8 @@ let value: DeploymentPackage = {
 
 ## Fields
 
-| Field                             | Type                              | Required                          | Description                       |
-| --------------------------------- | --------------------------------- | --------------------------------- | --------------------------------- |
-| `id`                              | *string*                          | :heavy_check_mark:                | The ID of the deployment package. |
-| `name`                            | *string*                          | :heavy_check_mark:                | The name of the package.          |
-| `version`                         | *string*                          | :heavy_check_mark:                | The version of the package.       |
+| Field     | Type     | Required           | Description                       |
+| --------- | -------- | ------------------ | --------------------------------- |
+| `id`      | _string_ | :heavy_check_mark: | The ID of the deployment package. |
+| `name`    | _string_ | :heavy_check_mark: | The name of the package.          |
+| `version` | _string_ | :heavy_check_mark: | The version of the package.       |

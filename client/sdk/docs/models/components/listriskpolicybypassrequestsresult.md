@@ -12,6 +12,6 @@ let value: ListRiskPolicyBypassRequestsResult = {
 
 ## Fields
 
-| Field                                                                                      | Type                                                                                       | Required                                                                                   | Description                                                                                |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `requests`                                                                                 | [components.RiskPolicyBypassRequest](../../models/components/riskpolicybypassrequest.md)[] | :heavy_check_mark:                                                                         | Current risk policy bypass request records.                                                |
+| Field      | Type                                                                                       | Required           | Description                                 |
+| ---------- | ------------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------- |
+| `requests` | [components.RiskPolicyBypassRequest](../../models/components/riskpolicybypassrequest.md)[] | :heavy_check_mark: | Current risk policy bypass request records. |

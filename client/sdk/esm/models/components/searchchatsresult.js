@@ -6,15 +6,22 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { ChatSummary$inboundSchema } from "./chatsummary.js";
 /** @internal */
-export const SearchChatsResult$inboundSchema = z.pipe(z.object({
+export const SearchChatsResult$inboundSchema = z.pipe(
+  z.object({
     chats: z.array(ChatSummary$inboundSchema),
     next_cursor: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function searchChatsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SearchChatsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SearchChatsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SearchChatsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SearchChatsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=searchchatsresult.js.map

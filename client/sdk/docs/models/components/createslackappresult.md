@@ -19,6 +19,6 @@ let value: CreateSlackAppResult = {
 
 ## Fields
 
-| Field                                                                  | Type                                                                   | Required                                                               | Description                                                            |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `app`                                                                  | [components.SlackAppResult](../../models/components/slackappresult.md) | :heavy_check_mark:                                                     | N/A                                                                    |
+| Field | Type                                                                   | Required           | Description |
+| ----- | ---------------------------------------------------------------------- | ------------------ | ----------- |
+| `app` | [components.SlackAppResult](../../models/components/slackappresult.md) | :heavy_check_mark: | N/A         |

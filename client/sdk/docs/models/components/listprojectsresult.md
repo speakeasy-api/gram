@@ -12,6 +12,6 @@ let value: ListProjectsResult = {
 
 ## Fields
 
-| Field                                                                | Type                                                                 | Required                                                             | Description                                                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `projects`                                                           | [components.ProjectEntry](../../models/components/projectentry.md)[] | :heavy_check_mark:                                                   | The list of projects                                                 |
+| Field      | Type                                                                 | Required           | Description          |
+| ---------- | -------------------------------------------------------------------- | ------------------ | -------------------- |
+| `projects` | [components.ProjectEntry](../../models/components/projectentry.md)[] | :heavy_check_mark: | The list of projects |

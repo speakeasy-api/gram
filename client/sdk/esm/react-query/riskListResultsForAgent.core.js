@@ -4,40 +4,57 @@
 import { riskResultsListForAgent } from "../funcs/riskResultsListForAgent.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchRiskListResultsForAgent(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildRiskListResultsForAgentQuery(client$, request, security, options),
-    });
+export function prefetchRiskListResultsForAgent(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildRiskListResultsForAgentQuery(client$, request, security, options),
+  });
 }
-export function buildRiskListResultsForAgentQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyRiskListResultsForAgent({
-            policyId: request?.policyId,
-            chatId: request?.chatId,
-            category: request?.category,
-            ruleId: request?.ruleId,
-            userId: request?.userId,
-            uniqueMatch: request?.uniqueMatch,
-            from: request?.from,
-            to: request?.to,
-            cursor: request?.cursor,
-            limit: request?.limit,
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function riskListResultsForAgentQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(riskResultsListForAgent(client$, request, security, mergedOptions));
-        },
-    };
+export function buildRiskListResultsForAgentQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyRiskListResultsForAgent({
+      policyId: request?.policyId,
+      chatId: request?.chatId,
+      category: request?.category,
+      ruleId: request?.ruleId,
+      userId: request?.userId,
+      uniqueMatch: request?.uniqueMatch,
+      from: request?.from,
+      to: request?.to,
+      cursor: request?.cursor,
+      limit: request?.limit,
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function riskListResultsForAgentQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        riskResultsListForAgent(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyRiskListResultsForAgent(parameters) {
-    return ["@gram/client", "results", "listForAgent", parameters];
+  return ["@gram/client", "results", "listForAgent", parameters];
 }
 //# sourceMappingURL=riskListResultsForAgent.core.js.map

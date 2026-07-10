@@ -4,29 +4,41 @@
 import { accessListRoles } from "../funcs/accessListRoles.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchRoles(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildRolesQuery(client$, request, security, options),
-    });
+export function prefetchRoles(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildRolesQuery(client$, request, security, options),
+  });
 }
 export function buildRolesQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyRoles({
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-        }),
-        queryFn: async function rolesQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(accessListRoles(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyRoles({
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+    }),
+    queryFn: async function rolesQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        accessListRoles(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyRoles(parameters) {
-    return ["@gram/client", "access", "listRoles", parameters];
+  return ["@gram/client", "access", "listRoles", parameters];
 }
 //# sourceMappingURL=roles.core.js.map

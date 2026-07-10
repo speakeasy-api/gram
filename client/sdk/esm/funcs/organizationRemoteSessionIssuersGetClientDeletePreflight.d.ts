@@ -2,7 +2,13 @@ import { GramCore } from "../core.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
-import { ConnectionError, InvalidRequestError, RequestAbortedError, RequestTimeoutError, UnexpectedClientError } from "../models/errors/httpclienterrors.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
 import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
@@ -15,5 +21,25 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Authoritative impact summary for deleting a remote_session_client: associated session count and affected MCP server names. Requires org:read.
  */
-export declare function organizationRemoteSessionIssuersGetClientDeletePreflight(client: GramCore, request: operations.GetOrganizationRemoteSessionClientDeletePreflightRequest, security?: operations.GetOrganizationRemoteSessionClientDeletePreflightSecurity | undefined, options?: RequestOptions): APIPromise<Result<components.OrganizationClientDeletePreflight, errors.ServiceError | GramError | ResponseValidationError | ConnectionError | RequestAbortedError | RequestTimeoutError | InvalidRequestError | UnexpectedClientError | SDKValidationError>>;
+export declare function organizationRemoteSessionIssuersGetClientDeletePreflight(
+  client: GramCore,
+  request: operations.GetOrganizationRemoteSessionClientDeletePreflightRequest,
+  security?:
+    | operations.GetOrganizationRemoteSessionClientDeletePreflightSecurity
+    | undefined,
+  options?: RequestOptions,
+): APIPromise<
+  Result<
+    components.OrganizationClientDeletePreflight,
+    | errors.ServiceError
+    | GramError
+    | ResponseValidationError
+    | ConnectionError
+    | RequestAbortedError
+    | RequestTimeoutError
+    | InvalidRequestError
+    | UnexpectedClientError
+    | SDKValidationError
+  >
+>;
 //# sourceMappingURL=organizationRemoteSessionIssuersGetClientDeletePreflight.d.ts.map

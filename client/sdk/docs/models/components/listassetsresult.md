@@ -22,6 +22,6 @@ let value: ListAssetsResult = {
 
 ## Fields
 
-| Field                                                  | Type                                                   | Required                                               | Description                                            |
-| ------------------------------------------------------ | ------------------------------------------------------ | ------------------------------------------------------ | ------------------------------------------------------ |
-| `assets`                                               | [components.Asset](../../models/components/asset.md)[] | :heavy_check_mark:                                     | The list of assets                                     |
+| Field    | Type                                                   | Required           | Description        |
+| -------- | ------------------------------------------------------ | ------------------ | ------------------ |
+| `assets` | [components.Asset](../../models/components/asset.md)[] | :heavy_check_mark: | The list of assets |

@@ -8,25 +8,34 @@ import { safeParse } from "../../lib/schemas.js";
  * Visibility of the collection
  */
 export const MCPCollectionVisibility = {
-    Public: "public",
-    Private: "private",
+  Public: "public",
+  Private: "private",
 };
 /** @internal */
-export const MCPCollectionVisibility$inboundSchema = z.enum(MCPCollectionVisibility);
+export const MCPCollectionVisibility$inboundSchema = z.enum(
+  MCPCollectionVisibility,
+);
 /** @internal */
-export const MCPCollection$inboundSchema = z.pipe(z.object({
+export const MCPCollection$inboundSchema = z.pipe(
+  z.object({
     description: z.optional(z.string()),
     id: z.string(),
     mcp_registry_namespace: z.optional(z.string()),
     name: z.string(),
     slug: z.string(),
     visibility: MCPCollectionVisibility$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "mcp_registry_namespace": "mcpRegistryNamespace",
+      mcp_registry_namespace: "mcpRegistryNamespace",
     });
-}));
+  }),
+);
 export function mcpCollectionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => MCPCollection$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'MCPCollection' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => MCPCollection$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'MCPCollection' from JSON`,
+  );
 }
 //# sourceMappingURL=mcpcollection.js.map

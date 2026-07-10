@@ -6,16 +6,21 @@ import { QueryMeasures } from "./querymeasures.js";
  * A single time bucket within a series
  */
 export type QueryPoint = {
-    /**
-     * Bucket start time in Unix nanoseconds (string for JS precision)
-     */
-    bucketTimeUnixNano: string;
-    /**
-     * Aggregated measure values for a group or time bucket
-     */
-    measures: QueryMeasures;
+  /**
+   * Bucket start time in Unix nanoseconds (string for JS precision)
+   */
+  bucketTimeUnixNano: string;
+  /**
+   * Aggregated measure values for a group or time bucket
+   */
+  measures: QueryMeasures;
 };
 /** @internal */
-export declare const QueryPoint$inboundSchema: z.ZodMiniType<QueryPoint, unknown>;
-export declare function queryPointFromJSON(jsonString: string): SafeParseResult<QueryPoint, SDKValidationError>;
+export declare const QueryPoint$inboundSchema: z.ZodMiniType<
+  QueryPoint,
+  unknown
+>;
+export declare function queryPointFromJSON(
+  jsonString: string,
+): SafeParseResult<QueryPoint, SDKValidationError>;
 //# sourceMappingURL=querypoint.d.ts.map

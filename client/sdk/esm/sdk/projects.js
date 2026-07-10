@@ -12,77 +12,83 @@ import { projectsUpsertAllowedOrigin } from "../funcs/projectsUpsertAllowedOrigi
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Projects extends ClientSDK {
-    /**
-     * createProject projects
-     *
-     * @remarks
-     * Create a new project.
-     */
-    async create(request, security, options) {
-        return unwrapAsync(projectsCreate(this, request, security, options));
-    }
-    /**
-     * deleteProject projects
-     *
-     * @remarks
-     * Delete a project by its ID
-     */
-    async deleteById(request, security, options) {
-        return unwrapAsync(projectsDeleteById(this, request, security, options));
-    }
-    /**
-     * getProject projects
-     *
-     * @remarks
-     * Get project details by slug.
-     */
-    async read(request, security, options) {
-        return unwrapAsync(projectsRead(this, request, security, options));
-    }
-    /**
-     * listProjects projects
-     *
-     * @remarks
-     * List all projects for an organization.
-     */
-    async list(request, security, options) {
-        return unwrapAsync(projectsList(this, request, security, options));
-    }
-    /**
-     * listAllowedOrigins projects
-     *
-     * @remarks
-     * List allowed origins for a project.
-     */
-    async listAllowedOrigins(request, security, options) {
-        return unwrapAsync(projectsListAllowedOrigins(this, request, security, options));
-    }
-    /**
-     * setLogo projects
-     *
-     * @remarks
-     * Uploads a logo for a project.
-     */
-    async setLogo(request, security, options) {
-        return unwrapAsync(projectsSetLogo(this, request, security, options));
-    }
-    /**
-     * setOrganizationWhitelist projects
-     *
-     * @remarks
-     * Set organization whitelist status (admin only - requires speakeasy-team API key)
-     */
-    async setOrganizationWhitelist(request, security, options) {
-        return unwrapAsync(projectsSetOrganizationWhitelist(this, request, security, options));
-    }
-    /**
-     * upsertAllowedOrigin projects
-     *
-     * @remarks
-     * Upsert an allowed origin for a project.
-     */
-    async upsertAllowedOrigin(request, security, options) {
-        return unwrapAsync(projectsUpsertAllowedOrigin(this, request, security, options));
-    }
+  /**
+   * createProject projects
+   *
+   * @remarks
+   * Create a new project.
+   */
+  async create(request, security, options) {
+    return unwrapAsync(projectsCreate(this, request, security, options));
+  }
+  /**
+   * deleteProject projects
+   *
+   * @remarks
+   * Delete a project by its ID
+   */
+  async deleteById(request, security, options) {
+    return unwrapAsync(projectsDeleteById(this, request, security, options));
+  }
+  /**
+   * getProject projects
+   *
+   * @remarks
+   * Get project details by slug.
+   */
+  async read(request, security, options) {
+    return unwrapAsync(projectsRead(this, request, security, options));
+  }
+  /**
+   * listProjects projects
+   *
+   * @remarks
+   * List all projects for an organization.
+   */
+  async list(request, security, options) {
+    return unwrapAsync(projectsList(this, request, security, options));
+  }
+  /**
+   * listAllowedOrigins projects
+   *
+   * @remarks
+   * List allowed origins for a project.
+   */
+  async listAllowedOrigins(request, security, options) {
+    return unwrapAsync(
+      projectsListAllowedOrigins(this, request, security, options),
+    );
+  }
+  /**
+   * setLogo projects
+   *
+   * @remarks
+   * Uploads a logo for a project.
+   */
+  async setLogo(request, security, options) {
+    return unwrapAsync(projectsSetLogo(this, request, security, options));
+  }
+  /**
+   * setOrganizationWhitelist projects
+   *
+   * @remarks
+   * Set organization whitelist status (admin only - requires speakeasy-team API key)
+   */
+  async setOrganizationWhitelist(request, security, options) {
+    return unwrapAsync(
+      projectsSetOrganizationWhitelist(this, request, security, options),
+    );
+  }
+  /**
+   * upsertAllowedOrigin projects
+   *
+   * @remarks
+   * Upsert an allowed origin for a project.
+   */
+  async upsertAllowedOrigin(request, security, options) {
+    return unwrapAsync(
+      projectsUpsertAllowedOrigin(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=projects.js.map

@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Assistant$inboundSchema } from "./assistant.js";
 /** @internal */
 export const ListAssistantsResult$inboundSchema = z.object({
-    assistants: z.array(Assistant$inboundSchema),
+  assistants: z.array(Assistant$inboundSchema),
 });
 export function listAssistantsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListAssistantsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListAssistantsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListAssistantsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListAssistantsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listassistantsresult.js.map

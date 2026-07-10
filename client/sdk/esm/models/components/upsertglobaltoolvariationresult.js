@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { ToolVariation$inboundSchema } from "./toolvariation.js";
 /** @internal */
 export const UpsertGlobalToolVariationResult$inboundSchema = z.object({
-    variation: ToolVariation$inboundSchema,
+  variation: ToolVariation$inboundSchema,
 });
 export function upsertGlobalToolVariationResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => UpsertGlobalToolVariationResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'UpsertGlobalToolVariationResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => UpsertGlobalToolVariationResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UpsertGlobalToolVariationResult' from JSON`,
+  );
 }
 //# sourceMappingURL=upsertglobaltoolvariationresult.js.map

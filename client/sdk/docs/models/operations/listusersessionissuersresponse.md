@@ -24,6 +24,6 @@ let value: ListUserSessionIssuersResponse = {
 
 ## Fields
 
-| Field                                                                                              | Type                                                                                               | Required                                                                                           | Description                                                                                        |
-| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `result`                                                                                           | [components.ListUserSessionIssuersResult](../../models/components/listusersessionissuersresult.md) | :heavy_check_mark:                                                                                 | N/A                                                                                                |
+| Field    | Type                                                                                               | Required           | Description |
+| -------- | -------------------------------------------------------------------------------------------------- | ------------------ | ----------- |
+| `result` | [components.ListUserSessionIssuersResult](../../models/components/listusersessionissuersresult.md) | :heavy_check_mark: | N/A         |

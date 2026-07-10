@@ -3,63 +3,113 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { DiscoverProtectedResourceMetadataRequestBody$outboundSchema, } from "../components/discoverprotectedresourcemetadatarequestbody.js";
+import { DiscoverProtectedResourceMetadataRequestBody$outboundSchema } from "../components/discoverprotectedresourcemetadatarequestbody.js";
 /** @internal */
-export const DiscoverRemoteMcpProtectedResourceMetadataSecurityOption1$outboundSchema = z.pipe(z.object({
-    projectSlugHeaderGramProject: z.string(),
-    sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
-    return remap$(v, {
+export const DiscoverRemoteMcpProtectedResourceMetadataSecurityOption1$outboundSchema =
+  z.pipe(
+    z.object({
+      projectSlugHeaderGramProject: z.string(),
+      sessionHeaderGramSession: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
         sessionHeaderGramSession: "session_header_Gram-Session",
-    });
-}));
-export function discoverRemoteMcpProtectedResourceMetadataSecurityOption1ToJSON(discoverRemoteMcpProtectedResourceMetadataSecurityOption1) {
-    return JSON.stringify(DiscoverRemoteMcpProtectedResourceMetadataSecurityOption1$outboundSchema
-        .parse(discoverRemoteMcpProtectedResourceMetadataSecurityOption1));
+      });
+    }),
+  );
+export function discoverRemoteMcpProtectedResourceMetadataSecurityOption1ToJSON(
+  discoverRemoteMcpProtectedResourceMetadataSecurityOption1,
+) {
+  return JSON.stringify(
+    DiscoverRemoteMcpProtectedResourceMetadataSecurityOption1$outboundSchema.parse(
+      discoverRemoteMcpProtectedResourceMetadataSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const DiscoverRemoteMcpProtectedResourceMetadataSecurityOption2$outboundSchema = z.pipe(z.object({
-    apikeyHeaderGramKey: z.string(),
-    projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
-    return remap$(v, {
+export const DiscoverRemoteMcpProtectedResourceMetadataSecurityOption2$outboundSchema =
+  z.pipe(
+    z.object({
+      apikeyHeaderGramKey: z.string(),
+      projectSlugHeaderGramProject: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
         projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    });
-}));
-export function discoverRemoteMcpProtectedResourceMetadataSecurityOption2ToJSON(discoverRemoteMcpProtectedResourceMetadataSecurityOption2) {
-    return JSON.stringify(DiscoverRemoteMcpProtectedResourceMetadataSecurityOption2$outboundSchema
-        .parse(discoverRemoteMcpProtectedResourceMetadataSecurityOption2));
+      });
+    }),
+  );
+export function discoverRemoteMcpProtectedResourceMetadataSecurityOption2ToJSON(
+  discoverRemoteMcpProtectedResourceMetadataSecurityOption2,
+) {
+  return JSON.stringify(
+    DiscoverRemoteMcpProtectedResourceMetadataSecurityOption2$outboundSchema.parse(
+      discoverRemoteMcpProtectedResourceMetadataSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const DiscoverRemoteMcpProtectedResourceMetadataSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => DiscoverRemoteMcpProtectedResourceMetadataSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => DiscoverRemoteMcpProtectedResourceMetadataSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
-    return remap$(v, {
+export const DiscoverRemoteMcpProtectedResourceMetadataSecurity$outboundSchema =
+  z.pipe(
+    z.object({
+      option1: z.optional(
+        z.lazy(
+          () =>
+            DiscoverRemoteMcpProtectedResourceMetadataSecurityOption1$outboundSchema,
+        ),
+      ),
+      option2: z.optional(
+        z.lazy(
+          () =>
+            DiscoverRemoteMcpProtectedResourceMetadataSecurityOption2$outboundSchema,
+        ),
+      ),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         option1: "Option1",
         option2: "Option2",
-    });
-}));
-export function discoverRemoteMcpProtectedResourceMetadataSecurityToJSON(discoverRemoteMcpProtectedResourceMetadataSecurity) {
-    return JSON.stringify(DiscoverRemoteMcpProtectedResourceMetadataSecurity$outboundSchema.parse(discoverRemoteMcpProtectedResourceMetadataSecurity));
+      });
+    }),
+  );
+export function discoverRemoteMcpProtectedResourceMetadataSecurityToJSON(
+  discoverRemoteMcpProtectedResourceMetadataSecurity,
+) {
+  return JSON.stringify(
+    DiscoverRemoteMcpProtectedResourceMetadataSecurity$outboundSchema.parse(
+      discoverRemoteMcpProtectedResourceMetadataSecurity,
+    ),
+  );
 }
 /** @internal */
-export const DiscoverRemoteMcpProtectedResourceMetadataRequest$outboundSchema = z.pipe(z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
-    discoverProtectedResourceMetadataRequestBody: DiscoverProtectedResourceMetadataRequestBody$outboundSchema,
-}), z.transform((v) => {
-    return remap$(v, {
+export const DiscoverRemoteMcpProtectedResourceMetadataRequest$outboundSchema =
+  z.pipe(
+    z.object({
+      gramSession: z.optional(z.string()),
+      gramKey: z.optional(z.string()),
+      gramProject: z.optional(z.string()),
+      discoverProtectedResourceMetadataRequestBody:
+        DiscoverProtectedResourceMetadataRequestBody$outboundSchema,
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
         gramProject: "Gram-Project",
-        discoverProtectedResourceMetadataRequestBody: "DiscoverProtectedResourceMetadataRequestBody",
-    });
-}));
-export function discoverRemoteMcpProtectedResourceMetadataRequestToJSON(discoverRemoteMcpProtectedResourceMetadataRequest) {
-    return JSON.stringify(DiscoverRemoteMcpProtectedResourceMetadataRequest$outboundSchema.parse(discoverRemoteMcpProtectedResourceMetadataRequest));
+        discoverProtectedResourceMetadataRequestBody:
+          "DiscoverProtectedResourceMetadataRequestBody",
+      });
+    }),
+  );
+export function discoverRemoteMcpProtectedResourceMetadataRequestToJSON(
+  discoverRemoteMcpProtectedResourceMetadataRequest,
+) {
+  return JSON.stringify(
+    DiscoverRemoteMcpProtectedResourceMetadataRequest$outboundSchema.parse(
+      discoverRemoteMcpProtectedResourceMetadataRequest,
+    ),
+  );
 }
 //# sourceMappingURL=discoverremotemcpprotectedresourcemetadata.js.map

@@ -4,57 +4,91 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetActiveDeploymentSecurityOption1$outboundSchema = z.pipe(z.object({
+export const GetActiveDeploymentSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function getActiveDeploymentSecurityOption1ToJSON(getActiveDeploymentSecurityOption1) {
-    return JSON.stringify(GetActiveDeploymentSecurityOption1$outboundSchema.parse(getActiveDeploymentSecurityOption1));
+  }),
+);
+export function getActiveDeploymentSecurityOption1ToJSON(
+  getActiveDeploymentSecurityOption1,
+) {
+  return JSON.stringify(
+    GetActiveDeploymentSecurityOption1$outboundSchema.parse(
+      getActiveDeploymentSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const GetActiveDeploymentSecurityOption2$outboundSchema = z.pipe(z.object({
+export const GetActiveDeploymentSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function getActiveDeploymentSecurityOption2ToJSON(getActiveDeploymentSecurityOption2) {
-    return JSON.stringify(GetActiveDeploymentSecurityOption2$outboundSchema.parse(getActiveDeploymentSecurityOption2));
+  }),
+);
+export function getActiveDeploymentSecurityOption2ToJSON(
+  getActiveDeploymentSecurityOption2,
+) {
+  return JSON.stringify(
+    GetActiveDeploymentSecurityOption2$outboundSchema.parse(
+      getActiveDeploymentSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const GetActiveDeploymentSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => GetActiveDeploymentSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => GetActiveDeploymentSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const GetActiveDeploymentSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => GetActiveDeploymentSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => GetActiveDeploymentSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function getActiveDeploymentSecurityToJSON(getActiveDeploymentSecurity) {
-    return JSON.stringify(GetActiveDeploymentSecurity$outboundSchema.parse(getActiveDeploymentSecurity));
+  return JSON.stringify(
+    GetActiveDeploymentSecurity$outboundSchema.parse(
+      getActiveDeploymentSecurity,
+    ),
+  );
 }
 /** @internal */
-export const GetActiveDeploymentRequest$outboundSchema = z.pipe(z.object({
+export const GetActiveDeploymentRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function getActiveDeploymentRequestToJSON(getActiveDeploymentRequest) {
-    return JSON.stringify(GetActiveDeploymentRequest$outboundSchema.parse(getActiveDeploymentRequest));
+  return JSON.stringify(
+    GetActiveDeploymentRequest$outboundSchema.parse(getActiveDeploymentRequest),
+  );
 }
 //# sourceMappingURL=getactivedeployment.js.map

@@ -4,25 +4,35 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const EnableRBACSecurity$outboundSchema = z.pipe(z.object({
+export const EnableRBACSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function enableRBACSecurityToJSON(enableRBACSecurity) {
-    return JSON.stringify(EnableRBACSecurity$outboundSchema.parse(enableRBACSecurity));
+  return JSON.stringify(
+    EnableRBACSecurity$outboundSchema.parse(enableRBACSecurity),
+  );
 }
 /** @internal */
-export const EnableRBACRequest$outboundSchema = z.pipe(z.object({
+export const EnableRBACRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function enableRBACRequestToJSON(enableRBACRequest) {
-    return JSON.stringify(EnableRBACRequest$outboundSchema.parse(enableRBACRequest));
+  return JSON.stringify(
+    EnableRBACRequest$outboundSchema.parse(enableRBACRequest),
+  );
 }
 //# sourceMappingURL=enablerbac.js.map

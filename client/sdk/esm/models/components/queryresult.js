@@ -7,19 +7,25 @@ import { safeParse } from "../../lib/schemas.js";
 import { QueryRow$inboundSchema } from "./queryrow.js";
 import { QuerySeries$inboundSchema } from "./queryseries.js";
 /** @internal */
-export const QueryResult$inboundSchema = z
-    .pipe(z.object({
+export const QueryResult$inboundSchema = z.pipe(
+  z.object({
     group_by: z.string(),
     interval_seconds: z.int(),
     table: z.array(QueryRow$inboundSchema),
     timeseries: z.array(QuerySeries$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "group_by": "groupBy",
-        "interval_seconds": "intervalSeconds",
+      group_by: "groupBy",
+      interval_seconds: "intervalSeconds",
     });
-}));
+  }),
+);
 export function queryResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => QueryResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'QueryResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => QueryResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'QueryResult' from JSON`,
+  );
 }
 //# sourceMappingURL=queryresult.js.map

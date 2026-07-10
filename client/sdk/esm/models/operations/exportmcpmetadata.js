@@ -3,61 +3,93 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { ExportMcpMetadataRequestBody$outboundSchema, } from "../components/exportmcpmetadatarequestbody.js";
+import { ExportMcpMetadataRequestBody$outboundSchema } from "../components/exportmcpmetadatarequestbody.js";
 /** @internal */
-export const ExportMcpMetadataSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ExportMcpMetadataSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function exportMcpMetadataSecurityOption1ToJSON(exportMcpMetadataSecurityOption1) {
-    return JSON.stringify(ExportMcpMetadataSecurityOption1$outboundSchema.parse(exportMcpMetadataSecurityOption1));
+  }),
+);
+export function exportMcpMetadataSecurityOption1ToJSON(
+  exportMcpMetadataSecurityOption1,
+) {
+  return JSON.stringify(
+    ExportMcpMetadataSecurityOption1$outboundSchema.parse(
+      exportMcpMetadataSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ExportMcpMetadataSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ExportMcpMetadataSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function exportMcpMetadataSecurityOption2ToJSON(exportMcpMetadataSecurityOption2) {
-    return JSON.stringify(ExportMcpMetadataSecurityOption2$outboundSchema.parse(exportMcpMetadataSecurityOption2));
+  }),
+);
+export function exportMcpMetadataSecurityOption2ToJSON(
+  exportMcpMetadataSecurityOption2,
+) {
+  return JSON.stringify(
+    ExportMcpMetadataSecurityOption2$outboundSchema.parse(
+      exportMcpMetadataSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ExportMcpMetadataSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ExportMcpMetadataSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ExportMcpMetadataSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ExportMcpMetadataSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ExportMcpMetadataSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ExportMcpMetadataSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function exportMcpMetadataSecurityToJSON(exportMcpMetadataSecurity) {
-    return JSON.stringify(ExportMcpMetadataSecurity$outboundSchema.parse(exportMcpMetadataSecurity));
+  return JSON.stringify(
+    ExportMcpMetadataSecurity$outboundSchema.parse(exportMcpMetadataSecurity),
+  );
 }
 /** @internal */
-export const ExportMcpMetadataRequest$outboundSchema = z.pipe(z.object({
+export const ExportMcpMetadataRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     exportMcpMetadataRequestBody: ExportMcpMetadataRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        exportMcpMetadataRequestBody: "ExportMcpMetadataRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      exportMcpMetadataRequestBody: "ExportMcpMetadataRequestBody",
     });
-}));
+  }),
+);
 export function exportMcpMetadataRequestToJSON(exportMcpMetadataRequest) {
-    return JSON.stringify(ExportMcpMetadataRequest$outboundSchema.parse(exportMcpMetadataRequest));
+  return JSON.stringify(
+    ExportMcpMetadataRequest$outboundSchema.parse(exportMcpMetadataRequest),
+  );
 }
 //# sourceMappingURL=exportmcpmetadata.js.map

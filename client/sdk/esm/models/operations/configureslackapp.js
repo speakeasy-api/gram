@@ -5,31 +5,42 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 /** @internal */
-export const ConfigureSlackAppSecurity$outboundSchema = z.pipe(z.object({
+export const ConfigureSlackAppSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function configureSlackAppSecurityToJSON(configureSlackAppSecurity) {
-    return JSON.stringify(ConfigureSlackAppSecurity$outboundSchema.parse(configureSlackAppSecurity));
+  return JSON.stringify(
+    ConfigureSlackAppSecurity$outboundSchema.parse(configureSlackAppSecurity),
+  );
 }
 /** @internal */
-export const ConfigureSlackAppRequest$outboundSchema = z.pipe(z.object({
+export const ConfigureSlackAppRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    configureSlackAppRequestBody: components.ConfigureSlackAppRequestBody$outboundSchema,
-}), z.transform((v) => {
+    configureSlackAppRequestBody:
+      components.ConfigureSlackAppRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        configureSlackAppRequestBody: "ConfigureSlackAppRequestBody",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      configureSlackAppRequestBody: "ConfigureSlackAppRequestBody",
     });
-}));
+  }),
+);
 export function configureSlackAppRequestToJSON(configureSlackAppRequest) {
-    return JSON.stringify(ConfigureSlackAppRequest$outboundSchema.parse(configureSlackAppRequest));
+  return JSON.stringify(
+    ConfigureSlackAppRequest$outboundSchema.parse(configureSlackAppRequest),
+  );
 }
 //# sourceMappingURL=configureslackapp.js.map

@@ -16,12 +16,12 @@ let value: DeploymentFunctions = {
 
 ## Fields
 
-| Field                                                           | Type                                                            | Required                                                        | Description                                                     |
-| --------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
-| `assetId`                                                       | *string*                                                        | :heavy_check_mark:                                              | The ID of the uploaded asset.                                   |
-| `id`                                                            | *string*                                                        | :heavy_check_mark:                                              | The ID of the deployment asset.                                 |
-| `memoryMib`                                                     | *number*                                                        | :heavy_minus_sign:                                              | The memory limit in MiB of function runner machines.            |
-| `name`                                                          | *string*                                                        | :heavy_check_mark:                                              | The name to give the document as it will be displayed in UIs.   |
-| `runtime`                                                       | *string*                                                        | :heavy_check_mark:                                              | The runtime to use when executing functions.                    |
-| `scale`                                                         | *number*                                                        | :heavy_minus_sign:                                              | The number of instances to run for the function.                |
-| `slug`                                                          | *string*                                                        | :heavy_check_mark:                                              | A short url-friendly label that uniquely identifies a resource. |
+| Field       | Type     | Required           | Description                                                     |
+| ----------- | -------- | ------------------ | --------------------------------------------------------------- |
+| `assetId`   | _string_ | :heavy_check_mark: | The ID of the uploaded asset.                                   |
+| `id`        | _string_ | :heavy_check_mark: | The ID of the deployment asset.                                 |
+| `memoryMib` | _number_ | :heavy_minus_sign: | The memory limit in MiB of function runner machines.            |
+| `name`      | _string_ | :heavy_check_mark: | The name to give the document as it will be displayed in UIs.   |
+| `runtime`   | _string_ | :heavy_check_mark: | The runtime to use when executing functions.                    |
+| `scale`     | _number_ | :heavy_minus_sign: | The number of instances to run for the function.                |
+| `slug`      | _string_ | :heavy_check_mark: | A short url-friendly label that uniquely identifies a resource. |

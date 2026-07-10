@@ -3,61 +3,93 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { ListFilterOptionsPayload$outboundSchema, } from "../components/listfilteroptionspayload.js";
+import { ListFilterOptionsPayload$outboundSchema } from "../components/listfilteroptionspayload.js";
 /** @internal */
-export const ListFilterOptionsSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListFilterOptionsSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listFilterOptionsSecurityOption1ToJSON(listFilterOptionsSecurityOption1) {
-    return JSON.stringify(ListFilterOptionsSecurityOption1$outboundSchema.parse(listFilterOptionsSecurityOption1));
+  }),
+);
+export function listFilterOptionsSecurityOption1ToJSON(
+  listFilterOptionsSecurityOption1,
+) {
+  return JSON.stringify(
+    ListFilterOptionsSecurityOption1$outboundSchema.parse(
+      listFilterOptionsSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListFilterOptionsSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListFilterOptionsSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listFilterOptionsSecurityOption2ToJSON(listFilterOptionsSecurityOption2) {
-    return JSON.stringify(ListFilterOptionsSecurityOption2$outboundSchema.parse(listFilterOptionsSecurityOption2));
+  }),
+);
+export function listFilterOptionsSecurityOption2ToJSON(
+  listFilterOptionsSecurityOption2,
+) {
+  return JSON.stringify(
+    ListFilterOptionsSecurityOption2$outboundSchema.parse(
+      listFilterOptionsSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListFilterOptionsSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListFilterOptionsSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListFilterOptionsSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListFilterOptionsSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListFilterOptionsSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListFilterOptionsSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function listFilterOptionsSecurityToJSON(listFilterOptionsSecurity) {
-    return JSON.stringify(ListFilterOptionsSecurity$outboundSchema.parse(listFilterOptionsSecurity));
+  return JSON.stringify(
+    ListFilterOptionsSecurity$outboundSchema.parse(listFilterOptionsSecurity),
+  );
 }
 /** @internal */
-export const ListFilterOptionsRequest$outboundSchema = z.pipe(z.object({
+export const ListFilterOptionsRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     listFilterOptionsPayload: ListFilterOptionsPayload$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        listFilterOptionsPayload: "ListFilterOptionsPayload",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      listFilterOptionsPayload: "ListFilterOptionsPayload",
     });
-}));
+  }),
+);
 export function listFilterOptionsRequestToJSON(listFilterOptionsRequest) {
-    return JSON.stringify(ListFilterOptionsRequest$outboundSchema.parse(listFilterOptionsRequest));
+  return JSON.stringify(
+    ListFilterOptionsRequest$outboundSchema.parse(listFilterOptionsRequest),
+  );
 }
 //# sourceMappingURL=listfilteroptions.js.map

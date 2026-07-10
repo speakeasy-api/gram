@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { OtelForwardingDestination$inboundSchema, } from "./otelforwardingdestination.js";
+import { OtelForwardingDestination$inboundSchema } from "./otelforwardingdestination.js";
 /** @internal */
 export const OtelForwardingDestinationList$inboundSchema = z.object({
-    destinations: z.array(OtelForwardingDestination$inboundSchema),
+  destinations: z.array(OtelForwardingDestination$inboundSchema),
 });
 export function otelForwardingDestinationListFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => OtelForwardingDestinationList$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'OtelForwardingDestinationList' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => OtelForwardingDestinationList$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'OtelForwardingDestinationList' from JSON`,
+  );
 }
 //# sourceMappingURL=otelforwardingdestinationlist.js.map

@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const AuditLog$inboundSchema = z.pipe(z.object({
+export const AuditLog$inboundSchema = z.pipe(
+  z.object({
     action: z.string(),
     actor_display_name: z.optional(z.string()),
     actor_id: z.string(),
@@ -13,7 +14,10 @@ export const AuditLog$inboundSchema = z.pipe(z.object({
     actor_type: z.string(),
     after_snapshot: z.optional(z.any()),
     before_snapshot: z.optional(z.any()),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     id: z.string(),
     metadata: z.optional(z.record(z.string(), z.any())),
     project_id: z.optional(z.string()),
@@ -22,24 +26,30 @@ export const AuditLog$inboundSchema = z.pipe(z.object({
     subject_id: z.string(),
     subject_slug: z.optional(z.string()),
     subject_type: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "actor_display_name": "actorDisplayName",
-        "actor_id": "actorId",
-        "actor_slug": "actorSlug",
-        "actor_type": "actorType",
-        "after_snapshot": "afterSnapshot",
-        "before_snapshot": "beforeSnapshot",
-        "created_at": "createdAt",
-        "project_id": "projectId",
-        "project_slug": "projectSlug",
-        "subject_display_name": "subjectDisplayName",
-        "subject_id": "subjectId",
-        "subject_slug": "subjectSlug",
-        "subject_type": "subjectType",
+      actor_display_name: "actorDisplayName",
+      actor_id: "actorId",
+      actor_slug: "actorSlug",
+      actor_type: "actorType",
+      after_snapshot: "afterSnapshot",
+      before_snapshot: "beforeSnapshot",
+      created_at: "createdAt",
+      project_id: "projectId",
+      project_slug: "projectSlug",
+      subject_display_name: "subjectDisplayName",
+      subject_id: "subjectId",
+      subject_slug: "subjectSlug",
+      subject_type: "subjectType",
     });
-}));
+  }),
+);
 export function auditLogFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => AuditLog$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'AuditLog' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => AuditLog$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AuditLog' from JSON`,
+  );
 }
 //# sourceMappingURL=auditlog.js.map

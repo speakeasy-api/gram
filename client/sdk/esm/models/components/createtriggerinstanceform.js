@@ -7,22 +7,27 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Optional initial status.
  */
 export const CreateTriggerInstanceFormStatus = {
-    Active: "active",
-    Paused: "paused",
+  Active: "active",
+  Paused: "paused",
 };
 /**
  * The trigger target kind.
  */
 export const CreateTriggerInstanceFormTargetKind = {
-    Assistant: "assistant",
-    Noop: "noop",
+  Assistant: "assistant",
+  Noop: "noop",
 };
 /** @internal */
-export const CreateTriggerInstanceFormStatus$outboundSchema = z.enum(CreateTriggerInstanceFormStatus);
+export const CreateTriggerInstanceFormStatus$outboundSchema = z.enum(
+  CreateTriggerInstanceFormStatus,
+);
 /** @internal */
-export const CreateTriggerInstanceFormTargetKind$outboundSchema = z.enum(CreateTriggerInstanceFormTargetKind);
+export const CreateTriggerInstanceFormTargetKind$outboundSchema = z.enum(
+  CreateTriggerInstanceFormTargetKind,
+);
 /** @internal */
-export const CreateTriggerInstanceForm$outboundSchema = z.pipe(z.object({
+export const CreateTriggerInstanceForm$outboundSchema = z.pipe(
+  z.object({
     config: z.record(z.string(), z.any()),
     definitionSlug: z.string(),
     environmentId: z.optional(z.string()),
@@ -31,16 +36,20 @@ export const CreateTriggerInstanceForm$outboundSchema = z.pipe(z.object({
     targetDisplay: z.string(),
     targetKind: CreateTriggerInstanceFormTargetKind$outboundSchema,
     targetRef: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        definitionSlug: "definition_slug",
-        environmentId: "environment_id",
-        targetDisplay: "target_display",
-        targetKind: "target_kind",
-        targetRef: "target_ref",
+      definitionSlug: "definition_slug",
+      environmentId: "environment_id",
+      targetDisplay: "target_display",
+      targetKind: "target_kind",
+      targetRef: "target_ref",
     });
-}));
+  }),
+);
 export function createTriggerInstanceFormToJSON(createTriggerInstanceForm) {
-    return JSON.stringify(CreateTriggerInstanceForm$outboundSchema.parse(createTriggerInstanceForm));
+  return JSON.stringify(
+    CreateTriggerInstanceForm$outboundSchema.parse(createTriggerInstanceForm),
+  );
 }
 //# sourceMappingURL=createtriggerinstanceform.js.map

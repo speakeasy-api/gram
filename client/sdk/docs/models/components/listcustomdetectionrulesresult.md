@@ -23,6 +23,6 @@ let value: ListCustomDetectionRulesResult = {
 
 ## Fields
 
-| Field                                                                                      | Type                                                                                       | Required                                                                                   | Description                                                                                |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `rules`                                                                                    | [components.RiskCustomDetectionRule](../../models/components/riskcustomdetectionrule.md)[] | :heavy_check_mark:                                                                         | The list of custom detection rules.                                                        |
+| Field   | Type                                                                                       | Required           | Description                         |
+| ------- | ------------------------------------------------------------------------------------------ | ------------------ | ----------------------------------- |
+| `rules` | [components.RiskCustomDetectionRule](../../models/components/riskcustomdetectionrule.md)[] | :heavy_check_mark: | The list of custom detection rules. |

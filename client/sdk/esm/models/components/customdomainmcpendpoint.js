@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const CustomDomainMcpEndpoint$inboundSchema = z.pipe(z.object({
+export const CustomDomainMcpEndpoint$inboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     mcp_server_id: z.string(),
     mcp_server_name: z.optional(z.string()),
@@ -14,17 +15,23 @@ export const CustomDomainMcpEndpoint$inboundSchema = z.pipe(z.object({
     project_name: z.string(),
     project_slug: z.string(),
     slug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "mcp_server_id": "mcpServerId",
-        "mcp_server_name": "mcpServerName",
-        "mcp_server_slug": "mcpServerSlug",
-        "project_id": "projectId",
-        "project_name": "projectName",
-        "project_slug": "projectSlug",
+      mcp_server_id: "mcpServerId",
+      mcp_server_name: "mcpServerName",
+      mcp_server_slug: "mcpServerSlug",
+      project_id: "projectId",
+      project_name: "projectName",
+      project_slug: "projectSlug",
     });
-}));
+  }),
+);
 export function customDomainMcpEndpointFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => CustomDomainMcpEndpoint$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'CustomDomainMcpEndpoint' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => CustomDomainMcpEndpoint$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CustomDomainMcpEndpoint' from JSON`,
+  );
 }
 //# sourceMappingURL=customdomainmcpendpoint.js.map

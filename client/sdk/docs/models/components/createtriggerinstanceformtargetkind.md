@@ -13,5 +13,5 @@ let value: CreateTriggerInstanceFormTargetKind = "noop";
 ## Values
 
 ```typescript
-"assistant" | "noop"
+"assistant" | "noop";
 ```

@@ -3,13 +3,17 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { AuditLogFacetOption$inboundSchema, } from "./auditlogfacetoption.js";
+import { AuditLogFacetOption$inboundSchema } from "./auditlogfacetoption.js";
 /** @internal */
 export const ListAuditLogFacetsResult$inboundSchema = z.object({
-    actions: z.array(AuditLogFacetOption$inboundSchema),
-    actors: z.array(AuditLogFacetOption$inboundSchema),
+  actions: z.array(AuditLogFacetOption$inboundSchema),
+  actors: z.array(AuditLogFacetOption$inboundSchema),
 });
 export function listAuditLogFacetsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListAuditLogFacetsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListAuditLogFacetsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListAuditLogFacetsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListAuditLogFacetsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listauditlogfacetsresult.js.map

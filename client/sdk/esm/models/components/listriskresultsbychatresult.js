@@ -4,17 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { RiskChatSummary$inboundSchema, } from "./riskchatsummary.js";
+import { RiskChatSummary$inboundSchema } from "./riskchatsummary.js";
 /** @internal */
-export const ListRiskResultsByChatResult$inboundSchema = z.pipe(z.object({
+export const ListRiskResultsByChatResult$inboundSchema = z.pipe(
+  z.object({
     chats: z.array(RiskChatSummary$inboundSchema),
     next_cursor: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function listRiskResultsByChatResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListRiskResultsByChatResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListRiskResultsByChatResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListRiskResultsByChatResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListRiskResultsByChatResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listriskresultsbychatresult.js.map

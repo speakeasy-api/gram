@@ -5,19 +5,26 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const RiskSpan$inboundSchema = z.pipe(z.object({
+export const RiskSpan$inboundSchema = z.pipe(
+  z.object({
     end_pos: z.optional(z.int()),
     field: z.optional(z.string()),
     match: z.string(),
     path: z.optional(z.string()),
     start_pos: z.optional(z.int()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "end_pos": "endPos",
-        "start_pos": "startPos",
+      end_pos: "endPos",
+      start_pos: "startPos",
     });
-}));
+  }),
+);
 export function riskSpanFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskSpan$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskSpan' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskSpan$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskSpan' from JSON`,
+  );
 }
 //# sourceMappingURL=riskspan.js.map

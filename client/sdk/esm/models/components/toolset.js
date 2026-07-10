@@ -4,27 +4,35 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ExternalMCPHeaderDefinition$inboundSchema, } from "./externalmcpheaderdefinition.js";
-import { ExternalOAuthServer$inboundSchema, } from "./externaloauthserver.js";
-import { FunctionEnvironmentVariable$inboundSchema, } from "./functionenvironmentvariable.js";
-import { OAuthEnablementMetadata$inboundSchema, } from "./oauthenablementmetadata.js";
-import { OAuthProxyServer$inboundSchema, } from "./oauthproxyserver.js";
-import { PromptTemplate$inboundSchema, } from "./prompttemplate.js";
+import { ExternalMCPHeaderDefinition$inboundSchema } from "./externalmcpheaderdefinition.js";
+import { ExternalOAuthServer$inboundSchema } from "./externaloauthserver.js";
+import { FunctionEnvironmentVariable$inboundSchema } from "./functionenvironmentvariable.js";
+import { OAuthEnablementMetadata$inboundSchema } from "./oauthenablementmetadata.js";
+import { OAuthProxyServer$inboundSchema } from "./oauthproxyserver.js";
+import { PromptTemplate$inboundSchema } from "./prompttemplate.js";
 import { Resource$inboundSchema } from "./resource.js";
-import { SecurityVariable$inboundSchema, } from "./securityvariable.js";
-import { ServerVariable$inboundSchema, } from "./servervariable.js";
+import { SecurityVariable$inboundSchema } from "./securityvariable.js";
+import { ServerVariable$inboundSchema } from "./servervariable.js";
 import { Tool$inboundSchema } from "./tool.js";
 import { ToolsetOrigin$inboundSchema } from "./toolsetorigin.js";
 /** @internal */
-export const Toolset$inboundSchema = z.pipe(z.object({
+export const Toolset$inboundSchema = z.pipe(
+  z.object({
     account_type: z.string(),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     custom_domain_id: z.optional(z.string()),
     default_environment_slug: z.optional(z.string()),
     description: z.optional(z.string()),
-    external_mcp_header_definitions: z.optional(z.array(ExternalMCPHeaderDefinition$inboundSchema)),
+    external_mcp_header_definitions: z.optional(
+      z.array(ExternalMCPHeaderDefinition$inboundSchema),
+    ),
     external_oauth_server: z.optional(ExternalOAuthServer$inboundSchema),
-    function_environment_variables: z.optional(z.array(FunctionEnvironmentVariable$inboundSchema)),
+    function_environment_variables: z.optional(
+      z.array(FunctionEnvironmentVariable$inboundSchema),
+    ),
     id: z.string(),
     mcp_enabled: z.optional(z.boolean()),
     mcp_is_public: z.optional(z.boolean()),
@@ -46,39 +54,48 @@ export const Toolset$inboundSchema = z.pipe(z.object({
     tool_variations_group_id: z.optional(z.string()),
     tools: z.array(Tool$inboundSchema),
     toolset_version: z.int(),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     user_session_issuer_id: z.optional(z.string()),
     user_session_issuer_slug: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "account_type": "accountType",
-        "created_at": "createdAt",
-        "custom_domain_id": "customDomainId",
-        "default_environment_slug": "defaultEnvironmentSlug",
-        "external_mcp_header_definitions": "externalMcpHeaderDefinitions",
-        "external_oauth_server": "externalOauthServer",
-        "function_environment_variables": "functionEnvironmentVariables",
-        "mcp_enabled": "mcpEnabled",
-        "mcp_is_public": "mcpIsPublic",
-        "mcp_slug": "mcpSlug",
-        "oauth_enablement_metadata": "oauthEnablementMetadata",
-        "oauth_proxy_server": "oauthProxyServer",
-        "organization_id": "organizationId",
-        "project_id": "projectId",
-        "prompt_templates": "promptTemplates",
-        "resource_urns": "resourceUrns",
-        "security_variables": "securityVariables",
-        "server_variables": "serverVariables",
-        "tool_selection_mode": "toolSelectionMode",
-        "tool_urns": "toolUrns",
-        "tool_variations_group_id": "toolVariationsGroupId",
-        "toolset_version": "toolsetVersion",
-        "updated_at": "updatedAt",
-        "user_session_issuer_id": "userSessionIssuerId",
-        "user_session_issuer_slug": "userSessionIssuerSlug",
+      account_type: "accountType",
+      created_at: "createdAt",
+      custom_domain_id: "customDomainId",
+      default_environment_slug: "defaultEnvironmentSlug",
+      external_mcp_header_definitions: "externalMcpHeaderDefinitions",
+      external_oauth_server: "externalOauthServer",
+      function_environment_variables: "functionEnvironmentVariables",
+      mcp_enabled: "mcpEnabled",
+      mcp_is_public: "mcpIsPublic",
+      mcp_slug: "mcpSlug",
+      oauth_enablement_metadata: "oauthEnablementMetadata",
+      oauth_proxy_server: "oauthProxyServer",
+      organization_id: "organizationId",
+      project_id: "projectId",
+      prompt_templates: "promptTemplates",
+      resource_urns: "resourceUrns",
+      security_variables: "securityVariables",
+      server_variables: "serverVariables",
+      tool_selection_mode: "toolSelectionMode",
+      tool_urns: "toolUrns",
+      tool_variations_group_id: "toolVariationsGroupId",
+      toolset_version: "toolsetVersion",
+      updated_at: "updatedAt",
+      user_session_issuer_id: "userSessionIssuerId",
+      user_session_issuer_slug: "userSessionIssuerSlug",
     });
-}));
+  }),
+);
 export function toolsetFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => Toolset$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'Toolset' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => Toolset$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'Toolset' from JSON`,
+  );
 }
 //# sourceMappingURL=toolset.js.map

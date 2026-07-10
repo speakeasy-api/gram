@@ -36,6 +36,6 @@ let value: EvolveResult = {
 
 ## Fields
 
-| Field                                                          | Type                                                           | Required                                                       | Description                                                    |
-| -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
-| `deployment`                                                   | [components.Deployment](../../models/components/deployment.md) | :heavy_minus_sign:                                             | N/A                                                            |
+| Field        | Type                                                           | Required           | Description |
+| ------------ | -------------------------------------------------------------- | ------------------ | ----------- |
+| `deployment` | [components.Deployment](../../models/components/deployment.md) | :heavy_minus_sign: | N/A         |

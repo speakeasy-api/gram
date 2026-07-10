@@ -3,61 +3,101 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpsertGlobalToolVariationForm$outboundSchema, } from "../components/upsertglobaltoolvariationform.js";
+import { UpsertGlobalToolVariationForm$outboundSchema } from "../components/upsertglobaltoolvariationform.js";
 /** @internal */
-export const UpsertGlobalVariationSecurityOption1$outboundSchema = z.pipe(z.object({
+export const UpsertGlobalVariationSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function upsertGlobalVariationSecurityOption1ToJSON(upsertGlobalVariationSecurityOption1) {
-    return JSON.stringify(UpsertGlobalVariationSecurityOption1$outboundSchema.parse(upsertGlobalVariationSecurityOption1));
+  }),
+);
+export function upsertGlobalVariationSecurityOption1ToJSON(
+  upsertGlobalVariationSecurityOption1,
+) {
+  return JSON.stringify(
+    UpsertGlobalVariationSecurityOption1$outboundSchema.parse(
+      upsertGlobalVariationSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const UpsertGlobalVariationSecurityOption2$outboundSchema = z.pipe(z.object({
+export const UpsertGlobalVariationSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function upsertGlobalVariationSecurityOption2ToJSON(upsertGlobalVariationSecurityOption2) {
-    return JSON.stringify(UpsertGlobalVariationSecurityOption2$outboundSchema.parse(upsertGlobalVariationSecurityOption2));
+  }),
+);
+export function upsertGlobalVariationSecurityOption2ToJSON(
+  upsertGlobalVariationSecurityOption2,
+) {
+  return JSON.stringify(
+    UpsertGlobalVariationSecurityOption2$outboundSchema.parse(
+      upsertGlobalVariationSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const UpsertGlobalVariationSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => UpsertGlobalVariationSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => UpsertGlobalVariationSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const UpsertGlobalVariationSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => UpsertGlobalVariationSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => UpsertGlobalVariationSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function upsertGlobalVariationSecurityToJSON(upsertGlobalVariationSecurity) {
-    return JSON.stringify(UpsertGlobalVariationSecurity$outboundSchema.parse(upsertGlobalVariationSecurity));
+  }),
+);
+export function upsertGlobalVariationSecurityToJSON(
+  upsertGlobalVariationSecurity,
+) {
+  return JSON.stringify(
+    UpsertGlobalVariationSecurity$outboundSchema.parse(
+      upsertGlobalVariationSecurity,
+    ),
+  );
 }
 /** @internal */
-export const UpsertGlobalVariationRequest$outboundSchema = z.pipe(z.object({
+export const UpsertGlobalVariationRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     upsertGlobalToolVariationForm: UpsertGlobalToolVariationForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        upsertGlobalToolVariationForm: "UpsertGlobalToolVariationForm",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      upsertGlobalToolVariationForm: "UpsertGlobalToolVariationForm",
     });
-}));
-export function upsertGlobalVariationRequestToJSON(upsertGlobalVariationRequest) {
-    return JSON.stringify(UpsertGlobalVariationRequest$outboundSchema.parse(upsertGlobalVariationRequest));
+  }),
+);
+export function upsertGlobalVariationRequestToJSON(
+  upsertGlobalVariationRequest,
+) {
+  return JSON.stringify(
+    UpsertGlobalVariationRequest$outboundSchema.parse(
+      upsertGlobalVariationRequest,
+    ),
+  );
 }
 //# sourceMappingURL=upsertglobalvariation.js.map

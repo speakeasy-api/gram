@@ -4,10 +4,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ExternalMCPRemote$inboundSchema, } from "./externalmcpremote.js";
-import { ExternalMCPTool$inboundSchema, } from "./externalmcptool.js";
+import { ExternalMCPRemote$inboundSchema } from "./externalmcpremote.js";
+import { ExternalMCPTool$inboundSchema } from "./externalmcptool.js";
 /** @internal */
-export const ExternalMCPServer$inboundSchema = z.pipe(z.object({
+export const ExternalMCPServer$inboundSchema = z.pipe(
+  z.object({
     description: z.string(),
     icon_url: z.optional(z.string()),
     mcp_server_id: z.optional(z.string()),
@@ -20,17 +21,24 @@ export const ExternalMCPServer$inboundSchema = z.pipe(z.object({
     tools: z.optional(z.array(ExternalMCPTool$inboundSchema)),
     toolset_id: z.optional(z.string()),
     version: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "icon_url": "iconUrl",
-        "mcp_server_id": "mcpServerId",
-        "organization_mcp_collection_registry_id": "organizationMcpCollectionRegistryId",
-        "registry_id": "registryId",
-        "registry_specifier": "registrySpecifier",
-        "toolset_id": "toolsetId",
+      icon_url: "iconUrl",
+      mcp_server_id: "mcpServerId",
+      organization_mcp_collection_registry_id:
+        "organizationMcpCollectionRegistryId",
+      registry_id: "registryId",
+      registry_specifier: "registrySpecifier",
+      toolset_id: "toolsetId",
     });
-}));
+  }),
+);
 export function externalMCPServerFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ExternalMCPServer$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ExternalMCPServer' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ExternalMCPServer$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ExternalMCPServer' from JSON`,
+  );
 }
 //# sourceMappingURL=externalmcpserver.js.map

@@ -4,9 +4,13 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const CreateTunneledMcpServerForm$outboundSchema = z.object({
-    name: z.string(),
+  name: z.string(),
 });
 export function createTunneledMcpServerFormToJSON(createTunneledMcpServerForm) {
-    return JSON.stringify(CreateTunneledMcpServerForm$outboundSchema.parse(createTunneledMcpServerForm));
+  return JSON.stringify(
+    CreateTunneledMcpServerForm$outboundSchema.parse(
+      createTunneledMcpServerForm,
+    ),
+  );
 }
 //# sourceMappingURL=createtunneledmcpserverform.js.map

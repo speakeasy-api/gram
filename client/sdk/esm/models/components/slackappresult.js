@@ -5,8 +5,12 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const SlackAppResult$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const SlackAppResult$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     icon_asset_id: z.optional(z.string()),
     id: z.string(),
     name: z.string(),
@@ -18,22 +22,31 @@ export const SlackAppResult$inboundSchema = z.pipe(z.object({
     status: z.string(),
     system_prompt: z.optional(z.string()),
     toolset_ids: z.array(z.string()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "icon_asset_id": "iconAssetId",
-        "redirect_url": "redirectUrl",
-        "request_url": "requestUrl",
-        "slack_client_id": "slackClientId",
-        "slack_team_id": "slackTeamId",
-        "slack_team_name": "slackTeamName",
-        "system_prompt": "systemPrompt",
-        "toolset_ids": "toolsetIds",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      icon_asset_id: "iconAssetId",
+      redirect_url: "redirectUrl",
+      request_url: "requestUrl",
+      slack_client_id: "slackClientId",
+      slack_team_id: "slackTeamId",
+      slack_team_name: "slackTeamName",
+      system_prompt: "systemPrompt",
+      toolset_ids: "toolsetIds",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function slackAppResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SlackAppResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SlackAppResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SlackAppResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SlackAppResult' from JSON`,
+  );
 }
 //# sourceMappingURL=slackappresult.js.map

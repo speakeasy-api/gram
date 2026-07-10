@@ -3,33 +3,43 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpdateRequestBody$outboundSchema, } from "../components/updaterequestbody.js";
+import { UpdateRequestBody$outboundSchema } from "../components/updaterequestbody.js";
 /** @internal */
-export const UpdateCollectionSecurity$outboundSchema = z.pipe(z.object({
+export const UpdateCollectionSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
     apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
     });
-}));
+  }),
+);
 export function updateCollectionSecurityToJSON(updateCollectionSecurity) {
-    return JSON.stringify(UpdateCollectionSecurity$outboundSchema.parse(updateCollectionSecurity));
+  return JSON.stringify(
+    UpdateCollectionSecurity$outboundSchema.parse(updateCollectionSecurity),
+  );
 }
 /** @internal */
-export const UpdateCollectionRequest$outboundSchema = z.pipe(z.object({
+export const UpdateCollectionRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     updateRequestBody: UpdateRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        updateRequestBody: "UpdateRequestBody",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      updateRequestBody: "UpdateRequestBody",
     });
-}));
+  }),
+);
 export function updateCollectionRequestToJSON(updateCollectionRequest) {
-    return JSON.stringify(UpdateCollectionRequest$outboundSchema.parse(updateCollectionRequest));
+  return JSON.stringify(
+    UpdateCollectionRequest$outboundSchema.parse(updateCollectionRequest),
+  );
 }
 //# sourceMappingURL=updatecollection.js.map

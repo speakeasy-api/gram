@@ -6,17 +6,24 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { QueryMeasures$inboundSchema } from "./querymeasures.js";
 /** @internal */
-export const QueryRow$inboundSchema = z.pipe(z.object({
+export const QueryRow$inboundSchema = z.pipe(
+  z.object({
     dimension_values: z.record(z.string(), z.array(z.string())),
     group_value: z.string(),
     measures: QueryMeasures$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "dimension_values": "dimensionValues",
-        "group_value": "groupValue",
+      dimension_values: "dimensionValues",
+      group_value: "groupValue",
     });
-}));
+  }),
+);
 export function queryRowFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => QueryRow$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'QueryRow' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => QueryRow$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'QueryRow' from JSON`,
+  );
 }
 //# sourceMappingURL=queryrow.js.map

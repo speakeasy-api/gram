@@ -4,16 +4,21 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const WorkflowAgentToolset$outboundSchema = z.pipe(z.object({
+export const WorkflowAgentToolset$outboundSchema = z.pipe(
+  z.object({
     environmentSlug: z.string(),
     toolsetSlug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        environmentSlug: "environment_slug",
-        toolsetSlug: "toolset_slug",
+      environmentSlug: "environment_slug",
+      toolsetSlug: "toolset_slug",
     });
-}));
+  }),
+);
 export function workflowAgentToolsetToJSON(workflowAgentToolset) {
-    return JSON.stringify(WorkflowAgentToolset$outboundSchema.parse(workflowAgentToolset));
+  return JSON.stringify(
+    WorkflowAgentToolset$outboundSchema.parse(workflowAgentToolset),
+  );
 }
 //# sourceMappingURL=workflowagenttoolset.js.map

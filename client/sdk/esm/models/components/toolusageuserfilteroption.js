@@ -8,28 +8,35 @@ import { safeParse } from "../../lib/schemas.js";
  * Tool usage user identity kind
  */
 export const UserKind = {
-    Email: "email",
-    ExternalUserId: "external_user_id",
-    UserId: "user_id",
-    Unknown: "unknown",
+  Email: "email",
+  ExternalUserId: "external_user_id",
+  UserId: "user_id",
+  Unknown: "unknown",
 };
 /** @internal */
 export const UserKind$inboundSchema = z.enum(UserKind);
 /** @internal */
-export const ToolUsageUserFilterOption$inboundSchema = z.pipe(z.object({
+export const ToolUsageUserFilterOption$inboundSchema = z.pipe(
+  z.object({
     event_count: z.int(),
     user_key: z.string(),
     user_kind: UserKind$inboundSchema,
     user_label: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "event_count": "eventCount",
-        "user_key": "userKey",
-        "user_kind": "userKind",
-        "user_label": "userLabel",
+      event_count: "eventCount",
+      user_key: "userKey",
+      user_kind: "userKind",
+      user_label: "userLabel",
     });
-}));
+  }),
+);
 export function toolUsageUserFilterOptionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolUsageUserFilterOption$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolUsageUserFilterOption' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolUsageUserFilterOption$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolUsageUserFilterOption' from JSON`,
+  );
 }
 //# sourceMappingURL=toolusageuserfilteroption.js.map

@@ -8,18 +8,14 @@ Authoritative impact summary for deleting a remote_session_client: how many sess
 import { OrganizationClientDeletePreflight } from "@gram/client/models/components/organizationclientdeletepreflight.js";
 
 let value: OrganizationClientDeletePreflight = {
-  mcpServerNames: [
-    "<value 1>",
-    "<value 2>",
-    "<value 3>",
-  ],
+  mcpServerNames: ["<value 1>", "<value 2>", "<value 3>"],
   sessionCount: 125813,
 };
 ```
 
 ## Fields
 
-| Field                                                             | Type                                                              | Required                                                          | Description                                                       |
-| ----------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `mcpServerNames`                                                  | *string*[]                                                        | :heavy_check_mark:                                                | Display names of MCP servers this client is attached to.          |
-| `sessionCount`                                                    | *number*                                                          | :heavy_check_mark:                                                | Number of non-deleted remote_sessions minted against this client. |
+| Field            | Type       | Required           | Description                                                       |
+| ---------------- | ---------- | ------------------ | ----------------------------------------------------------------- |
+| `mcpServerNames` | _string_[] | :heavy_check_mark: | Display names of MCP servers this client is attached to.          |
+| `sessionCount`   | _number_   | :heavy_check_mark: | Number of non-deleted remote_sessions minted against this client. |

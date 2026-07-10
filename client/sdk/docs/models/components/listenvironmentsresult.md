@@ -32,6 +32,6 @@ let value: ListEnvironmentsResult = {
 
 ## Fields
 
-| Field                                                              | Type                                                               | Required                                                           | Description                                                        |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `environments`                                                     | [components.Environment](../../models/components/environment.md)[] | :heavy_check_mark:                                                 | N/A                                                                |
+| Field          | Type                                                               | Required           | Description |
+| -------------- | ------------------------------------------------------------------ | ------------------ | ----------- |
+| `environments` | [components.Environment](../../models/components/environment.md)[] | :heavy_check_mark: | N/A         |

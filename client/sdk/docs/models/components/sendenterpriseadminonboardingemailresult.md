@@ -13,7 +13,7 @@ let value: SendEnterpriseAdminOnboardingEmailResult = {
 
 ## Fields
 
-| Field                                             | Type                                              | Required                                          | Description                                       |
-| ------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------- |
-| `sentCount`                                       | *number*                                          | :heavy_check_mark:                                | Number of recipients the email was dispatched to. |
-| `setupLink`                                       | *string*                                          | :heavy_check_mark:                                | The setup link embedded in the dispatched email.  |
+| Field       | Type     | Required           | Description                                       |
+| ----------- | -------- | ------------------ | ------------------------------------------------- |
+| `sentCount` | _number_ | :heavy_check_mark: | Number of recipients the email was dispatched to. |
+| `setupLink` | _string_ | :heavy_check_mark: | The setup link embedded in the dispatched email.  |

@@ -4,16 +4,21 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CaptureEventPayload$outboundSchema = z.pipe(z.object({
+export const CaptureEventPayload$outboundSchema = z.pipe(
+  z.object({
     distinctId: z.optional(z.string()),
     event: z.string(),
     properties: z.optional(z.record(z.string(), z.any())),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        distinctId: "distinct_id",
+      distinctId: "distinct_id",
     });
-}));
+  }),
+);
 export function captureEventPayloadToJSON(captureEventPayload) {
-    return JSON.stringify(CaptureEventPayload$outboundSchema.parse(captureEventPayload));
+  return JSON.stringify(
+    CaptureEventPayload$outboundSchema.parse(captureEventPayload),
+  );
 }
 //# sourceMappingURL=captureeventpayload.js.map

@@ -13,5 +13,5 @@ let value: Tier = "client";
 ## Values
 
 ```typescript
-"origin" | "client" | "server" | "tool"
+"origin" | "client" | "server" | "tool";
 ```

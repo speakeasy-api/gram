@@ -4,14 +4,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const SetToolVariationsGroupRequestBody$outboundSchema = z.pipe(z.object({
+export const SetToolVariationsGroupRequestBody$outboundSchema = z.pipe(
+  z.object({
     toolVariationsGroupId: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        toolVariationsGroupId: "tool_variations_group_id",
+      toolVariationsGroupId: "tool_variations_group_id",
     });
-}));
-export function setToolVariationsGroupRequestBodyToJSON(setToolVariationsGroupRequestBody) {
-    return JSON.stringify(SetToolVariationsGroupRequestBody$outboundSchema.parse(setToolVariationsGroupRequestBody));
+  }),
+);
+export function setToolVariationsGroupRequestBodyToJSON(
+  setToolVariationsGroupRequestBody,
+) {
+  return JSON.stringify(
+    SetToolVariationsGroupRequestBody$outboundSchema.parse(
+      setToolVariationsGroupRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=settoolvariationsgrouprequestbody.js.map

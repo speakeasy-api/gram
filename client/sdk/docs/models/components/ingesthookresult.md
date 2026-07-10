@@ -14,9 +14,9 @@ let value: IngestHookResult = {
 
 ## Fields
 
-| Field                                                      | Type                                                       | Required                                                   | Description                                                |
-| ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
-| `decision`                                                 | [components.Decision](../../models/components/decision.md) | :heavy_check_mark:                                         | Whether the local hook should allow or deny the action.    |
-| `effects`                                                  | Record<string, *any*>                                      | :heavy_minus_sign:                                         | Optional side-effect hints for hook SDKs.                  |
-| `message`                                                  | *string*                                                   | :heavy_minus_sign:                                         | User-facing decision message.                              |
-| `reason`                                                   | *string*                                                   | :heavy_minus_sign:                                         | Machine-readable decision reason.                          |
+| Field      | Type                                                       | Required           | Description                                             |
+| ---------- | ---------------------------------------------------------- | ------------------ | ------------------------------------------------------- |
+| `decision` | [components.Decision](../../models/components/decision.md) | :heavy_check_mark: | Whether the local hook should allow or deny the action. |
+| `effects`  | Record<string, _any_>                                      | :heavy_minus_sign: | Optional side-effect hints for hook SDKs.               |
+| `message`  | _string_                                                   | :heavy_minus_sign: | User-facing decision message.                           |
+| `reason`   | _string_                                                   | :heavy_minus_sign: | Machine-readable decision reason.                       |

@@ -3,33 +3,43 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpdateRoleForm$outboundSchema, } from "../components/updateroleform.js";
+import { UpdateRoleForm$outboundSchema } from "../components/updateroleform.js";
 /** @internal */
-export const UpdateRoleSecurity$outboundSchema = z.pipe(z.object({
+export const UpdateRoleSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function updateRoleSecurityToJSON(updateRoleSecurity) {
-    return JSON.stringify(UpdateRoleSecurity$outboundSchema.parse(updateRoleSecurity));
+  return JSON.stringify(
+    UpdateRoleSecurity$outboundSchema.parse(updateRoleSecurity),
+  );
 }
 /** @internal */
-export const UpdateRoleRequest$outboundSchema = z.pipe(z.object({
+export const UpdateRoleRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     updateRoleForm: UpdateRoleForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        updateRoleForm: "UpdateRoleForm",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      updateRoleForm: "UpdateRoleForm",
     });
-}));
+  }),
+);
 export function updateRoleRequestToJSON(updateRoleRequest) {
-    return JSON.stringify(UpdateRoleRequest$outboundSchema.parse(updateRoleRequest));
+  return JSON.stringify(
+    UpdateRoleRequest$outboundSchema.parse(updateRoleRequest),
+  );
 }
 //# sourceMappingURL=updaterole.js.map

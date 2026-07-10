@@ -12,8 +12,8 @@ let value: GetProjectRequest = {
 
 ## Fields
 
-| Field                          | Type                           | Required                       | Description                    |
-| ------------------------------ | ------------------------------ | ------------------------------ | ------------------------------ |
-| `slug`                         | *string*                       | :heavy_check_mark:             | The slug of the project to get |
-| `gramKey`                      | *string*                       | :heavy_minus_sign:             | API Key header                 |
-| `gramSession`                  | *string*                       | :heavy_minus_sign:             | Session header                 |
+| Field         | Type     | Required           | Description                    |
+| ------------- | -------- | ------------------ | ------------------------------ |
+| `slug`        | _string_ | :heavy_check_mark: | The slug of the project to get |
+| `gramKey`     | _string_ | :heavy_minus_sign: | API Key header                 |
+| `gramSession` | _string_ | :heavy_minus_sign: | Session header                 |

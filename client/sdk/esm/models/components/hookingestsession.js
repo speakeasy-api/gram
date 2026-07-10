@@ -4,17 +4,22 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const HookIngestSession$outboundSchema = z.pipe(z.object({
+export const HookIngestSession$outboundSchema = z.pipe(
+  z.object({
     cwd: z.optional(z.string()),
     id: z.optional(z.string()),
     model: z.optional(z.string()),
     turnId: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        turnId: "turn_id",
+      turnId: "turn_id",
     });
-}));
+  }),
+);
 export function hookIngestSessionToJSON(hookIngestSession) {
-    return JSON.stringify(HookIngestSession$outboundSchema.parse(hookIngestSession));
+  return JSON.stringify(
+    HookIngestSession$outboundSchema.parse(hookIngestSession),
+  );
 }
 //# sourceMappingURL=hookingestsession.js.map

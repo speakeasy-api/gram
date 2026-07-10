@@ -11,5 +11,5 @@ let value: CreateShadowMCPAccessRuleFormAccessScope = "project";
 ## Values
 
 ```typescript
-"organization" | "project"
+"organization" | "project";
 ```

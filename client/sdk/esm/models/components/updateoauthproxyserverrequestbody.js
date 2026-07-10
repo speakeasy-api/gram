@@ -3,16 +3,25 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { OAuthProxyServerUpdateForm$outboundSchema, } from "./oauthproxyserverupdateform.js";
+import { OAuthProxyServerUpdateForm$outboundSchema } from "./oauthproxyserverupdateform.js";
 /** @internal */
-export const UpdateOAuthProxyServerRequestBody$outboundSchema = z.pipe(z.object({
+export const UpdateOAuthProxyServerRequestBody$outboundSchema = z.pipe(
+  z.object({
     oauthProxyServer: OAuthProxyServerUpdateForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        oauthProxyServer: "oauth_proxy_server",
+      oauthProxyServer: "oauth_proxy_server",
     });
-}));
-export function updateOAuthProxyServerRequestBodyToJSON(updateOAuthProxyServerRequestBody) {
-    return JSON.stringify(UpdateOAuthProxyServerRequestBody$outboundSchema.parse(updateOAuthProxyServerRequestBody));
+  }),
+);
+export function updateOAuthProxyServerRequestBodyToJSON(
+  updateOAuthProxyServerRequestBody,
+) {
+  return JSON.stringify(
+    UpdateOAuthProxyServerRequestBody$outboundSchema.parse(
+      updateOAuthProxyServerRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=updateoauthproxyserverrequestbody.js.map

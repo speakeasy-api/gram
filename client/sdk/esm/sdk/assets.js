@@ -16,113 +16,121 @@ import { assetsUploadOpenAPIv3 } from "../funcs/assetsUploadOpenAPIv3.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Assets extends ClientSDK {
-    /**
-     * createSignedChatAttachmentURL assets
-     *
-     * @remarks
-     * Create a time-limited signed URL to access a chat attachment without authentication.
-     */
-    async createSignedChatAttachmentURL(request, security, options) {
-        return unwrapAsync(assetsCreateSignedChatAttachmentURL(this, request, security, options));
-    }
-    /**
-     * fetchOpenAPIv3FromURL assets
-     *
-     * @remarks
-     * Fetch an OpenAPI v3 document from a URL and upload it to Gram.
-     */
-    async fetchOpenAPIv3FromURL(request, security, options) {
-        return unwrapAsync(assetsFetchOpenAPIv3FromURL(this, request, security, options));
-    }
-    /**
-     * listAssets assets
-     *
-     * @remarks
-     * List all assets for a project.
-     */
-    async listAssets(request, security, options) {
-        return unwrapAsync(assetsListAssets(this, request, security, options));
-    }
-    /**
-     * serveChatAttachment assets
-     *
-     * @remarks
-     * Serve a chat attachment from Gram.
-     */
-    async serveChatAttachment(request, security, options) {
-        return unwrapAsync(assetsServeChatAttachment(this, request, security, options));
-    }
-    /**
-     * serveChatAttachmentSigned assets
-     *
-     * @remarks
-     * Serve a chat attachment using a signed URL token.
-     */
-    async serveChatAttachmentSigned(request, options) {
-        return unwrapAsync(assetsServeChatAttachmentSigned(this, request, options));
-    }
-    /**
-     * serveFunction assets
-     *
-     * @remarks
-     * Serve a Gram Functions asset from Gram.
-     */
-    async serveFunction(request, security, options) {
-        return unwrapAsync(assetsServeFunction(this, request, security, options));
-    }
-    /**
-     * serveImage assets
-     *
-     * @remarks
-     * Serve an image from Gram.
-     */
-    async serveImage(request, options) {
-        return unwrapAsync(assetsServeImage(this, request, options));
-    }
-    /**
-     * serveOpenAPIv3 assets
-     *
-     * @remarks
-     * Serve an OpenAPIv3 asset from Gram.
-     */
-    async serveOpenAPIv3(request, security, options) {
-        return unwrapAsync(assetsServeOpenAPIv3(this, request, security, options));
-    }
-    /**
-     * uploadChatAttachment assets
-     *
-     * @remarks
-     * Upload a chat attachment to Gram.
-     */
-    async uploadChatAttachment(request, security, options) {
-        return unwrapAsync(assetsUploadChatAttachment(this, request, security, options));
-    }
-    /**
-     * uploadFunctions assets
-     *
-     * @remarks
-     * Upload functions to Gram.
-     */
-    async uploadFunctions(request, security, options) {
-        return unwrapAsync(assetsUploadFunctions(this, request, security, options));
-    }
-    /**
-     * uploadImage assets
-     *
-     * @remarks
-     * Upload an image to Gram.
-     */
-    async uploadImage(request, security, options) {
-        return unwrapAsync(assetsUploadImage(this, request, security, options));
-    }
-    /**
-     * uploadOpenAPIv3 assets
-     *
-     * @remarks
-     * Upload an OpenAPI v3 document to Gram.
-     */
-    async uploadOpenAPIv3(request, security, options) {
-        return unwrapAsync(assetsUploadOpenAPIv3(this, request, security, options));
-    }
+  /**
+   * createSignedChatAttachmentURL assets
+   *
+   * @remarks
+   * Create a time-limited signed URL to access a chat attachment without authentication.
+   */
+  async createSignedChatAttachmentURL(request, security, options) {
+    return unwrapAsync(
+      assetsCreateSignedChatAttachmentURL(this, request, security, options),
+    );
+  }
+  /**
+   * fetchOpenAPIv3FromURL assets
+   *
+   * @remarks
+   * Fetch an OpenAPI v3 document from a URL and upload it to Gram.
+   */
+  async fetchOpenAPIv3FromURL(request, security, options) {
+    return unwrapAsync(
+      assetsFetchOpenAPIv3FromURL(this, request, security, options),
+    );
+  }
+  /**
+   * listAssets assets
+   *
+   * @remarks
+   * List all assets for a project.
+   */
+  async listAssets(request, security, options) {
+    return unwrapAsync(assetsListAssets(this, request, security, options));
+  }
+  /**
+   * serveChatAttachment assets
+   *
+   * @remarks
+   * Serve a chat attachment from Gram.
+   */
+  async serveChatAttachment(request, security, options) {
+    return unwrapAsync(
+      assetsServeChatAttachment(this, request, security, options),
+    );
+  }
+  /**
+   * serveChatAttachmentSigned assets
+   *
+   * @remarks
+   * Serve a chat attachment using a signed URL token.
+   */
+  async serveChatAttachmentSigned(request, options) {
+    return unwrapAsync(assetsServeChatAttachmentSigned(this, request, options));
+  }
+  /**
+   * serveFunction assets
+   *
+   * @remarks
+   * Serve a Gram Functions asset from Gram.
+   */
+  async serveFunction(request, security, options) {
+    return unwrapAsync(assetsServeFunction(this, request, security, options));
+  }
+  /**
+   * serveImage assets
+   *
+   * @remarks
+   * Serve an image from Gram.
+   */
+  async serveImage(request, options) {
+    return unwrapAsync(assetsServeImage(this, request, options));
+  }
+  /**
+   * serveOpenAPIv3 assets
+   *
+   * @remarks
+   * Serve an OpenAPIv3 asset from Gram.
+   */
+  async serveOpenAPIv3(request, security, options) {
+    return unwrapAsync(assetsServeOpenAPIv3(this, request, security, options));
+  }
+  /**
+   * uploadChatAttachment assets
+   *
+   * @remarks
+   * Upload a chat attachment to Gram.
+   */
+  async uploadChatAttachment(request, security, options) {
+    return unwrapAsync(
+      assetsUploadChatAttachment(this, request, security, options),
+    );
+  }
+  /**
+   * uploadFunctions assets
+   *
+   * @remarks
+   * Upload functions to Gram.
+   */
+  async uploadFunctions(request, security, options) {
+    return unwrapAsync(assetsUploadFunctions(this, request, security, options));
+  }
+  /**
+   * uploadImage assets
+   *
+   * @remarks
+   * Upload an image to Gram.
+   */
+  async uploadImage(request, security, options) {
+    return unwrapAsync(assetsUploadImage(this, request, security, options));
+  }
+  /**
+   * uploadOpenAPIv3 assets
+   *
+   * @remarks
+   * Upload an OpenAPI v3 document to Gram.
+   */
+  async uploadOpenAPIv3(request, security, options) {
+    return unwrapAsync(assetsUploadOpenAPIv3(this, request, security, options));
+  }
 }
 //# sourceMappingURL=assets.js.map

@@ -13,5 +13,5 @@ let value: RiskPolicyBypassRequestStatus = "denied";
 ## Values
 
 ```typescript
-"requested" | "approved" | "denied" | "revoked"
+"requested" | "approved" | "denied" | "revoked";
 ```

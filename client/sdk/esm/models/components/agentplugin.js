@@ -5,16 +5,22 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const AgentPlugin$inboundSchema = z
-    .pipe(z.object({
+export const AgentPlugin$inboundSchema = z.pipe(
+  z.object({
     marketplace_name: z.string(),
     slug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "marketplace_name": "marketplaceName",
+      marketplace_name: "marketplaceName",
     });
-}));
+  }),
+);
 export function agentPluginFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => AgentPlugin$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'AgentPlugin' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => AgentPlugin$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AgentPlugin' from JSON`,
+  );
 }
 //# sourceMappingURL=agentplugin.js.map

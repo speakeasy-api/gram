@@ -6,15 +6,13 @@
 import { ListToolsResult } from "@gram/client/models/components/listtoolsresult.js";
 
 let value: ListToolsResult = {
-  tools: [
-    {},
-  ],
+  tools: [{}],
 };
 ```
 
 ## Fields
 
-| Field                                                                    | Type                                                                     | Required                                                                 | Description                                                              |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| `nextCursor`                                                             | *string*                                                                 | :heavy_minus_sign:                                                       | The cursor to fetch results from                                         |
-| `tools`                                                                  | [components.Tool](../../models/components/tool.md)[]                     | :heavy_check_mark:                                                       | The list of tools (polymorphic union of HTTP tools and prompt templates) |
+| Field        | Type                                                 | Required           | Description                                                              |
+| ------------ | ---------------------------------------------------- | ------------------ | ------------------------------------------------------------------------ |
+| `nextCursor` | _string_                                             | :heavy_minus_sign: | The cursor to fetch results from                                         |
+| `tools`      | [components.Tool](../../models/components/tool.md)[] | :heavy_check_mark: | The list of tools (polymorphic union of HTTP tools and prompt templates) |

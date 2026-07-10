@@ -13,5 +13,5 @@ let value: ResourceType = "project";
 ## Values
 
 ```typescript
-"org" | "project" | "mcp" | "environment" | "risk_policy" | "chat"
+"org" | "project" | "mcp" | "environment" | "risk_policy" | "chat";
 ```

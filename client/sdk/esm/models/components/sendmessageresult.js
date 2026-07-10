@@ -5,17 +5,24 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const SendMessageResult$inboundSchema = z.pipe(z.object({
+export const SendMessageResult$inboundSchema = z.pipe(
+  z.object({
     accepted: z.boolean(),
     chat_id: z.string(),
     thread_id: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "chat_id": "chatId",
-        "thread_id": "threadId",
+      chat_id: "chatId",
+      thread_id: "threadId",
     });
-}));
+  }),
+);
 export function sendMessageResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SendMessageResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SendMessageResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SendMessageResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SendMessageResult' from JSON`,
+  );
 }
 //# sourceMappingURL=sendmessageresult.js.map

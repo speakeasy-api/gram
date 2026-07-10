@@ -12,6 +12,6 @@ let value: UpdateOAuthProxyServerRequestBody = {
 
 ## Fields
 
-| Field                                                                                          | Type                                                                                           | Required                                                                                       | Description                                                                                    |
-| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `oauthProxyServer`                                                                             | [components.OAuthProxyServerUpdateForm](../../models/components/oauthproxyserverupdateform.md) | :heavy_check_mark:                                                                             | N/A                                                                                            |
+| Field              | Type                                                                                           | Required           | Description |
+| ------------------ | ---------------------------------------------------------------------------------------------- | ------------------ | ----------- |
+| `oauthProxyServer` | [components.OAuthProxyServerUpdateForm](../../models/components/oauthproxyserverupdateform.md) | :heavy_check_mark: | N/A         |

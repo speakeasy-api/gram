@@ -4,19 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const SendMessageRequestBody$outboundSchema = z.pipe(z.object({
+export const SendMessageRequestBody$outboundSchema = z.pipe(
+  z.object({
     assistantId: z.string(),
     chatId: z.optional(z.string()),
     idempotencyKey: z.optional(z.string()),
     message: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        assistantId: "assistant_id",
-        chatId: "chat_id",
-        idempotencyKey: "idempotency_key",
+      assistantId: "assistant_id",
+      chatId: "chat_id",
+      idempotencyKey: "idempotency_key",
     });
-}));
+  }),
+);
 export function sendMessageRequestBodyToJSON(sendMessageRequestBody) {
-    return JSON.stringify(SendMessageRequestBody$outboundSchema.parse(sendMessageRequestBody));
+  return JSON.stringify(
+    SendMessageRequestBody$outboundSchema.parse(sendMessageRequestBody),
+  );
 }
 //# sourceMappingURL=sendmessagerequestbody.js.map

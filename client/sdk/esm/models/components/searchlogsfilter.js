@@ -7,36 +7,40 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * HTTP method filter
  */
 export const HttpMethod = {
-    Get: "GET",
-    Post: "POST",
-    Put: "PUT",
-    Patch: "PATCH",
-    Delete: "DELETE",
-    Head: "HEAD",
-    Options: "OPTIONS",
+  Get: "GET",
+  Post: "POST",
+  Put: "PUT",
+  Patch: "PATCH",
+  Delete: "DELETE",
+  Head: "HEAD",
+  Options: "OPTIONS",
 };
 /**
  * Severity level filter
  */
 export const SeverityText = {
-    Debug: "DEBUG",
-    Info: "INFO",
-    Warn: "WARN",
-    Error: "ERROR",
-    Fatal: "FATAL",
+  Debug: "DEBUG",
+  Info: "INFO",
+  Warn: "WARN",
+  Error: "ERROR",
+  Fatal: "FATAL",
 };
 /** @internal */
-export const HttpMethod$outboundSchema = z
-    .enum(HttpMethod);
+export const HttpMethod$outboundSchema = z.enum(HttpMethod);
 /** @internal */
-export const SeverityText$outboundSchema = z
-    .enum(SeverityText);
+export const SeverityText$outboundSchema = z.enum(SeverityText);
 /** @internal */
-export const SearchLogsFilter$outboundSchema = z.pipe(z.object({
+export const SearchLogsFilter$outboundSchema = z.pipe(
+  z.object({
     deploymentId: z.optional(z.string()),
     eventSource: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
-    from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    from: z.optional(
+      z.pipe(
+        z.date(),
+        z.transform((v) => v.toISOString()),
+      ),
+    ),
     functionId: z.optional(z.string()),
     gramChatId: z.optional(z.string()),
     gramUrn: z.optional(z.string()),
@@ -46,28 +50,37 @@ export const SearchLogsFilter$outboundSchema = z.pipe(z.object({
     httpStatusCode: z.optional(z.int()),
     serviceName: z.optional(z.string()),
     severityText: z.optional(SeverityText$outboundSchema),
-    to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    to: z.optional(
+      z.pipe(
+        z.date(),
+        z.transform((v) => v.toISOString()),
+      ),
+    ),
     traceId: z.optional(z.string()),
     userId: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        deploymentId: "deployment_id",
-        eventSource: "event_source",
-        externalUserId: "external_user_id",
-        functionId: "function_id",
-        gramChatId: "gram_chat_id",
-        gramUrn: "gram_urn",
-        gramUrns: "gram_urns",
-        httpMethod: "http_method",
-        httpRoute: "http_route",
-        httpStatusCode: "http_status_code",
-        serviceName: "service_name",
-        severityText: "severity_text",
-        traceId: "trace_id",
-        userId: "user_id",
+      deploymentId: "deployment_id",
+      eventSource: "event_source",
+      externalUserId: "external_user_id",
+      functionId: "function_id",
+      gramChatId: "gram_chat_id",
+      gramUrn: "gram_urn",
+      gramUrns: "gram_urns",
+      httpMethod: "http_method",
+      httpRoute: "http_route",
+      httpStatusCode: "http_status_code",
+      serviceName: "service_name",
+      severityText: "severity_text",
+      traceId: "trace_id",
+      userId: "user_id",
     });
-}));
+  }),
+);
 export function searchLogsFilterToJSON(searchLogsFilter) {
-    return JSON.stringify(SearchLogsFilter$outboundSchema.parse(searchLogsFilter));
+  return JSON.stringify(
+    SearchLogsFilter$outboundSchema.parse(searchLogsFilter),
+  );
 }
 //# sourceMappingURL=searchlogsfilter.js.map

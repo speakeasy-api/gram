@@ -4,7 +4,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const UpdateToolsetRequestBody$outboundSchema = z.pipe(z.object({
+export const UpdateToolsetRequestBody$outboundSchema = z.pipe(
+  z.object({
     customDomainId: z.optional(z.string()),
     defaultEnvironmentSlug: z.optional(z.string()),
     description: z.optional(z.string()),
@@ -16,20 +17,24 @@ export const UpdateToolsetRequestBody$outboundSchema = z.pipe(z.object({
     resourceUrns: z.optional(z.array(z.string())),
     toolSelectionMode: z.optional(z.string()),
     toolUrns: z.optional(z.array(z.string())),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        customDomainId: "custom_domain_id",
-        defaultEnvironmentSlug: "default_environment_slug",
-        mcpEnabled: "mcp_enabled",
-        mcpIsPublic: "mcp_is_public",
-        mcpSlug: "mcp_slug",
-        promptTemplateNames: "prompt_template_names",
-        resourceUrns: "resource_urns",
-        toolSelectionMode: "tool_selection_mode",
-        toolUrns: "tool_urns",
+      customDomainId: "custom_domain_id",
+      defaultEnvironmentSlug: "default_environment_slug",
+      mcpEnabled: "mcp_enabled",
+      mcpIsPublic: "mcp_is_public",
+      mcpSlug: "mcp_slug",
+      promptTemplateNames: "prompt_template_names",
+      resourceUrns: "resource_urns",
+      toolSelectionMode: "tool_selection_mode",
+      toolUrns: "tool_urns",
     });
-}));
+  }),
+);
 export function updateToolsetRequestBodyToJSON(updateToolsetRequestBody) {
-    return JSON.stringify(UpdateToolsetRequestBody$outboundSchema.parse(updateToolsetRequestBody));
+  return JSON.stringify(
+    UpdateToolsetRequestBody$outboundSchema.parse(updateToolsetRequestBody),
+  );
 }
 //# sourceMappingURL=updatetoolsetrequestbody.js.map

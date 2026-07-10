@@ -4,17 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { TraceSummaryRecord$inboundSchema, } from "./tracesummaryrecord.js";
+import { TraceSummaryRecord$inboundSchema } from "./tracesummaryrecord.js";
 /** @internal */
-export const ListTracesResult$inboundSchema = z.pipe(z.object({
+export const ListTracesResult$inboundSchema = z.pipe(
+  z.object({
     next_cursor: z.optional(z.string()),
     traces: z.array(TraceSummaryRecord$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        next_cursor: "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function listTracesResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListTracesResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListTracesResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListTracesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListTracesResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listtracesresult.js.map

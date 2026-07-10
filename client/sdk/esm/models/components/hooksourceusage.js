@@ -5,15 +5,22 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const HookSourceUsage$inboundSchema = z.pipe(z.object({
+export const HookSourceUsage$inboundSchema = z.pipe(
+  z.object({
     event_count: z.int(),
     source: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "event_count": "eventCount",
+      event_count: "eventCount",
     });
-}));
+  }),
+);
 export function hookSourceUsageFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => HookSourceUsage$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'HookSourceUsage' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => HookSourceUsage$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'HookSourceUsage' from JSON`,
+  );
 }
 //# sourceMappingURL=hooksourceusage.js.map

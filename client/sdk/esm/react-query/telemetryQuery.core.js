@@ -4,26 +4,38 @@
 import { telemetryQuery } from "../funcs/telemetryQuery.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchTelemetryQuery(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildTelemetryQueryQuery(client$, request, security, options),
-    });
+export function prefetchTelemetryQuery(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildTelemetryQueryQuery(client$, request, security, options),
+  });
 }
 export function buildTelemetryQueryQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyTelemetryQuery({ gramSession: request.gramSession }),
-        queryFn: async function telemetryQueryQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(telemetryQuery(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyTelemetryQuery({ gramSession: request.gramSession }),
+    queryFn: async function telemetryQueryQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        telemetryQuery(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyTelemetryQuery(parameters) {
-    return ["@gram/client", "telemetry", "query", parameters];
+  return ["@gram/client", "telemetry", "query", parameters];
 }
 //# sourceMappingURL=telemetryQuery.core.js.map

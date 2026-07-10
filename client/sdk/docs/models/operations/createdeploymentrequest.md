@@ -13,9 +13,7 @@ let value: CreateDeploymentRequest = {
       {
         name: "My Slack Integration",
         registryServerSpecifier: "slack",
-        selectedRemotes: [
-          "https://mcp.example.com/sse",
-        ],
+        selectedRemotes: ["https://mcp.example.com/sse"],
         slug: "<value>",
       },
     ],
@@ -29,10 +27,10 @@ let value: CreateDeploymentRequest = {
 
 ## Fields
 
-| Field                                                                                            | Type                                                                                             | Required                                                                                         | Description                                                                                      | Example                                                                                          |
-| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `gramKey`                                                                                        | *string*                                                                                         | :heavy_minus_sign:                                                                               | API Key header                                                                                   |                                                                                                  |
-| `gramSession`                                                                                    | *string*                                                                                         | :heavy_minus_sign:                                                                               | Session header                                                                                   |                                                                                                  |
-| `gramProject`                                                                                    | *string*                                                                                         | :heavy_minus_sign:                                                                               | project header                                                                                   |                                                                                                  |
-| `idempotencyKey`                                                                                 | *string*                                                                                         | :heavy_check_mark:                                                                               | A unique identifier that will mitigate against duplicate deployments.                            | 01jqq0ajmb4qh9eppz48dejr2m                                                                       |
-| `createDeploymentRequestBody`                                                                    | [components.CreateDeploymentRequestBody](../../models/components/createdeploymentrequestbody.md) | :heavy_check_mark:                                                                               | N/A                                                                                              |                                                                                                  |
+| Field                         | Type                                                                                             | Required           | Description                                                           | Example                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------ | ------------------ | --------------------------------------------------------------------- | -------------------------- |
+| `gramKey`                     | _string_                                                                                         | :heavy_minus_sign: | API Key header                                                        |                            |
+| `gramSession`                 | _string_                                                                                         | :heavy_minus_sign: | Session header                                                        |                            |
+| `gramProject`                 | _string_                                                                                         | :heavy_minus_sign: | project header                                                        |                            |
+| `idempotencyKey`              | _string_                                                                                         | :heavy_check_mark: | A unique identifier that will mitigate against duplicate deployments. | 01jqq0ajmb4qh9eppz48dejr2m |
+| `createDeploymentRequestBody` | [components.CreateDeploymentRequestBody](../../models/components/createdeploymentrequestbody.md) | :heavy_check_mark: | N/A                                                                   |                            |

@@ -4,21 +4,26 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CreateAwsIamCredentialForm$outboundSchema = z.pipe(z.object({
+export const CreateAwsIamCredentialForm$outboundSchema = z.pipe(
+  z.object({
     assumeRoleArn: z.optional(z.string()),
     name: z.string(),
     oidcAudience: z.optional(z.string()),
     oidcSubject: z.optional(z.string()),
     stsRegion: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        assumeRoleArn: "assume_role_arn",
-        oidcAudience: "oidc_audience",
-        oidcSubject: "oidc_subject",
-        stsRegion: "sts_region",
+      assumeRoleArn: "assume_role_arn",
+      oidcAudience: "oidc_audience",
+      oidcSubject: "oidc_subject",
+      stsRegion: "sts_region",
     });
-}));
+  }),
+);
 export function createAwsIamCredentialFormToJSON(createAwsIamCredentialForm) {
-    return JSON.stringify(CreateAwsIamCredentialForm$outboundSchema.parse(createAwsIamCredentialForm));
+  return JSON.stringify(
+    CreateAwsIamCredentialForm$outboundSchema.parse(createAwsIamCredentialForm),
+  );
 }
 //# sourceMappingURL=createawsiamcredentialform.js.map

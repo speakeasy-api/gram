@@ -8,15 +8,19 @@ import { safeParse } from "../../lib/schemas.js";
  * The cloud provider of the credential.
  */
 export const Provider = {
-    AwsIam: "aws_iam",
-    GcpIam: "gcp_iam",
+  AwsIam: "aws_iam",
+  GcpIam: "gcp_iam",
 };
 /** @internal */
 export const Provider$inboundSchema = z.enum(Provider);
 /** @internal */
-export const AwsIamCredential$inboundSchema = z.pipe(z.object({
+export const AwsIamCredential$inboundSchema = z.pipe(
+  z.object({
     assume_role_arn: z.optional(z.string()),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     external_id: z.optional(z.string()),
     id: z.string(),
     name: z.string(),
@@ -25,20 +29,29 @@ export const AwsIamCredential$inboundSchema = z.pipe(z.object({
     organization_id: z.string(),
     provider: Provider$inboundSchema,
     sts_region: z.optional(z.string()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "assume_role_arn": "assumeRoleArn",
-        "created_at": "createdAt",
-        "external_id": "externalId",
-        "oidc_audience": "oidcAudience",
-        "oidc_subject": "oidcSubject",
-        "organization_id": "organizationId",
-        "sts_region": "stsRegion",
-        "updated_at": "updatedAt",
+      assume_role_arn: "assumeRoleArn",
+      created_at: "createdAt",
+      external_id: "externalId",
+      oidc_audience: "oidcAudience",
+      oidc_subject: "oidcSubject",
+      organization_id: "organizationId",
+      sts_region: "stsRegion",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function awsIamCredentialFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => AwsIamCredential$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'AwsIamCredential' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => AwsIamCredential$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AwsIamCredential' from JSON`,
+  );
 }
 //# sourceMappingURL=awsiamcredential.js.map

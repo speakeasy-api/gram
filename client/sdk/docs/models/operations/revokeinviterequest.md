@@ -12,7 +12,7 @@ let value: RevokeInviteRequest = {
 
 ## Fields
 
-| Field                 | Type                  | Required              | Description           |
-| --------------------- | --------------------- | --------------------- | --------------------- |
-| `invitationId`        | *string*              | :heavy_check_mark:    | WorkOS invitation ID. |
-| `gramSession`         | *string*              | :heavy_minus_sign:    | Session header        |
+| Field          | Type     | Required           | Description           |
+| -------------- | -------- | ------------------ | --------------------- |
+| `invitationId` | _string_ | :heavy_check_mark: | WorkOS invitation ID. |
+| `gramSession`  | _string_ | :heavy_minus_sign: | Session header        |

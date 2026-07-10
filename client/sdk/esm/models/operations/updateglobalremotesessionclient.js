@@ -3,29 +3,47 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpdateRemoteSessionClientForm$outboundSchema, } from "../components/updateremotesessionclientform.js";
+import { UpdateRemoteSessionClientForm$outboundSchema } from "../components/updateremotesessionclientform.js";
 /** @internal */
-export const UpdateGlobalRemoteSessionClientSecurity$outboundSchema = z.pipe(z.object({
+export const UpdateGlobalRemoteSessionClientSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function updateGlobalRemoteSessionClientSecurityToJSON(updateGlobalRemoteSessionClientSecurity) {
-    return JSON.stringify(UpdateGlobalRemoteSessionClientSecurity$outboundSchema.parse(updateGlobalRemoteSessionClientSecurity));
+  }),
+);
+export function updateGlobalRemoteSessionClientSecurityToJSON(
+  updateGlobalRemoteSessionClientSecurity,
+) {
+  return JSON.stringify(
+    UpdateGlobalRemoteSessionClientSecurity$outboundSchema.parse(
+      updateGlobalRemoteSessionClientSecurity,
+    ),
+  );
 }
 /** @internal */
-export const UpdateGlobalRemoteSessionClientRequest$outboundSchema = z.pipe(z.object({
+export const UpdateGlobalRemoteSessionClientRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     updateRemoteSessionClientForm: UpdateRemoteSessionClientForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        updateRemoteSessionClientForm: "UpdateRemoteSessionClientForm",
+      gramSession: "Gram-Session",
+      updateRemoteSessionClientForm: "UpdateRemoteSessionClientForm",
     });
-}));
-export function updateGlobalRemoteSessionClientRequestToJSON(updateGlobalRemoteSessionClientRequest) {
-    return JSON.stringify(UpdateGlobalRemoteSessionClientRequest$outboundSchema.parse(updateGlobalRemoteSessionClientRequest));
+  }),
+);
+export function updateGlobalRemoteSessionClientRequestToJSON(
+  updateGlobalRemoteSessionClientRequest,
+) {
+  return JSON.stringify(
+    UpdateGlobalRemoteSessionClientRequest$outboundSchema.parse(
+      updateGlobalRemoteSessionClientRequest,
+    ),
+  );
 }
 //# sourceMappingURL=updateglobalremotesessionclient.js.map

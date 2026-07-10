@@ -4,7 +4,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CreatePackageForm$outboundSchema = z.pipe(z.object({
+export const CreatePackageForm$outboundSchema = z.pipe(
+  z.object({
     description: z.optional(z.string()),
     imageAssetId: z.optional(z.string()),
     keywords: z.optional(z.array(z.string())),
@@ -12,12 +13,16 @@ export const CreatePackageForm$outboundSchema = z.pipe(z.object({
     summary: z.string(),
     title: z.string(),
     url: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        imageAssetId: "image_asset_id",
+      imageAssetId: "image_asset_id",
     });
-}));
+  }),
+);
 export function createPackageFormToJSON(createPackageForm) {
-    return JSON.stringify(CreatePackageForm$outboundSchema.parse(createPackageForm));
+  return JSON.stringify(
+    CreatePackageForm$outboundSchema.parse(createPackageForm),
+  );
 }
 //# sourceMappingURL=createpackageform.js.map

@@ -15,7 +15,7 @@ let value: ToolUsageShadowServerFilterOption = {
 
 ## Fields
 
-| Field                                                          | Type                                                           | Required                                                       | Description                                                    |
-| -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
-| `eventCount`                                                   | *number*                                                       | :heavy_check_mark:                                             | Number of tool usage events observed for the Shadow MCP server |
-| `serverName`                                                   | *string*                                                       | :heavy_check_mark:                                             | Observed Shadow MCP server name                                |
+| Field        | Type     | Required           | Description                                                    |
+| ------------ | -------- | ------------------ | -------------------------------------------------------------- |
+| `eventCount` | _number_ | :heavy_check_mark: | Number of tool usage events observed for the Shadow MCP server |
+| `serverName` | _string_ | :heavy_check_mark: | Observed Shadow MCP server name                                |

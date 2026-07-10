@@ -4,30 +4,42 @@
 import { packagesList } from "../funcs/packagesList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchListPackages(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildListPackagesQuery(client$, request, security, options),
-    });
+export function prefetchListPackages(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildListPackagesQuery(client$, request, security, options),
+  });
 }
 export function buildListPackagesQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyListPackages({
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function listPackagesQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(packagesList(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyListPackages({
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function listPackagesQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        packagesList(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyListPackages(parameters) {
-    return ["@gram/client", "packages", "list", parameters];
+  return ["@gram/client", "packages", "list", parameters];
 }
 //# sourceMappingURL=listPackages.core.js.map

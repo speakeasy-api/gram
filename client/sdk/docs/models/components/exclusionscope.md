@@ -13,5 +13,14 @@ let value: ExclusionScope = "environment:blocked_write";
 ## Values
 
 ```typescript
-"org:blocked_read" | "org:blocked_admin" | "project:blocked_read" | "project:blocked_write" | "mcp:blocked_read" | "mcp:blocked_write" | "mcp:blocked_connect" | "environment:blocked_read" | "environment:blocked_write" | "risk_policy:bypass"
+"org:blocked_read" |
+  "org:blocked_admin" |
+  "project:blocked_read" |
+  "project:blocked_write" |
+  "mcp:blocked_read" |
+  "mcp:blocked_write" |
+  "mcp:blocked_connect" |
+  "environment:blocked_read" |
+  "environment:blocked_write" |
+  "risk_policy:bypass";
 ```

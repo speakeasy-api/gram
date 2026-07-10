@@ -4,26 +4,37 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const SearchUsersFilter$outboundSchema = z.pipe(z.object({
+export const SearchUsersFilter$outboundSchema = z.pipe(
+  z.object({
     accountType: z.optional(z.string()),
     deploymentId: z.optional(z.string()),
     eventSource: z.optional(z.string()),
     externalOrgId: z.optional(z.string()),
-    from: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    from: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
     hookSource: z.optional(z.string()),
-    to: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    to: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
     userIds: z.optional(z.array(z.string())),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        accountType: "account_type",
-        deploymentId: "deployment_id",
-        eventSource: "event_source",
-        externalOrgId: "external_org_id",
-        hookSource: "hook_source",
-        userIds: "user_ids",
+      accountType: "account_type",
+      deploymentId: "deployment_id",
+      eventSource: "event_source",
+      externalOrgId: "external_org_id",
+      hookSource: "hook_source",
+      userIds: "user_ids",
     });
-}));
+  }),
+);
 export function searchUsersFilterToJSON(searchUsersFilter) {
-    return JSON.stringify(SearchUsersFilter$outboundSchema.parse(searchUsersFilter));
+  return JSON.stringify(
+    SearchUsersFilter$outboundSchema.parse(searchUsersFilter),
+  );
 }
 //# sourceMappingURL=searchusersfilter.js.map

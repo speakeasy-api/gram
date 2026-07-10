@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const TestDetectionRuleMatch$inboundSchema = z.pipe(z.object({
+export const TestDetectionRuleMatch$inboundSchema = z.pipe(
+  z.object({
     confidence: z.number(),
     description: z.optional(z.string()),
     end_pos: z.int(),
@@ -14,14 +15,20 @@ export const TestDetectionRuleMatch$inboundSchema = z.pipe(z.object({
     source: z.string(),
     start_pos: z.int(),
     tags: z.optional(z.array(z.string())),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "end_pos": "endPos",
-        "rule_id": "ruleId",
-        "start_pos": "startPos",
+      end_pos: "endPos",
+      rule_id: "ruleId",
+      start_pos: "startPos",
     });
-}));
+  }),
+);
 export function testDetectionRuleMatchFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TestDetectionRuleMatch$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TestDetectionRuleMatch' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TestDetectionRuleMatch$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TestDetectionRuleMatch' from JSON`,
+  );
 }
 //# sourceMappingURL=testdetectionrulematch.js.map

@@ -5,16 +5,23 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const McpExportTool$inboundSchema = z.pipe(z.object({
+export const McpExportTool$inboundSchema = z.pipe(
+  z.object({
     description: z.string(),
     input_schema: z.any(),
     name: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "input_schema": "inputSchema",
+      input_schema: "inputSchema",
     });
-}));
+  }),
+);
 export function mcpExportToolFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => McpExportTool$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'McpExportTool' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => McpExportTool$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'McpExportTool' from JSON`,
+  );
 }
 //# sourceMappingURL=mcpexporttool.js.map

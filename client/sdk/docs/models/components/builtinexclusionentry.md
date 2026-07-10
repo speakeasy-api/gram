@@ -16,9 +16,9 @@ let value: BuiltinExclusionEntry = {
 
 ## Fields
 
-| Field                                                                   | Type                                                                    | Required                                                                | Description                                                             |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `description`                                                           | *string*                                                                | :heavy_check_mark:                                                      | Human rationale for why these values are known-safe.                    |
-| `id`                                                                    | *string*                                                                | :heavy_check_mark:                                                      | Stable rule id.                                                         |
-| `reason`                                                                | *string*                                                                | :heavy_check_mark:                                                      | Label surfaced when this rule suppresses a finding.                     |
-| `samples`                                                               | *string*[]                                                              | :heavy_minus_sign:                                                      | Example values — published test/documentation data, never real secrets. |
+| Field         | Type       | Required           | Description                                                             |
+| ------------- | ---------- | ------------------ | ----------------------------------------------------------------------- |
+| `description` | _string_   | :heavy_check_mark: | Human rationale for why these values are known-safe.                    |
+| `id`          | _string_   | :heavy_check_mark: | Stable rule id.                                                         |
+| `reason`      | _string_   | :heavy_check_mark: | Label surfaced when this rule suppresses a finding.                     |
+| `samples`     | _string_[] | :heavy_minus_sign: | Example values — published test/documentation data, never real secrets. |

@@ -4,26 +4,44 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteAwsIamCredentialSecurity$outboundSchema = z.pipe(z.object({
+export const DeleteAwsIamCredentialSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function deleteAwsIamCredentialSecurityToJSON(deleteAwsIamCredentialSecurity) {
-    return JSON.stringify(DeleteAwsIamCredentialSecurity$outboundSchema.parse(deleteAwsIamCredentialSecurity));
+  }),
+);
+export function deleteAwsIamCredentialSecurityToJSON(
+  deleteAwsIamCredentialSecurity,
+) {
+  return JSON.stringify(
+    DeleteAwsIamCredentialSecurity$outboundSchema.parse(
+      deleteAwsIamCredentialSecurity,
+    ),
+  );
 }
 /** @internal */
-export const DeleteAwsIamCredentialRequest$outboundSchema = z.pipe(z.object({
+export const DeleteAwsIamCredentialRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
-export function deleteAwsIamCredentialRequestToJSON(deleteAwsIamCredentialRequest) {
-    return JSON.stringify(DeleteAwsIamCredentialRequest$outboundSchema.parse(deleteAwsIamCredentialRequest));
+  }),
+);
+export function deleteAwsIamCredentialRequestToJSON(
+  deleteAwsIamCredentialRequest,
+) {
+  return JSON.stringify(
+    DeleteAwsIamCredentialRequest$outboundSchema.parse(
+      deleteAwsIamCredentialRequest,
+    ),
+  );
 }
 //# sourceMappingURL=deleteawsiamcredential.js.map

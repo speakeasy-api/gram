@@ -15,95 +15,115 @@ import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 import { unwrapResultIterator } from "../types/operations.js";
 export class AdminRemoteSessions extends ClientSDK {
-    /**
-     * createGlobalClient adminRemoteSessions
-     *
-     * @remarks
-     * Register a global remote_session_client under an existing global remote_session_issuer. Caller supplies client_id and optional client_secret obtained out-of-band from the upstream issuer. Requires platform admin.
-     */
-    async createGlobalClient(request, security, options) {
-        return unwrapAsync(adminRemoteSessionsCreateGlobalClient(this, request, security, options));
-    }
-    /**
-     * createGlobalIssuer adminRemoteSessions
-     *
-     * @remarks
-     * Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.
-     */
-    async createGlobalIssuer(request, security, options) {
-        return unwrapAsync(adminRemoteSessionsCreateGlobalIssuer(this, request, security, options));
-    }
-    /**
-     * deleteGlobalClient adminRemoteSessions
-     *
-     * @remarks
-     * Soft-delete a global remote_session_client. Cascades to the remote_sessions minted against it. Requires platform admin.
-     */
-    async deleteGlobalClient(request, security, options) {
-        return unwrapAsync(adminRemoteSessionsDeleteGlobalClient(this, request, security, options));
-    }
-    /**
-     * deleteGlobalIssuer adminRemoteSessions
-     *
-     * @remarks
-     * Soft-delete a global remote_session_issuer. Blocked when any global remote_session_clients still reference it. Requires platform admin.
-     */
-    async deleteGlobalIssuer(request, security, options) {
-        return unwrapAsync(adminRemoteSessionsDeleteGlobalIssuer(this, request, security, options));
-    }
-    /**
-     * getGlobalClient adminRemoteSessions
-     *
-     * @remarks
-     * Get a global remote_session_client by id. Requires platform admin.
-     */
-    async getGlobalClient(request, security, options) {
-        return unwrapAsync(adminRemoteSessionsGetGlobalClient(this, request, security, options));
-    }
-    /**
-     * getGlobalIssuer adminRemoteSessions
-     *
-     * @remarks
-     * Get a global remote_session_issuer by id. Requires platform admin.
-     */
-    async getGlobalIssuer(request, security, options) {
-        return unwrapAsync(adminRemoteSessionsGetGlobalIssuer(this, request, security, options));
-    }
-    /**
-     * listGlobalClients adminRemoteSessions
-     *
-     * @remarks
-     * List the global remote_session_clients registered with a global remote_session_issuer. Requires platform admin.
-     */
-    async listGlobalClients(request, security, options) {
-        return unwrapResultIterator(adminRemoteSessionsListGlobalClients(this, request, security, options));
-    }
-    /**
-     * listGlobalIssuers adminRemoteSessions
-     *
-     * @remarks
-     * List global remote_session_issuers. Requires platform admin.
-     */
-    async listGlobalIssuers(request, security, options) {
-        return unwrapResultIterator(adminRemoteSessionsListGlobalIssuers(this, request, security, options));
-    }
-    /**
-     * updateGlobalClient adminRemoteSessions
-     *
-     * @remarks
-     * Rotate the client_secret or change non-issuer settings on a global remote_session_client. Requires platform admin.
-     */
-    async updateGlobalClient(request, security, options) {
-        return unwrapAsync(adminRemoteSessionsUpdateGlobalClient(this, request, security, options));
-    }
-    /**
-     * updateGlobalIssuer adminRemoteSessions
-     *
-     * @remarks
-     * Update a global remote_session_issuer. Requires platform admin.
-     */
-    async updateGlobalIssuer(request, security, options) {
-        return unwrapAsync(adminRemoteSessionsUpdateGlobalIssuer(this, request, security, options));
-    }
+  /**
+   * createGlobalClient adminRemoteSessions
+   *
+   * @remarks
+   * Register a global remote_session_client under an existing global remote_session_issuer. Caller supplies client_id and optional client_secret obtained out-of-band from the upstream issuer. Requires platform admin.
+   */
+  async createGlobalClient(request, security, options) {
+    return unwrapAsync(
+      adminRemoteSessionsCreateGlobalClient(this, request, security, options),
+    );
+  }
+  /**
+   * createGlobalIssuer adminRemoteSessions
+   *
+   * @remarks
+   * Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.
+   */
+  async createGlobalIssuer(request, security, options) {
+    return unwrapAsync(
+      adminRemoteSessionsCreateGlobalIssuer(this, request, security, options),
+    );
+  }
+  /**
+   * deleteGlobalClient adminRemoteSessions
+   *
+   * @remarks
+   * Soft-delete a global remote_session_client. Cascades to the remote_sessions minted against it. Requires platform admin.
+   */
+  async deleteGlobalClient(request, security, options) {
+    return unwrapAsync(
+      adminRemoteSessionsDeleteGlobalClient(this, request, security, options),
+    );
+  }
+  /**
+   * deleteGlobalIssuer adminRemoteSessions
+   *
+   * @remarks
+   * Soft-delete a global remote_session_issuer. Blocked when any global remote_session_clients still reference it. Requires platform admin.
+   */
+  async deleteGlobalIssuer(request, security, options) {
+    return unwrapAsync(
+      adminRemoteSessionsDeleteGlobalIssuer(this, request, security, options),
+    );
+  }
+  /**
+   * getGlobalClient adminRemoteSessions
+   *
+   * @remarks
+   * Get a global remote_session_client by id. Requires platform admin.
+   */
+  async getGlobalClient(request, security, options) {
+    return unwrapAsync(
+      adminRemoteSessionsGetGlobalClient(this, request, security, options),
+    );
+  }
+  /**
+   * getGlobalIssuer adminRemoteSessions
+   *
+   * @remarks
+   * Get a global remote_session_issuer by id. Requires platform admin.
+   */
+  async getGlobalIssuer(request, security, options) {
+    return unwrapAsync(
+      adminRemoteSessionsGetGlobalIssuer(this, request, security, options),
+    );
+  }
+  /**
+   * listGlobalClients adminRemoteSessions
+   *
+   * @remarks
+   * List the global remote_session_clients registered with a global remote_session_issuer. Requires platform admin.
+   */
+  async listGlobalClients(request, security, options) {
+    return unwrapResultIterator(
+      adminRemoteSessionsListGlobalClients(this, request, security, options),
+    );
+  }
+  /**
+   * listGlobalIssuers adminRemoteSessions
+   *
+   * @remarks
+   * List global remote_session_issuers. Requires platform admin.
+   */
+  async listGlobalIssuers(request, security, options) {
+    return unwrapResultIterator(
+      adminRemoteSessionsListGlobalIssuers(this, request, security, options),
+    );
+  }
+  /**
+   * updateGlobalClient adminRemoteSessions
+   *
+   * @remarks
+   * Rotate the client_secret or change non-issuer settings on a global remote_session_client. Requires platform admin.
+   */
+  async updateGlobalClient(request, security, options) {
+    return unwrapAsync(
+      adminRemoteSessionsUpdateGlobalClient(this, request, security, options),
+    );
+  }
+  /**
+   * updateGlobalIssuer adminRemoteSessions
+   *
+   * @remarks
+   * Update a global remote_session_issuer. Requires platform admin.
+   */
+  async updateGlobalIssuer(request, security, options) {
+    return unwrapAsync(
+      adminRemoteSessionsUpdateGlobalIssuer(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=adminremotesessions.js.map

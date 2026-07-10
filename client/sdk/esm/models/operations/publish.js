@@ -3,61 +3,77 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { PublishPackageForm$outboundSchema, } from "../components/publishpackageform.js";
+import { PublishPackageForm$outboundSchema } from "../components/publishpackageform.js";
 /** @internal */
-export const PublishSecurityOption1$outboundSchema = z.pipe(z.object({
+export const PublishSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
+  }),
+);
 export function publishSecurityOption1ToJSON(publishSecurityOption1) {
-    return JSON.stringify(PublishSecurityOption1$outboundSchema.parse(publishSecurityOption1));
+  return JSON.stringify(
+    PublishSecurityOption1$outboundSchema.parse(publishSecurityOption1),
+  );
 }
 /** @internal */
-export const PublishSecurityOption2$outboundSchema = z.pipe(z.object({
+export const PublishSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function publishSecurityOption2ToJSON(publishSecurityOption2) {
-    return JSON.stringify(PublishSecurityOption2$outboundSchema.parse(publishSecurityOption2));
+  return JSON.stringify(
+    PublishSecurityOption2$outboundSchema.parse(publishSecurityOption2),
+  );
 }
 /** @internal */
-export const PublishSecurity$outboundSchema = z.pipe(z.object({
+export const PublishSecurity$outboundSchema = z.pipe(
+  z.object({
     option1: z.optional(z.lazy(() => PublishSecurityOption1$outboundSchema)),
     option2: z.optional(z.lazy(() => PublishSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function publishSecurityToJSON(publishSecurity) {
-    return JSON.stringify(PublishSecurity$outboundSchema.parse(publishSecurity));
+  return JSON.stringify(PublishSecurity$outboundSchema.parse(publishSecurity));
 }
 /** @internal */
-export const PublishRequest$outboundSchema = z.pipe(z.object({
+export const PublishRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     publishPackageForm: PublishPackageForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        publishPackageForm: "PublishPackageForm",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      publishPackageForm: "PublishPackageForm",
     });
-}));
+  }),
+);
 export function publishRequestToJSON(publishRequest) {
-    return JSON.stringify(PublishRequest$outboundSchema.parse(publishRequest));
+  return JSON.stringify(PublishRequest$outboundSchema.parse(publishRequest));
 }
 //# sourceMappingURL=publish.js.map

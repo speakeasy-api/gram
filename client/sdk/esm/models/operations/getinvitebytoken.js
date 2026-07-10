@@ -4,9 +4,11 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const GetInviteByTokenRequest$outboundSchema = z.object({
-    token: z.string(),
+  token: z.string(),
 });
 export function getInviteByTokenRequestToJSON(getInviteByTokenRequest) {
-    return JSON.stringify(GetInviteByTokenRequest$outboundSchema.parse(getInviteByTokenRequest));
+  return JSON.stringify(
+    GetInviteByTokenRequest$outboundSchema.parse(getInviteByTokenRequest),
+  );
 }
 //# sourceMappingURL=getinvitebytoken.js.map

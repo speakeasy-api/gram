@@ -10,7 +10,7 @@ let value: WorkOSSSOIntentOptions = {};
 
 ## Fields
 
-| Field                                                                                 | Type                                                                                  | Required                                                                              | Description                                                                           |
-| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `bookmarkSlug`                                                                        | *string*                                                                              | :heavy_minus_sign:                                                                    | SSO bookmark slug to launch a specific app after authentication.                      |
-| `providerType`                                                                        | *string*                                                                              | :heavy_minus_sign:                                                                    | SSO provider type to shortcut into a specific setup flow (e.g. OktaSAML, GoogleSAML). |
+| Field          | Type     | Required           | Description                                                                           |
+| -------------- | -------- | ------------------ | ------------------------------------------------------------------------------------- |
+| `bookmarkSlug` | _string_ | :heavy_minus_sign: | SSO bookmark slug to launch a specific app after authentication.                      |
+| `providerType` | _string_ | :heavy_minus_sign: | SSO provider type to shortcut into a specific setup flow (e.g. OktaSAML, GoogleSAML). |

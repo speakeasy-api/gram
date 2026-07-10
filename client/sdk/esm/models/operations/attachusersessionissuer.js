@@ -3,61 +3,101 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { AttachUserSessionIssuerForm$outboundSchema, } from "../components/attachusersessionissuerform.js";
+import { AttachUserSessionIssuerForm$outboundSchema } from "../components/attachusersessionissuerform.js";
 /** @internal */
-export const AttachUserSessionIssuerSecurityOption1$outboundSchema = z.pipe(z.object({
+export const AttachUserSessionIssuerSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function attachUserSessionIssuerSecurityOption1ToJSON(attachUserSessionIssuerSecurityOption1) {
-    return JSON.stringify(AttachUserSessionIssuerSecurityOption1$outboundSchema.parse(attachUserSessionIssuerSecurityOption1));
+  }),
+);
+export function attachUserSessionIssuerSecurityOption1ToJSON(
+  attachUserSessionIssuerSecurityOption1,
+) {
+  return JSON.stringify(
+    AttachUserSessionIssuerSecurityOption1$outboundSchema.parse(
+      attachUserSessionIssuerSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const AttachUserSessionIssuerSecurityOption2$outboundSchema = z.pipe(z.object({
+export const AttachUserSessionIssuerSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function attachUserSessionIssuerSecurityOption2ToJSON(attachUserSessionIssuerSecurityOption2) {
-    return JSON.stringify(AttachUserSessionIssuerSecurityOption2$outboundSchema.parse(attachUserSessionIssuerSecurityOption2));
+  }),
+);
+export function attachUserSessionIssuerSecurityOption2ToJSON(
+  attachUserSessionIssuerSecurityOption2,
+) {
+  return JSON.stringify(
+    AttachUserSessionIssuerSecurityOption2$outboundSchema.parse(
+      attachUserSessionIssuerSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const AttachUserSessionIssuerSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => AttachUserSessionIssuerSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => AttachUserSessionIssuerSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const AttachUserSessionIssuerSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => AttachUserSessionIssuerSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => AttachUserSessionIssuerSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function attachUserSessionIssuerSecurityToJSON(attachUserSessionIssuerSecurity) {
-    return JSON.stringify(AttachUserSessionIssuerSecurity$outboundSchema.parse(attachUserSessionIssuerSecurity));
+  }),
+);
+export function attachUserSessionIssuerSecurityToJSON(
+  attachUserSessionIssuerSecurity,
+) {
+  return JSON.stringify(
+    AttachUserSessionIssuerSecurity$outboundSchema.parse(
+      attachUserSessionIssuerSecurity,
+    ),
+  );
 }
 /** @internal */
-export const AttachUserSessionIssuerRequest$outboundSchema = z.pipe(z.object({
+export const AttachUserSessionIssuerRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     attachUserSessionIssuerForm: AttachUserSessionIssuerForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        attachUserSessionIssuerForm: "AttachUserSessionIssuerForm",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      attachUserSessionIssuerForm: "AttachUserSessionIssuerForm",
     });
-}));
-export function attachUserSessionIssuerRequestToJSON(attachUserSessionIssuerRequest) {
-    return JSON.stringify(AttachUserSessionIssuerRequest$outboundSchema.parse(attachUserSessionIssuerRequest));
+  }),
+);
+export function attachUserSessionIssuerRequestToJSON(
+  attachUserSessionIssuerRequest,
+) {
+  return JSON.stringify(
+    AttachUserSessionIssuerRequest$outboundSchema.parse(
+      attachUserSessionIssuerRequest,
+    ),
+  );
 }
 //# sourceMappingURL=attachusersessionissuer.js.map

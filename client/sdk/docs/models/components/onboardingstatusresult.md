@@ -13,7 +13,7 @@ let value: OnboardingStatusResult = {
 
 ## Fields
 
-| Field                                                                      | Type                                                                       | Required                                                                   | Description                                                                |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `dsyncConfigured`                                                          | *boolean*                                                                  | :heavy_check_mark:                                                         | Whether the organization has at least one linked directory sync in WorkOS. |
-| `ssoConfigured`                                                            | *boolean*                                                                  | :heavy_check_mark:                                                         | Whether the organization has at least one active SSO connection in WorkOS. |
+| Field             | Type      | Required           | Description                                                                |
+| ----------------- | --------- | ------------------ | -------------------------------------------------------------------------- |
+| `dsyncConfigured` | _boolean_ | :heavy_check_mark: | Whether the organization has at least one linked directory sync in WorkOS. |
+| `ssoConfigured`   | _boolean_ | :heavy_check_mark: | Whether the organization has at least one active SSO connection in WorkOS. |

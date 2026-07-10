@@ -3,26 +3,37 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { LogFilter$outboundSchema, } from "./logfilter.js";
+import { LogFilter$outboundSchema } from "./logfilter.js";
 export const TypesToInclude = {
-    Mcp: "mcp",
-    Local: "local",
-    Skill: "skill",
+  Mcp: "mcp",
+  Local: "local",
+  Skill: "skill",
 };
 /** @internal */
 export const TypesToInclude$outboundSchema = z.enum(TypesToInclude);
 /** @internal */
-export const GetHooksSummaryPayload$outboundSchema = z.pipe(z.object({
+export const GetHooksSummaryPayload$outboundSchema = z.pipe(
+  z.object({
     filters: z.optional(z.array(LogFilter$outboundSchema)),
-    from: z.pipe(z.date(), z.transform(v => v.toISOString())),
-    to: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    from: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
+    to: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
     typesToInclude: z.optional(z.array(TypesToInclude$outboundSchema)),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        typesToInclude: "types_to_include",
+      typesToInclude: "types_to_include",
     });
-}));
+  }),
+);
 export function getHooksSummaryPayloadToJSON(getHooksSummaryPayload) {
-    return JSON.stringify(GetHooksSummaryPayload$outboundSchema.parse(getHooksSummaryPayload));
+  return JSON.stringify(
+    GetHooksSummaryPayload$outboundSchema.parse(getHooksSummaryPayload),
+  );
 }
 //# sourceMappingURL=gethookssummarypayload.js.map

@@ -13,7 +13,7 @@ let value: SetProductFeatureRequestBody = {
 
 ## Fields
 
-| Field                                                            | Type                                                             | Required                                                         | Description                                                      |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `enabled`                                                        | *boolean*                                                        | :heavy_check_mark:                                               | Whether the feature should be enabled                            |
-| `featureName`                                                    | [components.FeatureName](../../models/components/featurename.md) | :heavy_check_mark:                                               | Name of the feature to update                                    |
+| Field         | Type                                                             | Required           | Description                           |
+| ------------- | ---------------------------------------------------------------- | ------------------ | ------------------------------------- |
+| `enabled`     | _boolean_                                                        | :heavy_check_mark: | Whether the feature should be enabled |
+| `featureName` | [components.FeatureName](../../models/components/featurename.md) | :heavy_check_mark: | Name of the feature to update         |

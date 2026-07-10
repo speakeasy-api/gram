@@ -6,9 +6,9 @@
  * React Server Components cannot serialize functions or Symbol properties across the server/client boundary.
  */
 export function pageIteratorToJSON(page) {
-    const { next: _, ...rest } = page;
-    // Symbol properties are copied by spread but can't be serialized for RSC
-    delete rest[Symbol.asyncIterator];
-    return rest;
+  const { next: _, ...rest } = page;
+  // Symbol properties are copied by spread but can't be serialized for RSC
+  delete rest[Symbol.asyncIterator];
+  return rest;
 }
 //# sourceMappingURL=_types.js.map

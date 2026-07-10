@@ -5,24 +5,31 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const HooksBreakdownRow$inboundSchema = z.pipe(z.object({
+export const HooksBreakdownRow$inboundSchema = z.pipe(
+  z.object({
     event_count: z.int(),
     failure_count: z.int(),
     hook_source: z.string(),
     server_name: z.string(),
     tool_name: z.string(),
     user_email: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "event_count": "eventCount",
-        "failure_count": "failureCount",
-        "hook_source": "hookSource",
-        "server_name": "serverName",
-        "tool_name": "toolName",
-        "user_email": "userEmail",
+      event_count: "eventCount",
+      failure_count: "failureCount",
+      hook_source: "hookSource",
+      server_name: "serverName",
+      tool_name: "toolName",
+      user_email: "userEmail",
     });
-}));
+  }),
+);
 export function hooksBreakdownRowFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => HooksBreakdownRow$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'HooksBreakdownRow' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => HooksBreakdownRow$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'HooksBreakdownRow' from JSON`,
+  );
 }
 //# sourceMappingURL=hooksbreakdownrow.js.map

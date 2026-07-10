@@ -13,5 +13,5 @@ let value: SearchUsersPayloadUserType = "external";
 ## Values
 
 ```typescript
-"internal" | "external"
+"internal" | "external";
 ```

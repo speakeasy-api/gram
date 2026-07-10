@@ -3,33 +3,43 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpdatePluginServerForm$outboundSchema, } from "../components/updatepluginserverform.js";
+import { UpdatePluginServerForm$outboundSchema } from "../components/updatepluginserverform.js";
 /** @internal */
-export const UpdatePluginServerSecurity$outboundSchema = z.pipe(z.object({
+export const UpdatePluginServerSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function updatePluginServerSecurityToJSON(updatePluginServerSecurity) {
-    return JSON.stringify(UpdatePluginServerSecurity$outboundSchema.parse(updatePluginServerSecurity));
+  return JSON.stringify(
+    UpdatePluginServerSecurity$outboundSchema.parse(updatePluginServerSecurity),
+  );
 }
 /** @internal */
-export const UpdatePluginServerRequest$outboundSchema = z.pipe(z.object({
+export const UpdatePluginServerRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     updatePluginServerForm: UpdatePluginServerForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        updatePluginServerForm: "UpdatePluginServerForm",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      updatePluginServerForm: "UpdatePluginServerForm",
     });
-}));
+  }),
+);
 export function updatePluginServerRequestToJSON(updatePluginServerRequest) {
-    return JSON.stringify(UpdatePluginServerRequest$outboundSchema.parse(updatePluginServerRequest));
+  return JSON.stringify(
+    UpdatePluginServerRequest$outboundSchema.parse(updatePluginServerRequest),
+  );
 }
 //# sourceMappingURL=updatepluginserver.js.map

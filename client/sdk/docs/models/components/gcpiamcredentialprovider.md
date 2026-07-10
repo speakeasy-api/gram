@@ -13,5 +13,5 @@ let value: GcpIamCredentialProvider = "aws_iam";
 ## Values
 
 ```typescript
-"aws_iam" | "gcp_iam"
+"aws_iam" | "gcp_iam";
 ```

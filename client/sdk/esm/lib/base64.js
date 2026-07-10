@@ -3,29 +3,29 @@
  */
 import * as z from "zod/v4-mini";
 export function bytesToBase64(u8arr) {
-    return btoa(String.fromCodePoint(...u8arr));
+  return btoa(String.fromCodePoint(...u8arr));
 }
 export function bytesFromBase64(encoded) {
-    return Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
+  return Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
 }
 export function stringToBytes(str) {
-    return new TextEncoder().encode(str);
+  return new TextEncoder().encode(str);
 }
 export function stringFromBytes(u8arr) {
-    return new TextDecoder().decode(u8arr);
+  return new TextDecoder().decode(u8arr);
 }
 export function stringToBase64(str) {
-    return bytesToBase64(stringToBytes(str));
+  return bytesToBase64(stringToBytes(str));
 }
 export function stringFromBase64(b64str) {
-    return stringFromBytes(bytesFromBase64(b64str));
+  return stringFromBytes(bytesFromBase64(b64str));
 }
 export const zodOutbound = z.union([
-    z.custom(x => x instanceof Uint8Array),
-    z.pipe(z.string(), z.transform(stringToBytes)),
+  z.custom((x) => x instanceof Uint8Array),
+  z.pipe(z.string(), z.transform(stringToBytes)),
 ]);
 export const zodInbound = z.union([
-    z.custom(x => x instanceof Uint8Array),
-    z.pipe(z.string(), z.transform(bytesFromBase64)),
+  z.custom((x) => x instanceof Uint8Array),
+  z.pipe(z.string(), z.transform(bytesFromBase64)),
 ]);
 //# sourceMappingURL=base64.js.map

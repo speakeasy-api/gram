@@ -2,11 +2,20 @@ import { GramCore } from "../core.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GetProjectOverviewResult } from "../models/components/getprojectoverviewresult.js";
 import { GramError } from "../models/errors/gramerror.js";
-import { ConnectionError, InvalidRequestError, RequestAbortedError, RequestTimeoutError, UnexpectedClientError } from "../models/errors/httpclienterrors.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { GetProjectOverviewRequest, GetProjectOverviewSecurity } from "../models/operations/getprojectoverview.js";
+import {
+  GetProjectOverviewRequest,
+  GetProjectOverviewSecurity,
+} from "../models/operations/getprojectoverview.js";
 import { APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 /**
@@ -15,5 +24,23 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Get project-level overview including total chats, tool calls, active servers/users, and top lists
  */
-export declare function telemetryGetProjectOverview(client: GramCore, request: GetProjectOverviewRequest, security?: GetProjectOverviewSecurity | undefined, options?: RequestOptions): APIPromise<Result<GetProjectOverviewResult, ServiceError | GramError | ResponseValidationError | ConnectionError | RequestAbortedError | RequestTimeoutError | InvalidRequestError | UnexpectedClientError | SDKValidationError>>;
+export declare function telemetryGetProjectOverview(
+  client: GramCore,
+  request: GetProjectOverviewRequest,
+  security?: GetProjectOverviewSecurity | undefined,
+  options?: RequestOptions,
+): APIPromise<
+  Result<
+    GetProjectOverviewResult,
+    | ServiceError
+    | GramError
+    | ResponseValidationError
+    | ConnectionError
+    | RequestAbortedError
+    | RequestTimeoutError
+    | InvalidRequestError
+    | UnexpectedClientError
+    | SDKValidationError
+  >
+>;
 //# sourceMappingURL=telemetryGetProjectOverview.d.ts.map

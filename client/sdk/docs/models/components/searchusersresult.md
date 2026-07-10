@@ -14,8 +14,8 @@ let value: SearchUsersResult = {
 
 ## Fields
 
-| Field                                                              | Type                                                               | Required                                                           | Description                                                        |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `nextCursor`                                                       | *string*                                                           | :heavy_minus_sign:                                                 | Cursor for next page                                               |
-| `roles`                                                            | [components.RoleSummary](../../models/components/rolesummary.md)[] | :heavy_minus_sign:                                                 | List of role usage summaries (populated when group_by=role)        |
-| `users`                                                            | [components.UserSummary](../../models/components/usersummary.md)[] | :heavy_check_mark:                                                 | List of user usage summaries (populated when group_by=employee)    |
+| Field        | Type                                                               | Required           | Description                                                     |
+| ------------ | ------------------------------------------------------------------ | ------------------ | --------------------------------------------------------------- |
+| `nextCursor` | _string_                                                           | :heavy_minus_sign: | Cursor for next page                                            |
+| `roles`      | [components.RoleSummary](../../models/components/rolesummary.md)[] | :heavy_minus_sign: | List of role usage summaries (populated when group_by=role)     |
+| `users`      | [components.UserSummary](../../models/components/usersummary.md)[] | :heavy_check_mark: | List of user usage summaries (populated when group_by=employee) |

@@ -10,6 +10,6 @@ let value: SetToolVariationsGroupRequestBody = {};
 
 ## Fields
 
-| Field                                                                 | Type                                                                  | Required                                                              | Description                                                           |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `toolVariationsGroupId`                                               | *string*                                                              | :heavy_minus_sign:                                                    | The tool variations group id to assign, or null to disable filtering. |
+| Field                   | Type     | Required           | Description                                                           |
+| ----------------------- | -------- | ------------------ | --------------------------------------------------------------------- |
+| `toolVariationsGroupId` | _string_ | :heavy_minus_sign: | The tool variations group id to assign, or null to disable filtering. |

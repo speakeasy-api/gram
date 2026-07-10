@@ -18,9 +18,9 @@ let value: CreateRoleForm = {
 
 ## Fields
 
-| Field                                                                | Type                                                                 | Required                                                             | Description                                                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `description`                                                        | *string*                                                             | :heavy_check_mark:                                                   | Description of what this role can do.                                |
-| `grants`                                                             | [components.RoleGrant](../../models/components/rolegrant.md)[]       | :heavy_check_mark:                                                   | Scope grants to assign.                                              |
-| `memberIds`                                                          | *string*[]                                                           | :heavy_minus_sign:                                                   | Optional member IDs to additionally assign to this role on creation. |
-| `name`                                                               | *string*                                                             | :heavy_check_mark:                                                   | Display name for the role.                                           |
+| Field         | Type                                                           | Required           | Description                                                          |
+| ------------- | -------------------------------------------------------------- | ------------------ | -------------------------------------------------------------------- |
+| `description` | _string_                                                       | :heavy_check_mark: | Description of what this role can do.                                |
+| `grants`      | [components.RoleGrant](../../models/components/rolegrant.md)[] | :heavy_check_mark: | Scope grants to assign.                                              |
+| `memberIds`   | _string_[]                                                     | :heavy_minus_sign: | Optional member IDs to additionally assign to this role on creation. |
+| `name`        | _string_                                                       | :heavy_check_mark: | Display name for the role.                                           |

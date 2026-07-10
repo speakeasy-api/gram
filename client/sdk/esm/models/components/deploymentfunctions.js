@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const DeploymentFunctions$inboundSchema = z.pipe(z.object({
+export const DeploymentFunctions$inboundSchema = z.pipe(
+  z.object({
     asset_id: z.string(),
     id: z.string(),
     memory_mib: z.optional(z.int()),
@@ -13,13 +14,19 @@ export const DeploymentFunctions$inboundSchema = z.pipe(z.object({
     runtime: z.string(),
     scale: z.optional(z.int()),
     slug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "asset_id": "assetId",
-        "memory_mib": "memoryMib",
+      asset_id: "assetId",
+      memory_mib: "memoryMib",
     });
-}));
+  }),
+);
 export function deploymentFunctionsFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => DeploymentFunctions$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'DeploymentFunctions' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => DeploymentFunctions$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'DeploymentFunctions' from JSON`,
+  );
 }
 //# sourceMappingURL=deploymentfunctions.js.map

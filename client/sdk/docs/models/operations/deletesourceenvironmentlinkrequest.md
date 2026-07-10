@@ -13,9 +13,9 @@ let value: DeleteSourceEnvironmentLinkRequest = {
 
 ## Fields
 
-| Field                                                          | Type                                                           | Required                                                       | Description                                                    |
-| -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
-| `sourceKind`                                                   | [operations.SourceKind](../../models/operations/sourcekind.md) | :heavy_check_mark:                                             | The kind of source (http or function)                          |
-| `sourceSlug`                                                   | *string*                                                       | :heavy_check_mark:                                             | The slug of the source                                         |
-| `gramSession`                                                  | *string*                                                       | :heavy_minus_sign:                                             | Session header                                                 |
-| `gramProject`                                                  | *string*                                                       | :heavy_minus_sign:                                             | project header                                                 |
+| Field         | Type                                                           | Required           | Description                           |
+| ------------- | -------------------------------------------------------------- | ------------------ | ------------------------------------- |
+| `sourceKind`  | [operations.SourceKind](../../models/operations/sourcekind.md) | :heavy_check_mark: | The kind of source (http or function) |
+| `sourceSlug`  | _string_                                                       | :heavy_check_mark: | The slug of the source                |
+| `gramSession` | _string_                                                       | :heavy_minus_sign: | Session header                        |
+| `gramProject` | _string_                                                       | :heavy_minus_sign: | project header                        |

@@ -4,31 +4,48 @@
 import { riskEvalsListReviews } from "../funcs/riskEvalsListReviews.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchRiskListEvalReviews(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildRiskListEvalReviewsQuery(client$, request, security, options),
-    });
+export function prefetchRiskListEvalReviews(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildRiskListEvalReviewsQuery(client$, request, security, options),
+  });
 }
-export function buildRiskListEvalReviewsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyRiskListEvalReviews({
-            policyId: request.policyId,
-            gramKey: request.gramKey,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function riskListEvalReviewsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(riskEvalsListReviews(client$, request, security, mergedOptions));
-        },
-    };
+export function buildRiskListEvalReviewsQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyRiskListEvalReviews({
+      policyId: request.policyId,
+      gramKey: request.gramKey,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function riskListEvalReviewsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        riskEvalsListReviews(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyRiskListEvalReviews(parameters) {
-    return ["@gram/client", "evals", "listReviews", parameters];
+  return ["@gram/client", "evals", "listReviews", parameters];
 }
 //# sourceMappingURL=riskListEvalReviews.core.js.map

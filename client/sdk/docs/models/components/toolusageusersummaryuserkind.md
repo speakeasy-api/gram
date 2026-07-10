@@ -13,5 +13,5 @@ let value: ToolUsageUserSummaryUserKind = "external_user_id";
 ## Values
 
 ```typescript
-"email" | "external_user_id" | "user_id" | "unknown"
+"email" | "external_user_id" | "user_id" | "unknown";
 ```

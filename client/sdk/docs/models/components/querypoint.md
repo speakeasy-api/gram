@@ -24,7 +24,7 @@ let value: QueryPoint = {
 
 ## Fields
 
-| Field                                                                | Type                                                                 | Required                                                             | Description                                                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `bucketTimeUnixNano`                                                 | *string*                                                             | :heavy_check_mark:                                                   | Bucket start time in Unix nanoseconds (string for JS precision)      |
-| `measures`                                                           | [components.QueryMeasures](../../models/components/querymeasures.md) | :heavy_check_mark:                                                   | Aggregated measure values for a group or time bucket                 |
+| Field                | Type                                                                 | Required           | Description                                                     |
+| -------------------- | -------------------------------------------------------------------- | ------------------ | --------------------------------------------------------------- |
+| `bucketTimeUnixNano` | _string_                                                             | :heavy_check_mark: | Bucket start time in Unix nanoseconds (string for JS precision) |
+| `measures`           | [components.QueryMeasures](../../models/components/querymeasures.md) | :heavy_check_mark: | Aggregated measure values for a group or time bucket            |

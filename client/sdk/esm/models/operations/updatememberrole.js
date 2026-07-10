@@ -5,31 +5,41 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 /** @internal */
-export const UpdateMemberRoleSecurity$outboundSchema = z.pipe(z.object({
+export const UpdateMemberRoleSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function updateMemberRoleSecurityToJSON(updateMemberRoleSecurity) {
-    return JSON.stringify(UpdateMemberRoleSecurity$outboundSchema.parse(updateMemberRoleSecurity));
+  return JSON.stringify(
+    UpdateMemberRoleSecurity$outboundSchema.parse(updateMemberRoleSecurity),
+  );
 }
 /** @internal */
-export const UpdateMemberRoleRequest$outboundSchema = z.pipe(z.object({
+export const UpdateMemberRoleRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     updateMemberRoleForm: components.UpdateMemberRoleForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        updateMemberRoleForm: "UpdateMemberRoleForm",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      updateMemberRoleForm: "UpdateMemberRoleForm",
     });
-}));
+  }),
+);
 export function updateMemberRoleRequestToJSON(updateMemberRoleRequest) {
-    return JSON.stringify(UpdateMemberRoleRequest$outboundSchema.parse(updateMemberRoleRequest));
+  return JSON.stringify(
+    UpdateMemberRoleRequest$outboundSchema.parse(updateMemberRoleRequest),
+  );
 }
 //# sourceMappingURL=updatememberrole.js.map

@@ -4,25 +4,35 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetDomainSecurity$outboundSchema = z.pipe(z.object({
+export const GetDomainSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function getDomainSecurityToJSON(getDomainSecurity) {
-    return JSON.stringify(GetDomainSecurity$outboundSchema.parse(getDomainSecurity));
+  return JSON.stringify(
+    GetDomainSecurity$outboundSchema.parse(getDomainSecurity),
+  );
 }
 /** @internal */
-export const GetDomainRequest$outboundSchema = z.pipe(z.object({
+export const GetDomainRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function getDomainRequestToJSON(getDomainRequest) {
-    return JSON.stringify(GetDomainRequest$outboundSchema.parse(getDomainRequest));
+  return JSON.stringify(
+    GetDomainRequest$outboundSchema.parse(getDomainRequest),
+  );
 }
 //# sourceMappingURL=getdomain.js.map

@@ -14,8 +14,8 @@ let value: AddOpenAPIv3DeploymentAssetForm = {
 
 ## Fields
 
-| Field                                                           | Type                                                            | Required                                                        | Description                                                     |
-| --------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
-| `assetId`                                                       | *string*                                                        | :heavy_check_mark:                                              | The ID of the uploaded asset.                                   |
-| `name`                                                          | *string*                                                        | :heavy_check_mark:                                              | The name to give the document as it will be displayed in UIs.   |
-| `slug`                                                          | *string*                                                        | :heavy_check_mark:                                              | A short url-friendly label that uniquely identifies a resource. |
+| Field     | Type     | Required           | Description                                                     |
+| --------- | -------- | ------------------ | --------------------------------------------------------------- |
+| `assetId` | _string_ | :heavy_check_mark: | The ID of the uploaded asset.                                   |
+| `name`    | _string_ | :heavy_check_mark: | The name to give the document as it will be displayed in UIs.   |
+| `slug`    | _string_ | :heavy_check_mark: | A short url-friendly label that uniquely identifies a resource. |

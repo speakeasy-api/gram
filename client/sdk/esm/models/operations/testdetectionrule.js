@@ -3,61 +3,93 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { TestDetectionRuleRequestBody$outboundSchema, } from "../components/testdetectionrulerequestbody.js";
+import { TestDetectionRuleRequestBody$outboundSchema } from "../components/testdetectionrulerequestbody.js";
 /** @internal */
-export const TestDetectionRuleSecurityOption1$outboundSchema = z.pipe(z.object({
+export const TestDetectionRuleSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function testDetectionRuleSecurityOption1ToJSON(testDetectionRuleSecurityOption1) {
-    return JSON.stringify(TestDetectionRuleSecurityOption1$outboundSchema.parse(testDetectionRuleSecurityOption1));
+  }),
+);
+export function testDetectionRuleSecurityOption1ToJSON(
+  testDetectionRuleSecurityOption1,
+) {
+  return JSON.stringify(
+    TestDetectionRuleSecurityOption1$outboundSchema.parse(
+      testDetectionRuleSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const TestDetectionRuleSecurityOption2$outboundSchema = z.pipe(z.object({
+export const TestDetectionRuleSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function testDetectionRuleSecurityOption2ToJSON(testDetectionRuleSecurityOption2) {
-    return JSON.stringify(TestDetectionRuleSecurityOption2$outboundSchema.parse(testDetectionRuleSecurityOption2));
+  }),
+);
+export function testDetectionRuleSecurityOption2ToJSON(
+  testDetectionRuleSecurityOption2,
+) {
+  return JSON.stringify(
+    TestDetectionRuleSecurityOption2$outboundSchema.parse(
+      testDetectionRuleSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const TestDetectionRuleSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => TestDetectionRuleSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => TestDetectionRuleSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const TestDetectionRuleSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => TestDetectionRuleSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => TestDetectionRuleSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function testDetectionRuleSecurityToJSON(testDetectionRuleSecurity) {
-    return JSON.stringify(TestDetectionRuleSecurity$outboundSchema.parse(testDetectionRuleSecurity));
+  return JSON.stringify(
+    TestDetectionRuleSecurity$outboundSchema.parse(testDetectionRuleSecurity),
+  );
 }
 /** @internal */
-export const TestDetectionRuleRequest$outboundSchema = z.pipe(z.object({
+export const TestDetectionRuleRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     testDetectionRuleRequestBody: TestDetectionRuleRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        testDetectionRuleRequestBody: "TestDetectionRuleRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      testDetectionRuleRequestBody: "TestDetectionRuleRequestBody",
     });
-}));
+  }),
+);
 export function testDetectionRuleRequestToJSON(testDetectionRuleRequest) {
-    return JSON.stringify(TestDetectionRuleRequest$outboundSchema.parse(testDetectionRuleRequest));
+  return JSON.stringify(
+    TestDetectionRuleRequest$outboundSchema.parse(testDetectionRuleRequest),
+  );
 }
 //# sourceMappingURL=testdetectionrule.js.map

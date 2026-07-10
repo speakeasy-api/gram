@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Deployment$inboundSchema } from "./deployment.js";
 /** @internal */
 export const RedeployResult$inboundSchema = z.object({
-    deployment: z.optional(Deployment$inboundSchema),
+  deployment: z.optional(Deployment$inboundSchema),
 });
 export function redeployResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RedeployResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RedeployResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RedeployResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RedeployResult' from JSON`,
+  );
 }
 //# sourceMappingURL=redeployresult.js.map

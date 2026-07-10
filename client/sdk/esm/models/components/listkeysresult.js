@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Key$inboundSchema } from "./key.js";
 /** @internal */
 export const ListKeysResult$inboundSchema = z.object({
-    keys: z.array(Key$inboundSchema),
+  keys: z.array(Key$inboundSchema),
 });
 export function listKeysResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListKeysResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListKeysResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListKeysResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListKeysResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listkeysresult.js.map

@@ -3,33 +3,51 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpsertConfigRequestBody$outboundSchema, } from "../components/upsertconfigrequestbody.js";
+import { UpsertConfigRequestBody$outboundSchema } from "../components/upsertconfigrequestbody.js";
 /** @internal */
-export const UpsertAIIntegrationConfigSecurity$outboundSchema = z.pipe(z.object({
+export const UpsertAIIntegrationConfigSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function upsertAIIntegrationConfigSecurityToJSON(upsertAIIntegrationConfigSecurity) {
-    return JSON.stringify(UpsertAIIntegrationConfigSecurity$outboundSchema.parse(upsertAIIntegrationConfigSecurity));
+  }),
+);
+export function upsertAIIntegrationConfigSecurityToJSON(
+  upsertAIIntegrationConfigSecurity,
+) {
+  return JSON.stringify(
+    UpsertAIIntegrationConfigSecurity$outboundSchema.parse(
+      upsertAIIntegrationConfigSecurity,
+    ),
+  );
 }
 /** @internal */
-export const UpsertAIIntegrationConfigRequest$outboundSchema = z.pipe(z.object({
+export const UpsertAIIntegrationConfigRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     upsertConfigRequestBody: UpsertConfigRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        upsertConfigRequestBody: "UpsertConfigRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      upsertConfigRequestBody: "UpsertConfigRequestBody",
     });
-}));
-export function upsertAIIntegrationConfigRequestToJSON(upsertAIIntegrationConfigRequest) {
-    return JSON.stringify(UpsertAIIntegrationConfigRequest$outboundSchema.parse(upsertAIIntegrationConfigRequest));
+  }),
+);
+export function upsertAIIntegrationConfigRequestToJSON(
+  upsertAIIntegrationConfigRequest,
+) {
+  return JSON.stringify(
+    UpsertAIIntegrationConfigRequest$outboundSchema.parse(
+      upsertAIIntegrationConfigRequest,
+    ),
+  );
 }
 //# sourceMappingURL=upsertaiintegrationconfig.js.map

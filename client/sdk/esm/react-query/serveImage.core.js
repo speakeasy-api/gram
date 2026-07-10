@@ -5,25 +5,29 @@ import { assetsServeImage } from "../funcs/assetsServeImage.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
 export function prefetchServeImage(queryClient, client$, request, options) {
-    return queryClient.prefetchQuery({
-        ...buildServeImageQuery(client$, request, options),
-    });
+  return queryClient.prefetchQuery({
+    ...buildServeImageQuery(client$, request, options),
+  });
 }
 export function buildServeImageQuery(client$, request, options) {
-    return {
-        queryKey: queryKeyServeImage({ id: request.id }),
-        queryFn: async function serveImageQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(assetsServeImage(client$, request, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyServeImage({ id: request.id }),
+    queryFn: async function serveImageQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(assetsServeImage(client$, request, mergedOptions));
+    },
+  };
 }
 export function queryKeyServeImage(parameters) {
-    return ["@gram/client", "assets", "serveImage", parameters];
+  return ["@gram/client", "assets", "serveImage", parameters];
 }
 //# sourceMappingURL=serveImage.core.js.map

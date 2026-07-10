@@ -7,82 +7,110 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Sort order
  */
 export const ListTracesQueryParamSort = {
-    Asc: "asc",
-    Desc: "desc",
+  Asc: "asc",
+  Desc: "desc",
 };
 /** @internal */
-export const ListTracesSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListTracesSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
+  }),
+);
 export function listTracesSecurityOption1ToJSON(listTracesSecurityOption1) {
-    return JSON.stringify(ListTracesSecurityOption1$outboundSchema.parse(listTracesSecurityOption1));
+  return JSON.stringify(
+    ListTracesSecurityOption1$outboundSchema.parse(listTracesSecurityOption1),
+  );
 }
 /** @internal */
-export const ListTracesSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListTracesSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
+  }),
+);
 export function listTracesSecurityOption2ToJSON(listTracesSecurityOption2) {
-    return JSON.stringify(ListTracesSecurityOption2$outboundSchema.parse(listTracesSecurityOption2));
+  return JSON.stringify(
+    ListTracesSecurityOption2$outboundSchema.parse(listTracesSecurityOption2),
+  );
 }
 /** @internal */
-export const ListTracesSecurityOption3$outboundSchema = z.pipe(z.object({
+export const ListTracesSecurityOption3$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
+  }),
+);
 export function listTracesSecurityOption3ToJSON(listTracesSecurityOption3) {
-    return JSON.stringify(ListTracesSecurityOption3$outboundSchema.parse(listTracesSecurityOption3));
+  return JSON.stringify(
+    ListTracesSecurityOption3$outboundSchema.parse(listTracesSecurityOption3),
+  );
 }
 /** @internal */
-export const ListTracesSecurityOption4$outboundSchema = z.pipe(z.object({
+export const ListTracesSecurityOption4$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function listTracesSecurityOption4ToJSON(listTracesSecurityOption4) {
-    return JSON.stringify(ListTracesSecurityOption4$outboundSchema.parse(listTracesSecurityOption4));
+  return JSON.stringify(
+    ListTracesSecurityOption4$outboundSchema.parse(listTracesSecurityOption4),
+  );
 }
 /** @internal */
-export const ListTracesSecurity$outboundSchema = z.pipe(z.object({
+export const ListTracesSecurity$outboundSchema = z.pipe(
+  z.object({
     option1: z.optional(z.lazy(() => ListTracesSecurityOption1$outboundSchema)),
     option2: z.optional(z.lazy(() => ListTracesSecurityOption2$outboundSchema)),
     option3: z.optional(z.lazy(() => ListTracesSecurityOption3$outboundSchema)),
     option4: z.optional(z.lazy(() => ListTracesSecurityOption4$outboundSchema)),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
-        option3: "Option3",
-        option4: "Option4",
+      option1: "Option1",
+      option2: "Option2",
+      option3: "Option3",
+      option4: "Option4",
     });
-}));
+  }),
+);
 export function listTracesSecurityToJSON(listTracesSecurity) {
-    return JSON.stringify(ListTracesSecurity$outboundSchema.parse(listTracesSecurity));
+  return JSON.stringify(
+    ListTracesSecurity$outboundSchema.parse(listTracesSecurity),
+  );
 }
 /** @internal */
-export const ListTracesQueryParamSort$outboundSchema = z.enum(ListTracesQueryParamSort);
+export const ListTracesQueryParamSort$outboundSchema = z.enum(
+  ListTracesQueryParamSort,
+);
 /** @internal */
-export const ListTracesRequest$outboundSchema = z.pipe(z.object({
+export const ListTracesRequest$outboundSchema = z.pipe(
+  z.object({
     timeStart: z.optional(z.int()),
     timeEnd: z.optional(z.int()),
     deploymentId: z.optional(z.string()),
@@ -93,18 +121,22 @@ export const ListTracesRequest$outboundSchema = z.pipe(z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        timeStart: "time_start",
-        timeEnd: "time_end",
-        deploymentId: "deployment_id",
-        functionId: "function_id",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      timeStart: "time_start",
+      timeEnd: "time_end",
+      deploymentId: "deployment_id",
+      functionId: "function_id",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function listTracesRequestToJSON(listTracesRequest) {
-    return JSON.stringify(ListTracesRequest$outboundSchema.parse(listTracesRequest));
+  return JSON.stringify(
+    ListTracesRequest$outboundSchema.parse(listTracesRequest),
+  );
 }
 //# sourceMappingURL=listtraces.js.map

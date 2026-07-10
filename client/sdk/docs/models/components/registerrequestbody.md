@@ -12,6 +12,6 @@ let value: RegisterRequestBody = {
 
 ## Fields
 
-| Field                           | Type                            | Required                        | Description                     |
-| ------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- |
-| `orgName`                       | *string*                        | :heavy_check_mark:              | The name of the org to register |
+| Field     | Type     | Required           | Description                     |
+| --------- | -------- | ------------------ | ------------------------------- |
+| `orgName` | _string_ | :heavy_check_mark: | The name of the org to register |

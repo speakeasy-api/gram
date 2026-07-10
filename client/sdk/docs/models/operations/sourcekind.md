@@ -13,5 +13,5 @@ let value: SourceKind = "http";
 ## Values
 
 ```typescript
-"http" | "function"
+"http" | "function";
 ```

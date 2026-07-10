@@ -4,55 +4,88 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListChatSourcesSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListChatSourcesSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listChatSourcesSecurityOption1ToJSON(listChatSourcesSecurityOption1) {
-    return JSON.stringify(ListChatSourcesSecurityOption1$outboundSchema.parse(listChatSourcesSecurityOption1));
+  }),
+);
+export function listChatSourcesSecurityOption1ToJSON(
+  listChatSourcesSecurityOption1,
+) {
+  return JSON.stringify(
+    ListChatSourcesSecurityOption1$outboundSchema.parse(
+      listChatSourcesSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListChatSourcesSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListChatSourcesSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     chatSessionsTokenHeaderGramChatSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        chatSessionsTokenHeaderGramChatSession: "chat_sessions_token_header_Gram-Chat-Session",
+      chatSessionsTokenHeaderGramChatSession:
+        "chat_sessions_token_header_Gram-Chat-Session",
     });
-}));
-export function listChatSourcesSecurityOption2ToJSON(listChatSourcesSecurityOption2) {
-    return JSON.stringify(ListChatSourcesSecurityOption2$outboundSchema.parse(listChatSourcesSecurityOption2));
+  }),
+);
+export function listChatSourcesSecurityOption2ToJSON(
+  listChatSourcesSecurityOption2,
+) {
+  return JSON.stringify(
+    ListChatSourcesSecurityOption2$outboundSchema.parse(
+      listChatSourcesSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListChatSourcesSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListChatSourcesSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListChatSourcesSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListChatSourcesSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListChatSourcesSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListChatSourcesSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function listChatSourcesSecurityToJSON(listChatSourcesSecurity) {
-    return JSON.stringify(ListChatSourcesSecurity$outboundSchema.parse(listChatSourcesSecurity));
+  return JSON.stringify(
+    ListChatSourcesSecurity$outboundSchema.parse(listChatSourcesSecurity),
+  );
 }
 /** @internal */
-export const ListChatSourcesRequest$outboundSchema = z.pipe(z.object({
+export const ListChatSourcesRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        gramChatSession: "Gram-Chat-Session",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      gramChatSession: "Gram-Chat-Session",
     });
-}));
+  }),
+);
 export function listChatSourcesRequestToJSON(listChatSourcesRequest) {
-    return JSON.stringify(ListChatSourcesRequest$outboundSchema.parse(listChatSourcesRequest));
+  return JSON.stringify(
+    ListChatSourcesRequest$outboundSchema.parse(listChatSourcesRequest),
+  );
 }
 //# sourceMappingURL=listchatsources.js.map

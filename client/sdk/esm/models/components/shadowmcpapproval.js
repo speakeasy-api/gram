@@ -5,21 +5,31 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ShadowMCPApproval$inboundSchema = z.pipe(z.object({
-    approved_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const ShadowMCPApproval$inboundSchema = z.pipe(
+  z.object({
+    approved_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     approved_by: z.optional(z.string()),
     match: z.string(),
     policy_id: z.string(),
     server_name: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "approved_at": "approvedAt",
-        "approved_by": "approvedBy",
-        "policy_id": "policyId",
-        "server_name": "serverName",
+      approved_at: "approvedAt",
+      approved_by: "approvedBy",
+      policy_id: "policyId",
+      server_name: "serverName",
     });
-}));
+  }),
+);
 export function shadowMCPApprovalFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ShadowMCPApproval$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ShadowMCPApproval' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ShadowMCPApproval$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ShadowMCPApproval' from JSON`,
+  );
 }
 //# sourceMappingURL=shadowmcpapproval.js.map

@@ -6,12 +6,17 @@ import { ProjectSummary } from "./projectsummary.js";
  * Result of user metrics summary query
  */
 export type GetUserMetricsSummaryResult = {
-    /**
-     * Aggregated metrics
-     */
-    metrics: ProjectSummary;
+  /**
+   * Aggregated metrics
+   */
+  metrics: ProjectSummary;
 };
 /** @internal */
-export declare const GetUserMetricsSummaryResult$inboundSchema: z.ZodMiniType<GetUserMetricsSummaryResult, unknown>;
-export declare function getUserMetricsSummaryResultFromJSON(jsonString: string): SafeParseResult<GetUserMetricsSummaryResult, SDKValidationError>;
+export declare const GetUserMetricsSummaryResult$inboundSchema: z.ZodMiniType<
+  GetUserMetricsSummaryResult,
+  unknown
+>;
+export declare function getUserMetricsSummaryResultFromJSON(
+  jsonString: string,
+): SafeParseResult<GetUserMetricsSummaryResult, SDKValidationError>;
 //# sourceMappingURL=getusermetricssummaryresult.d.ts.map

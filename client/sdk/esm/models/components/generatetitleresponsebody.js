@@ -5,9 +5,13 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const GenerateTitleResponseBody$inboundSchema = z.object({
-    title: z.string(),
+  title: z.string(),
 });
 export function generateTitleResponseBodyFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GenerateTitleResponseBody$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GenerateTitleResponseBody' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => GenerateTitleResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GenerateTitleResponseBody' from JSON`,
+  );
 }
 //# sourceMappingURL=generatetitleresponsebody.js.map

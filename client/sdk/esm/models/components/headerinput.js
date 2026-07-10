@@ -4,21 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const HeaderInput$outboundSchema = z.pipe(z.object({
+export const HeaderInput$outboundSchema = z.pipe(
+  z.object({
     description: z.optional(z.string()),
     isRequired: z.optional(z.boolean()),
     isSecret: z.optional(z.boolean()),
     name: z.string(),
     value: z.optional(z.string()),
     valueFromRequestHeader: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        isRequired: "is_required",
-        isSecret: "is_secret",
-        valueFromRequestHeader: "value_from_request_header",
+      isRequired: "is_required",
+      isSecret: "is_secret",
+      valueFromRequestHeader: "value_from_request_header",
     });
-}));
+  }),
+);
 export function headerInputToJSON(headerInput) {
-    return JSON.stringify(HeaderInput$outboundSchema.parse(headerInput));
+  return JSON.stringify(HeaderInput$outboundSchema.parse(headerInput));
 }
 //# sourceMappingURL=headerinput.js.map

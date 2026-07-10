@@ -13,5 +13,5 @@ let value: UpdateAssistantFormStatus = "paused";
 ## Values
 
 ```typescript
-"active" | "paused"
+"active" | "paused";
 ```

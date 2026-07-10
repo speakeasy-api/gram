@@ -7,23 +7,30 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * The visibility of the package version
  */
 export const PublishPackageFormVisibility = {
-    Public: "public",
-    Private: "private",
+  Public: "public",
+  Private: "private",
 };
 /** @internal */
-export const PublishPackageFormVisibility$outboundSchema = z.enum(PublishPackageFormVisibility);
+export const PublishPackageFormVisibility$outboundSchema = z.enum(
+  PublishPackageFormVisibility,
+);
 /** @internal */
-export const PublishPackageForm$outboundSchema = z.pipe(z.object({
+export const PublishPackageForm$outboundSchema = z.pipe(
+  z.object({
     deploymentId: z.string(),
     name: z.string(),
     version: z.string(),
     visibility: PublishPackageFormVisibility$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        deploymentId: "deployment_id",
+      deploymentId: "deployment_id",
     });
-}));
+  }),
+);
 export function publishPackageFormToJSON(publishPackageForm) {
-    return JSON.stringify(PublishPackageForm$outboundSchema.parse(publishPackageForm));
+  return JSON.stringify(
+    PublishPackageForm$outboundSchema.parse(publishPackageForm),
+  );
 }
 //# sourceMappingURL=publishpackageform.js.map

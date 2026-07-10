@@ -13,5 +13,5 @@ let value: SeverityText = "FATAL";
 ## Values
 
 ```typescript
-"DEBUG" | "INFO" | "WARN" | "ERROR" | "FATAL"
+"DEBUG" | "INFO" | "WARN" | "ERROR" | "FATAL";
 ```

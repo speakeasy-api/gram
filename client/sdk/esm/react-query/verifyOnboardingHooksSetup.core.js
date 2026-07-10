@@ -4,34 +4,61 @@
 import { organizationsVerifyOnboardingHooksSetup } from "../funcs/organizationsVerifyOnboardingHooksSetup.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchVerifyOnboardingHooksSetup(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildVerifyOnboardingHooksSetupQuery(client$, request, security, options),
-    });
+export function prefetchVerifyOnboardingHooksSetup(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildVerifyOnboardingHooksSetupQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+  });
 }
-export function buildVerifyOnboardingHooksSetupQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyVerifyOnboardingHooksSetup({
-            sinceUnixNano: request?.sinceUnixNano,
-            gramSession: request?.gramSession,
-        }),
-        queryFn: async function verifyOnboardingHooksSetupQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(organizationsVerifyOnboardingHooksSetup(client$, request, security, mergedOptions));
-        },
-    };
+export function buildVerifyOnboardingHooksSetupQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyVerifyOnboardingHooksSetup({
+      sinceUnixNano: request?.sinceUnixNano,
+      gramSession: request?.gramSession,
+    }),
+    queryFn: async function verifyOnboardingHooksSetupQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        organizationsVerifyOnboardingHooksSetup(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ),
+      );
+    },
+  };
 }
 export function queryKeyVerifyOnboardingHooksSetup(parameters) {
-    return [
-        "@gram/client",
-        "organizations",
-        "verifyOnboardingHooksSetup",
-        parameters,
-    ];
+  return [
+    "@gram/client",
+    "organizations",
+    "verifyOnboardingHooksSetup",
+    parameters,
+  ];
 }
 //# sourceMappingURL=verifyOnboardingHooksSetup.core.js.map

@@ -3,61 +3,93 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpdateRiskPolicyRequestBody$outboundSchema, } from "../components/updateriskpolicyrequestbody.js";
+import { UpdateRiskPolicyRequestBody$outboundSchema } from "../components/updateriskpolicyrequestbody.js";
 /** @internal */
-export const UpdateRiskPolicySecurityOption1$outboundSchema = z.pipe(z.object({
+export const UpdateRiskPolicySecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function updateRiskPolicySecurityOption1ToJSON(updateRiskPolicySecurityOption1) {
-    return JSON.stringify(UpdateRiskPolicySecurityOption1$outboundSchema.parse(updateRiskPolicySecurityOption1));
+  }),
+);
+export function updateRiskPolicySecurityOption1ToJSON(
+  updateRiskPolicySecurityOption1,
+) {
+  return JSON.stringify(
+    UpdateRiskPolicySecurityOption1$outboundSchema.parse(
+      updateRiskPolicySecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const UpdateRiskPolicySecurityOption2$outboundSchema = z.pipe(z.object({
+export const UpdateRiskPolicySecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function updateRiskPolicySecurityOption2ToJSON(updateRiskPolicySecurityOption2) {
-    return JSON.stringify(UpdateRiskPolicySecurityOption2$outboundSchema.parse(updateRiskPolicySecurityOption2));
+  }),
+);
+export function updateRiskPolicySecurityOption2ToJSON(
+  updateRiskPolicySecurityOption2,
+) {
+  return JSON.stringify(
+    UpdateRiskPolicySecurityOption2$outboundSchema.parse(
+      updateRiskPolicySecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const UpdateRiskPolicySecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => UpdateRiskPolicySecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => UpdateRiskPolicySecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const UpdateRiskPolicySecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => UpdateRiskPolicySecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => UpdateRiskPolicySecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function updateRiskPolicySecurityToJSON(updateRiskPolicySecurity) {
-    return JSON.stringify(UpdateRiskPolicySecurity$outboundSchema.parse(updateRiskPolicySecurity));
+  return JSON.stringify(
+    UpdateRiskPolicySecurity$outboundSchema.parse(updateRiskPolicySecurity),
+  );
 }
 /** @internal */
-export const UpdateRiskPolicyRequest$outboundSchema = z.pipe(z.object({
+export const UpdateRiskPolicyRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     updateRiskPolicyRequestBody: UpdateRiskPolicyRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        updateRiskPolicyRequestBody: "UpdateRiskPolicyRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      updateRiskPolicyRequestBody: "UpdateRiskPolicyRequestBody",
     });
-}));
+  }),
+);
 export function updateRiskPolicyRequestToJSON(updateRiskPolicyRequest) {
-    return JSON.stringify(UpdateRiskPolicyRequest$outboundSchema.parse(updateRiskPolicyRequest));
+  return JSON.stringify(
+    UpdateRiskPolicyRequest$outboundSchema.parse(updateRiskPolicyRequest),
+  );
 }
 //# sourceMappingURL=updateriskpolicy.js.map

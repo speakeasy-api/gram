@@ -5,42 +5,68 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const DownloadCodexInstallScriptSecurity$outboundSchema = z.pipe(z.object({
+export const DownloadCodexInstallScriptSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function downloadCodexInstallScriptSecurityToJSON(downloadCodexInstallScriptSecurity) {
-    return JSON.stringify(DownloadCodexInstallScriptSecurity$outboundSchema.parse(downloadCodexInstallScriptSecurity));
+  }),
+);
+export function downloadCodexInstallScriptSecurityToJSON(
+  downloadCodexInstallScriptSecurity,
+) {
+  return JSON.stringify(
+    DownloadCodexInstallScriptSecurity$outboundSchema.parse(
+      downloadCodexInstallScriptSecurity,
+    ),
+  );
 }
 /** @internal */
-export const DownloadCodexInstallScriptRequest$outboundSchema = z.pipe(z.object({
+export const DownloadCodexInstallScriptRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
-export function downloadCodexInstallScriptRequestToJSON(downloadCodexInstallScriptRequest) {
-    return JSON.stringify(DownloadCodexInstallScriptRequest$outboundSchema.parse(downloadCodexInstallScriptRequest));
+  }),
+);
+export function downloadCodexInstallScriptRequestToJSON(
+  downloadCodexInstallScriptRequest,
+) {
+  return JSON.stringify(
+    DownloadCodexInstallScriptRequest$outboundSchema.parse(
+      downloadCodexInstallScriptRequest,
+    ),
+  );
 }
 /** @internal */
-export const DownloadCodexInstallScriptResponse$inboundSchema = z.pipe(z.object({
+export const DownloadCodexInstallScriptResponse$inboundSchema = z.pipe(
+  z.object({
     Headers: z._default(z.record(z.string(), z.array(z.string())), {}),
-    Result: z.custom(x => x instanceof ReadableStream),
-}), z.transform((v) => {
+    Result: z.custom((x) => x instanceof ReadableStream),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Headers": "headers",
-        "Result": "result",
+      Headers: "headers",
+      Result: "result",
     });
-}));
+  }),
+);
 export function downloadCodexInstallScriptResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => DownloadCodexInstallScriptResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'DownloadCodexInstallScriptResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) =>
+      DownloadCodexInstallScriptResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'DownloadCodexInstallScriptResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=downloadcodexinstallscript.js.map

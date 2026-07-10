@@ -3,13 +3,17 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { BuiltinExclusionEntry$inboundSchema, } from "./builtinexclusionentry.js";
+import { BuiltinExclusionEntry$inboundSchema } from "./builtinexclusionentry.js";
 /** @internal */
 export const BuiltinExclusionCategory$inboundSchema = z.object({
-    entries: z.array(BuiltinExclusionEntry$inboundSchema),
-    label: z.string(),
+  entries: z.array(BuiltinExclusionEntry$inboundSchema),
+  label: z.string(),
 });
 export function builtinExclusionCategoryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => BuiltinExclusionCategory$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'BuiltinExclusionCategory' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => BuiltinExclusionCategory$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'BuiltinExclusionCategory' from JSON`,
+  );
 }
 //# sourceMappingURL=builtinexclusioncategory.js.map

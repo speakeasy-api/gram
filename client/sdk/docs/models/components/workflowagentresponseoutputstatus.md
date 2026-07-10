@@ -13,5 +13,5 @@ let value: WorkflowAgentResponseOutputStatus = "failed";
 ## Values
 
 ```typescript
-"in_progress" | "completed" | "failed"
+"in_progress" | "completed" | "failed";
 ```

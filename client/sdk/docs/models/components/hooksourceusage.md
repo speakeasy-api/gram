@@ -15,7 +15,7 @@ let value: HookSourceUsage = {
 
 ## Fields
 
-| Field                                          | Type                                           | Required                                       | Description                                    |
-| ---------------------------------------------- | ---------------------------------------------- | ---------------------------------------------- | ---------------------------------------------- |
-| `eventCount`                                   | *number*                                       | :heavy_check_mark:                             | Total hook events for this source              |
-| `source`                                       | *string*                                       | :heavy_check_mark:                             | Hook source (from attributes.gram.hook.source) |
+| Field        | Type     | Required           | Description                                    |
+| ------------ | -------- | ------------------ | ---------------------------------------------- |
+| `eventCount` | _number_ | :heavy_check_mark: | Total hook events for this source              |
+| `source`     | _string_ | :heavy_check_mark: | Hook source (from attributes.gram.hook.source) |

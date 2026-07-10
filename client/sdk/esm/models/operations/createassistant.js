@@ -3,33 +3,43 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateAssistantForm$outboundSchema, } from "../components/createassistantform.js";
+import { CreateAssistantForm$outboundSchema } from "../components/createassistantform.js";
 /** @internal */
-export const CreateAssistantSecurity$outboundSchema = z.pipe(z.object({
+export const CreateAssistantSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function createAssistantSecurityToJSON(createAssistantSecurity) {
-    return JSON.stringify(CreateAssistantSecurity$outboundSchema.parse(createAssistantSecurity));
+  return JSON.stringify(
+    CreateAssistantSecurity$outboundSchema.parse(createAssistantSecurity),
+  );
 }
 /** @internal */
-export const CreateAssistantRequest$outboundSchema = z.pipe(z.object({
+export const CreateAssistantRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     createAssistantForm: CreateAssistantForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        createAssistantForm: "CreateAssistantForm",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      createAssistantForm: "CreateAssistantForm",
     });
-}));
+  }),
+);
 export function createAssistantRequestToJSON(createAssistantRequest) {
-    return JSON.stringify(CreateAssistantRequest$outboundSchema.parse(createAssistantRequest));
+  return JSON.stringify(
+    CreateAssistantRequest$outboundSchema.parse(createAssistantRequest),
+  );
 }
 //# sourceMappingURL=createassistant.js.map

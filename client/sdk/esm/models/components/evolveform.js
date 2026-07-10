@@ -3,12 +3,13 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { AddExternalMCPForm$outboundSchema, } from "./addexternalmcpform.js";
-import { AddFunctionsForm$outboundSchema, } from "./addfunctionsform.js";
-import { AddOpenAPIv3DeploymentAssetForm$outboundSchema, } from "./addopenapiv3deploymentassetform.js";
-import { AddPackageForm$outboundSchema, } from "./addpackageform.js";
+import { AddExternalMCPForm$outboundSchema } from "./addexternalmcpform.js";
+import { AddFunctionsForm$outboundSchema } from "./addfunctionsform.js";
+import { AddOpenAPIv3DeploymentAssetForm$outboundSchema } from "./addopenapiv3deploymentassetform.js";
+import { AddPackageForm$outboundSchema } from "./addpackageform.js";
 /** @internal */
-export const EvolveForm$outboundSchema = z.pipe(z.object({
+export const EvolveForm$outboundSchema = z.pipe(
+  z.object({
     deploymentId: z.optional(z.string()),
     excludeExternalMcps: z.optional(z.array(z.string())),
     excludeFunctions: z.optional(z.array(z.string())),
@@ -17,23 +18,27 @@ export const EvolveForm$outboundSchema = z.pipe(z.object({
     nonBlocking: z.optional(z.boolean()),
     upsertExternalMcps: z.optional(z.array(AddExternalMCPForm$outboundSchema)),
     upsertFunctions: z.optional(z.array(AddFunctionsForm$outboundSchema)),
-    upsertOpenapiv3Assets: z.optional(z.array(AddOpenAPIv3DeploymentAssetForm$outboundSchema)),
+    upsertOpenapiv3Assets: z.optional(
+      z.array(AddOpenAPIv3DeploymentAssetForm$outboundSchema),
+    ),
     upsertPackages: z.optional(z.array(AddPackageForm$outboundSchema)),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        deploymentId: "deployment_id",
-        excludeExternalMcps: "exclude_external_mcps",
-        excludeFunctions: "exclude_functions",
-        excludeOpenapiv3Assets: "exclude_openapiv3_assets",
-        excludePackages: "exclude_packages",
-        nonBlocking: "non_blocking",
-        upsertExternalMcps: "upsert_external_mcps",
-        upsertFunctions: "upsert_functions",
-        upsertOpenapiv3Assets: "upsert_openapiv3_assets",
-        upsertPackages: "upsert_packages",
+      deploymentId: "deployment_id",
+      excludeExternalMcps: "exclude_external_mcps",
+      excludeFunctions: "exclude_functions",
+      excludeOpenapiv3Assets: "exclude_openapiv3_assets",
+      excludePackages: "exclude_packages",
+      nonBlocking: "non_blocking",
+      upsertExternalMcps: "upsert_external_mcps",
+      upsertFunctions: "upsert_functions",
+      upsertOpenapiv3Assets: "upsert_openapiv3_assets",
+      upsertPackages: "upsert_packages",
     });
-}));
+  }),
+);
 export function evolveFormToJSON(evolveForm) {
-    return JSON.stringify(EvolveForm$outboundSchema.parse(evolveForm));
+  return JSON.stringify(EvolveForm$outboundSchema.parse(evolveForm));
 }
 //# sourceMappingURL=evolveform.js.map

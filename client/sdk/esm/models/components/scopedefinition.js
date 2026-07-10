@@ -8,85 +8,90 @@ import { safeParse } from "../../lib/schemas.js";
  * The scope used to store exception rules for this scope.
  */
 export const ExclusionScope = {
-    OrgBlockedRead: "org:blocked_read",
-    OrgBlockedAdmin: "org:blocked_admin",
-    ProjectBlockedRead: "project:blocked_read",
-    ProjectBlockedWrite: "project:blocked_write",
-    McpBlockedRead: "mcp:blocked_read",
-    McpBlockedWrite: "mcp:blocked_write",
-    McpBlockedConnect: "mcp:blocked_connect",
-    EnvironmentBlockedRead: "environment:blocked_read",
-    EnvironmentBlockedWrite: "environment:blocked_write",
-    RiskPolicyBypass: "risk_policy:bypass",
+  OrgBlockedRead: "org:blocked_read",
+  OrgBlockedAdmin: "org:blocked_admin",
+  ProjectBlockedRead: "project:blocked_read",
+  ProjectBlockedWrite: "project:blocked_write",
+  McpBlockedRead: "mcp:blocked_read",
+  McpBlockedWrite: "mcp:blocked_write",
+  McpBlockedConnect: "mcp:blocked_connect",
+  EnvironmentBlockedRead: "environment:blocked_read",
+  EnvironmentBlockedWrite: "environment:blocked_write",
+  RiskPolicyBypass: "risk_policy:bypass",
 };
 /**
  * The type of resource this scope applies to.
  */
 export const ResourceType = {
-    Org: "org",
-    Project: "project",
-    Mcp: "mcp",
-    Environment: "environment",
-    RiskPolicy: "risk_policy",
-    Chat: "chat",
+  Org: "org",
+  Project: "project",
+  Mcp: "mcp",
+  Environment: "environment",
+  RiskPolicy: "risk_policy",
+  Chat: "chat",
 };
 /**
  * Unique scope identifier.
  */
 export const Slug = {
-    OrgRead: "org:read",
-    OrgBlockedRead: "org:blocked_read",
-    OrgAdmin: "org:admin",
-    OrgBlockedAdmin: "org:blocked_admin",
-    ProjectRead: "project:read",
-    ProjectBlockedRead: "project:blocked_read",
-    ProjectWrite: "project:write",
-    ProjectBlockedWrite: "project:blocked_write",
-    McpRead: "mcp:read",
-    McpBlockedRead: "mcp:blocked_read",
-    McpWrite: "mcp:write",
-    McpBlockedWrite: "mcp:blocked_write",
-    McpConnect: "mcp:connect",
-    McpBlockedConnect: "mcp:blocked_connect",
-    EnvironmentRead: "environment:read",
-    EnvironmentBlockedRead: "environment:blocked_read",
-    EnvironmentWrite: "environment:write",
-    EnvironmentBlockedWrite: "environment:blocked_write",
-    RiskPolicyEvaluate: "risk_policy:evaluate",
-    RiskPolicyBypass: "risk_policy:bypass",
-    ChatRead: "chat:read",
+  OrgRead: "org:read",
+  OrgBlockedRead: "org:blocked_read",
+  OrgAdmin: "org:admin",
+  OrgBlockedAdmin: "org:blocked_admin",
+  ProjectRead: "project:read",
+  ProjectBlockedRead: "project:blocked_read",
+  ProjectWrite: "project:write",
+  ProjectBlockedWrite: "project:blocked_write",
+  McpRead: "mcp:read",
+  McpBlockedRead: "mcp:blocked_read",
+  McpWrite: "mcp:write",
+  McpBlockedWrite: "mcp:blocked_write",
+  McpConnect: "mcp:connect",
+  McpBlockedConnect: "mcp:blocked_connect",
+  EnvironmentRead: "environment:read",
+  EnvironmentBlockedRead: "environment:blocked_read",
+  EnvironmentWrite: "environment:write",
+  EnvironmentBlockedWrite: "environment:blocked_write",
+  RiskPolicyEvaluate: "risk_policy:evaluate",
+  RiskPolicyBypass: "risk_policy:bypass",
+  ChatRead: "chat:read",
 };
 /**
  * Whether this scope is a first-class permission or an internal storage/evaluation scope.
  */
 export const Visibility = {
-    UserVisible: "user_visible",
-    Internal: "internal",
+  UserVisible: "user_visible",
+  Internal: "internal",
 };
 /** @internal */
 export const ExclusionScope$inboundSchema = z.enum(ExclusionScope);
 /** @internal */
-export const ResourceType$inboundSchema = z
-    .enum(ResourceType);
+export const ResourceType$inboundSchema = z.enum(ResourceType);
 /** @internal */
 export const Slug$inboundSchema = z.enum(Slug);
 /** @internal */
-export const Visibility$inboundSchema = z
-    .enum(Visibility);
+export const Visibility$inboundSchema = z.enum(Visibility);
 /** @internal */
-export const ScopeDefinition$inboundSchema = z.pipe(z.object({
+export const ScopeDefinition$inboundSchema = z.pipe(
+  z.object({
     description: z.string(),
     exclusion_scope: z.optional(ExclusionScope$inboundSchema),
     resource_type: ResourceType$inboundSchema,
     slug: Slug$inboundSchema,
     visibility: Visibility$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "exclusion_scope": "exclusionScope",
-        "resource_type": "resourceType",
+      exclusion_scope: "exclusionScope",
+      resource_type: "resourceType",
     });
-}));
+  }),
+);
 export function scopeDefinitionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ScopeDefinition$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ScopeDefinition' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ScopeDefinition$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ScopeDefinition' from JSON`,
+  );
 }
 //# sourceMappingURL=scopedefinition.js.map

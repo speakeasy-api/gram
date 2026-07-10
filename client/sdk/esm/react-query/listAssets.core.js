@@ -4,30 +4,42 @@
 import { assetsListAssets } from "../funcs/assetsListAssets.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchListAssets(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildListAssetsQuery(client$, request, security, options),
-    });
+export function prefetchListAssets(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildListAssetsQuery(client$, request, security, options),
+  });
 }
 export function buildListAssetsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyListAssets({
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-            gramKey: request?.gramKey,
-        }),
-        queryFn: async function listAssetsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(assetsListAssets(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyListAssets({
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+      gramKey: request?.gramKey,
+    }),
+    queryFn: async function listAssetsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        assetsListAssets(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyListAssets(parameters) {
-    return ["@gram/client", "assets", "listAssets", parameters];
+  return ["@gram/client", "assets", "listAssets", parameters];
 }
 //# sourceMappingURL=listAssets.core.js.map

@@ -10,6 +10,6 @@ let value: GetIntegrationResult = {};
 
 ## Fields
 
-| Field                                                            | Type                                                             | Required                                                         | Description                                                      |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `integration`                                                    | [components.Integration](../../models/components/integration.md) | :heavy_minus_sign:                                               | N/A                                                              |
+| Field         | Type                                                             | Required           | Description |
+| ------------- | ---------------------------------------------------------------- | ------------------ | ----------- |
+| `integration` | [components.Integration](../../models/components/integration.md) | :heavy_minus_sign: | N/A         |

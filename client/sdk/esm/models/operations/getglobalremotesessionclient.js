@@ -4,26 +4,44 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetGlobalRemoteSessionClientSecurity$outboundSchema = z.pipe(z.object({
+export const GetGlobalRemoteSessionClientSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function getGlobalRemoteSessionClientSecurityToJSON(getGlobalRemoteSessionClientSecurity) {
-    return JSON.stringify(GetGlobalRemoteSessionClientSecurity$outboundSchema.parse(getGlobalRemoteSessionClientSecurity));
+  }),
+);
+export function getGlobalRemoteSessionClientSecurityToJSON(
+  getGlobalRemoteSessionClientSecurity,
+) {
+  return JSON.stringify(
+    GetGlobalRemoteSessionClientSecurity$outboundSchema.parse(
+      getGlobalRemoteSessionClientSecurity,
+    ),
+  );
 }
 /** @internal */
-export const GetGlobalRemoteSessionClientRequest$outboundSchema = z.pipe(z.object({
+export const GetGlobalRemoteSessionClientRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
-export function getGlobalRemoteSessionClientRequestToJSON(getGlobalRemoteSessionClientRequest) {
-    return JSON.stringify(GetGlobalRemoteSessionClientRequest$outboundSchema.parse(getGlobalRemoteSessionClientRequest));
+  }),
+);
+export function getGlobalRemoteSessionClientRequestToJSON(
+  getGlobalRemoteSessionClientRequest,
+) {
+  return JSON.stringify(
+    GetGlobalRemoteSessionClientRequest$outboundSchema.parse(
+      getGlobalRemoteSessionClientRequest,
+    ),
+  );
 }
 //# sourceMappingURL=getglobalremotesessionclient.js.map

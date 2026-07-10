@@ -9,9 +9,9 @@ import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import { Environment$inboundSchema, } from "../models/components/environment.js";
-import { ServiceError$inboundSchema, } from "../models/errors/serviceerror.js";
-import { UpdateEnvironmentRequest$outboundSchema, } from "../models/operations/updateenvironment.js";
+import { Environment$inboundSchema } from "../models/components/environment.js";
+import { ServiceError$inboundSchema } from "../models/errors/serviceerror.js";
+import { UpdateEnvironmentRequest$outboundSchema } from "../models/operations/updateenvironment.js";
 import { APIPromise } from "../types/async.js";
 /**
  * updateEnvironment environments
@@ -20,89 +20,105 @@ import { APIPromise } from "../types/async.js";
  * Update an environment
  */
 export function environmentsUpdateBySlug(client, request, security, options) {
-    return new APIPromise($do(client, request, security, options));
+  return new APIPromise($do(client, request, security, options));
 }
 async function $do(client, request, security, options) {
-    const parsed = safeParse(request, (value) => z.parse(UpdateEnvironmentRequest$outboundSchema, value), "Input validation failed");
-    if (!parsed.ok) {
-        return [parsed, { status: "invalid" }];
-    }
-    const payload = parsed.value;
-    const body = encodeJSON("body", payload.UpdateEnvironmentRequestBody, {
-        explode: true,
-    });
-    const path = pathToFunc("/rpc/environments.update")();
-    const query = encodeFormQuery({
-        "slug": payload.slug,
-    });
-    const headers = new Headers(compactMap({
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
-            explode: false,
-            charEncoding: "none",
-        }),
-        "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
-            explode: false,
-            charEncoding: "none",
-        }),
-    }));
-    const requestSecurity = resolveSecurity([
-        {
-            fieldName: "Gram-Project",
-            type: "apiKey:header",
-            value: security?.projectSlugHeaderGramProject,
-        },
-        {
-            fieldName: "Gram-Session",
-            type: "apiKey:header",
-            value: security?.sessionHeaderGramSession,
-        },
-    ]);
-    const context = {
-        options: client._options,
-        baseURL: options?.serverURL ?? client._baseURL ?? "",
-        operationID: "updateEnvironment",
-        oAuth2Scopes: null,
-        resolvedSecurity: requestSecurity,
-        securitySource: security,
-        retryConfig: options?.retries
-            || client._options.retryConfig
-            || { strategy: "none" },
-        retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"],
-    };
-    const requestRes = client._createRequest(context, {
-        security: requestSecurity,
-        method: "POST",
-        baseURL: options?.serverURL,
-        path: path,
-        headers: headers,
-        query: query,
-        body: body,
-        userAgent: client._options.userAgent,
-        timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
-    }, options);
-    if (!requestRes.ok) {
-        return [requestRes, { status: "invalid" }];
-    }
-    const req = requestRes.value;
-    const doResult = await client._do(req, {
-        context,
-        isErrorStatusCode: (statusCode) => matchStatusCode({ status: statusCode }, ["4XX", "5XX"]),
-        retryConfig: context.retryConfig,
-        retryCodes: context.retryCodes,
-    });
-    if (!doResult.ok) {
-        return [doResult, { status: "request-error", request: req }];
-    }
-    const response = doResult.value;
-    const responseFields = {
-        HttpMeta: { Response: response, Request: req },
-    };
-    const [result] = await M.match(M.json(200, Environment$inboundSchema), M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema), M.jsonErr([500, 502], ServiceError$inboundSchema), M.fail("4XX"), M.fail("5XX"))(response, req, { extraFields: responseFields });
-    if (!result.ok) {
-        return [result, { status: "complete", request: req, response }];
-    }
+  const parsed = safeParse(
+    request,
+    (value) => z.parse(UpdateEnvironmentRequest$outboundSchema, value),
+    "Input validation failed",
+  );
+  if (!parsed.ok) {
+    return [parsed, { status: "invalid" }];
+  }
+  const payload = parsed.value;
+  const body = encodeJSON("body", payload.UpdateEnvironmentRequestBody, {
+    explode: true,
+  });
+  const path = pathToFunc("/rpc/environments.update")();
+  const query = encodeFormQuery({
+    slug: payload.slug,
+  });
+  const headers = new Headers(
+    compactMap({
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+        explode: false,
+        charEncoding: "none",
+      }),
+      "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+        explode: false,
+        charEncoding: "none",
+      }),
+    }),
+  );
+  const requestSecurity = resolveSecurity([
+    {
+      fieldName: "Gram-Project",
+      type: "apiKey:header",
+      value: security?.projectSlugHeaderGramProject,
+    },
+    {
+      fieldName: "Gram-Session",
+      type: "apiKey:header",
+      value: security?.sessionHeaderGramSession,
+    },
+  ]);
+  const context = {
+    options: client._options,
+    baseURL: options?.serverURL ?? client._baseURL ?? "",
+    operationID: "updateEnvironment",
+    oAuth2Scopes: null,
+    resolvedSecurity: requestSecurity,
+    securitySource: security,
+    retryConfig: options?.retries ||
+      client._options.retryConfig || { strategy: "none" },
+    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"],
+  };
+  const requestRes = client._createRequest(
+    context,
+    {
+      security: requestSecurity,
+      method: "POST",
+      baseURL: options?.serverURL,
+      path: path,
+      headers: headers,
+      query: query,
+      body: body,
+      userAgent: client._options.userAgent,
+      timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
+    },
+    options,
+  );
+  if (!requestRes.ok) {
+    return [requestRes, { status: "invalid" }];
+  }
+  const req = requestRes.value;
+  const doResult = await client._do(req, {
+    context,
+    isErrorStatusCode: (statusCode) =>
+      matchStatusCode({ status: statusCode }, ["4XX", "5XX"]),
+    retryConfig: context.retryConfig,
+    retryCodes: context.retryCodes,
+  });
+  if (!doResult.ok) {
+    return [doResult, { status: "request-error", request: req }];
+  }
+  const response = doResult.value;
+  const responseFields = {
+    HttpMeta: { Response: response, Request: req },
+  };
+  const [result] = await M.match(
+    M.json(200, Environment$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
+    M.fail("4XX"),
+    M.fail("5XX"),
+  )(response, req, { extraFields: responseFields });
+  if (!result.ok) {
     return [result, { status: "complete", request: req, response }];
+  }
+  return [result, { status: "complete", request: req, response }];
 }
 //# sourceMappingURL=environmentsUpdateBySlug.js.map

@@ -12,6 +12,6 @@ let value: InstanceMcpServer = {
 
 ## Fields
 
-| Field                         | Type                          | Required                      | Description                   |
-| ----------------------------- | ----------------------------- | ----------------------------- | ----------------------------- |
-| `url`                         | *string*                      | :heavy_check_mark:            | The address of the MCP server |
+| Field | Type     | Required           | Description                   |
+| ----- | -------- | ------------------ | ----------------------------- |
+| `url` | _string_ | :heavy_check_mark: | The address of the MCP server |

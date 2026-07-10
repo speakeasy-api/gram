@@ -9,50 +9,52 @@ import { domainsUpdateDomain } from "../funcs/domainsUpdateDomain.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Domains extends ClientSDK {
-    /**
-     * deleteDomain domains
-     *
-     * @remarks
-     * Delete a custom domain
-     */
-    async deleteDomain(request, security, options) {
-        return unwrapAsync(domainsDeleteDomain(this, request, security, options));
-    }
-    /**
-     * getDomain domains
-     *
-     * @remarks
-     * Get the custom domain for an organization
-     */
-    async getDomain(request, security, options) {
-        return unwrapAsync(domainsGetDomain(this, request, security, options));
-    }
-    /**
-     * listMcpEndpoints domains
-     *
-     * @remarks
-     * List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.
-     */
-    async listMcpEndpoints(request, security, options) {
-        return unwrapAsync(domainsListMcpEndpoints(this, request, security, options));
-    }
-    /**
-     * createDomain domains
-     *
-     * @remarks
-     * Create a custom domain for an organization
-     */
-    async registerDomain(request, security, options) {
-        return unwrapAsync(domainsRegisterDomain(this, request, security, options));
-    }
-    /**
-     * updateDomain domains
-     *
-     * @remarks
-     * Update the IP allowlist for the organization's custom domain
-     */
-    async updateDomain(request, security, options) {
-        return unwrapAsync(domainsUpdateDomain(this, request, security, options));
-    }
+  /**
+   * deleteDomain domains
+   *
+   * @remarks
+   * Delete a custom domain
+   */
+  async deleteDomain(request, security, options) {
+    return unwrapAsync(domainsDeleteDomain(this, request, security, options));
+  }
+  /**
+   * getDomain domains
+   *
+   * @remarks
+   * Get the custom domain for an organization
+   */
+  async getDomain(request, security, options) {
+    return unwrapAsync(domainsGetDomain(this, request, security, options));
+  }
+  /**
+   * listMcpEndpoints domains
+   *
+   * @remarks
+   * List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.
+   */
+  async listMcpEndpoints(request, security, options) {
+    return unwrapAsync(
+      domainsListMcpEndpoints(this, request, security, options),
+    );
+  }
+  /**
+   * createDomain domains
+   *
+   * @remarks
+   * Create a custom domain for an organization
+   */
+  async registerDomain(request, security, options) {
+    return unwrapAsync(domainsRegisterDomain(this, request, security, options));
+  }
+  /**
+   * updateDomain domains
+   *
+   * @remarks
+   * Update the IP allowlist for the organization's custom domain
+   */
+  async updateDomain(request, security, options) {
+    return unwrapAsync(domainsUpdateDomain(this, request, security, options));
+  }
 }
 //# sourceMappingURL=domains.js.map

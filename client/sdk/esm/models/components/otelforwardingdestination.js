@@ -4,10 +4,14 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { OtelForwardingHeader$inboundSchema, } from "./otelforwardingheader.js";
+import { OtelForwardingHeader$inboundSchema } from "./otelforwardingheader.js";
 /** @internal */
-export const OtelForwardingDestination$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const OtelForwardingDestination$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     enabled: z.boolean(),
     endpoint_url: z.string(),
     headers: z.array(OtelForwardingHeader$inboundSchema),
@@ -15,17 +19,26 @@ export const OtelForwardingDestination$inboundSchema = z.pipe(z.object({
     name: z.string(),
     organization_id: z.string(),
     project_id: z.optional(z.string()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "endpoint_url": "endpointUrl",
-        "organization_id": "organizationId",
-        "project_id": "projectId",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      endpoint_url: "endpointUrl",
+      organization_id: "organizationId",
+      project_id: "projectId",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function otelForwardingDestinationFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => OtelForwardingDestination$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'OtelForwardingDestination' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => OtelForwardingDestination$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'OtelForwardingDestination' from JSON`,
+  );
 }
 //# sourceMappingURL=otelforwardingdestination.js.map

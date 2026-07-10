@@ -5,22 +5,28 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const UserAccount$inboundSchema = z
-    .pipe(z.object({
+export const UserAccount$inboundSchema = z.pipe(
+  z.object({
     account_type: z.optional(z.string()),
     email: z.optional(z.string()),
     external_org_id: z.optional(z.string()),
     id: z.optional(z.string()),
     last_seen_unix_nano: z.optional(z.string()),
     provider: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "account_type": "accountType",
-        "external_org_id": "externalOrgId",
-        "last_seen_unix_nano": "lastSeenUnixNano",
+      account_type: "accountType",
+      external_org_id: "externalOrgId",
+      last_seen_unix_nano: "lastSeenUnixNano",
     });
-}));
+  }),
+);
 export function userAccountFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => UserAccount$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'UserAccount' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => UserAccount$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UserAccount' from JSON`,
+  );
 }
 //# sourceMappingURL=useraccount.js.map

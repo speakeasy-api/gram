@@ -4,10 +4,12 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const OtelForwardingHeaderInput$outboundSchema = z.object({
-    name: z.string(),
-    value: z.string(),
+  name: z.string(),
+  value: z.string(),
 });
 export function otelForwardingHeaderInputToJSON(otelForwardingHeaderInput) {
-    return JSON.stringify(OtelForwardingHeaderInput$outboundSchema.parse(otelForwardingHeaderInput));
+  return JSON.stringify(
+    OtelForwardingHeaderInput$outboundSchema.parse(otelForwardingHeaderInput),
+  );
 }
 //# sourceMappingURL=otelforwardingheaderinput.js.map

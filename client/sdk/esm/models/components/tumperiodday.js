@@ -6,10 +6,17 @@ import { safeParse } from "../../lib/schemas.js";
 import { RFCDate } from "../../types/rfcdate.js";
 /** @internal */
 export const TUMPeriodDay$inboundSchema = z.object({
-    date: z.pipe(z.string(), z.transform(v => new RFCDate(v))),
-    tokens: z.int(),
+  date: z.pipe(
+    z.string(),
+    z.transform((v) => new RFCDate(v)),
+  ),
+  tokens: z.int(),
 });
 export function tumPeriodDayFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TUMPeriodDay$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TUMPeriodDay' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TUMPeriodDay$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TUMPeriodDay' from JSON`,
+  );
 }
 //# sourceMappingURL=tumperiodday.js.map

@@ -13,5 +13,5 @@ let value: MCPCollectionVisibility = "public";
 ## Values
 
 ```typescript
-"public" | "private"
+"public" | "private";
 ```

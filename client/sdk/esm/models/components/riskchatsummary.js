@@ -5,22 +5,32 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const RiskChatSummary$inboundSchema = z.pipe(z.object({
+export const RiskChatSummary$inboundSchema = z.pipe(
+  z.object({
     chat_id: z.string(),
     chat_title: z.optional(z.string()),
     findings_count: z.int(),
-    latest_detected: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    latest_detected: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     user_id: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "chat_id": "chatId",
-        "chat_title": "chatTitle",
-        "findings_count": "findingsCount",
-        "latest_detected": "latestDetected",
-        "user_id": "userId",
+      chat_id: "chatId",
+      chat_title: "chatTitle",
+      findings_count: "findingsCount",
+      latest_detected: "latestDetected",
+      user_id: "userId",
     });
-}));
+  }),
+);
 export function riskChatSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskChatSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskChatSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskChatSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskChatSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=riskchatsummary.js.map

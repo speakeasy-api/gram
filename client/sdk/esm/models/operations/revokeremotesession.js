@@ -4,58 +4,92 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const RevokeRemoteSessionSecurityOption1$outboundSchema = z.pipe(z.object({
+export const RevokeRemoteSessionSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function revokeRemoteSessionSecurityOption1ToJSON(revokeRemoteSessionSecurityOption1) {
-    return JSON.stringify(RevokeRemoteSessionSecurityOption1$outboundSchema.parse(revokeRemoteSessionSecurityOption1));
+  }),
+);
+export function revokeRemoteSessionSecurityOption1ToJSON(
+  revokeRemoteSessionSecurityOption1,
+) {
+  return JSON.stringify(
+    RevokeRemoteSessionSecurityOption1$outboundSchema.parse(
+      revokeRemoteSessionSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const RevokeRemoteSessionSecurityOption2$outboundSchema = z.pipe(z.object({
+export const RevokeRemoteSessionSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function revokeRemoteSessionSecurityOption2ToJSON(revokeRemoteSessionSecurityOption2) {
-    return JSON.stringify(RevokeRemoteSessionSecurityOption2$outboundSchema.parse(revokeRemoteSessionSecurityOption2));
+  }),
+);
+export function revokeRemoteSessionSecurityOption2ToJSON(
+  revokeRemoteSessionSecurityOption2,
+) {
+  return JSON.stringify(
+    RevokeRemoteSessionSecurityOption2$outboundSchema.parse(
+      revokeRemoteSessionSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const RevokeRemoteSessionSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => RevokeRemoteSessionSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => RevokeRemoteSessionSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const RevokeRemoteSessionSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => RevokeRemoteSessionSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => RevokeRemoteSessionSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function revokeRemoteSessionSecurityToJSON(revokeRemoteSessionSecurity) {
-    return JSON.stringify(RevokeRemoteSessionSecurity$outboundSchema.parse(revokeRemoteSessionSecurity));
+  return JSON.stringify(
+    RevokeRemoteSessionSecurity$outboundSchema.parse(
+      revokeRemoteSessionSecurity,
+    ),
+  );
 }
 /** @internal */
-export const RevokeRemoteSessionRequest$outboundSchema = z.pipe(z.object({
+export const RevokeRemoteSessionRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function revokeRemoteSessionRequestToJSON(revokeRemoteSessionRequest) {
-    return JSON.stringify(RevokeRemoteSessionRequest$outboundSchema.parse(revokeRemoteSessionRequest));
+  return JSON.stringify(
+    RevokeRemoteSessionRequest$outboundSchema.parse(revokeRemoteSessionRequest),
+  );
 }
 //# sourceMappingURL=revokeremotesession.js.map

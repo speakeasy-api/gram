@@ -7,16 +7,23 @@ import { safeParse } from "../../lib/schemas.js";
 import { RoleSummary$inboundSchema } from "./rolesummary.js";
 import { UserSummary$inboundSchema } from "./usersummary.js";
 /** @internal */
-export const SearchUsersResult$inboundSchema = z.pipe(z.object({
+export const SearchUsersResult$inboundSchema = z.pipe(
+  z.object({
     next_cursor: z.optional(z.string()),
     roles: z.optional(z.array(RoleSummary$inboundSchema)),
     users: z.array(UserSummary$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function searchUsersResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SearchUsersResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SearchUsersResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SearchUsersResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SearchUsersResult' from JSON`,
+  );
 }
 //# sourceMappingURL=searchusersresult.js.map

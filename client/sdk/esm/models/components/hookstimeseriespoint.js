@@ -5,22 +5,29 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const HooksTimeSeriesPoint$inboundSchema = z.pipe(z.object({
+export const HooksTimeSeriesPoint$inboundSchema = z.pipe(
+  z.object({
     bucket_start_ns: z.string(),
     event_count: z.int(),
     failure_count: z.int(),
     server_name: z.string(),
     user_email: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "bucket_start_ns": "bucketStartNs",
-        "event_count": "eventCount",
-        "failure_count": "failureCount",
-        "server_name": "serverName",
-        "user_email": "userEmail",
+      bucket_start_ns: "bucketStartNs",
+      event_count: "eventCount",
+      failure_count: "failureCount",
+      server_name: "serverName",
+      user_email: "userEmail",
     });
-}));
+  }),
+);
 export function hooksTimeSeriesPointFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => HooksTimeSeriesPoint$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'HooksTimeSeriesPoint' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => HooksTimeSeriesPoint$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'HooksTimeSeriesPoint' from JSON`,
+  );
 }
 //# sourceMappingURL=hookstimeseriespoint.js.map

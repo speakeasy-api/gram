@@ -5,25 +5,24 @@ import * as z from "zod/v4/core";
 import { GramError } from "./gramerror.js";
 import { formatZodError } from "./sdkvalidationerror.js";
 export class ResponseValidationError extends GramError {
-    constructor(message, extra) {
-        super(message, extra);
-        this.name = "ResponseValidationError";
-        this.cause = extra.cause;
-        this.rawValue = extra.rawValue;
-        this.rawMessage = extra.rawMessage;
+  constructor(message, extra) {
+    super(message, extra);
+    this.name = "ResponseValidationError";
+    this.cause = extra.cause;
+    this.rawValue = extra.rawValue;
+    this.rawMessage = extra.rawMessage;
+  }
+  /**
+   * Return a pretty-formatted error message if the underlying validation error
+   * is a ZodError or some other recognized error type, otherwise return the
+   * default error message.
+   */
+  pretty() {
+    if (this.cause instanceof z.$ZodError) {
+      return `${this.rawMessage}\n${formatZodError(this.cause)}`;
+    } else {
+      return this.toString();
     }
-    /**
-     * Return a pretty-formatted error message if the underlying validation error
-     * is a ZodError or some other recognized error type, otherwise return the
-     * default error message.
-     */
-    pretty() {
-        if (this.cause instanceof z.$ZodError) {
-            return `${this.rawMessage}\n${formatZodError(this.cause)}`;
-        }
-        else {
-            return this.toString();
-        }
-    }
+  }
 }
 //# sourceMappingURL=responsevalidationerror.js.map

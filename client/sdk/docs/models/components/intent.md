@@ -13,5 +13,5 @@ let value: Intent = "log_streams";
 ## Values
 
 ```typescript
-"dsync" | "sso" | "audit_logs" | "domain_verification" | "log_streams"
+"dsync" | "sso" | "audit_logs" | "domain_verification" | "log_streams";
 ```

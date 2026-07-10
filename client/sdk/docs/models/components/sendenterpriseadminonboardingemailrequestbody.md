@@ -12,6 +12,6 @@ let value: SendEnterpriseAdminOnboardingEmailRequestBody = {
 
 ## Fields
 
-| Field                      | Type                       | Required                   | Description                |
-| -------------------------- | -------------------------- | -------------------------- | -------------------------- |
-| `recipients`               | *string*[]                 | :heavy_check_mark:         | Recipient email addresses. |
+| Field        | Type       | Required           | Description                |
+| ------------ | ---------- | ------------------ | -------------------------- |
+| `recipients` | _string_[] | :heavy_check_mark: | Recipient email addresses. |

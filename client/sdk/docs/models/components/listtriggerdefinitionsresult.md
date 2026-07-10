@@ -8,7 +8,7 @@ import { ListTriggerDefinitionsResult } from "@gram/client/models/components/lis
 let value: ListTriggerDefinitionsResult = {
   definitions: [
     {
-      configSchema: "{key: 1625880966672995, key1: null, key2: \"<value>\"}",
+      configSchema: '{key: 1625880966672995, key1: null, key2: "<value>"}',
       description:
         "blah reproachfully before closely nervously than outlying plus excepting",
       envRequirements: [],
@@ -22,6 +22,6 @@ let value: ListTriggerDefinitionsResult = {
 
 ## Fields
 
-| Field                                                                          | Type                                                                           | Required                                                                       | Description                                                                    |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `definitions`                                                                  | [components.TriggerDefinition](../../models/components/triggerdefinition.md)[] | :heavy_check_mark:                                                             | The available trigger definitions.                                             |
+| Field         | Type                                                                           | Required           | Description                        |
+| ------------- | ------------------------------------------------------------------------------ | ------------------ | ---------------------------------- |
+| `definitions` | [components.TriggerDefinition](../../models/components/triggerdefinition.md)[] | :heavy_check_mark: | The available trigger definitions. |

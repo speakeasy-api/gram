@@ -4,30 +4,42 @@
 import { assistantsGet } from "../funcs/assistantsGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchAssistantsGet(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildAssistantsGetQuery(client$, request, security, options),
-    });
+export function prefetchAssistantsGet(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildAssistantsGetQuery(client$, request, security, options),
+  });
 }
 export function buildAssistantsGetQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyAssistantsGet({
-            id: request.id,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function assistantsGetQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(assistantsGet(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyAssistantsGet({
+      id: request.id,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function assistantsGetQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        assistantsGet(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyAssistantsGet(parameters) {
-    return ["@gram/client", "assistants", "get", parameters];
+  return ["@gram/client", "assistants", "get", parameters];
 }
 //# sourceMappingURL=assistantsGet.core.js.map

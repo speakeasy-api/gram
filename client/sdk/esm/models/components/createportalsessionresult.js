@@ -5,10 +5,14 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const CreatePortalSessionResult$inboundSchema = z.object({
-    token: z.string(),
-    url: z.string(),
+  token: z.string(),
+  url: z.string(),
 });
 export function createPortalSessionResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => CreatePortalSessionResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'CreatePortalSessionResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => CreatePortalSessionResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CreatePortalSessionResult' from JSON`,
+  );
 }
 //# sourceMappingURL=createportalsessionresult.js.map

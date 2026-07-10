@@ -8,26 +8,33 @@ import { safeParse } from "../../lib/schemas.js";
  * Invitation lifecycle state.
  */
 export const State = {
-    Pending: "pending",
-    Accepted: "accepted",
-    Expired: "expired",
-    Revoked: "revoked",
+  Pending: "pending",
+  Accepted: "accepted",
+  Expired: "expired",
+  Revoked: "revoked",
 };
 /** @internal */
 export const State$inboundSchema = z.enum(State);
 /** @internal */
-export const OrganizationInvitationAccept$inboundSchema = z.pipe(z.object({
+export const OrganizationInvitationAccept$inboundSchema = z.pipe(
+  z.object({
     accept_invitation_url: z.string(),
     email: z.string(),
     organization_name: z.string(),
     state: State$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "accept_invitation_url": "acceptInvitationUrl",
-        "organization_name": "organizationName",
+      accept_invitation_url: "acceptInvitationUrl",
+      organization_name: "organizationName",
     });
-}));
+  }),
+);
 export function organizationInvitationAcceptFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => OrganizationInvitationAccept$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'OrganizationInvitationAccept' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => OrganizationInvitationAccept$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'OrganizationInvitationAccept' from JSON`,
+  );
 }
 //# sourceMappingURL=organizationinvitationaccept.js.map

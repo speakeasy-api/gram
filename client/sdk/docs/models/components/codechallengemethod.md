@@ -13,5 +13,5 @@ let value: CodeChallengeMethod = "S256";
 ## Values
 
 ```typescript
-"S256"
+"S256";
 ```

@@ -6,17 +6,19 @@ import * as z from "zod/v4-mini";
  * User feedback: success or failure
  */
 export const Feedback = {
-    Success: "success",
-    Failure: "failure",
+  Success: "success",
+  Failure: "failure",
 };
 /** @internal */
 export const Feedback$outboundSchema = z.enum(Feedback);
 /** @internal */
 export const SubmitFeedbackRequestBody$outboundSchema = z.object({
-    feedback: Feedback$outboundSchema,
-    id: z.string(),
+  feedback: Feedback$outboundSchema,
+  id: z.string(),
 });
 export function submitFeedbackRequestBodyToJSON(submitFeedbackRequestBody) {
-    return JSON.stringify(SubmitFeedbackRequestBody$outboundSchema.parse(submitFeedbackRequestBody));
+  return JSON.stringify(
+    SubmitFeedbackRequestBody$outboundSchema.parse(submitFeedbackRequestBody),
+  );
 }
 //# sourceMappingURL=submitfeedbackrequestbody.js.map

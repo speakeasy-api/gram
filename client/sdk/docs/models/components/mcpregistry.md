@@ -16,8 +16,8 @@ let value: MCPRegistry = {
 
 ## Fields
 
-| Field                         | Type                          | Required                      | Description                   |
-| ----------------------------- | ----------------------------- | ----------------------------- | ----------------------------- |
-| `id`                          | *string*                      | :heavy_check_mark:            | Registry ID                   |
-| `name`                        | *string*                      | :heavy_check_mark:            | Display name for the registry |
-| `url`                         | *string*                      | :heavy_check_mark:            | URL of the registry           |
+| Field  | Type     | Required           | Description                   |
+| ------ | -------- | ------------------ | ----------------------------- |
+| `id`   | _string_ | :heavy_check_mark: | Registry ID                   |
+| `name` | _string_ | :heavy_check_mark: | Display name for the registry |
+| `url`  | _string_ | :heavy_check_mark: | URL of the registry           |

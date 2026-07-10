@@ -12,6 +12,6 @@ let value: RedeployRequestBody = {
 
 ## Fields
 
-| Field                                 | Type                                  | Required                              | Description                           |
-| ------------------------------------- | ------------------------------------- | ------------------------------------- | ------------------------------------- |
-| `deploymentId`                        | *string*                              | :heavy_check_mark:                    | The ID of the deployment to redeploy. |
+| Field          | Type     | Required           | Description                           |
+| -------------- | -------- | ------------------ | ------------------------------------- |
+| `deploymentId` | _string_ | :heavy_check_mark: | The ID of the deployment to redeploy. |

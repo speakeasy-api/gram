@@ -4,7 +4,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CreateRemoteSessionIssuerForm$outboundSchema = z.pipe(z.object({
+export const CreateRemoteSessionIssuerForm$outboundSchema = z.pipe(
+  z.object({
     authorizationEndpoint: z.optional(z.string()),
     clientIdMetadataDocumentSupported: z.optional(z.boolean()),
     grantTypesSupported: z.optional(z.array(z.string())),
@@ -20,21 +21,31 @@ export const CreateRemoteSessionIssuerForm$outboundSchema = z.pipe(z.object({
     slug: z.string(),
     tokenEndpoint: z.optional(z.string()),
     tokenEndpointAuthMethodsSupported: z.optional(z.array(z.string())),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        authorizationEndpoint: "authorization_endpoint",
-        clientIdMetadataDocumentSupported: "client_id_metadata_document_supported",
-        grantTypesSupported: "grant_types_supported",
-        jwksUri: "jwks_uri",
-        logoAssetId: "logo_asset_id",
-        registrationEndpoint: "registration_endpoint",
-        responseTypesSupported: "response_types_supported",
-        scopesSupported: "scopes_supported",
-        tokenEndpoint: "token_endpoint",
-        tokenEndpointAuthMethodsSupported: "token_endpoint_auth_methods_supported",
+      authorizationEndpoint: "authorization_endpoint",
+      clientIdMetadataDocumentSupported:
+        "client_id_metadata_document_supported",
+      grantTypesSupported: "grant_types_supported",
+      jwksUri: "jwks_uri",
+      logoAssetId: "logo_asset_id",
+      registrationEndpoint: "registration_endpoint",
+      responseTypesSupported: "response_types_supported",
+      scopesSupported: "scopes_supported",
+      tokenEndpoint: "token_endpoint",
+      tokenEndpointAuthMethodsSupported:
+        "token_endpoint_auth_methods_supported",
     });
-}));
-export function createRemoteSessionIssuerFormToJSON(createRemoteSessionIssuerForm) {
-    return JSON.stringify(CreateRemoteSessionIssuerForm$outboundSchema.parse(createRemoteSessionIssuerForm));
+  }),
+);
+export function createRemoteSessionIssuerFormToJSON(
+  createRemoteSessionIssuerForm,
+) {
+  return JSON.stringify(
+    CreateRemoteSessionIssuerForm$outboundSchema.parse(
+      createRemoteSessionIssuerForm,
+    ),
+  );
 }
 //# sourceMappingURL=createremotesessionissuerform.js.map

@@ -3,61 +3,94 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { GetProjectMetricsSummaryPayload$outboundSchema, } from "../components/getprojectmetricssummarypayload.js";
+import { GetProjectMetricsSummaryPayload$outboundSchema } from "../components/getprojectmetricssummarypayload.js";
 /** @internal */
-export const ListAttributeKeysSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListAttributeKeysSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listAttributeKeysSecurityOption1ToJSON(listAttributeKeysSecurityOption1) {
-    return JSON.stringify(ListAttributeKeysSecurityOption1$outboundSchema.parse(listAttributeKeysSecurityOption1));
+  }),
+);
+export function listAttributeKeysSecurityOption1ToJSON(
+  listAttributeKeysSecurityOption1,
+) {
+  return JSON.stringify(
+    ListAttributeKeysSecurityOption1$outboundSchema.parse(
+      listAttributeKeysSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListAttributeKeysSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListAttributeKeysSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listAttributeKeysSecurityOption2ToJSON(listAttributeKeysSecurityOption2) {
-    return JSON.stringify(ListAttributeKeysSecurityOption2$outboundSchema.parse(listAttributeKeysSecurityOption2));
+  }),
+);
+export function listAttributeKeysSecurityOption2ToJSON(
+  listAttributeKeysSecurityOption2,
+) {
+  return JSON.stringify(
+    ListAttributeKeysSecurityOption2$outboundSchema.parse(
+      listAttributeKeysSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListAttributeKeysSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListAttributeKeysSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListAttributeKeysSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListAttributeKeysSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListAttributeKeysSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListAttributeKeysSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function listAttributeKeysSecurityToJSON(listAttributeKeysSecurity) {
-    return JSON.stringify(ListAttributeKeysSecurity$outboundSchema.parse(listAttributeKeysSecurity));
+  return JSON.stringify(
+    ListAttributeKeysSecurity$outboundSchema.parse(listAttributeKeysSecurity),
+  );
 }
 /** @internal */
-export const ListAttributeKeysRequest$outboundSchema = z.pipe(z.object({
+export const ListAttributeKeysRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    getProjectMetricsSummaryPayload: GetProjectMetricsSummaryPayload$outboundSchema,
-}), z.transform((v) => {
+    getProjectMetricsSummaryPayload:
+      GetProjectMetricsSummaryPayload$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        getProjectMetricsSummaryPayload: "GetProjectMetricsSummaryPayload",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      getProjectMetricsSummaryPayload: "GetProjectMetricsSummaryPayload",
     });
-}));
+  }),
+);
 export function listAttributeKeysRequestToJSON(listAttributeKeysRequest) {
-    return JSON.stringify(ListAttributeKeysRequest$outboundSchema.parse(listAttributeKeysRequest));
+  return JSON.stringify(
+    ListAttributeKeysRequest$outboundSchema.parse(listAttributeKeysRequest),
+  );
 }
 //# sourceMappingURL=listattributekeys.js.map

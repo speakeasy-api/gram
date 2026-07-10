@@ -4,30 +4,42 @@
 import { templatesRender } from "../funcs/templatesRender.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchRenderTemplate(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildRenderTemplateQuery(client$, request, security, options),
-    });
+export function prefetchRenderTemplate(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildRenderTemplateQuery(client$, request, security, options),
+  });
 }
 export function buildRenderTemplateQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyRenderTemplate({
-            gramKey: request.gramKey,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function renderTemplateQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(templatesRender(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyRenderTemplate({
+      gramKey: request.gramKey,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function renderTemplateQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        templatesRender(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyRenderTemplate(parameters) {
-    return ["@gram/client", "templates", "render", parameters];
+  return ["@gram/client", "templates", "render", parameters];
 }
 //# sourceMappingURL=renderTemplate.core.js.map

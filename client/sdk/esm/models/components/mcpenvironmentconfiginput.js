@@ -4,18 +4,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const McpEnvironmentConfigInput$outboundSchema = z.pipe(z.object({
+export const McpEnvironmentConfigInput$outboundSchema = z.pipe(
+  z.object({
     headerDisplayName: z.optional(z.string()),
     providedBy: z.string(),
     variableName: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        headerDisplayName: "header_display_name",
-        providedBy: "provided_by",
-        variableName: "variable_name",
+      headerDisplayName: "header_display_name",
+      providedBy: "provided_by",
+      variableName: "variable_name",
     });
-}));
+  }),
+);
 export function mcpEnvironmentConfigInputToJSON(mcpEnvironmentConfigInput) {
-    return JSON.stringify(McpEnvironmentConfigInput$outboundSchema.parse(mcpEnvironmentConfigInput));
+  return JSON.stringify(
+    McpEnvironmentConfigInput$outboundSchema.parse(mcpEnvironmentConfigInput),
+  );
 }
 //# sourceMappingURL=mcpenvironmentconfiginput.js.map

@@ -5,10 +5,15 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const ProtectedResourceMetadataUnavailable$inboundSchema = z.object({
-    code: z.string(),
-    message: z.string(),
+  code: z.string(),
+  message: z.string(),
 });
 export function protectedResourceMetadataUnavailableFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ProtectedResourceMetadataUnavailable$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ProtectedResourceMetadataUnavailable' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) =>
+      ProtectedResourceMetadataUnavailable$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ProtectedResourceMetadataUnavailable' from JSON`,
+  );
 }
 //# sourceMappingURL=protectedresourcemetadataunavailable.js.map

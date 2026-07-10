@@ -14,6 +14,6 @@ let value: RevokeAllRemoteSessionsResult = {
 
 ## Fields
 
-| Field                              | Type                               | Required                           | Description                        |
-| ---------------------------------- | ---------------------------------- | ---------------------------------- | ---------------------------------- |
-| `revokedCount`                     | *number*                           | :heavy_check_mark:                 | Number of remote_sessions revoked. |
+| Field          | Type     | Required           | Description                        |
+| -------------- | -------- | ------------------ | ---------------------------------- |
+| `revokedCount` | _number_ | :heavy_check_mark: | Number of remote_sessions revoked. |

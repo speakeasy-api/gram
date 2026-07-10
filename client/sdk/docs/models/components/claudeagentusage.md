@@ -21,7 +21,7 @@ let value: ClaudeAgentUsage = {
 
 ## Fields
 
-| Field                                                                      | Type                                                                       | Required                                                                   | Description                                                                |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `tools`                                                                    | [components.ClaudeToolUsage](../../models/components/claudetoolusage.md)[] | :heavy_check_mark:                                                         | Per-tool Claude usage keyed by tool_use_id.                                |
-| `turns`                                                                    | [components.ClaudeTurnUsage](../../models/components/claudeturnusage.md)[] | :heavy_check_mark:                                                         | Per-prompt Claude usage turns ordered by start time.                       |
+| Field   | Type                                                                       | Required           | Description                                          |
+| ------- | -------------------------------------------------------------------------- | ------------------ | ---------------------------------------------------- |
+| `tools` | [components.ClaudeToolUsage](../../models/components/claudetoolusage.md)[] | :heavy_check_mark: | Per-tool Claude usage keyed by tool_use_id.          |
+| `turns` | [components.ClaudeTurnUsage](../../models/components/claudeturnusage.md)[] | :heavy_check_mark: | Per-prompt Claude usage turns ordered by start time. |

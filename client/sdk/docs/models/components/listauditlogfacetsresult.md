@@ -19,7 +19,7 @@ let value: ListAuditLogFacetsResult = {
 
 ## Fields
 
-| Field                                                                              | Type                                                                               | Required                                                                           | Description                                                                        |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `actions`                                                                          | [components.AuditLogFacetOption](../../models/components/auditlogfacetoption.md)[] | :heavy_check_mark:                                                                 | Available action facets                                                            |
-| `actors`                                                                           | [components.AuditLogFacetOption](../../models/components/auditlogfacetoption.md)[] | :heavy_check_mark:                                                                 | Available actor facets                                                             |
+| Field     | Type                                                                               | Required           | Description             |
+| --------- | ---------------------------------------------------------------------------------- | ------------------ | ----------------------- |
+| `actions` | [components.AuditLogFacetOption](../../models/components/auditlogfacetoption.md)[] | :heavy_check_mark: | Available action facets |
+| `actors`  | [components.AuditLogFacetOption](../../models/components/auditlogfacetoption.md)[] | :heavy_check_mark: | Available actor facets  |

@@ -13,5 +13,5 @@ let value: CreateTriggerInstanceFormStatus = "active";
 ## Values
 
 ```typescript
-"active" | "paused"
+"active" | "paused";
 ```

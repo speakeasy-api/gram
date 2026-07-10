@@ -5,31 +5,41 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 /** @internal */
-export const CreateResponseSecurity$outboundSchema = z.pipe(z.object({
+export const CreateResponseSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     projectSlugHeaderGramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
+  }),
+);
 export function createResponseSecurityToJSON(createResponseSecurity) {
-    return JSON.stringify(CreateResponseSecurity$outboundSchema.parse(createResponseSecurity));
+  return JSON.stringify(
+    CreateResponseSecurity$outboundSchema.parse(createResponseSecurity),
+  );
 }
 /** @internal */
-export const CreateResponseRequest$outboundSchema = z.pipe(z.object({
+export const CreateResponseRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     workflowAgentRequest: components.WorkflowAgentRequest$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        workflowAgentRequest: "WorkflowAgentRequest",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      workflowAgentRequest: "WorkflowAgentRequest",
     });
-}));
+  }),
+);
 export function createResponseRequestToJSON(createResponseRequest) {
-    return JSON.stringify(CreateResponseRequest$outboundSchema.parse(createResponseRequest));
+  return JSON.stringify(
+    CreateResponseRequest$outboundSchema.parse(createResponseRequest),
+  );
 }
 //# sourceMappingURL=createresponse.js.map

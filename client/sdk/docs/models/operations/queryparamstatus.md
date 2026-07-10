@@ -13,5 +13,5 @@ let value: QueryParamStatus = "approved";
 ## Values
 
 ```typescript
-"requested" | "approved" | "denied" | "revoked"
+"requested" | "approved" | "denied" | "revoked";
 ```

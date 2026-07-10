@@ -13,5 +13,5 @@ let value: HookStatus = "success";
 ## Values
 
 ```typescript
-"success" | "failure" | "pending" | "blocked"
+"success" | "failure" | "pending" | "blocked";
 ```

@@ -7,14 +7,17 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * The visibility of an MCP server
  */
 export const UpdateMcpServerFormVisibility = {
-    Disabled: "disabled",
-    Private: "private",
-    Public: "public",
+  Disabled: "disabled",
+  Private: "private",
+  Public: "public",
 };
 /** @internal */
-export const UpdateMcpServerFormVisibility$outboundSchema = z.enum(UpdateMcpServerFormVisibility);
+export const UpdateMcpServerFormVisibility$outboundSchema = z.enum(
+  UpdateMcpServerFormVisibility,
+);
 /** @internal */
-export const UpdateMcpServerForm$outboundSchema = z.pipe(z.object({
+export const UpdateMcpServerForm$outboundSchema = z.pipe(
+  z.object({
     environmentId: z.optional(z.string()),
     id: z.string(),
     name: z.optional(z.string()),
@@ -24,17 +27,21 @@ export const UpdateMcpServerForm$outboundSchema = z.pipe(z.object({
     tunneledMcpServerId: z.optional(z.string()),
     userSessionIssuerId: z.optional(z.string()),
     visibility: UpdateMcpServerFormVisibility$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        environmentId: "environment_id",
-        remoteMcpServerId: "remote_mcp_server_id",
-        toolVariationsGroupId: "tool_variations_group_id",
-        toolsetId: "toolset_id",
-        tunneledMcpServerId: "tunneled_mcp_server_id",
-        userSessionIssuerId: "user_session_issuer_id",
+      environmentId: "environment_id",
+      remoteMcpServerId: "remote_mcp_server_id",
+      toolVariationsGroupId: "tool_variations_group_id",
+      toolsetId: "toolset_id",
+      tunneledMcpServerId: "tunneled_mcp_server_id",
+      userSessionIssuerId: "user_session_issuer_id",
     });
-}));
+  }),
+);
 export function updateMcpServerFormToJSON(updateMcpServerForm) {
-    return JSON.stringify(UpdateMcpServerForm$outboundSchema.parse(updateMcpServerForm));
+  return JSON.stringify(
+    UpdateMcpServerForm$outboundSchema.parse(updateMcpServerForm),
+  );
 }
 //# sourceMappingURL=updatemcpserverform.js.map

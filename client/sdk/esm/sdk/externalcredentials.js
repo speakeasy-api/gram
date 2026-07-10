@@ -15,104 +15,126 @@ import { externalCredentialsUpdateGcpIam } from "../funcs/externalCredentialsUpd
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class ExternalCredentials extends ClientSDK {
-    /**
-     * createAwsIamCredential externalCredentials
-     *
-     * @remarks
-     * Create an AWS IAM external credential. Requires org:admin.
-     */
-    async createAwsIam(request, security, options) {
-        return unwrapAsync(externalCredentialsCreateAwsIam(this, request, security, options));
-    }
-    /**
-     * createGcpIamCredential externalCredentials
-     *
-     * @remarks
-     * Create a GCP IAM external credential. Requires org:admin.
-     */
-    async createGcpIam(request, security, options) {
-        return unwrapAsync(externalCredentialsCreateGcpIam(this, request, security, options));
-    }
-    /**
-     * deleteAwsIamCredential externalCredentials
-     *
-     * @remarks
-     * Soft-delete an AWS IAM external credential by ID. Requires org:admin.
-     */
-    async deleteAwsIam(request, security, options) {
-        return unwrapAsync(externalCredentialsDeleteAwsIam(this, request, security, options));
-    }
-    /**
-     * deleteGcpIamCredential externalCredentials
-     *
-     * @remarks
-     * Soft-delete a GCP IAM external credential by ID. Requires org:admin.
-     */
-    async deleteGcpIam(request, security, options) {
-        return unwrapAsync(externalCredentialsDeleteGcpIam(this, request, security, options));
-    }
-    /**
-     * getAwsIamCredential externalCredentials
-     *
-     * @remarks
-     * Get an AWS IAM external credential by ID. Requires org:read.
-     */
-    async getAwsIam(request, security, options) {
-        return unwrapAsync(externalCredentialsGetAwsIam(this, request, security, options));
-    }
-    /**
-     * getGcpIamCredential externalCredentials
-     *
-     * @remarks
-     * Get a GCP IAM external credential by ID. Requires org:read.
-     */
-    async getGcpIam(request, security, options) {
-        return unwrapAsync(externalCredentialsGetGcpIam(this, request, security, options));
-    }
-    /**
-     * listExternalCredentials externalCredentials
-     *
-     * @remarks
-     * List the organization's external credentials (provider-independent summary). Optionally filter by provider. Requires org:read.
-     */
-    async list(request, security, options) {
-        return unwrapAsync(externalCredentialsList(this, request, security, options));
-    }
-    /**
-     * listAwsIamCredentials externalCredentials
-     *
-     * @remarks
-     * List the organization's AWS IAM external credentials. Requires org:read.
-     */
-    async listAwsIam(request, security, options) {
-        return unwrapAsync(externalCredentialsListAwsIam(this, request, security, options));
-    }
-    /**
-     * listGcpIamCredentials externalCredentials
-     *
-     * @remarks
-     * List the organization's GCP IAM external credentials. Requires org:read.
-     */
-    async listGcpIam(request, security, options) {
-        return unwrapAsync(externalCredentialsListGcpIam(this, request, security, options));
-    }
-    /**
-     * updateAwsIamCredential externalCredentials
-     *
-     * @remarks
-     * Replace an AWS IAM external credential's configuration. Requires org:admin.
-     */
-    async updateAwsIam(request, security, options) {
-        return unwrapAsync(externalCredentialsUpdateAwsIam(this, request, security, options));
-    }
-    /**
-     * updateGcpIamCredential externalCredentials
-     *
-     * @remarks
-     * Replace a GCP IAM external credential's configuration. Requires org:admin.
-     */
-    async updateGcpIam(request, security, options) {
-        return unwrapAsync(externalCredentialsUpdateGcpIam(this, request, security, options));
-    }
+  /**
+   * createAwsIamCredential externalCredentials
+   *
+   * @remarks
+   * Create an AWS IAM external credential. Requires org:admin.
+   */
+  async createAwsIam(request, security, options) {
+    return unwrapAsync(
+      externalCredentialsCreateAwsIam(this, request, security, options),
+    );
+  }
+  /**
+   * createGcpIamCredential externalCredentials
+   *
+   * @remarks
+   * Create a GCP IAM external credential. Requires org:admin.
+   */
+  async createGcpIam(request, security, options) {
+    return unwrapAsync(
+      externalCredentialsCreateGcpIam(this, request, security, options),
+    );
+  }
+  /**
+   * deleteAwsIamCredential externalCredentials
+   *
+   * @remarks
+   * Soft-delete an AWS IAM external credential by ID. Requires org:admin.
+   */
+  async deleteAwsIam(request, security, options) {
+    return unwrapAsync(
+      externalCredentialsDeleteAwsIam(this, request, security, options),
+    );
+  }
+  /**
+   * deleteGcpIamCredential externalCredentials
+   *
+   * @remarks
+   * Soft-delete a GCP IAM external credential by ID. Requires org:admin.
+   */
+  async deleteGcpIam(request, security, options) {
+    return unwrapAsync(
+      externalCredentialsDeleteGcpIam(this, request, security, options),
+    );
+  }
+  /**
+   * getAwsIamCredential externalCredentials
+   *
+   * @remarks
+   * Get an AWS IAM external credential by ID. Requires org:read.
+   */
+  async getAwsIam(request, security, options) {
+    return unwrapAsync(
+      externalCredentialsGetAwsIam(this, request, security, options),
+    );
+  }
+  /**
+   * getGcpIamCredential externalCredentials
+   *
+   * @remarks
+   * Get a GCP IAM external credential by ID. Requires org:read.
+   */
+  async getGcpIam(request, security, options) {
+    return unwrapAsync(
+      externalCredentialsGetGcpIam(this, request, security, options),
+    );
+  }
+  /**
+   * listExternalCredentials externalCredentials
+   *
+   * @remarks
+   * List the organization's external credentials (provider-independent summary). Optionally filter by provider. Requires org:read.
+   */
+  async list(request, security, options) {
+    return unwrapAsync(
+      externalCredentialsList(this, request, security, options),
+    );
+  }
+  /**
+   * listAwsIamCredentials externalCredentials
+   *
+   * @remarks
+   * List the organization's AWS IAM external credentials. Requires org:read.
+   */
+  async listAwsIam(request, security, options) {
+    return unwrapAsync(
+      externalCredentialsListAwsIam(this, request, security, options),
+    );
+  }
+  /**
+   * listGcpIamCredentials externalCredentials
+   *
+   * @remarks
+   * List the organization's GCP IAM external credentials. Requires org:read.
+   */
+  async listGcpIam(request, security, options) {
+    return unwrapAsync(
+      externalCredentialsListGcpIam(this, request, security, options),
+    );
+  }
+  /**
+   * updateAwsIamCredential externalCredentials
+   *
+   * @remarks
+   * Replace an AWS IAM external credential's configuration. Requires org:admin.
+   */
+  async updateAwsIam(request, security, options) {
+    return unwrapAsync(
+      externalCredentialsUpdateAwsIam(this, request, security, options),
+    );
+  }
+  /**
+   * updateGcpIamCredential externalCredentials
+   *
+   * @remarks
+   * Replace a GCP IAM external credential's configuration. Requires org:admin.
+   */
+  async updateGcpIam(request, security, options) {
+    return unwrapAsync(
+      externalCredentialsUpdateGcpIam(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=externalcredentials.js.map

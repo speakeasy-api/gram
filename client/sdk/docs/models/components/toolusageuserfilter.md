@@ -15,7 +15,7 @@ let value: ToolUsageUserFilter = {
 
 ## Fields
 
-| Field                                                                                    | Type                                                                                     | Required                                                                                 | Description                                                                              |
-| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `key`                                                                                    | *string*                                                                                 | :heavy_check_mark:                                                                       | User identity value to include                                                           |
-| `kind`                                                                                   | [components.ToolUsageUserFilterKind](../../models/components/toolusageuserfilterkind.md) | :heavy_check_mark:                                                                       | Tool usage user identity kind                                                            |
+| Field  | Type                                                                                     | Required           | Description                    |
+| ------ | ---------------------------------------------------------------------------------------- | ------------------ | ------------------------------ |
+| `key`  | _string_                                                                                 | :heavy_check_mark: | User identity value to include |
+| `kind` | [components.ToolUsageUserFilterKind](../../models/components/toolusageuserfilterkind.md) | :heavy_check_mark: | Tool usage user identity kind  |

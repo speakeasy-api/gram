@@ -4,57 +4,85 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListPackagesSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListPackagesSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
+  }),
+);
 export function listPackagesSecurityOption1ToJSON(listPackagesSecurityOption1) {
-    return JSON.stringify(ListPackagesSecurityOption1$outboundSchema.parse(listPackagesSecurityOption1));
+  return JSON.stringify(
+    ListPackagesSecurityOption1$outboundSchema.parse(
+      listPackagesSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListPackagesSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListPackagesSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function listPackagesSecurityOption2ToJSON(listPackagesSecurityOption2) {
-    return JSON.stringify(ListPackagesSecurityOption2$outboundSchema.parse(listPackagesSecurityOption2));
+  return JSON.stringify(
+    ListPackagesSecurityOption2$outboundSchema.parse(
+      listPackagesSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListPackagesSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListPackagesSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListPackagesSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListPackagesSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListPackagesSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListPackagesSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function listPackagesSecurityToJSON(listPackagesSecurity) {
-    return JSON.stringify(ListPackagesSecurity$outboundSchema.parse(listPackagesSecurity));
+  return JSON.stringify(
+    ListPackagesSecurity$outboundSchema.parse(listPackagesSecurity),
+  );
 }
 /** @internal */
-export const ListPackagesRequest$outboundSchema = z.pipe(z.object({
+export const ListPackagesRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function listPackagesRequestToJSON(listPackagesRequest) {
-    return JSON.stringify(ListPackagesRequest$outboundSchema.parse(listPackagesRequest));
+  return JSON.stringify(
+    ListPackagesRequest$outboundSchema.parse(listPackagesRequest),
+  );
 }
 //# sourceMappingURL=listpackages.js.map

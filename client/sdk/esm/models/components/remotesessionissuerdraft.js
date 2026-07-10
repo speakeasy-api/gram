@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const RemoteSessionIssuerDraft$inboundSchema = z.pipe(z.object({
+export const RemoteSessionIssuerDraft$inboundSchema = z.pipe(
+  z.object({
     authorization_endpoint: z.optional(z.string()),
     client_id_metadata_document_supported: z.boolean(),
     discovery_warnings: z.array(z.string()),
@@ -19,21 +20,29 @@ export const RemoteSessionIssuerDraft$inboundSchema = z.pipe(z.object({
     scopes_supported: z.optional(z.array(z.string())),
     token_endpoint: z.optional(z.string()),
     token_endpoint_auth_methods_supported: z.optional(z.array(z.string())),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "authorization_endpoint": "authorizationEndpoint",
-        "client_id_metadata_document_supported": "clientIdMetadataDocumentSupported",
-        "discovery_warnings": "discoveryWarnings",
-        "grant_types_supported": "grantTypesSupported",
-        "jwks_uri": "jwksUri",
-        "registration_endpoint": "registrationEndpoint",
-        "response_types_supported": "responseTypesSupported",
-        "scopes_supported": "scopesSupported",
-        "token_endpoint": "tokenEndpoint",
-        "token_endpoint_auth_methods_supported": "tokenEndpointAuthMethodsSupported",
+      authorization_endpoint: "authorizationEndpoint",
+      client_id_metadata_document_supported:
+        "clientIdMetadataDocumentSupported",
+      discovery_warnings: "discoveryWarnings",
+      grant_types_supported: "grantTypesSupported",
+      jwks_uri: "jwksUri",
+      registration_endpoint: "registrationEndpoint",
+      response_types_supported: "responseTypesSupported",
+      scopes_supported: "scopesSupported",
+      token_endpoint: "tokenEndpoint",
+      token_endpoint_auth_methods_supported:
+        "tokenEndpointAuthMethodsSupported",
     });
-}));
+  }),
+);
 export function remoteSessionIssuerDraftFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RemoteSessionIssuerDraft$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RemoteSessionIssuerDraft' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RemoteSessionIssuerDraft$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RemoteSessionIssuerDraft' from JSON`,
+  );
 }
 //# sourceMappingURL=remotesessionissuerdraft.js.map

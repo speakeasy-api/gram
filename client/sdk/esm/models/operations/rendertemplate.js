@@ -3,76 +3,119 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { RenderTemplateRequestBody$outboundSchema, } from "../components/rendertemplaterequestbody.js";
+import { RenderTemplateRequestBody$outboundSchema } from "../components/rendertemplaterequestbody.js";
 /** @internal */
-export const RenderTemplateSecurityOption1$outboundSchema = z.pipe(z.object({
+export const RenderTemplateSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function renderTemplateSecurityOption1ToJSON(renderTemplateSecurityOption1) {
-    return JSON.stringify(RenderTemplateSecurityOption1$outboundSchema.parse(renderTemplateSecurityOption1));
+  }),
+);
+export function renderTemplateSecurityOption1ToJSON(
+  renderTemplateSecurityOption1,
+) {
+  return JSON.stringify(
+    RenderTemplateSecurityOption1$outboundSchema.parse(
+      renderTemplateSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const RenderTemplateSecurityOption2$outboundSchema = z.pipe(z.object({
+export const RenderTemplateSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function renderTemplateSecurityOption2ToJSON(renderTemplateSecurityOption2) {
-    return JSON.stringify(RenderTemplateSecurityOption2$outboundSchema.parse(renderTemplateSecurityOption2));
+  }),
+);
+export function renderTemplateSecurityOption2ToJSON(
+  renderTemplateSecurityOption2,
+) {
+  return JSON.stringify(
+    RenderTemplateSecurityOption2$outboundSchema.parse(
+      renderTemplateSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const RenderTemplateSecurityOption3$outboundSchema = z.pipe(z.object({
+export const RenderTemplateSecurityOption3$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function renderTemplateSecurityOption3ToJSON(renderTemplateSecurityOption3) {
-    return JSON.stringify(RenderTemplateSecurityOption3$outboundSchema.parse(renderTemplateSecurityOption3));
+  }),
+);
+export function renderTemplateSecurityOption3ToJSON(
+  renderTemplateSecurityOption3,
+) {
+  return JSON.stringify(
+    RenderTemplateSecurityOption3$outboundSchema.parse(
+      renderTemplateSecurityOption3,
+    ),
+  );
 }
 /** @internal */
-export const RenderTemplateSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => RenderTemplateSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => RenderTemplateSecurityOption2$outboundSchema)),
-    option3: z.optional(z.lazy(() => RenderTemplateSecurityOption3$outboundSchema)),
-}), z.transform((v) => {
+export const RenderTemplateSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => RenderTemplateSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => RenderTemplateSecurityOption2$outboundSchema),
+    ),
+    option3: z.optional(
+      z.lazy(() => RenderTemplateSecurityOption3$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
-        option3: "Option3",
+      option1: "Option1",
+      option2: "Option2",
+      option3: "Option3",
     });
-}));
+  }),
+);
 export function renderTemplateSecurityToJSON(renderTemplateSecurity) {
-    return JSON.stringify(RenderTemplateSecurity$outboundSchema.parse(renderTemplateSecurity));
+  return JSON.stringify(
+    RenderTemplateSecurity$outboundSchema.parse(renderTemplateSecurity),
+  );
 }
 /** @internal */
-export const RenderTemplateRequest$outboundSchema = z.pipe(z.object({
+export const RenderTemplateRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     renderTemplateRequestBody: RenderTemplateRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        renderTemplateRequestBody: "RenderTemplateRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      renderTemplateRequestBody: "RenderTemplateRequestBody",
     });
-}));
+  }),
+);
 export function renderTemplateRequestToJSON(renderTemplateRequest) {
-    return JSON.stringify(RenderTemplateRequest$outboundSchema.parse(renderTemplateRequest));
+  return JSON.stringify(
+    RenderTemplateRequest$outboundSchema.parse(renderTemplateRequest),
+  );
 }
 //# sourceMappingURL=rendertemplate.js.map

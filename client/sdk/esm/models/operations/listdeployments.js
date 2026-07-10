@@ -4,58 +4,90 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListDeploymentsSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListDeploymentsSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listDeploymentsSecurityOption1ToJSON(listDeploymentsSecurityOption1) {
-    return JSON.stringify(ListDeploymentsSecurityOption1$outboundSchema.parse(listDeploymentsSecurityOption1));
+  }),
+);
+export function listDeploymentsSecurityOption1ToJSON(
+  listDeploymentsSecurityOption1,
+) {
+  return JSON.stringify(
+    ListDeploymentsSecurityOption1$outboundSchema.parse(
+      listDeploymentsSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListDeploymentsSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListDeploymentsSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listDeploymentsSecurityOption2ToJSON(listDeploymentsSecurityOption2) {
-    return JSON.stringify(ListDeploymentsSecurityOption2$outboundSchema.parse(listDeploymentsSecurityOption2));
+  }),
+);
+export function listDeploymentsSecurityOption2ToJSON(
+  listDeploymentsSecurityOption2,
+) {
+  return JSON.stringify(
+    ListDeploymentsSecurityOption2$outboundSchema.parse(
+      listDeploymentsSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListDeploymentsSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListDeploymentsSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListDeploymentsSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListDeploymentsSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListDeploymentsSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListDeploymentsSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function listDeploymentsSecurityToJSON(listDeploymentsSecurity) {
-    return JSON.stringify(ListDeploymentsSecurity$outboundSchema.parse(listDeploymentsSecurity));
+  return JSON.stringify(
+    ListDeploymentsSecurity$outboundSchema.parse(listDeploymentsSecurity),
+  );
 }
 /** @internal */
-export const ListDeploymentsRequest$outboundSchema = z.pipe(z.object({
+export const ListDeploymentsRequest$outboundSchema = z.pipe(
+  z.object({
     cursor: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function listDeploymentsRequestToJSON(listDeploymentsRequest) {
-    return JSON.stringify(ListDeploymentsRequest$outboundSchema.parse(listDeploymentsRequest));
+  return JSON.stringify(
+    ListDeploymentsRequest$outboundSchema.parse(listDeploymentsRequest),
+  );
 }
 //# sourceMappingURL=listdeployments.js.map

@@ -13,5 +13,5 @@ let value: Feedback = "success";
 ## Values
 
 ```typescript
-"success" | "failure"
+"success" | "failure";
 ```

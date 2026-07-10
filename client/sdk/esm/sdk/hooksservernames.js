@@ -7,32 +7,48 @@ import { hooksServerNamesUpsertServerNameOverride } from "../funcs/hooksServerNa
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class HooksServerNames extends ClientSDK {
-    /**
-     * delete hooksServerNames
-     *
-     * @remarks
-     * Delete a server name display override
-     */
-    async deleteServerNameOverride(request, security, options) {
-        return unwrapAsync(hooksServerNamesDeleteServerNameOverride(this, request, security, options));
-    }
-    /**
-     * list hooksServerNames
-     *
-     * @remarks
-     * List all server name display overrides for a project
-     */
-    async listServerNameOverrides(request, security, options) {
-        return unwrapAsync(hooksServerNamesListServerNameOverrides(this, request, security, options));
-    }
-    /**
-     * upsert hooksServerNames
-     *
-     * @remarks
-     * Create or update a server name display override
-     */
-    async upsertServerNameOverride(request, security, options) {
-        return unwrapAsync(hooksServerNamesUpsertServerNameOverride(this, request, security, options));
-    }
+  /**
+   * delete hooksServerNames
+   *
+   * @remarks
+   * Delete a server name display override
+   */
+  async deleteServerNameOverride(request, security, options) {
+    return unwrapAsync(
+      hooksServerNamesDeleteServerNameOverride(
+        this,
+        request,
+        security,
+        options,
+      ),
+    );
+  }
+  /**
+   * list hooksServerNames
+   *
+   * @remarks
+   * List all server name display overrides for a project
+   */
+  async listServerNameOverrides(request, security, options) {
+    return unwrapAsync(
+      hooksServerNamesListServerNameOverrides(this, request, security, options),
+    );
+  }
+  /**
+   * upsert hooksServerNames
+   *
+   * @remarks
+   * Create or update a server name display override
+   */
+  async upsertServerNameOverride(request, security, options) {
+    return unwrapAsync(
+      hooksServerNamesUpsertServerNameOverride(
+        this,
+        request,
+        security,
+        options,
+      ),
+    );
+  }
 }
 //# sourceMappingURL=hooksservernames.js.map

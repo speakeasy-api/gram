@@ -12,6 +12,6 @@ let value: DiscoverRemoteSessionIssuerRequestBody = {
 
 ## Fields
 
-| Field                                                   | Type                                                    | Required                                                | Description                                             |
-| ------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------- |
-| `issuer`                                                | *string*                                                | :heavy_check_mark:                                      | Issuer URL to discover (e.g. https://login.linear.com). |
+| Field    | Type     | Required           | Description                                             |
+| -------- | -------- | ------------------ | ------------------------------------------------------- |
+| `issuer` | _string_ | :heavy_check_mark: | Issuer URL to discover (e.g. https://login.linear.com). |

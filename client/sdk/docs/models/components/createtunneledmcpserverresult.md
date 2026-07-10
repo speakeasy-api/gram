@@ -26,7 +26,7 @@ let value: CreateTunneledMcpServerResult = {
 
 ## Fields
 
-| Field                                                                        | Type                                                                         | Required                                                                     | Description                                                                  |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `server`                                                                     | [components.TunneledMcpServer](../../models/components/tunneledmcpserver.md) | :heavy_check_mark:                                                           | A customer-hosted MCP server connected through a tunnel                      |
-| `tunnelKey`                                                                  | *string*                                                                     | :heavy_check_mark:                                                           | Plaintext tunnel key. Only returned at creation time.                        |
+| Field       | Type                                                                         | Required           | Description                                             |
+| ----------- | ---------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------- |
+| `server`    | [components.TunneledMcpServer](../../models/components/tunneledmcpserver.md) | :heavy_check_mark: | A customer-hosted MCP server connected through a tunnel |
+| `tunnelKey` | _string_                                                                     | :heavy_check_mark: | Plaintext tunnel key. Only returned at creation time.   |

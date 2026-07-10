@@ -12,7 +12,7 @@ let value: AddDeploymentPackageForm = {
 
 ## Fields
 
-| Field                       | Type                        | Required                    | Description                 |
-| --------------------------- | --------------------------- | --------------------------- | --------------------------- |
-| `name`                      | *string*                    | :heavy_check_mark:          | The name of the package.    |
-| `version`                   | *string*                    | :heavy_minus_sign:          | The version of the package. |
+| Field     | Type     | Required           | Description                 |
+| --------- | -------- | ------------------ | --------------------------- |
+| `name`    | _string_ | :heavy_check_mark: | The name of the package.    |
+| `version` | _string_ | :heavy_minus_sign: | The version of the package. |

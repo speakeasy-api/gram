@@ -20,7 +20,7 @@ let value: ListVersionsResult = {
 
 ## Fields
 
-| Field                                                                    | Type                                                                     | Required                                                                 | Description                                                              |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| `package`                                                                | [components.Package](../../models/components/package.md)                 | :heavy_check_mark:                                                       | N/A                                                                      |
-| `versions`                                                               | [components.PackageVersion](../../models/components/packageversion.md)[] | :heavy_check_mark:                                                       | N/A                                                                      |
+| Field      | Type                                                                     | Required           | Description |
+| ---------- | ------------------------------------------------------------------------ | ------------------ | ----------- |
+| `package`  | [components.Package](../../models/components/package.md)                 | :heavy_check_mark: | N/A         |
+| `versions` | [components.PackageVersion](../../models/components/packageversion.md)[] | :heavy_check_mark: | N/A         |

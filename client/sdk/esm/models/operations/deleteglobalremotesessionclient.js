@@ -4,26 +4,44 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteGlobalRemoteSessionClientSecurity$outboundSchema = z.pipe(z.object({
+export const DeleteGlobalRemoteSessionClientSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function deleteGlobalRemoteSessionClientSecurityToJSON(deleteGlobalRemoteSessionClientSecurity) {
-    return JSON.stringify(DeleteGlobalRemoteSessionClientSecurity$outboundSchema.parse(deleteGlobalRemoteSessionClientSecurity));
+  }),
+);
+export function deleteGlobalRemoteSessionClientSecurityToJSON(
+  deleteGlobalRemoteSessionClientSecurity,
+) {
+  return JSON.stringify(
+    DeleteGlobalRemoteSessionClientSecurity$outboundSchema.parse(
+      deleteGlobalRemoteSessionClientSecurity,
+    ),
+  );
 }
 /** @internal */
-export const DeleteGlobalRemoteSessionClientRequest$outboundSchema = z.pipe(z.object({
+export const DeleteGlobalRemoteSessionClientRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
-export function deleteGlobalRemoteSessionClientRequestToJSON(deleteGlobalRemoteSessionClientRequest) {
-    return JSON.stringify(DeleteGlobalRemoteSessionClientRequest$outboundSchema.parse(deleteGlobalRemoteSessionClientRequest));
+  }),
+);
+export function deleteGlobalRemoteSessionClientRequestToJSON(
+  deleteGlobalRemoteSessionClientRequest,
+) {
+  return JSON.stringify(
+    DeleteGlobalRemoteSessionClientRequest$outboundSchema.parse(
+      deleteGlobalRemoteSessionClientRequest,
+    ),
+  );
 }
 //# sourceMappingURL=deleteglobalremotesessionclient.js.map

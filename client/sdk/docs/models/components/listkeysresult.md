@@ -14,11 +14,7 @@ let value: ListKeysResult = {
       keyPrefix: "<value>",
       name: "<value>",
       organizationId: "<id>",
-      scopes: [
-        "<value 1>",
-        "<value 2>",
-        "<value 3>",
-      ],
+      scopes: ["<value 1>", "<value 2>", "<value 3>"],
       updatedAt: new Date("2026-06-30T02:33:05.338Z"),
     },
   ],
@@ -27,6 +23,6 @@ let value: ListKeysResult = {
 
 ## Fields
 
-| Field                                              | Type                                               | Required                                           | Description                                        |
-| -------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
-| `keys`                                             | [components.Key](../../models/components/key.md)[] | :heavy_check_mark:                                 | N/A                                                |
+| Field  | Type                                               | Required           | Description |
+| ------ | -------------------------------------------------- | ------------------ | ----------- |
+| `keys` | [components.Key](../../models/components/key.md)[] | :heavy_check_mark: | N/A         |

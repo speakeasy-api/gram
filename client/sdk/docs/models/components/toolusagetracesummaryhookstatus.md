@@ -13,5 +13,5 @@ let value: ToolUsageTraceSummaryHookStatus = "success";
 ## Values
 
 ```typescript
-"success" | "failure" | "blocked" | "pending"
+"success" | "failure" | "blocked" | "pending";
 ```

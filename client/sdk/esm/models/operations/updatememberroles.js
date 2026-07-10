@@ -3,33 +3,43 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpdateMemberRolesForm$outboundSchema, } from "../components/updatememberrolesform.js";
+import { UpdateMemberRolesForm$outboundSchema } from "../components/updatememberrolesform.js";
 /** @internal */
-export const UpdateMemberRolesSecurity$outboundSchema = z.pipe(z.object({
+export const UpdateMemberRolesSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function updateMemberRolesSecurityToJSON(updateMemberRolesSecurity) {
-    return JSON.stringify(UpdateMemberRolesSecurity$outboundSchema.parse(updateMemberRolesSecurity));
+  return JSON.stringify(
+    UpdateMemberRolesSecurity$outboundSchema.parse(updateMemberRolesSecurity),
+  );
 }
 /** @internal */
-export const UpdateMemberRolesRequest$outboundSchema = z.pipe(z.object({
+export const UpdateMemberRolesRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     updateMemberRolesForm: UpdateMemberRolesForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        updateMemberRolesForm: "UpdateMemberRolesForm",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      updateMemberRolesForm: "UpdateMemberRolesForm",
     });
-}));
+  }),
+);
 export function updateMemberRolesRequestToJSON(updateMemberRolesRequest) {
-    return JSON.stringify(UpdateMemberRolesRequest$outboundSchema.parse(updateMemberRolesRequest));
+  return JSON.stringify(
+    UpdateMemberRolesRequest$outboundSchema.parse(updateMemberRolesRequest),
+  );
 }
 //# sourceMappingURL=updatememberroles.js.map

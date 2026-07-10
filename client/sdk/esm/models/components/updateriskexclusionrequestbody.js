@@ -7,16 +7,19 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * How match_value is interpreted.
  */
 export const UpdateRiskExclusionRequestBodyMatchType = {
-    Exact: "exact",
-    Regex: "regex",
-    RuleId: "rule_id",
-    Source: "source",
-    EntityType: "entity_type",
+  Exact: "exact",
+  Regex: "regex",
+  RuleId: "rule_id",
+  Source: "source",
+  EntityType: "entity_type",
 };
 /** @internal */
-export const UpdateRiskExclusionRequestBodyMatchType$outboundSchema = z.enum(UpdateRiskExclusionRequestBodyMatchType);
+export const UpdateRiskExclusionRequestBodyMatchType$outboundSchema = z.enum(
+  UpdateRiskExclusionRequestBodyMatchType,
+);
 /** @internal */
-export const UpdateRiskExclusionRequestBody$outboundSchema = z.pipe(z.object({
+export const UpdateRiskExclusionRequestBody$outboundSchema = z.pipe(
+  z.object({
     enabled: z.optional(z.boolean()),
     id: z.string(),
     matchType: UpdateRiskExclusionRequestBodyMatchType$outboundSchema,
@@ -24,16 +27,24 @@ export const UpdateRiskExclusionRequestBody$outboundSchema = z.pipe(z.object({
     riskPolicyId: z.optional(z.string()),
     ruleIdFilter: z._default(z.string(), ""),
     sourceFilter: z._default(z.string(), ""),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        matchType: "match_type",
-        matchValue: "match_value",
-        riskPolicyId: "risk_policy_id",
-        ruleIdFilter: "rule_id_filter",
-        sourceFilter: "source_filter",
+      matchType: "match_type",
+      matchValue: "match_value",
+      riskPolicyId: "risk_policy_id",
+      ruleIdFilter: "rule_id_filter",
+      sourceFilter: "source_filter",
     });
-}));
-export function updateRiskExclusionRequestBodyToJSON(updateRiskExclusionRequestBody) {
-    return JSON.stringify(UpdateRiskExclusionRequestBody$outboundSchema.parse(updateRiskExclusionRequestBody));
+  }),
+);
+export function updateRiskExclusionRequestBodyToJSON(
+  updateRiskExclusionRequestBody,
+) {
+  return JSON.stringify(
+    UpdateRiskExclusionRequestBody$outboundSchema.parse(
+      updateRiskExclusionRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=updateriskexclusionrequestbody.js.map

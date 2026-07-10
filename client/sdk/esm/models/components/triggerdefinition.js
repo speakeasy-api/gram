@@ -4,31 +4,40 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { TriggerEnvRequirement$inboundSchema, } from "./triggerenvrequirement.js";
+import { TriggerEnvRequirement$inboundSchema } from "./triggerenvrequirement.js";
 /**
  * The ingress kind for the trigger definition.
  */
 export const TriggerDefinitionKind = {
-    Webhook: "webhook",
-    Schedule: "schedule",
+  Webhook: "webhook",
+  Schedule: "schedule",
 };
 /** @internal */
-export const TriggerDefinitionKind$inboundSchema = z.enum(TriggerDefinitionKind);
+export const TriggerDefinitionKind$inboundSchema = z.enum(
+  TriggerDefinitionKind,
+);
 /** @internal */
-export const TriggerDefinition$inboundSchema = z.pipe(z.object({
+export const TriggerDefinition$inboundSchema = z.pipe(
+  z.object({
     config_schema: z.string(),
     description: z.string(),
     env_requirements: z.array(TriggerEnvRequirement$inboundSchema),
     kind: TriggerDefinitionKind$inboundSchema,
     slug: z.string(),
     title: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "config_schema": "configSchema",
-        "env_requirements": "envRequirements",
+      config_schema: "configSchema",
+      env_requirements: "envRequirements",
     });
-}));
+  }),
+);
 export function triggerDefinitionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TriggerDefinition$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TriggerDefinition' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TriggerDefinition$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TriggerDefinition' from JSON`,
+  );
 }
 //# sourceMappingURL=triggerdefinition.js.map

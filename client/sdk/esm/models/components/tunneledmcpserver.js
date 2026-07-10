@@ -8,50 +8,70 @@ import { safeParse } from "../../lib/schemas.js";
  * Derived live connection status for a tunneled MCP server source
  */
 export const ConnectionStatus = {
-    Connected: "connected",
-    Inactive: "inactive",
-    NeverConnected: "never_connected",
+  Connected: "connected",
+  Inactive: "inactive",
+  NeverConnected: "never_connected",
 };
 /**
  * Stored lifecycle status for a tunneled MCP server source
  */
 export const TunneledMcpServerStatus = {
-    Created: "created",
-    Active: "active",
-    Revoked: "revoked",
+  Created: "created",
+  Active: "active",
+  Revoked: "revoked",
 };
 /** @internal */
 export const ConnectionStatus$inboundSchema = z.enum(ConnectionStatus);
 /** @internal */
-export const TunneledMcpServerStatus$inboundSchema = z.enum(TunneledMcpServerStatus);
+export const TunneledMcpServerStatus$inboundSchema = z.enum(
+  TunneledMcpServerStatus,
+);
 /** @internal */
-export const TunneledMcpServer$inboundSchema = z.pipe(z.object({
+export const TunneledMcpServer$inboundSchema = z.pipe(
+  z.object({
     active_connection_count: z.int(),
     active_consumer_session_count: z.int(),
     agent_version: z.optional(z.string()),
     connection_status: ConnectionStatus$inboundSchema,
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     id: z.string(),
     key_prefix: z.string(),
-    last_seen_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
+    last_seen_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
     name: z.string(),
     project_id: z.string(),
     status: TunneledMcpServerStatus$inboundSchema,
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "active_connection_count": "activeConnectionCount",
-        "active_consumer_session_count": "activeConsumerSessionCount",
-        "agent_version": "agentVersion",
-        "connection_status": "connectionStatus",
-        "created_at": "createdAt",
-        "key_prefix": "keyPrefix",
-        "last_seen_at": "lastSeenAt",
-        "project_id": "projectId",
-        "updated_at": "updatedAt",
+      active_connection_count: "activeConnectionCount",
+      active_consumer_session_count: "activeConsumerSessionCount",
+      agent_version: "agentVersion",
+      connection_status: "connectionStatus",
+      created_at: "createdAt",
+      key_prefix: "keyPrefix",
+      last_seen_at: "lastSeenAt",
+      project_id: "projectId",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function tunneledMcpServerFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TunneledMcpServer$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TunneledMcpServer' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TunneledMcpServer$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TunneledMcpServer' from JSON`,
+  );
 }
 //# sourceMappingURL=tunneledmcpserver.js.map

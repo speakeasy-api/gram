@@ -4,7 +4,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CursorHookPayload$outboundSchema = z.pipe(z.object({
+export const CursorHookPayload$outboundSchema = z.pipe(
+  z.object({
     additionalData: z.optional(z.record(z.string(), z.any())),
     cacheReadTokens: z.optional(z.int()),
     cacheWriteTokens: z.optional(z.int()),
@@ -34,32 +35,36 @@ export const CursorHookPayload$outboundSchema = z.pipe(z.object({
     transcriptPath: z.optional(z.string()),
     url: z.optional(z.string()),
     userEmail: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        additionalData: "additional_data",
-        cacheReadTokens: "cache_read_tokens",
-        cacheWriteTokens: "cache_write_tokens",
-        composerMode: "composer_mode",
-        conversationId: "conversation_id",
-        cursorVersion: "cursor_version",
-        durationMs: "duration_ms",
-        generationId: "generation_id",
-        hookEventName: "hook_event_name",
-        inputTokens: "input_tokens",
-        isInterrupt: "is_interrupt",
-        loopCount: "loop_count",
-        outputTokens: "output_tokens",
-        resultJson: "result_json",
-        sessionId: "session_id",
-        toolInput: "tool_input",
-        toolName: "tool_name",
-        toolResponse: "tool_response",
-        toolUseId: "tool_use_id",
-        transcriptPath: "transcript_path",
-        userEmail: "user_email",
+      additionalData: "additional_data",
+      cacheReadTokens: "cache_read_tokens",
+      cacheWriteTokens: "cache_write_tokens",
+      composerMode: "composer_mode",
+      conversationId: "conversation_id",
+      cursorVersion: "cursor_version",
+      durationMs: "duration_ms",
+      generationId: "generation_id",
+      hookEventName: "hook_event_name",
+      inputTokens: "input_tokens",
+      isInterrupt: "is_interrupt",
+      loopCount: "loop_count",
+      outputTokens: "output_tokens",
+      resultJson: "result_json",
+      sessionId: "session_id",
+      toolInput: "tool_input",
+      toolName: "tool_name",
+      toolResponse: "tool_response",
+      toolUseId: "tool_use_id",
+      transcriptPath: "transcript_path",
+      userEmail: "user_email",
     });
-}));
+  }),
+);
 export function cursorHookPayloadToJSON(cursorHookPayload) {
-    return JSON.stringify(CursorHookPayload$outboundSchema.parse(cursorHookPayload));
+  return JSON.stringify(
+    CursorHookPayload$outboundSchema.parse(cursorHookPayload),
+  );
 }
 //# sourceMappingURL=cursorhookpayload.js.map

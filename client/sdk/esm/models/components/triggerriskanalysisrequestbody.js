@@ -4,10 +4,16 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const TriggerRiskAnalysisRequestBody$outboundSchema = z.object({
-    id: z.string(),
-    limit: z._default(z.int(), 100),
+  id: z.string(),
+  limit: z._default(z.int(), 100),
 });
-export function triggerRiskAnalysisRequestBodyToJSON(triggerRiskAnalysisRequestBody) {
-    return JSON.stringify(TriggerRiskAnalysisRequestBody$outboundSchema.parse(triggerRiskAnalysisRequestBody));
+export function triggerRiskAnalysisRequestBodyToJSON(
+  triggerRiskAnalysisRequestBody,
+) {
+  return JSON.stringify(
+    TriggerRiskAnalysisRequestBody$outboundSchema.parse(
+      triggerRiskAnalysisRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=triggerriskanalysisrequestbody.js.map

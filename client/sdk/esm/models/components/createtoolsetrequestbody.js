@@ -3,23 +3,28 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { ToolsetOrigin$outboundSchema, } from "./toolsetorigin.js";
+import { ToolsetOrigin$outboundSchema } from "./toolsetorigin.js";
 /** @internal */
-export const CreateToolsetRequestBody$outboundSchema = z.pipe(z.object({
+export const CreateToolsetRequestBody$outboundSchema = z.pipe(
+  z.object({
     defaultEnvironmentSlug: z.optional(z.string()),
     description: z.optional(z.string()),
     name: z.string(),
     origin: z.optional(ToolsetOrigin$outboundSchema),
     resourceUrns: z.optional(z.array(z.string())),
     toolUrns: z.optional(z.array(z.string())),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        defaultEnvironmentSlug: "default_environment_slug",
-        resourceUrns: "resource_urns",
-        toolUrns: "tool_urns",
+      defaultEnvironmentSlug: "default_environment_slug",
+      resourceUrns: "resource_urns",
+      toolUrns: "tool_urns",
     });
-}));
+  }),
+);
 export function createToolsetRequestBodyToJSON(createToolsetRequestBody) {
-    return JSON.stringify(CreateToolsetRequestBody$outboundSchema.parse(createToolsetRequestBody));
+  return JSON.stringify(
+    CreateToolsetRequestBody$outboundSchema.parse(createToolsetRequestBody),
+  );
 }
 //# sourceMappingURL=createtoolsetrequestbody.js.map

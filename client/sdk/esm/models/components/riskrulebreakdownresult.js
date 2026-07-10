@@ -3,16 +3,26 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { RiskRuleBreakdownEntry$inboundSchema, } from "./riskrulebreakdownentry.js";
+import { RiskRuleBreakdownEntry$inboundSchema } from "./riskrulebreakdownentry.js";
 /** @internal */
 export const RiskRuleBreakdownResult$inboundSchema = z.object({
-    category: z.string(),
-    from: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-    rules: z.array(RiskRuleBreakdownEntry$inboundSchema),
-    to: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-    total: z.int(),
+  category: z.string(),
+  from: z.pipe(
+    z.iso.datetime({ offset: true }),
+    z.transform((v) => new Date(v)),
+  ),
+  rules: z.array(RiskRuleBreakdownEntry$inboundSchema),
+  to: z.pipe(
+    z.iso.datetime({ offset: true }),
+    z.transform((v) => new Date(v)),
+  ),
+  total: z.int(),
 });
 export function riskRuleBreakdownResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskRuleBreakdownResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskRuleBreakdownResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskRuleBreakdownResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskRuleBreakdownResult' from JSON`,
+  );
 }
 //# sourceMappingURL=riskrulebreakdownresult.js.map

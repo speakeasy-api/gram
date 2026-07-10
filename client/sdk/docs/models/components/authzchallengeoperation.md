@@ -11,5 +11,5 @@ let value: AuthzChallengeOperation = "require_any";
 ## Values
 
 ```typescript
-"require" | "require_any" | "filter"
+"require" | "require_any" | "filter";
 ```

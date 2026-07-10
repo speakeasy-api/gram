@@ -7,15 +7,17 @@
  * and break out of regular control flow of programs making them harder to
  * inspect and more verbose work with due to try-catch blocks.
  */
-export type Result<T, E = unknown> = {
-    ok: true;
-    value: T;
-    error?: never;
-} | {
-    ok: false;
-    value?: never;
-    error: E;
-};
+export type Result<T, E = unknown> =
+  | {
+      ok: true;
+      value: T;
+      error?: never;
+    }
+  | {
+      ok: false;
+      value?: never;
+      error: E;
+    };
 export declare function OK<V>(value: V): Result<V, never>;
 export declare function ERR<E>(error: E): Result<never, E>;
 /**
@@ -27,5 +29,7 @@ export declare function unwrap<T>(r: Result<T, unknown>): T;
  * unwrapAsync is a convenience function for resolving a value from a Promise
  * of a result or rejecting if an error occurred.
  */
-export declare function unwrapAsync<T>(pr: Promise<Result<T, unknown>>): Promise<T>;
+export declare function unwrapAsync<T>(
+  pr: Promise<Result<T, unknown>>,
+): Promise<T>;
 //# sourceMappingURL=fp.d.ts.map

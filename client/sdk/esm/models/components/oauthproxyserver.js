@@ -4,25 +4,40 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { OAuthProxyProvider$inboundSchema, } from "./oauthproxyprovider.js";
+import { OAuthProxyProvider$inboundSchema } from "./oauthproxyprovider.js";
 /** @internal */
-export const OAuthProxyServer$inboundSchema = z.pipe(z.object({
+export const OAuthProxyServer$inboundSchema = z.pipe(
+  z.object({
     audience: z.optional(z.string()),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     id: z.string(),
-    oauth_proxy_providers: z.optional(z.array(OAuthProxyProvider$inboundSchema)),
+    oauth_proxy_providers: z.optional(
+      z.array(OAuthProxyProvider$inboundSchema),
+    ),
     project_id: z.string(),
     slug: z.string(),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "oauth_proxy_providers": "oauthProxyProviders",
-        "project_id": "projectId",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      oauth_proxy_providers: "oauthProxyProviders",
+      project_id: "projectId",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function oAuthProxyServerFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => OAuthProxyServer$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'OAuthProxyServer' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => OAuthProxyServer$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'OAuthProxyServer' from JSON`,
+  );
 }
 //# sourceMappingURL=oauthproxyserver.js.map

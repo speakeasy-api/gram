@@ -4,30 +4,40 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteRoleSecurity$outboundSchema = z.pipe(z.object({
+export const DeleteRoleSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function deleteRoleSecurityToJSON(deleteRoleSecurity) {
-    return JSON.stringify(DeleteRoleSecurity$outboundSchema.parse(deleteRoleSecurity));
+  return JSON.stringify(
+    DeleteRoleSecurity$outboundSchema.parse(deleteRoleSecurity),
+  );
 }
 /** @internal */
-export const DeleteRoleRequest$outboundSchema = z.pipe(z.object({
+export const DeleteRoleRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function deleteRoleRequestToJSON(deleteRoleRequest) {
-    return JSON.stringify(DeleteRoleRequest$outboundSchema.parse(deleteRoleRequest));
+  return JSON.stringify(
+    DeleteRoleRequest$outboundSchema.parse(deleteRoleRequest),
+  );
 }
 //# sourceMappingURL=deleterole.js.map

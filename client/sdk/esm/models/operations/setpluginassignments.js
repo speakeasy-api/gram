@@ -3,33 +3,49 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { SetPluginAssignmentsForm$outboundSchema, } from "../components/setpluginassignmentsform.js";
+import { SetPluginAssignmentsForm$outboundSchema } from "../components/setpluginassignmentsform.js";
 /** @internal */
-export const SetPluginAssignmentsSecurity$outboundSchema = z.pipe(z.object({
+export const SetPluginAssignmentsSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function setPluginAssignmentsSecurityToJSON(setPluginAssignmentsSecurity) {
-    return JSON.stringify(SetPluginAssignmentsSecurity$outboundSchema.parse(setPluginAssignmentsSecurity));
+  }),
+);
+export function setPluginAssignmentsSecurityToJSON(
+  setPluginAssignmentsSecurity,
+) {
+  return JSON.stringify(
+    SetPluginAssignmentsSecurity$outboundSchema.parse(
+      setPluginAssignmentsSecurity,
+    ),
+  );
 }
 /** @internal */
-export const SetPluginAssignmentsRequest$outboundSchema = z.pipe(z.object({
+export const SetPluginAssignmentsRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     setPluginAssignmentsForm: SetPluginAssignmentsForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        setPluginAssignmentsForm: "SetPluginAssignmentsForm",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      setPluginAssignmentsForm: "SetPluginAssignmentsForm",
     });
-}));
+  }),
+);
 export function setPluginAssignmentsRequestToJSON(setPluginAssignmentsRequest) {
-    return JSON.stringify(SetPluginAssignmentsRequest$outboundSchema.parse(setPluginAssignmentsRequest));
+  return JSON.stringify(
+    SetPluginAssignmentsRequest$outboundSchema.parse(
+      setPluginAssignmentsRequest,
+    ),
+  );
 }
 //# sourceMappingURL=setpluginassignments.js.map

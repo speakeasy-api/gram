@@ -11,5 +11,5 @@ let value: UpdateShadowMCPAccessRuleFormMatchBreadth = "full_url";
 ## Values
 
 ```typescript
-"full_url" | "url_host"
+"full_url" | "url_host";
 ```

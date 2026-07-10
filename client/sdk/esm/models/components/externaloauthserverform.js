@@ -4,10 +4,12 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const ExternalOAuthServerForm$outboundSchema = z.object({
-    metadata: z.any(),
-    slug: z.string(),
+  metadata: z.any(),
+  slug: z.string(),
 });
 export function externalOAuthServerFormToJSON(externalOAuthServerForm) {
-    return JSON.stringify(ExternalOAuthServerForm$outboundSchema.parse(externalOAuthServerForm));
+  return JSON.stringify(
+    ExternalOAuthServerForm$outboundSchema.parse(externalOAuthServerForm),
+  );
 }
 //# sourceMappingURL=externaloauthserverform.js.map

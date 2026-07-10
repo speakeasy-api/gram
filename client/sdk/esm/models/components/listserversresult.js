@@ -4,16 +4,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { RemoteMcpServer$inboundSchema, } from "./remotemcpserver.js";
+import { RemoteMcpServer$inboundSchema } from "./remotemcpserver.js";
 /** @internal */
-export const ListServersResult$inboundSchema = z.pipe(z.object({
+export const ListServersResult$inboundSchema = z.pipe(
+  z.object({
     remote_mcp_servers: z.array(RemoteMcpServer$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "remote_mcp_servers": "remoteMcpServers",
+      remote_mcp_servers: "remoteMcpServers",
     });
-}));
+  }),
+);
 export function listServersResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListServersResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListServersResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListServersResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListServersResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listserversresult.js.map

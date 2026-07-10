@@ -7,17 +7,20 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * The type of hook event
  */
 export const CodexHookPayloadHookEventName = {
-    SessionStart: "SessionStart",
-    PreToolUse: "PreToolUse",
-    PermissionRequest: "PermissionRequest",
-    PostToolUse: "PostToolUse",
-    UserPromptSubmit: "UserPromptSubmit",
-    Stop: "Stop",
+  SessionStart: "SessionStart",
+  PreToolUse: "PreToolUse",
+  PermissionRequest: "PermissionRequest",
+  PostToolUse: "PostToolUse",
+  UserPromptSubmit: "UserPromptSubmit",
+  Stop: "Stop",
 };
 /** @internal */
-export const CodexHookPayloadHookEventName$outboundSchema = z.enum(CodexHookPayloadHookEventName);
+export const CodexHookPayloadHookEventName$outboundSchema = z.enum(
+  CodexHookPayloadHookEventName,
+);
 /** @internal */
-export const CodexHookPayload$outboundSchema = z.pipe(z.object({
+export const CodexHookPayload$outboundSchema = z.pipe(
+  z.object({
     additionalData: z.optional(z.record(z.string(), z.any())),
     cwd: z.optional(z.string()),
     hookEventName: CodexHookPayloadHookEventName$outboundSchema,
@@ -31,21 +34,25 @@ export const CodexHookPayload$outboundSchema = z.pipe(z.object({
     toolOutput: z.optional(z.any()),
     transcriptPath: z.optional(z.string()),
     userEmail: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        additionalData: "additional_data",
-        hookEventName: "hook_event_name",
-        lastAssistantMessage: "last_assistant_message",
-        permissionType: "permission_type",
-        sessionId: "session_id",
-        toolInput: "tool_input",
-        toolName: "tool_name",
-        toolOutput: "tool_output",
-        transcriptPath: "transcript_path",
-        userEmail: "user_email",
+      additionalData: "additional_data",
+      hookEventName: "hook_event_name",
+      lastAssistantMessage: "last_assistant_message",
+      permissionType: "permission_type",
+      sessionId: "session_id",
+      toolInput: "tool_input",
+      toolName: "tool_name",
+      toolOutput: "tool_output",
+      transcriptPath: "transcript_path",
+      userEmail: "user_email",
     });
-}));
+  }),
+);
 export function codexHookPayloadToJSON(codexHookPayload) {
-    return JSON.stringify(CodexHookPayload$outboundSchema.parse(codexHookPayload));
+  return JSON.stringify(
+    CodexHookPayload$outboundSchema.parse(codexHookPayload),
+  );
 }
 //# sourceMappingURL=codexhookpayload.js.map

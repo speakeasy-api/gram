@@ -13,5 +13,5 @@ let value: SaveRiskEvalReviewRequestBodyVerdict = "missed";
 ## Values
 
 ```typescript
-"correct" | "false_positive" | "missed"
+"correct" | "false_positive" | "missed";
 ```

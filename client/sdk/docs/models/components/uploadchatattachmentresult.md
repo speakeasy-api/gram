@@ -21,7 +21,7 @@ let value: UploadChatAttachmentResult = {
 
 ## Fields
 
-| Field                                                | Type                                                 | Required                                             | Description                                          |
-| ---------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------- |
-| `asset`                                              | [components.Asset](../../models/components/asset.md) | :heavy_check_mark:                                   | N/A                                                  |
-| `url`                                                | *string*                                             | :heavy_check_mark:                                   | The URL to serve the chat attachment                 |
+| Field   | Type                                                 | Required           | Description                          |
+| ------- | ---------------------------------------------------- | ------------------ | ------------------------------------ |
+| `asset` | [components.Asset](../../models/components/asset.md) | :heavy_check_mark: | N/A                                  |
+| `url`   | _string_                                             | :heavy_check_mark: | The URL to serve the chat attachment |

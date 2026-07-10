@@ -14,9 +14,9 @@ let value: UpdatePluginForm = {
 
 ## Fields
 
-| Field                 | Type                  | Required              | Description           |
-| --------------------- | --------------------- | --------------------- | --------------------- |
-| `description`         | *string*              | :heavy_minus_sign:    | Updated description.  |
-| `id`                  | *string*              | :heavy_check_mark:    | N/A                   |
-| `name`                | *string*              | :heavy_check_mark:    | Updated display name. |
-| `slug`                | *string*              | :heavy_check_mark:    | Updated slug.         |
+| Field         | Type     | Required           | Description           |
+| ------------- | -------- | ------------------ | --------------------- |
+| `description` | _string_ | :heavy_minus_sign: | Updated description.  |
+| `id`          | _string_ | :heavy_check_mark: | N/A                   |
+| `name`        | _string_ | :heavy_check_mark: | Updated display name. |
+| `slug`        | _string_ | :heavy_check_mark: | Updated slug.         |

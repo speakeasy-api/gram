@@ -13,5 +13,23 @@ let value: GroupBy = "department_name";
 ## Values
 
 ```typescript
-"department_name" | "job_title" | "employee_type" | "division_name" | "cost_center_name" | "email" | "model" | "hook_source" | "account_type" | "provider" | "billing_mode" | "query_source" | "skill_name" | "agent_name" | "mcp_server_name" | "mcp_tool_name" | "role" | "group" | "project_id"
+"department_name" |
+  "job_title" |
+  "employee_type" |
+  "division_name" |
+  "cost_center_name" |
+  "email" |
+  "model" |
+  "hook_source" |
+  "account_type" |
+  "provider" |
+  "billing_mode" |
+  "query_source" |
+  "skill_name" |
+  "agent_name" |
+  "mcp_server_name" |
+  "mcp_tool_name" |
+  "role" |
+  "group" |
+  "project_id";
 ```

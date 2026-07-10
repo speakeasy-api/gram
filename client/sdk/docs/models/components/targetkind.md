@@ -13,5 +13,5 @@ let value: TargetKind = "local_tools";
 ## Values
 
 ```typescript
-"server" | "local_tools" | "skill"
+"server" | "local_tools" | "skill";
 ```

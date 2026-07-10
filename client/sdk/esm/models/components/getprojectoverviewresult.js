@@ -4,28 +4,34 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ProjectOverviewSummary$inboundSchema, } from "./projectoverviewsummary.js";
+import { ProjectOverviewSummary$inboundSchema } from "./projectoverviewsummary.js";
 /**
  * Indicates whether metrics are session-based or tool-call-based
  */
 export const MetricsMode = {
-    Session: "session",
-    ToolCall: "tool_call",
+  Session: "session",
+  ToolCall: "tool_call",
 };
 /** @internal */
-export const MetricsMode$inboundSchema = z
-    .enum(MetricsMode);
+export const MetricsMode$inboundSchema = z.enum(MetricsMode);
 /** @internal */
-export const GetProjectOverviewResult$inboundSchema = z.pipe(z.object({
+export const GetProjectOverviewResult$inboundSchema = z.pipe(
+  z.object({
     comparison: ProjectOverviewSummary$inboundSchema,
     metrics_mode: MetricsMode$inboundSchema,
     summary: ProjectOverviewSummary$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "metrics_mode": "metricsMode",
+      metrics_mode: "metricsMode",
     });
-}));
+  }),
+);
 export function getProjectOverviewResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GetProjectOverviewResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GetProjectOverviewResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => GetProjectOverviewResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetProjectOverviewResult' from JSON`,
+  );
 }
 //# sourceMappingURL=getprojectoverviewresult.js.map

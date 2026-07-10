@@ -5,14 +5,14 @@ import { riskCapabilitiesGet } from "../funcs/riskCapabilitiesGet.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Capabilities extends ClientSDK {
-    /**
-     * getRiskCapabilities risk
-     *
-     * @remarks
-     * Get server-side risk analysis capabilities for the current project.
-     */
-    async get(request, security, options) {
-        return unwrapAsync(riskCapabilitiesGet(this, request, security, options));
-    }
+  /**
+   * getRiskCapabilities risk
+   *
+   * @remarks
+   * Get server-side risk analysis capabilities for the current project.
+   */
+  async get(request, security, options) {
+    return unwrapAsync(riskCapabilitiesGet(this, request, security, options));
+  }
 }
 //# sourceMappingURL=capabilities.js.map

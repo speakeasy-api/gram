@@ -4,25 +4,35 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CreateCheckoutSecurity$outboundSchema = z.pipe(z.object({
+export const CreateCheckoutSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function createCheckoutSecurityToJSON(createCheckoutSecurity) {
-    return JSON.stringify(CreateCheckoutSecurity$outboundSchema.parse(createCheckoutSecurity));
+  return JSON.stringify(
+    CreateCheckoutSecurity$outboundSchema.parse(createCheckoutSecurity),
+  );
 }
 /** @internal */
-export const CreateCheckoutRequest$outboundSchema = z.pipe(z.object({
+export const CreateCheckoutRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function createCheckoutRequestToJSON(createCheckoutRequest) {
-    return JSON.stringify(CreateCheckoutRequest$outboundSchema.parse(createCheckoutRequest));
+  return JSON.stringify(
+    CreateCheckoutRequest$outboundSchema.parse(createCheckoutRequest),
+  );
 }
 //# sourceMappingURL=createcheckout.js.map

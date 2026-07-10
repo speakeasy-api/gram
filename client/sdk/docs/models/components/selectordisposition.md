@@ -13,5 +13,5 @@ let value: SelectorDisposition = "destructive";
 ## Values
 
 ```typescript
-"read_only" | "destructive" | "idempotent" | "open_world"
+"read_only" | "destructive" | "idempotent" | "open_world";
 ```

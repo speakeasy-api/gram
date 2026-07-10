@@ -8,26 +8,31 @@ import { safeParse } from "../../lib/schemas.js";
  * Tool usage aggregation target kind
  */
 export const ToolUsageTargetToolBreakdownRowTargetKind = {
-    Server: "server",
-    LocalTools: "local_tools",
-    Skill: "skill",
+  Server: "server",
+  LocalTools: "local_tools",
+  Skill: "skill",
 };
 /**
  * Tool usage target type
  */
 export const ToolUsageTargetToolBreakdownRowTargetType = {
-    HostedMcpServer: "hosted_mcp_server",
-    TunneledMcpServer: "tunneled_mcp_server",
-    ShadowMcpServer: "shadow_mcp_server",
-    LocalTool: "local_tool",
-    Skill: "skill",
+  HostedMcpServer: "hosted_mcp_server",
+  TunneledMcpServer: "tunneled_mcp_server",
+  ShadowMcpServer: "shadow_mcp_server",
+  LocalTool: "local_tool",
+  Skill: "skill",
 };
 /** @internal */
-export const ToolUsageTargetToolBreakdownRowTargetKind$inboundSchema = z.enum(ToolUsageTargetToolBreakdownRowTargetKind);
+export const ToolUsageTargetToolBreakdownRowTargetKind$inboundSchema = z.enum(
+  ToolUsageTargetToolBreakdownRowTargetKind,
+);
 /** @internal */
-export const ToolUsageTargetToolBreakdownRowTargetType$inboundSchema = z.enum(ToolUsageTargetToolBreakdownRowTargetType);
+export const ToolUsageTargetToolBreakdownRowTargetType$inboundSchema = z.enum(
+  ToolUsageTargetToolBreakdownRowTargetType,
+);
 /** @internal */
-export const ToolUsageTargetToolBreakdownRow$inboundSchema = z.pipe(z.object({
+export const ToolUsageTargetToolBreakdownRow$inboundSchema = z.pipe(
+  z.object({
     event_count: z.int(),
     failure_count: z.int(),
     failure_rate: z.number(),
@@ -37,20 +42,26 @@ export const ToolUsageTargetToolBreakdownRow$inboundSchema = z.pipe(z.object({
     target_label: z.string(),
     target_type: ToolUsageTargetToolBreakdownRowTargetType$inboundSchema,
     tool_name: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "event_count": "eventCount",
-        "failure_count": "failureCount",
-        "failure_rate": "failureRate",
-        "success_count": "successCount",
-        "target_id": "targetId",
-        "target_kind": "targetKind",
-        "target_label": "targetLabel",
-        "target_type": "targetType",
-        "tool_name": "toolName",
+      event_count: "eventCount",
+      failure_count: "failureCount",
+      failure_rate: "failureRate",
+      success_count: "successCount",
+      target_id: "targetId",
+      target_kind: "targetKind",
+      target_label: "targetLabel",
+      target_type: "targetType",
+      tool_name: "toolName",
     });
-}));
+  }),
+);
 export function toolUsageTargetToolBreakdownRowFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolUsageTargetToolBreakdownRow$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolUsageTargetToolBreakdownRow' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolUsageTargetToolBreakdownRow$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolUsageTargetToolBreakdownRow' from JSON`,
+  );
 }
 //# sourceMappingURL=toolusagetargettoolbreakdownrow.js.map

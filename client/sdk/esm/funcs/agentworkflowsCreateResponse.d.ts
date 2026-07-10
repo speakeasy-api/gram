@@ -2,7 +2,13 @@ import { GramCore } from "../core.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
-import { ConnectionError, InvalidRequestError, RequestAbortedError, RequestTimeoutError, UnexpectedClientError } from "../models/errors/httpclienterrors.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
 import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
@@ -15,5 +21,23 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Create a new agent response. Executes an agent workflow with the provided input and tools.
  */
-export declare function agentworkflowsCreateResponse(client: GramCore, request: operations.CreateResponseRequest, security?: operations.CreateResponseSecurity | undefined, options?: RequestOptions): APIPromise<Result<components.WorkflowAgentResponseOutput, errors.ServiceError | GramError | ResponseValidationError | ConnectionError | RequestAbortedError | RequestTimeoutError | InvalidRequestError | UnexpectedClientError | SDKValidationError>>;
+export declare function agentworkflowsCreateResponse(
+  client: GramCore,
+  request: operations.CreateResponseRequest,
+  security?: operations.CreateResponseSecurity | undefined,
+  options?: RequestOptions,
+): APIPromise<
+  Result<
+    components.WorkflowAgentResponseOutput,
+    | errors.ServiceError
+    | GramError
+    | ResponseValidationError
+    | ConnectionError
+    | RequestAbortedError
+    | RequestTimeoutError
+    | InvalidRequestError
+    | UnexpectedClientError
+    | SDKValidationError
+  >
+>;
 //# sourceMappingURL=agentworkflowsCreateResponse.d.ts.map

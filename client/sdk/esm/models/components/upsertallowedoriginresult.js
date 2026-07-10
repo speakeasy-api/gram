@@ -6,14 +6,21 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { AllowedOrigin$inboundSchema } from "./allowedorigin.js";
 /** @internal */
-export const UpsertAllowedOriginResult$inboundSchema = z.pipe(z.object({
+export const UpsertAllowedOriginResult$inboundSchema = z.pipe(
+  z.object({
     allowed_origin: AllowedOrigin$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "allowed_origin": "allowedOrigin",
+      allowed_origin: "allowedOrigin",
     });
-}));
+  }),
+);
 export function upsertAllowedOriginResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => UpsertAllowedOriginResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'UpsertAllowedOriginResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => UpsertAllowedOriginResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UpsertAllowedOriginResult' from JSON`,
+  );
 }
 //# sourceMappingURL=upsertallowedoriginresult.js.map

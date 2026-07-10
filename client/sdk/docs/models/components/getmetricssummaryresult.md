@@ -54,6 +54,6 @@ let value: GetMetricsSummaryResult = {
 
 ## Fields
 
-| Field                                                                  | Type                                                                   | Required                                                               | Description                                                            |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `metrics`                                                              | [components.ProjectSummary](../../models/components/projectsummary.md) | :heavy_check_mark:                                                     | Aggregated metrics                                                     |
+| Field     | Type                                                                   | Required           | Description        |
+| --------- | ---------------------------------------------------------------------- | ------------------ | ------------------ |
+| `metrics` | [components.ProjectSummary](../../models/components/projectsummary.md) | :heavy_check_mark: | Aggregated metrics |

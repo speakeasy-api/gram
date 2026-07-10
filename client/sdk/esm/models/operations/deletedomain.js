@@ -4,25 +4,35 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteDomainSecurity$outboundSchema = z.pipe(z.object({
+export const DeleteDomainSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function deleteDomainSecurityToJSON(deleteDomainSecurity) {
-    return JSON.stringify(DeleteDomainSecurity$outboundSchema.parse(deleteDomainSecurity));
+  return JSON.stringify(
+    DeleteDomainSecurity$outboundSchema.parse(deleteDomainSecurity),
+  );
 }
 /** @internal */
-export const DeleteDomainRequest$outboundSchema = z.pipe(z.object({
+export const DeleteDomainRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function deleteDomainRequestToJSON(deleteDomainRequest) {
-    return JSON.stringify(DeleteDomainRequest$outboundSchema.parse(deleteDomainRequest));
+  return JSON.stringify(
+    DeleteDomainRequest$outboundSchema.parse(deleteDomainRequest),
+  );
 }
 //# sourceMappingURL=deletedomain.js.map

@@ -3,29 +3,47 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateShadowMCPAccessRuleForm$outboundSchema, } from "../components/createshadowmcpaccessruleform.js";
+import { CreateShadowMCPAccessRuleForm$outboundSchema } from "../components/createshadowmcpaccessruleform.js";
 /** @internal */
-export const CreateShadowMCPAccessRuleSecurity$outboundSchema = z.pipe(z.object({
+export const CreateShadowMCPAccessRuleSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function createShadowMCPAccessRuleSecurityToJSON(createShadowMCPAccessRuleSecurity) {
-    return JSON.stringify(CreateShadowMCPAccessRuleSecurity$outboundSchema.parse(createShadowMCPAccessRuleSecurity));
+  }),
+);
+export function createShadowMCPAccessRuleSecurityToJSON(
+  createShadowMCPAccessRuleSecurity,
+) {
+  return JSON.stringify(
+    CreateShadowMCPAccessRuleSecurity$outboundSchema.parse(
+      createShadowMCPAccessRuleSecurity,
+    ),
+  );
 }
 /** @internal */
-export const CreateShadowMCPAccessRuleRequest$outboundSchema = z.pipe(z.object({
+export const CreateShadowMCPAccessRuleRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     createShadowMCPAccessRuleForm: CreateShadowMCPAccessRuleForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        createShadowMCPAccessRuleForm: "CreateShadowMCPAccessRuleForm",
+      gramSession: "Gram-Session",
+      createShadowMCPAccessRuleForm: "CreateShadowMCPAccessRuleForm",
     });
-}));
-export function createShadowMCPAccessRuleRequestToJSON(createShadowMCPAccessRuleRequest) {
-    return JSON.stringify(CreateShadowMCPAccessRuleRequest$outboundSchema.parse(createShadowMCPAccessRuleRequest));
+  }),
+);
+export function createShadowMCPAccessRuleRequestToJSON(
+  createShadowMCPAccessRuleRequest,
+) {
+  return JSON.stringify(
+    CreateShadowMCPAccessRuleRequest$outboundSchema.parse(
+      createShadowMCPAccessRuleRequest,
+    ),
+  );
 }
 //# sourceMappingURL=createshadowmcpaccessrule.js.map

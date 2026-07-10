@@ -4,26 +4,36 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetAgentPluginsSecurity$outboundSchema = z.pipe(z.object({
+export const GetAgentPluginsSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
     });
-}));
+  }),
+);
 export function getAgentPluginsSecurityToJSON(getAgentPluginsSecurity) {
-    return JSON.stringify(GetAgentPluginsSecurity$outboundSchema.parse(getAgentPluginsSecurity));
+  return JSON.stringify(
+    GetAgentPluginsSecurity$outboundSchema.parse(getAgentPluginsSecurity),
+  );
 }
 /** @internal */
-export const GetAgentPluginsRequest$outboundSchema = z.pipe(z.object({
+export const GetAgentPluginsRequest$outboundSchema = z.pipe(
+  z.object({
     email: z.string(),
     gramKey: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
+      gramKey: "Gram-Key",
     });
-}));
+  }),
+);
 export function getAgentPluginsRequestToJSON(getAgentPluginsRequest) {
-    return JSON.stringify(GetAgentPluginsRequest$outboundSchema.parse(getAgentPluginsRequest));
+  return JSON.stringify(
+    GetAgentPluginsRequest$outboundSchema.parse(getAgentPluginsRequest),
+  );
 }
 //# sourceMappingURL=getagentplugins.js.map

@@ -6,17 +6,23 @@ import * as z from "zod/v4-mini";
  * Feedback sentiment.
  */
 export const Sentiment = {
-    Up: "up",
-    Down: "down",
+  Up: "up",
+  Down: "down",
 };
 /** @internal */
 export const Sentiment$outboundSchema = z.enum(Sentiment);
 /** @internal */
 export const SubmitRiskBlockFeedbackRequestBody$outboundSchema = z.object({
-    id: z.string(),
-    sentiment: Sentiment$outboundSchema,
+  id: z.string(),
+  sentiment: Sentiment$outboundSchema,
 });
-export function submitRiskBlockFeedbackRequestBodyToJSON(submitRiskBlockFeedbackRequestBody) {
-    return JSON.stringify(SubmitRiskBlockFeedbackRequestBody$outboundSchema.parse(submitRiskBlockFeedbackRequestBody));
+export function submitRiskBlockFeedbackRequestBodyToJSON(
+  submitRiskBlockFeedbackRequestBody,
+) {
+  return JSON.stringify(
+    SubmitRiskBlockFeedbackRequestBody$outboundSchema.parse(
+      submitRiskBlockFeedbackRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=submitriskblockfeedbackrequestbody.js.map

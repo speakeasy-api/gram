@@ -5,15 +5,26 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const CreateSignedChatAttachmentURLResult$inboundSchema = z.pipe(z.object({
-    expires_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const CreateSignedChatAttachmentURLResult$inboundSchema = z.pipe(
+  z.object({
+    expires_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     url: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "expires_at": "expiresAt",
+      expires_at: "expiresAt",
     });
-}));
+  }),
+);
 export function createSignedChatAttachmentURLResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => CreateSignedChatAttachmentURLResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'CreateSignedChatAttachmentURLResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) =>
+      CreateSignedChatAttachmentURLResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CreateSignedChatAttachmentURLResult' from JSON`,
+  );
 }
 //# sourceMappingURL=createsignedchatattachmenturlresult.js.map

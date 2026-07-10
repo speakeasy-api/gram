@@ -12,8 +12,8 @@ let value: ListProjectsRequest = {
 
 ## Fields
 
-| Field                                           | Type                                            | Required                                        | Description                                     |
-| ----------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- |
-| `organizationId`                                | *string*                                        | :heavy_check_mark:                              | The ID of the organization to list projects for |
-| `gramKey`                                       | *string*                                        | :heavy_minus_sign:                              | API Key header                                  |
-| `gramSession`                                   | *string*                                        | :heavy_minus_sign:                              | Session header                                  |
+| Field            | Type     | Required           | Description                                     |
+| ---------------- | -------- | ------------------ | ----------------------------------------------- |
+| `organizationId` | _string_ | :heavy_check_mark: | The ID of the organization to list projects for |
+| `gramKey`        | _string_ | :heavy_minus_sign: | API Key header                                  |
+| `gramSession`    | _string_ | :heavy_minus_sign: | Session header                                  |

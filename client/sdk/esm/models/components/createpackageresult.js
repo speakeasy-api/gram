@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Package$inboundSchema } from "./package.js";
 /** @internal */
 export const CreatePackageResult$inboundSchema = z.object({
-    package: Package$inboundSchema,
+  package: Package$inboundSchema,
 });
 export function createPackageResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => CreatePackageResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'CreatePackageResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => CreatePackageResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CreatePackageResult' from JSON`,
+  );
 }
 //# sourceMappingURL=createpackageresult.js.map

@@ -4,25 +4,35 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ValidateAPIKeySecurity$outboundSchema = z.pipe(z.object({
+export const ValidateAPIKeySecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
     });
-}));
+  }),
+);
 export function validateAPIKeySecurityToJSON(validateAPIKeySecurity) {
-    return JSON.stringify(ValidateAPIKeySecurity$outboundSchema.parse(validateAPIKeySecurity));
+  return JSON.stringify(
+    ValidateAPIKeySecurity$outboundSchema.parse(validateAPIKeySecurity),
+  );
 }
 /** @internal */
-export const ValidateAPIKeyRequest$outboundSchema = z.pipe(z.object({
+export const ValidateAPIKeyRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
+      gramKey: "Gram-Key",
     });
-}));
+  }),
+);
 export function validateAPIKeyRequestToJSON(validateAPIKeyRequest) {
-    return JSON.stringify(ValidateAPIKeyRequest$outboundSchema.parse(validateAPIKeyRequest));
+  return JSON.stringify(
+    ValidateAPIKeyRequest$outboundSchema.parse(validateAPIKeyRequest),
+  );
 }
 //# sourceMappingURL=validateapikey.js.map

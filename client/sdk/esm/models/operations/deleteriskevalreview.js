@@ -4,61 +4,99 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteRiskEvalReviewSecurityOption1$outboundSchema = z.pipe(z.object({
+export const DeleteRiskEvalReviewSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function deleteRiskEvalReviewSecurityOption1ToJSON(deleteRiskEvalReviewSecurityOption1) {
-    return JSON.stringify(DeleteRiskEvalReviewSecurityOption1$outboundSchema.parse(deleteRiskEvalReviewSecurityOption1));
+  }),
+);
+export function deleteRiskEvalReviewSecurityOption1ToJSON(
+  deleteRiskEvalReviewSecurityOption1,
+) {
+  return JSON.stringify(
+    DeleteRiskEvalReviewSecurityOption1$outboundSchema.parse(
+      deleteRiskEvalReviewSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const DeleteRiskEvalReviewSecurityOption2$outboundSchema = z.pipe(z.object({
+export const DeleteRiskEvalReviewSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function deleteRiskEvalReviewSecurityOption2ToJSON(deleteRiskEvalReviewSecurityOption2) {
-    return JSON.stringify(DeleteRiskEvalReviewSecurityOption2$outboundSchema.parse(deleteRiskEvalReviewSecurityOption2));
+  }),
+);
+export function deleteRiskEvalReviewSecurityOption2ToJSON(
+  deleteRiskEvalReviewSecurityOption2,
+) {
+  return JSON.stringify(
+    DeleteRiskEvalReviewSecurityOption2$outboundSchema.parse(
+      deleteRiskEvalReviewSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const DeleteRiskEvalReviewSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => DeleteRiskEvalReviewSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => DeleteRiskEvalReviewSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const DeleteRiskEvalReviewSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => DeleteRiskEvalReviewSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => DeleteRiskEvalReviewSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function deleteRiskEvalReviewSecurityToJSON(deleteRiskEvalReviewSecurity) {
-    return JSON.stringify(DeleteRiskEvalReviewSecurity$outboundSchema.parse(deleteRiskEvalReviewSecurity));
+  }),
+);
+export function deleteRiskEvalReviewSecurityToJSON(
+  deleteRiskEvalReviewSecurity,
+) {
+  return JSON.stringify(
+    DeleteRiskEvalReviewSecurity$outboundSchema.parse(
+      deleteRiskEvalReviewSecurity,
+    ),
+  );
 }
 /** @internal */
-export const DeleteRiskEvalReviewRequest$outboundSchema = z.pipe(z.object({
+export const DeleteRiskEvalReviewRequest$outboundSchema = z.pipe(
+  z.object({
     policyId: z.string(),
     chatId: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        policyId: "policy_id",
-        chatId: "chat_id",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      policyId: "policy_id",
+      chatId: "chat_id",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function deleteRiskEvalReviewRequestToJSON(deleteRiskEvalReviewRequest) {
-    return JSON.stringify(DeleteRiskEvalReviewRequest$outboundSchema.parse(deleteRiskEvalReviewRequest));
+  return JSON.stringify(
+    DeleteRiskEvalReviewRequest$outboundSchema.parse(
+      deleteRiskEvalReviewRequest,
+    ),
+  );
 }
 //# sourceMappingURL=deleteriskevalreview.js.map

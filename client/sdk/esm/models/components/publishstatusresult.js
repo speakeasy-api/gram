@@ -5,26 +5,38 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const PublishStatusResult$inboundSchema = z.pipe(z.object({
+export const PublishStatusResult$inboundSchema = z.pipe(
+  z.object({
     configured: z.boolean(),
     connected: z.boolean(),
-    last_published_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
+    last_published_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
     marketplace_url: z.optional(z.string()),
     repo_name: z.optional(z.string()),
     repo_owner: z.optional(z.string()),
     repo_url: z.optional(z.string()),
     up_to_date: z.optional(z.boolean()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "last_published_at": "lastPublishedAt",
-        "marketplace_url": "marketplaceUrl",
-        "repo_name": "repoName",
-        "repo_owner": "repoOwner",
-        "repo_url": "repoUrl",
-        "up_to_date": "upToDate",
+      last_published_at: "lastPublishedAt",
+      marketplace_url: "marketplaceUrl",
+      repo_name: "repoName",
+      repo_owner: "repoOwner",
+      repo_url: "repoUrl",
+      up_to_date: "upToDate",
     });
-}));
+  }),
+);
 export function publishStatusResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => PublishStatusResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'PublishStatusResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => PublishStatusResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'PublishStatusResult' from JSON`,
+  );
 }
 //# sourceMappingURL=publishstatusresult.js.map

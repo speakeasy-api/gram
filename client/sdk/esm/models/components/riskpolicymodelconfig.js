@@ -5,29 +5,41 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const RiskPolicyModelConfig$inboundSchema = z.pipe(z.object({
+export const RiskPolicyModelConfig$inboundSchema = z.pipe(
+  z.object({
     fail_open: z.optional(z.boolean()),
     model: z.optional(z.string()),
     temperature: z.optional(z.number()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "fail_open": "failOpen",
+      fail_open: "failOpen",
     });
-}));
+  }),
+);
 /** @internal */
-export const RiskPolicyModelConfig$outboundSchema = z.pipe(z.object({
+export const RiskPolicyModelConfig$outboundSchema = z.pipe(
+  z.object({
     failOpen: z.optional(z.boolean()),
     model: z.optional(z.string()),
     temperature: z.optional(z.number()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        failOpen: "fail_open",
+      failOpen: "fail_open",
     });
-}));
+  }),
+);
 export function riskPolicyModelConfigToJSON(riskPolicyModelConfig) {
-    return JSON.stringify(RiskPolicyModelConfig$outboundSchema.parse(riskPolicyModelConfig));
+  return JSON.stringify(
+    RiskPolicyModelConfig$outboundSchema.parse(riskPolicyModelConfig),
+  );
 }
 export function riskPolicyModelConfigFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskPolicyModelConfig$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskPolicyModelConfig' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskPolicyModelConfig$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskPolicyModelConfig' from JSON`,
+  );
 }
 //# sourceMappingURL=riskpolicymodelconfig.js.map

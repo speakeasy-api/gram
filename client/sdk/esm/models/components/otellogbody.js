@@ -4,9 +4,9 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const OTELLogBody$outboundSchema = z.object({
-    stringValue: z.optional(z.string()),
+  stringValue: z.optional(z.string()),
 });
 export function otelLogBodyToJSON(otelLogBody) {
-    return JSON.stringify(OTELLogBody$outboundSchema.parse(otelLogBody));
+  return JSON.stringify(OTELLogBody$outboundSchema.parse(otelLogBody));
 }
 //# sourceMappingURL=otellogbody.js.map

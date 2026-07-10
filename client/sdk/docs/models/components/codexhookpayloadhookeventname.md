@@ -13,5 +13,10 @@ let value: CodexHookPayloadHookEventName = "PermissionRequest";
 ## Values
 
 ```typescript
-"SessionStart" | "PreToolUse" | "PermissionRequest" | "PostToolUse" | "UserPromptSubmit" | "Stop"
+"SessionStart" |
+  "PreToolUse" |
+  "PermissionRequest" |
+  "PostToolUse" |
+  "UserPromptSubmit" |
+  "Stop";
 ```

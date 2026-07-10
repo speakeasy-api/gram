@@ -4,57 +4,89 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListAllowedOriginsSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListAllowedOriginsSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listAllowedOriginsSecurityOption1ToJSON(listAllowedOriginsSecurityOption1) {
-    return JSON.stringify(ListAllowedOriginsSecurityOption1$outboundSchema.parse(listAllowedOriginsSecurityOption1));
+  }),
+);
+export function listAllowedOriginsSecurityOption1ToJSON(
+  listAllowedOriginsSecurityOption1,
+) {
+  return JSON.stringify(
+    ListAllowedOriginsSecurityOption1$outboundSchema.parse(
+      listAllowedOriginsSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListAllowedOriginsSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListAllowedOriginsSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listAllowedOriginsSecurityOption2ToJSON(listAllowedOriginsSecurityOption2) {
-    return JSON.stringify(ListAllowedOriginsSecurityOption2$outboundSchema.parse(listAllowedOriginsSecurityOption2));
+  }),
+);
+export function listAllowedOriginsSecurityOption2ToJSON(
+  listAllowedOriginsSecurityOption2,
+) {
+  return JSON.stringify(
+    ListAllowedOriginsSecurityOption2$outboundSchema.parse(
+      listAllowedOriginsSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListAllowedOriginsSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListAllowedOriginsSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListAllowedOriginsSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListAllowedOriginsSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListAllowedOriginsSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListAllowedOriginsSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function listAllowedOriginsSecurityToJSON(listAllowedOriginsSecurity) {
-    return JSON.stringify(ListAllowedOriginsSecurity$outboundSchema.parse(listAllowedOriginsSecurity));
+  return JSON.stringify(
+    ListAllowedOriginsSecurity$outboundSchema.parse(listAllowedOriginsSecurity),
+  );
 }
 /** @internal */
-export const ListAllowedOriginsRequest$outboundSchema = z.pipe(z.object({
+export const ListAllowedOriginsRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function listAllowedOriginsRequestToJSON(listAllowedOriginsRequest) {
-    return JSON.stringify(ListAllowedOriginsRequest$outboundSchema.parse(listAllowedOriginsRequest));
+  return JSON.stringify(
+    ListAllowedOriginsRequest$outboundSchema.parse(listAllowedOriginsRequest),
+  );
 }
 //# sourceMappingURL=listallowedorigins.js.map

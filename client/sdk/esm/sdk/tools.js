@@ -5,14 +5,14 @@ import { toolsList } from "../funcs/toolsList.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Tools extends ClientSDK {
-    /**
-     * listResources resources
-     *
-     * @remarks
-     * List all resources for a project
-     */
-    async list(request, security, options) {
-        return unwrapAsync(toolsList(this, request, security, options));
-    }
+  /**
+   * listResources resources
+   *
+   * @remarks
+   * List all resources for a project
+   */
+  async list(request, security, options) {
+    return unwrapAsync(toolsList(this, request, security, options));
+  }
 }
 //# sourceMappingURL=tools.js.map

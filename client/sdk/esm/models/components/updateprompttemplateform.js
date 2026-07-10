@@ -7,21 +7,26 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * The template engine
  */
 export const UpdatePromptTemplateFormEngine = {
-    Mustache: "mustache",
+  Mustache: "mustache",
 };
 /**
  * The kind of prompt the template is used for
  */
 export const UpdatePromptTemplateFormKind = {
-    Prompt: "prompt",
-    HigherOrderTool: "higher_order_tool",
+  Prompt: "prompt",
+  HigherOrderTool: "higher_order_tool",
 };
 /** @internal */
-export const UpdatePromptTemplateFormEngine$outboundSchema = z.enum(UpdatePromptTemplateFormEngine);
+export const UpdatePromptTemplateFormEngine$outboundSchema = z.enum(
+  UpdatePromptTemplateFormEngine,
+);
 /** @internal */
-export const UpdatePromptTemplateFormKind$outboundSchema = z.enum(UpdatePromptTemplateFormKind);
+export const UpdatePromptTemplateFormKind$outboundSchema = z.enum(
+  UpdatePromptTemplateFormKind,
+);
 /** @internal */
-export const UpdatePromptTemplateForm$outboundSchema = z.pipe(z.object({
+export const UpdatePromptTemplateForm$outboundSchema = z.pipe(
+  z.object({
     arguments: z.optional(z.string()),
     description: z.optional(z.string()),
     engine: z.optional(UpdatePromptTemplateFormEngine$outboundSchema),
@@ -31,13 +36,17 @@ export const UpdatePromptTemplateForm$outboundSchema = z.pipe(z.object({
     prompt: z.optional(z.string()),
     toolUrnsHint: z.optional(z.array(z.string())),
     toolsHint: z.optional(z.array(z.string())),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        toolUrnsHint: "tool_urns_hint",
-        toolsHint: "tools_hint",
+      toolUrnsHint: "tool_urns_hint",
+      toolsHint: "tools_hint",
     });
-}));
+  }),
+);
 export function updatePromptTemplateFormToJSON(updatePromptTemplateForm) {
-    return JSON.stringify(UpdatePromptTemplateForm$outboundSchema.parse(updatePromptTemplateForm));
+  return JSON.stringify(
+    UpdatePromptTemplateForm$outboundSchema.parse(updatePromptTemplateForm),
+  );
 }
 //# sourceMappingURL=updateprompttemplateform.js.map

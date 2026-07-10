@@ -7,23 +7,25 @@ import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 import { unwrapResultIterator } from "../types/operations.js";
 export class RemoteSessions extends ClientSDK {
-    /**
-     * listRemoteSessions remoteSessions
-     *
-     * @remarks
-     * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
-     */
-    async list(request, security, options) {
-        return unwrapResultIterator(remoteSessionsList(this, request, security, options));
-    }
-    /**
-     * revokeRemoteSession remoteSessions
-     *
-     * @remarks
-     * Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.
-     */
-    async revoke(request, security, options) {
-        return unwrapAsync(remoteSessionsRevoke(this, request, security, options));
-    }
+  /**
+   * listRemoteSessions remoteSessions
+   *
+   * @remarks
+   * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
+   */
+  async list(request, security, options) {
+    return unwrapResultIterator(
+      remoteSessionsList(this, request, security, options),
+    );
+  }
+  /**
+   * revokeRemoteSession remoteSessions
+   *
+   * @remarks
+   * Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.
+   */
+  async revoke(request, security, options) {
+    return unwrapAsync(remoteSessionsRevoke(this, request, security, options));
+  }
 }
 //# sourceMappingURL=remotesessions.js.map

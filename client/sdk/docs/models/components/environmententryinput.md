@@ -15,7 +15,7 @@ let value: EnvironmentEntryInput = {
 
 ## Fields
 
-| Field                                 | Type                                  | Required                              | Description                           |
-| ------------------------------------- | ------------------------------------- | ------------------------------------- | ------------------------------------- |
-| `name`                                | *string*                              | :heavy_check_mark:                    | The name of the environment variable  |
-| `value`                               | *string*                              | :heavy_check_mark:                    | The value of the environment variable |
+| Field   | Type     | Required           | Description                           |
+| ------- | -------- | ------------------ | ------------------------------------- |
+| `name`  | _string_ | :heavy_check_mark: | The name of the environment variable  |
+| `value` | _string_ | :heavy_check_mark: | The value of the environment variable |

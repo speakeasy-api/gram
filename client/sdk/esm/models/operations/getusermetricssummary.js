@@ -3,61 +3,101 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { GetUserMetricsSummaryPayload$outboundSchema, } from "../components/getusermetricssummarypayload.js";
+import { GetUserMetricsSummaryPayload$outboundSchema } from "../components/getusermetricssummarypayload.js";
 /** @internal */
-export const GetUserMetricsSummarySecurityOption1$outboundSchema = z.pipe(z.object({
+export const GetUserMetricsSummarySecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function getUserMetricsSummarySecurityOption1ToJSON(getUserMetricsSummarySecurityOption1) {
-    return JSON.stringify(GetUserMetricsSummarySecurityOption1$outboundSchema.parse(getUserMetricsSummarySecurityOption1));
+  }),
+);
+export function getUserMetricsSummarySecurityOption1ToJSON(
+  getUserMetricsSummarySecurityOption1,
+) {
+  return JSON.stringify(
+    GetUserMetricsSummarySecurityOption1$outboundSchema.parse(
+      getUserMetricsSummarySecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const GetUserMetricsSummarySecurityOption2$outboundSchema = z.pipe(z.object({
+export const GetUserMetricsSummarySecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function getUserMetricsSummarySecurityOption2ToJSON(getUserMetricsSummarySecurityOption2) {
-    return JSON.stringify(GetUserMetricsSummarySecurityOption2$outboundSchema.parse(getUserMetricsSummarySecurityOption2));
+  }),
+);
+export function getUserMetricsSummarySecurityOption2ToJSON(
+  getUserMetricsSummarySecurityOption2,
+) {
+  return JSON.stringify(
+    GetUserMetricsSummarySecurityOption2$outboundSchema.parse(
+      getUserMetricsSummarySecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const GetUserMetricsSummarySecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => GetUserMetricsSummarySecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => GetUserMetricsSummarySecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const GetUserMetricsSummarySecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => GetUserMetricsSummarySecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => GetUserMetricsSummarySecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function getUserMetricsSummarySecurityToJSON(getUserMetricsSummarySecurity) {
-    return JSON.stringify(GetUserMetricsSummarySecurity$outboundSchema.parse(getUserMetricsSummarySecurity));
+  }),
+);
+export function getUserMetricsSummarySecurityToJSON(
+  getUserMetricsSummarySecurity,
+) {
+  return JSON.stringify(
+    GetUserMetricsSummarySecurity$outboundSchema.parse(
+      getUserMetricsSummarySecurity,
+    ),
+  );
 }
 /** @internal */
-export const GetUserMetricsSummaryRequest$outboundSchema = z.pipe(z.object({
+export const GetUserMetricsSummaryRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     getUserMetricsSummaryPayload: GetUserMetricsSummaryPayload$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        getUserMetricsSummaryPayload: "GetUserMetricsSummaryPayload",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      getUserMetricsSummaryPayload: "GetUserMetricsSummaryPayload",
     });
-}));
-export function getUserMetricsSummaryRequestToJSON(getUserMetricsSummaryRequest) {
-    return JSON.stringify(GetUserMetricsSummaryRequest$outboundSchema.parse(getUserMetricsSummaryRequest));
+  }),
+);
+export function getUserMetricsSummaryRequestToJSON(
+  getUserMetricsSummaryRequest,
+) {
+  return JSON.stringify(
+    GetUserMetricsSummaryRequest$outboundSchema.parse(
+      getUserMetricsSummaryRequest,
+    ),
+  );
 }
 //# sourceMappingURL=getusermetricssummary.js.map

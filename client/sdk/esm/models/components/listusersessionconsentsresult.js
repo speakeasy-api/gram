@@ -4,17 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { UserSessionConsent$inboundSchema, } from "./usersessionconsent.js";
+import { UserSessionConsent$inboundSchema } from "./usersessionconsent.js";
 /** @internal */
-export const ListUserSessionConsentsResult$inboundSchema = z.pipe(z.object({
+export const ListUserSessionConsentsResult$inboundSchema = z.pipe(
+  z.object({
     items: z.array(UserSessionConsent$inboundSchema),
     next_cursor: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function listUserSessionConsentsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListUserSessionConsentsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListUserSessionConsentsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListUserSessionConsentsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListUserSessionConsentsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listusersessionconsentsresult.js.map

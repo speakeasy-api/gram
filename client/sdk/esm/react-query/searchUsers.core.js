@@ -4,30 +4,42 @@
 import { telemetrySearchUsers } from "../funcs/telemetrySearchUsers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchSearchUsers(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildSearchUsersQuery(client$, request, security, options),
-    });
+export function prefetchSearchUsers(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildSearchUsersQuery(client$, request, security, options),
+  });
 }
 export function buildSearchUsersQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeySearchUsers({
-            gramKey: request.gramKey,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function searchUsersQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(telemetrySearchUsers(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeySearchUsers({
+      gramKey: request.gramKey,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function searchUsersQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        telemetrySearchUsers(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeySearchUsers(parameters) {
-    return ["@gram/client", "telemetry", "searchUsers", parameters];
+  return ["@gram/client", "telemetry", "searchUsers", parameters];
 }
 //# sourceMappingURL=searchUsers.core.js.map

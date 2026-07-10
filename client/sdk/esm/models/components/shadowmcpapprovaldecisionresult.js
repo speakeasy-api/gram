@@ -3,15 +3,19 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ShadowMCPAccessRule$inboundSchema, } from "./shadowmcpaccessrule.js";
-import { ShadowMCPApprovalRequest$inboundSchema, } from "./shadowmcpapprovalrequest.js";
+import { ShadowMCPAccessRule$inboundSchema } from "./shadowmcpaccessrule.js";
+import { ShadowMCPApprovalRequest$inboundSchema } from "./shadowmcpapprovalrequest.js";
 /** @internal */
 export const ShadowMCPApprovalDecisionResult$inboundSchema = z.object({
-    request: ShadowMCPApprovalRequest$inboundSchema,
-    rule: z.optional(ShadowMCPAccessRule$inboundSchema),
-    rules: z.array(ShadowMCPAccessRule$inboundSchema),
+  request: ShadowMCPApprovalRequest$inboundSchema,
+  rule: z.optional(ShadowMCPAccessRule$inboundSchema),
+  rules: z.array(ShadowMCPAccessRule$inboundSchema),
 });
 export function shadowMCPApprovalDecisionResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ShadowMCPApprovalDecisionResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ShadowMCPApprovalDecisionResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ShadowMCPApprovalDecisionResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ShadowMCPApprovalDecisionResult' from JSON`,
+  );
 }
 //# sourceMappingURL=shadowmcpapprovaldecisionresult.js.map

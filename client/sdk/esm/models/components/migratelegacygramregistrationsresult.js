@@ -5,14 +5,22 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const MigrateLegacyGramRegistrationsResult$inboundSchema = z.pipe(z.object({
+export const MigrateLegacyGramRegistrationsResult$inboundSchema = z.pipe(
+  z.object({
     migrated_count: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "migrated_count": "migratedCount",
+      migrated_count: "migratedCount",
     });
-}));
+  }),
+);
 export function migrateLegacyGramRegistrationsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => MigrateLegacyGramRegistrationsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'MigrateLegacyGramRegistrationsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) =>
+      MigrateLegacyGramRegistrationsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'MigrateLegacyGramRegistrationsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=migratelegacygramregistrationsresult.js.map

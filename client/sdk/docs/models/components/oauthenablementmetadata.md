@@ -12,6 +12,6 @@ let value: OAuthEnablementMetadata = {
 
 ## Fields
 
-| Field                                                 | Type                                                  | Required                                              | Description                                           |
-| ----------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------- |
-| `oauth2SecurityCount`                                 | *number*                                              | :heavy_check_mark:                                    | Count of security variables that are OAuth2 supported |
+| Field                 | Type     | Required           | Description                                           |
+| --------------------- | -------- | ------------------ | ----------------------------------------------------- |
+| `oauth2SecurityCount` | _number_ | :heavy_check_mark: | Count of security variables that are OAuth2 supported |

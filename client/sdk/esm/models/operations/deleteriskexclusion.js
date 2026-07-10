@@ -4,58 +4,92 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteRiskExclusionSecurityOption1$outboundSchema = z.pipe(z.object({
+export const DeleteRiskExclusionSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function deleteRiskExclusionSecurityOption1ToJSON(deleteRiskExclusionSecurityOption1) {
-    return JSON.stringify(DeleteRiskExclusionSecurityOption1$outboundSchema.parse(deleteRiskExclusionSecurityOption1));
+  }),
+);
+export function deleteRiskExclusionSecurityOption1ToJSON(
+  deleteRiskExclusionSecurityOption1,
+) {
+  return JSON.stringify(
+    DeleteRiskExclusionSecurityOption1$outboundSchema.parse(
+      deleteRiskExclusionSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const DeleteRiskExclusionSecurityOption2$outboundSchema = z.pipe(z.object({
+export const DeleteRiskExclusionSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function deleteRiskExclusionSecurityOption2ToJSON(deleteRiskExclusionSecurityOption2) {
-    return JSON.stringify(DeleteRiskExclusionSecurityOption2$outboundSchema.parse(deleteRiskExclusionSecurityOption2));
+  }),
+);
+export function deleteRiskExclusionSecurityOption2ToJSON(
+  deleteRiskExclusionSecurityOption2,
+) {
+  return JSON.stringify(
+    DeleteRiskExclusionSecurityOption2$outboundSchema.parse(
+      deleteRiskExclusionSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const DeleteRiskExclusionSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => DeleteRiskExclusionSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => DeleteRiskExclusionSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const DeleteRiskExclusionSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => DeleteRiskExclusionSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => DeleteRiskExclusionSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function deleteRiskExclusionSecurityToJSON(deleteRiskExclusionSecurity) {
-    return JSON.stringify(DeleteRiskExclusionSecurity$outboundSchema.parse(deleteRiskExclusionSecurity));
+  return JSON.stringify(
+    DeleteRiskExclusionSecurity$outboundSchema.parse(
+      deleteRiskExclusionSecurity,
+    ),
+  );
 }
 /** @internal */
-export const DeleteRiskExclusionRequest$outboundSchema = z.pipe(z.object({
+export const DeleteRiskExclusionRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function deleteRiskExclusionRequestToJSON(deleteRiskExclusionRequest) {
-    return JSON.stringify(DeleteRiskExclusionRequest$outboundSchema.parse(deleteRiskExclusionRequest));
+  return JSON.stringify(
+    DeleteRiskExclusionRequest$outboundSchema.parse(deleteRiskExclusionRequest),
+  );
 }
 //# sourceMappingURL=deleteriskexclusion.js.map

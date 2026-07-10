@@ -5,23 +5,36 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const McpEnvironmentConfig$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const McpEnvironmentConfig$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     header_display_name: z.optional(z.string()),
     id: z.string(),
     provided_by: z.string(),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     variable_name: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "header_display_name": "headerDisplayName",
-        "provided_by": "providedBy",
-        "updated_at": "updatedAt",
-        "variable_name": "variableName",
+      created_at: "createdAt",
+      header_display_name: "headerDisplayName",
+      provided_by: "providedBy",
+      updated_at: "updatedAt",
+      variable_name: "variableName",
     });
-}));
+  }),
+);
 export function mcpEnvironmentConfigFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => McpEnvironmentConfig$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'McpEnvironmentConfig' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => McpEnvironmentConfig$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'McpEnvironmentConfig' from JSON`,
+  );
 }
 //# sourceMappingURL=mcpenvironmentconfig.js.map

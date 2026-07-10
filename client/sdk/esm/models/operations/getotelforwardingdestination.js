@@ -4,30 +4,48 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetOtelForwardingDestinationSecurity$outboundSchema = z.pipe(z.object({
+export const GetOtelForwardingDestinationSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function getOtelForwardingDestinationSecurityToJSON(getOtelForwardingDestinationSecurity) {
-    return JSON.stringify(GetOtelForwardingDestinationSecurity$outboundSchema.parse(getOtelForwardingDestinationSecurity));
+  }),
+);
+export function getOtelForwardingDestinationSecurityToJSON(
+  getOtelForwardingDestinationSecurity,
+) {
+  return JSON.stringify(
+    GetOtelForwardingDestinationSecurity$outboundSchema.parse(
+      getOtelForwardingDestinationSecurity,
+    ),
+  );
 }
 /** @internal */
-export const GetOtelForwardingDestinationRequest$outboundSchema = z.pipe(z.object({
+export const GetOtelForwardingDestinationRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
     });
-}));
-export function getOtelForwardingDestinationRequestToJSON(getOtelForwardingDestinationRequest) {
-    return JSON.stringify(GetOtelForwardingDestinationRequest$outboundSchema.parse(getOtelForwardingDestinationRequest));
+  }),
+);
+export function getOtelForwardingDestinationRequestToJSON(
+  getOtelForwardingDestinationRequest,
+) {
+  return JSON.stringify(
+    GetOtelForwardingDestinationRequest$outboundSchema.parse(
+      getOtelForwardingDestinationRequest,
+    ),
+  );
 }
 //# sourceMappingURL=getotelforwardingdestination.js.map

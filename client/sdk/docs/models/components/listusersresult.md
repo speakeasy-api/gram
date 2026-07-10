@@ -22,6 +22,6 @@ let value: ListUsersResult = {
 
 ## Fields
 
-| Field                                                                        | Type                                                                         | Required                                                                     | Description                                                                  |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `users`                                                                      | [components.OrganizationUser](../../models/components/organizationuser.md)[] | :heavy_check_mark:                                                           | Users linked to the organization in Gram.                                    |
+| Field   | Type                                                                         | Required           | Description                               |
+| ------- | ---------------------------------------------------------------------------- | ------------------ | ----------------------------------------- |
+| `users` | [components.OrganizationUser](../../models/components/organizationuser.md)[] | :heavy_check_mark: | Users linked to the organization in Gram. |

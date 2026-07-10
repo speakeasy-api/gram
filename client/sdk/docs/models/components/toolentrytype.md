@@ -13,5 +13,5 @@ let value: ToolEntryType = "function";
 ## Values
 
 ```typescript
-"http" | "prompt" | "function" | "platform" | "externalmcp"
+"http" | "prompt" | "function" | "platform" | "externalmcp";
 ```

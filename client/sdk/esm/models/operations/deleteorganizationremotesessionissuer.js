@@ -4,30 +4,50 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteOrganizationRemoteSessionIssuerSecurity$outboundSchema = z.pipe(z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
-    apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const DeleteOrganizationRemoteSessionIssuerSecurity$outboundSchema =
+  z.pipe(
+    z.object({
+      sessionHeaderGramSession: z.optional(z.string()),
+      apikeyHeaderGramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         sessionHeaderGramSession: "session_header_Gram-Session",
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    });
-}));
-export function deleteOrganizationRemoteSessionIssuerSecurityToJSON(deleteOrganizationRemoteSessionIssuerSecurity) {
-    return JSON.stringify(DeleteOrganizationRemoteSessionIssuerSecurity$outboundSchema.parse(deleteOrganizationRemoteSessionIssuerSecurity));
+      });
+    }),
+  );
+export function deleteOrganizationRemoteSessionIssuerSecurityToJSON(
+  deleteOrganizationRemoteSessionIssuerSecurity,
+) {
+  return JSON.stringify(
+    DeleteOrganizationRemoteSessionIssuerSecurity$outboundSchema.parse(
+      deleteOrganizationRemoteSessionIssuerSecurity,
+    ),
+  );
 }
 /** @internal */
-export const DeleteOrganizationRemoteSessionIssuerRequest$outboundSchema = z.pipe(z.object({
-    id: z.string(),
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const DeleteOrganizationRemoteSessionIssuerRequest$outboundSchema =
+  z.pipe(
+    z.object({
+      id: z.string(),
+      gramSession: z.optional(z.string()),
+      gramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
-    });
-}));
-export function deleteOrganizationRemoteSessionIssuerRequestToJSON(deleteOrganizationRemoteSessionIssuerRequest) {
-    return JSON.stringify(DeleteOrganizationRemoteSessionIssuerRequest$outboundSchema.parse(deleteOrganizationRemoteSessionIssuerRequest));
+      });
+    }),
+  );
+export function deleteOrganizationRemoteSessionIssuerRequestToJSON(
+  deleteOrganizationRemoteSessionIssuerRequest,
+) {
+  return JSON.stringify(
+    DeleteOrganizationRemoteSessionIssuerRequest$outboundSchema.parse(
+      deleteOrganizationRemoteSessionIssuerRequest,
+    ),
+  );
 }
 //# sourceMappingURL=deleteorganizationremotesessionissuer.js.map

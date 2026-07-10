@@ -5,16 +5,23 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const OrganizationIssuerDeletePreflight$inboundSchema = z.pipe(z.object({
+export const OrganizationIssuerDeletePreflight$inboundSchema = z.pipe(
+  z.object({
     client_count: z.int(),
     mcp_server_names: z.array(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "client_count": "clientCount",
-        "mcp_server_names": "mcpServerNames",
+      client_count: "clientCount",
+      mcp_server_names: "mcpServerNames",
     });
-}));
+  }),
+);
 export function organizationIssuerDeletePreflightFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => OrganizationIssuerDeletePreflight$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'OrganizationIssuerDeletePreflight' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => OrganizationIssuerDeletePreflight$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'OrganizationIssuerDeletePreflight' from JSON`,
+  );
 }
 //# sourceMappingURL=organizationissuerdeletepreflight.js.map

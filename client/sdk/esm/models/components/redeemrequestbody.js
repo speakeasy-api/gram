@@ -4,15 +4,20 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const RedeemRequestBody$outboundSchema = z.pipe(z.object({
+export const RedeemRequestBody$outboundSchema = z.pipe(
+  z.object({
     code: z.string(),
     codeVerifier: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        codeVerifier: "code_verifier",
+      codeVerifier: "code_verifier",
     });
-}));
+  }),
+);
 export function redeemRequestBodyToJSON(redeemRequestBody) {
-    return JSON.stringify(RedeemRequestBody$outboundSchema.parse(redeemRequestBody));
+  return JSON.stringify(
+    RedeemRequestBody$outboundSchema.parse(redeemRequestBody),
+  );
 }
 //# sourceMappingURL=redeemrequestbody.js.map

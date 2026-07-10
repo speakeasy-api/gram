@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Project$inboundSchema } from "./project.js";
 /** @internal */
 export const SetProjectLogoResult$inboundSchema = z.object({
-    project: Project$inboundSchema,
+  project: Project$inboundSchema,
 });
 export function setProjectLogoResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SetProjectLogoResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SetProjectLogoResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SetProjectLogoResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SetProjectLogoResult' from JSON`,
+  );
 }
 //# sourceMappingURL=setprojectlogoresult.js.map

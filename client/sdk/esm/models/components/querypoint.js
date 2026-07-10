@@ -6,16 +6,22 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { QueryMeasures$inboundSchema } from "./querymeasures.js";
 /** @internal */
-export const QueryPoint$inboundSchema = z
-    .pipe(z.object({
+export const QueryPoint$inboundSchema = z.pipe(
+  z.object({
     bucket_time_unix_nano: z.string(),
     measures: QueryMeasures$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "bucket_time_unix_nano": "bucketTimeUnixNano",
+      bucket_time_unix_nano: "bucketTimeUnixNano",
     });
-}));
+  }),
+);
 export function queryPointFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => QueryPoint$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'QueryPoint' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => QueryPoint$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'QueryPoint' from JSON`,
+  );
 }
 //# sourceMappingURL=querypoint.js.map

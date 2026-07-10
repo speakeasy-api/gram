@@ -3,61 +3,103 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpdateCustomDetectionRuleRequestBody$outboundSchema, } from "../components/updatecustomdetectionrulerequestbody.js";
+import { UpdateCustomDetectionRuleRequestBody$outboundSchema } from "../components/updatecustomdetectionrulerequestbody.js";
 /** @internal */
-export const UpdateCustomDetectionRuleSecurityOption1$outboundSchema = z.pipe(z.object({
+export const UpdateCustomDetectionRuleSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function updateCustomDetectionRuleSecurityOption1ToJSON(updateCustomDetectionRuleSecurityOption1) {
-    return JSON.stringify(UpdateCustomDetectionRuleSecurityOption1$outboundSchema.parse(updateCustomDetectionRuleSecurityOption1));
+  }),
+);
+export function updateCustomDetectionRuleSecurityOption1ToJSON(
+  updateCustomDetectionRuleSecurityOption1,
+) {
+  return JSON.stringify(
+    UpdateCustomDetectionRuleSecurityOption1$outboundSchema.parse(
+      updateCustomDetectionRuleSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const UpdateCustomDetectionRuleSecurityOption2$outboundSchema = z.pipe(z.object({
+export const UpdateCustomDetectionRuleSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function updateCustomDetectionRuleSecurityOption2ToJSON(updateCustomDetectionRuleSecurityOption2) {
-    return JSON.stringify(UpdateCustomDetectionRuleSecurityOption2$outboundSchema.parse(updateCustomDetectionRuleSecurityOption2));
+  }),
+);
+export function updateCustomDetectionRuleSecurityOption2ToJSON(
+  updateCustomDetectionRuleSecurityOption2,
+) {
+  return JSON.stringify(
+    UpdateCustomDetectionRuleSecurityOption2$outboundSchema.parse(
+      updateCustomDetectionRuleSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const UpdateCustomDetectionRuleSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => UpdateCustomDetectionRuleSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => UpdateCustomDetectionRuleSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const UpdateCustomDetectionRuleSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => UpdateCustomDetectionRuleSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => UpdateCustomDetectionRuleSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function updateCustomDetectionRuleSecurityToJSON(updateCustomDetectionRuleSecurity) {
-    return JSON.stringify(UpdateCustomDetectionRuleSecurity$outboundSchema.parse(updateCustomDetectionRuleSecurity));
+  }),
+);
+export function updateCustomDetectionRuleSecurityToJSON(
+  updateCustomDetectionRuleSecurity,
+) {
+  return JSON.stringify(
+    UpdateCustomDetectionRuleSecurity$outboundSchema.parse(
+      updateCustomDetectionRuleSecurity,
+    ),
+  );
 }
 /** @internal */
-export const UpdateCustomDetectionRuleRequest$outboundSchema = z.pipe(z.object({
+export const UpdateCustomDetectionRuleRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    updateCustomDetectionRuleRequestBody: UpdateCustomDetectionRuleRequestBody$outboundSchema,
-}), z.transform((v) => {
+    updateCustomDetectionRuleRequestBody:
+      UpdateCustomDetectionRuleRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        updateCustomDetectionRuleRequestBody: "UpdateCustomDetectionRuleRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      updateCustomDetectionRuleRequestBody:
+        "UpdateCustomDetectionRuleRequestBody",
     });
-}));
-export function updateCustomDetectionRuleRequestToJSON(updateCustomDetectionRuleRequest) {
-    return JSON.stringify(UpdateCustomDetectionRuleRequest$outboundSchema.parse(updateCustomDetectionRuleRequest));
+  }),
+);
+export function updateCustomDetectionRuleRequestToJSON(
+  updateCustomDetectionRuleRequest,
+) {
+  return JSON.stringify(
+    UpdateCustomDetectionRuleRequest$outboundSchema.parse(
+      updateCustomDetectionRuleRequest,
+    ),
+  );
 }
 //# sourceMappingURL=updatecustomdetectionrule.js.map

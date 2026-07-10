@@ -5,15 +5,22 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const AuthorizeResponseBody$inboundSchema = z.pipe(z.object({
+export const AuthorizeResponseBody$inboundSchema = z.pipe(
+  z.object({
     code: z.string(),
     expires_in: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "expires_in": "expiresIn",
+      expires_in: "expiresIn",
     });
-}));
+  }),
+);
 export function authorizeResponseBodyFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => AuthorizeResponseBody$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'AuthorizeResponseBody' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => AuthorizeResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AuthorizeResponseBody' from JSON`,
+  );
 }
 //# sourceMappingURL=authorizeresponsebody.js.map

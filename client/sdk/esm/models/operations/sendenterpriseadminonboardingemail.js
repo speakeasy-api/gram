@@ -3,29 +3,49 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { SendEnterpriseAdminOnboardingEmailRequestBody$outboundSchema, } from "../components/sendenterpriseadminonboardingemailrequestbody.js";
+import { SendEnterpriseAdminOnboardingEmailRequestBody$outboundSchema } from "../components/sendenterpriseadminonboardingemailrequestbody.js";
 /** @internal */
-export const SendEnterpriseAdminOnboardingEmailSecurity$outboundSchema = z.pipe(z.object({
+export const SendEnterpriseAdminOnboardingEmailSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function sendEnterpriseAdminOnboardingEmailSecurityToJSON(sendEnterpriseAdminOnboardingEmailSecurity) {
-    return JSON.stringify(SendEnterpriseAdminOnboardingEmailSecurity$outboundSchema.parse(sendEnterpriseAdminOnboardingEmailSecurity));
+  }),
+);
+export function sendEnterpriseAdminOnboardingEmailSecurityToJSON(
+  sendEnterpriseAdminOnboardingEmailSecurity,
+) {
+  return JSON.stringify(
+    SendEnterpriseAdminOnboardingEmailSecurity$outboundSchema.parse(
+      sendEnterpriseAdminOnboardingEmailSecurity,
+    ),
+  );
 }
 /** @internal */
-export const SendEnterpriseAdminOnboardingEmailRequest$outboundSchema = z.pipe(z.object({
+export const SendEnterpriseAdminOnboardingEmailRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-    sendEnterpriseAdminOnboardingEmailRequestBody: SendEnterpriseAdminOnboardingEmailRequestBody$outboundSchema,
-}), z.transform((v) => {
+    sendEnterpriseAdminOnboardingEmailRequestBody:
+      SendEnterpriseAdminOnboardingEmailRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        sendEnterpriseAdminOnboardingEmailRequestBody: "SendEnterpriseAdminOnboardingEmailRequestBody",
+      gramSession: "Gram-Session",
+      sendEnterpriseAdminOnboardingEmailRequestBody:
+        "SendEnterpriseAdminOnboardingEmailRequestBody",
     });
-}));
-export function sendEnterpriseAdminOnboardingEmailRequestToJSON(sendEnterpriseAdminOnboardingEmailRequest) {
-    return JSON.stringify(SendEnterpriseAdminOnboardingEmailRequest$outboundSchema.parse(sendEnterpriseAdminOnboardingEmailRequest));
+  }),
+);
+export function sendEnterpriseAdminOnboardingEmailRequestToJSON(
+  sendEnterpriseAdminOnboardingEmailRequest,
+) {
+  return JSON.stringify(
+    SendEnterpriseAdminOnboardingEmailRequest$outboundSchema.parse(
+      sendEnterpriseAdminOnboardingEmailRequest,
+    ),
+  );
 }
 //# sourceMappingURL=sendenterpriseadminonboardingemail.js.map

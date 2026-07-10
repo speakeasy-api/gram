@@ -12,10 +12,10 @@ let value: ListOrganizationRemoteSessionClientSessionsRequest = {
 
 ## Fields
 
-| Field                            | Type                             | Required                         | Description                      |
-| -------------------------------- | -------------------------------- | -------------------------------- | -------------------------------- |
-| `clientId`                       | *string*                         | :heavy_check_mark:               | The remote_session_client id.    |
-| `cursor`                         | *string*                         | :heavy_minus_sign:               | Pagination cursor.               |
-| `limit`                          | *number*                         | :heavy_minus_sign:               | Page size (default 50, max 100). |
-| `gramSession`                    | *string*                         | :heavy_minus_sign:               | Session header                   |
-| `gramKey`                        | *string*                         | :heavy_minus_sign:               | API Key header                   |
+| Field         | Type     | Required           | Description                      |
+| ------------- | -------- | ------------------ | -------------------------------- |
+| `clientId`    | _string_ | :heavy_check_mark: | The remote_session_client id.    |
+| `cursor`      | _string_ | :heavy_minus_sign: | Pagination cursor.               |
+| `limit`       | _number_ | :heavy_minus_sign: | Page size (default 50, max 100). |
+| `gramSession` | _string_ | :heavy_minus_sign: | Session header                   |
+| `gramKey`     | _string_ | :heavy_minus_sign: | API Key header                   |

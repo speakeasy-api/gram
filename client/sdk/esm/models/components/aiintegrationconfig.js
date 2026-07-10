@@ -8,46 +8,78 @@ import { safeParse } from "../../lib/schemas.js";
  * Derived status for the latest usage poll state. Omitted when no config is set for the provider.
  */
 export const LastPollStatus = {
-    Pending: "pending",
-    Success: "success",
-    Failed: "failed",
+  Pending: "pending",
+  Success: "success",
+  Failed: "failed",
 };
 /** @internal */
 export const LastPollStatus$inboundSchema = z.enum(LastPollStatus);
 /** @internal */
-export const AIIntegrationConfig$inboundSchema = z.pipe(z.object({
+export const AIIntegrationConfig$inboundSchema = z.pipe(
+  z.object({
     billing_mode: z.optional(z.string()),
-    created_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
+    created_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
     enabled: z.boolean(),
     external_organization_id: z.optional(z.string()),
     has_api_key: z.boolean(),
     id: z.optional(z.string()),
     last_poll_error: z.optional(z.string()),
-    last_poll_failed_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
+    last_poll_failed_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
     last_poll_status: z.optional(LastPollStatus$inboundSchema),
-    last_polled_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
-    next_poll_after: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
+    last_polled_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
+    next_poll_after: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
     organization_id: z.string(),
     project_id: z.optional(z.string()),
     provider: z.string(),
-    updated_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
-}), z.transform((v) => {
+    updated_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "billing_mode": "billingMode",
-        "created_at": "createdAt",
-        "external_organization_id": "externalOrganizationId",
-        "has_api_key": "hasApiKey",
-        "last_poll_error": "lastPollError",
-        "last_poll_failed_at": "lastPollFailedAt",
-        "last_poll_status": "lastPollStatus",
-        "last_polled_at": "lastPolledAt",
-        "next_poll_after": "nextPollAfter",
-        "organization_id": "organizationId",
-        "project_id": "projectId",
-        "updated_at": "updatedAt",
+      billing_mode: "billingMode",
+      created_at: "createdAt",
+      external_organization_id: "externalOrganizationId",
+      has_api_key: "hasApiKey",
+      last_poll_error: "lastPollError",
+      last_poll_failed_at: "lastPollFailedAt",
+      last_poll_status: "lastPollStatus",
+      last_polled_at: "lastPolledAt",
+      next_poll_after: "nextPollAfter",
+      organization_id: "organizationId",
+      project_id: "projectId",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function aiIntegrationConfigFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => AIIntegrationConfig$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'AIIntegrationConfig' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => AIIntegrationConfig$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AIIntegrationConfig' from JSON`,
+  );
 }
 //# sourceMappingURL=aiintegrationconfig.js.map

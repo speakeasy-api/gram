@@ -16,8 +16,8 @@ let value: SkillBreakdownRow = {
 
 ## Fields
 
-| Field                                     | Type                                      | Required                                  | Description                               |
-| ----------------------------------------- | ----------------------------------------- | ----------------------------------------- | ----------------------------------------- |
-| `skillName`                               | *string*                                  | :heavy_check_mark:                        | Skill name                                |
-| `useCount`                                | *number*                                  | :heavy_check_mark:                        | Use count for this skill/user combination |
-| `userEmail`                               | *string*                                  | :heavy_check_mark:                        | User email address                        |
+| Field       | Type     | Required           | Description                               |
+| ----------- | -------- | ------------------ | ----------------------------------------- |
+| `skillName` | _string_ | :heavy_check_mark: | Skill name                                |
+| `useCount`  | _number_ | :heavy_check_mark: | Use count for this skill/user combination |
+| `userEmail` | _string_ | :heavy_check_mark: | User email address                        |

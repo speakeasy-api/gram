@@ -4,20 +4,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const HookMCPData$outboundSchema = z.pipe(z.object({
+export const HookMCPData$outboundSchema = z.pipe(
+  z.object({
     command: z.optional(z.string()),
     resultJson: z.optional(z.string()),
     serverIdentity: z.optional(z.string()),
     serverName: z.optional(z.string()),
     url: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        resultJson: "result_json",
-        serverIdentity: "server_identity",
-        serverName: "server_name",
+      resultJson: "result_json",
+      serverIdentity: "server_identity",
+      serverName: "server_name",
     });
-}));
+  }),
+);
 export function hookMCPDataToJSON(hookMCPData) {
-    return JSON.stringify(HookMCPData$outboundSchema.parse(hookMCPData));
+  return JSON.stringify(HookMCPData$outboundSchema.parse(hookMCPData));
 }
 //# sourceMappingURL=hookmcpdata.js.map

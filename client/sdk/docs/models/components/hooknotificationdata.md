@@ -12,8 +12,8 @@ let value: HookNotificationData = {};
 
 ## Fields
 
-| Field                 | Type                  | Required              | Description           |
-| --------------------- | --------------------- | --------------------- | --------------------- |
-| `message`             | *string*              | :heavy_minus_sign:    | Notification message. |
-| `title`               | *string*              | :heavy_minus_sign:    | Notification title.   |
-| `type`                | *string*              | :heavy_minus_sign:    | Notification type.    |
+| Field     | Type     | Required           | Description           |
+| --------- | -------- | ------------------ | --------------------- |
+| `message` | _string_ | :heavy_minus_sign: | Notification message. |
+| `title`   | _string_ | :heavy_minus_sign: | Notification title.   |
+| `type`    | _string_ | :heavy_minus_sign: | Notification type.    |

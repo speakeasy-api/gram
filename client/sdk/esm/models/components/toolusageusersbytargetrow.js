@@ -8,37 +8,44 @@ import { safeParse } from "../../lib/schemas.js";
  * Tool usage aggregation target kind
  */
 export const ToolUsageUsersByTargetRowTargetKind = {
-    Server: "server",
-    LocalTools: "local_tools",
-    Skill: "skill",
+  Server: "server",
+  LocalTools: "local_tools",
+  Skill: "skill",
 };
 /**
  * Tool usage target type
  */
 export const ToolUsageUsersByTargetRowTargetType = {
-    HostedMcpServer: "hosted_mcp_server",
-    TunneledMcpServer: "tunneled_mcp_server",
-    ShadowMcpServer: "shadow_mcp_server",
-    LocalTool: "local_tool",
-    Skill: "skill",
+  HostedMcpServer: "hosted_mcp_server",
+  TunneledMcpServer: "tunneled_mcp_server",
+  ShadowMcpServer: "shadow_mcp_server",
+  LocalTool: "local_tool",
+  Skill: "skill",
 };
 /**
  * Tool usage user identity kind
  */
 export const ToolUsageUsersByTargetRowUserKind = {
-    Email: "email",
-    ExternalUserId: "external_user_id",
-    UserId: "user_id",
-    Unknown: "unknown",
+  Email: "email",
+  ExternalUserId: "external_user_id",
+  UserId: "user_id",
+  Unknown: "unknown",
 };
 /** @internal */
-export const ToolUsageUsersByTargetRowTargetKind$inboundSchema = z.enum(ToolUsageUsersByTargetRowTargetKind);
+export const ToolUsageUsersByTargetRowTargetKind$inboundSchema = z.enum(
+  ToolUsageUsersByTargetRowTargetKind,
+);
 /** @internal */
-export const ToolUsageUsersByTargetRowTargetType$inboundSchema = z.enum(ToolUsageUsersByTargetRowTargetType);
+export const ToolUsageUsersByTargetRowTargetType$inboundSchema = z.enum(
+  ToolUsageUsersByTargetRowTargetType,
+);
 /** @internal */
-export const ToolUsageUsersByTargetRowUserKind$inboundSchema = z.enum(ToolUsageUsersByTargetRowUserKind);
+export const ToolUsageUsersByTargetRowUserKind$inboundSchema = z.enum(
+  ToolUsageUsersByTargetRowUserKind,
+);
 /** @internal */
-export const ToolUsageUsersByTargetRow$inboundSchema = z.pipe(z.object({
+export const ToolUsageUsersByTargetRow$inboundSchema = z.pipe(
+  z.object({
     event_count: z.int(),
     failure_count: z.int(),
     target_id: z.string(),
@@ -48,20 +55,26 @@ export const ToolUsageUsersByTargetRow$inboundSchema = z.pipe(z.object({
     user_key: z.string(),
     user_kind: ToolUsageUsersByTargetRowUserKind$inboundSchema,
     user_label: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "event_count": "eventCount",
-        "failure_count": "failureCount",
-        "target_id": "targetId",
-        "target_kind": "targetKind",
-        "target_label": "targetLabel",
-        "target_type": "targetType",
-        "user_key": "userKey",
-        "user_kind": "userKind",
-        "user_label": "userLabel",
+      event_count: "eventCount",
+      failure_count: "failureCount",
+      target_id: "targetId",
+      target_kind: "targetKind",
+      target_label: "targetLabel",
+      target_type: "targetType",
+      user_key: "userKey",
+      user_kind: "userKind",
+      user_label: "userLabel",
     });
-}));
+  }),
+);
 export function toolUsageUsersByTargetRowFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolUsageUsersByTargetRow$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolUsageUsersByTargetRow' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolUsageUsersByTargetRow$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolUsageUsersByTargetRow' from JSON`,
+  );
 }
 //# sourceMappingURL=toolusageusersbytargetrow.js.map

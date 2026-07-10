@@ -4,24 +4,30 @@
 import * as z from "zod/v4-mini";
 import { unrecognized } from "./unrecognized.js";
 export function inboundSchema(enumObj) {
-    const options = Object.values(enumObj);
-    return z.union([
-        ...options.map(x => z.literal(x)),
-        z.pipe(z.string(), z.transform(x => unrecognized(x))),
-    ]);
+  const options = Object.values(enumObj);
+  return z.union([
+    ...options.map((x) => z.literal(x)),
+    z.pipe(
+      z.string(),
+      z.transform((x) => unrecognized(x)),
+    ),
+  ]);
 }
 export function inboundSchemaInt(enumObj) {
-    // For numeric enums, Object.values returns both numbers and string keys
-    const options = Object.values(enumObj).filter(v => typeof v === "number");
-    return z.union([
-        ...options.map(x => z.literal(x)),
-        z.pipe(z.int(), z.transform(x => unrecognized(x))),
-    ]);
+  // For numeric enums, Object.values returns both numbers and string keys
+  const options = Object.values(enumObj).filter((v) => typeof v === "number");
+  return z.union([
+    ...options.map((x) => z.literal(x)),
+    z.pipe(
+      z.int(),
+      z.transform((x) => unrecognized(x)),
+    ),
+  ]);
 }
 export function outboundSchema(_) {
-    return z.string();
+  return z.string();
 }
 export function outboundSchemaInt(_) {
-    return z.int();
+  return z.int();
 }
 //# sourceMappingURL=enums.js.map

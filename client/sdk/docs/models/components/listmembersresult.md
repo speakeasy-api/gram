@@ -13,10 +13,7 @@ let value: ListMembersResult = {
       joinedAt: new Date("2025-02-14T23:30:54.184Z"),
       name: "<value>",
       principalUrn: "<value>",
-      roleIds: [
-        "<value 1>",
-        "<value 2>",
-      ],
+      roleIds: ["<value 1>", "<value 2>"],
     },
   ],
 };
@@ -24,6 +21,6 @@ let value: ListMembersResult = {
 
 ## Fields
 
-| Field                                                                | Type                                                                 | Required                                                             | Description                                                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `members`                                                            | [components.AccessMember](../../models/components/accessmember.md)[] | :heavy_check_mark:                                                   | The members in your organization.                                    |
+| Field     | Type                                                                 | Required           | Description                       |
+| --------- | -------------------------------------------------------------------- | ------------------ | --------------------------------- |
+| `members` | [components.AccessMember](../../models/components/accessmember.md)[] | :heavy_check_mark: | The members in your organization. |

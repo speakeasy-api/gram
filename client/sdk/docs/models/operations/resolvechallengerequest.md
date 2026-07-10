@@ -7,9 +7,7 @@ import { ResolveChallengeRequest } from "@gram/client/models/operations/resolvec
 
 let value: ResolveChallengeRequest = {
   resolveChallengeForm: {
-    challengeIds: [
-      "<value 1>",
-    ],
+    challengeIds: ["<value 1>"],
     principalUrn: "<value>",
     resolutionType: "dismissed",
     scope: "<value>",
@@ -19,8 +17,8 @@ let value: ResolveChallengeRequest = {
 
 ## Fields
 
-| Field                                                                              | Type                                                                               | Required                                                                           | Description                                                                        |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `gramKey`                                                                          | *string*                                                                           | :heavy_minus_sign:                                                                 | API Key header                                                                     |
-| `gramSession`                                                                      | *string*                                                                           | :heavy_minus_sign:                                                                 | Session header                                                                     |
-| `resolveChallengeForm`                                                             | [components.ResolveChallengeForm](../../models/components/resolvechallengeform.md) | :heavy_check_mark:                                                                 | N/A                                                                                |
+| Field                  | Type                                                                               | Required           | Description    |
+| ---------------------- | ---------------------------------------------------------------------------------- | ------------------ | -------------- |
+| `gramKey`              | _string_                                                                           | :heavy_minus_sign: | API Key header |
+| `gramSession`          | _string_                                                                           | :heavy_minus_sign: | Session header |
+| `resolveChallengeForm` | [components.ResolveChallengeForm](../../models/components/resolvechallengeform.md) | :heavy_check_mark: | N/A            |

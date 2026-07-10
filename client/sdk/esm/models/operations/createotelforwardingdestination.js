@@ -5,31 +5,50 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 /** @internal */
-export const CreateOtelForwardingDestinationSecurity$outboundSchema = z.pipe(z.object({
+export const CreateOtelForwardingDestinationSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function createOtelForwardingDestinationSecurityToJSON(createOtelForwardingDestinationSecurity) {
-    return JSON.stringify(CreateOtelForwardingDestinationSecurity$outboundSchema.parse(createOtelForwardingDestinationSecurity));
+  }),
+);
+export function createOtelForwardingDestinationSecurityToJSON(
+  createOtelForwardingDestinationSecurity,
+) {
+  return JSON.stringify(
+    CreateOtelForwardingDestinationSecurity$outboundSchema.parse(
+      createOtelForwardingDestinationSecurity,
+    ),
+  );
 }
 /** @internal */
-export const CreateOtelForwardingDestinationRequest$outboundSchema = z.pipe(z.object({
+export const CreateOtelForwardingDestinationRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-    createDestinationRequestBody: components.CreateDestinationRequestBody$outboundSchema,
-}), z.transform((v) => {
+    createDestinationRequestBody:
+      components.CreateDestinationRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        createDestinationRequestBody: "CreateDestinationRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      createDestinationRequestBody: "CreateDestinationRequestBody",
     });
-}));
-export function createOtelForwardingDestinationRequestToJSON(createOtelForwardingDestinationRequest) {
-    return JSON.stringify(CreateOtelForwardingDestinationRequest$outboundSchema.parse(createOtelForwardingDestinationRequest));
+  }),
+);
+export function createOtelForwardingDestinationRequestToJSON(
+  createOtelForwardingDestinationRequest,
+) {
+  return JSON.stringify(
+    CreateOtelForwardingDestinationRequest$outboundSchema.parse(
+      createOtelForwardingDestinationRequest,
+    ),
+  );
 }
 //# sourceMappingURL=createotelforwardingdestination.js.map

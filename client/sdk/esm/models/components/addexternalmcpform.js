@@ -4,22 +4,28 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const AddExternalMCPForm$outboundSchema = z.pipe(z.object({
+export const AddExternalMCPForm$outboundSchema = z.pipe(
+  z.object({
     name: z.string(),
     organizationMcpCollectionRegistryId: z.optional(z.string()),
     registryId: z.optional(z.string()),
     registryServerSpecifier: z.string(),
     selectedRemotes: z.optional(z.array(z.string())),
     slug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        organizationMcpCollectionRegistryId: "organization_mcp_collection_registry_id",
-        registryId: "registry_id",
-        registryServerSpecifier: "registry_server_specifier",
-        selectedRemotes: "selected_remotes",
+      organizationMcpCollectionRegistryId:
+        "organization_mcp_collection_registry_id",
+      registryId: "registry_id",
+      registryServerSpecifier: "registry_server_specifier",
+      selectedRemotes: "selected_remotes",
     });
-}));
+  }),
+);
 export function addExternalMCPFormToJSON(addExternalMCPForm) {
-    return JSON.stringify(AddExternalMCPForm$outboundSchema.parse(addExternalMCPForm));
+  return JSON.stringify(
+    AddExternalMCPForm$outboundSchema.parse(addExternalMCPForm),
+  );
 }
 //# sourceMappingURL=addexternalmcpform.js.map

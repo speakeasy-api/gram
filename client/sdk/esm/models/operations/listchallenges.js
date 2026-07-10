@@ -7,26 +7,32 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Filter by outcome.
  */
 export const QueryParamOutcome = {
-    Allow: "allow",
-    Deny: "deny",
+  Allow: "allow",
+  Deny: "deny",
 };
 /** @internal */
-export const ListChallengesSecurity$outboundSchema = z.pipe(z.object({
+export const ListChallengesSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function listChallengesSecurityToJSON(listChallengesSecurity) {
-    return JSON.stringify(ListChallengesSecurity$outboundSchema.parse(listChallengesSecurity));
+  return JSON.stringify(
+    ListChallengesSecurity$outboundSchema.parse(listChallengesSecurity),
+  );
 }
 /** @internal */
 export const QueryParamOutcome$outboundSchema = z.enum(QueryParamOutcome);
 /** @internal */
-export const ListChallengesRequest$outboundSchema = z.pipe(z.object({
+export const ListChallengesRequest$outboundSchema = z.pipe(
+  z.object({
     outcome: z.optional(QueryParamOutcome$outboundSchema),
     principalUrn: z.optional(z.string()),
     scope: z.optional(z.string()),
@@ -37,15 +43,19 @@ export const ListChallengesRequest$outboundSchema = z.pipe(z.object({
     offset: z._default(z.int(), 0),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        principalUrn: "principal_urn",
-        projectId: "project_id",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
+      principalUrn: "principal_urn",
+      projectId: "project_id",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function listChallengesRequestToJSON(listChallengesRequest) {
-    return JSON.stringify(ListChallengesRequest$outboundSchema.parse(listChallengesRequest));
+  return JSON.stringify(
+    ListChallengesRequest$outboundSchema.parse(listChallengesRequest),
+  );
 }
 //# sourceMappingURL=listchallenges.js.map

@@ -18,12 +18,12 @@ let value: RiskPolicyStatus = {
 
 ## Fields
 
-| Field                                                                  | Type                                                                   | Required                                                               | Description                                                            |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `analyzedMessages`                                                     | *number*                                                               | :heavy_check_mark:                                                     | Messages analyzed at the current policy version.                       |
-| `findingsCount`                                                        | *number*                                                               | :heavy_check_mark:                                                     | Number of findings at the current policy version.                      |
-| `pendingMessages`                                                      | *number*                                                               | :heavy_check_mark:                                                     | Messages not yet analyzed.                                             |
-| `policyId`                                                             | *string*                                                               | :heavy_check_mark:                                                     | The risk policy ID.                                                    |
-| `policyVersion`                                                        | *number*                                                               | :heavy_check_mark:                                                     | Current policy version.                                                |
-| `totalMessages`                                                        | *number*                                                               | :heavy_check_mark:                                                     | Total messages in the project.                                         |
-| `workflowStatus`                                                       | [components.WorkflowStatus](../../models/components/workflowstatus.md) | :heavy_check_mark:                                                     | Workflow state: running, sleeping, or not_started.                     |
+| Field              | Type                                                                   | Required           | Description                                        |
+| ------------------ | ---------------------------------------------------------------------- | ------------------ | -------------------------------------------------- |
+| `analyzedMessages` | _number_                                                               | :heavy_check_mark: | Messages analyzed at the current policy version.   |
+| `findingsCount`    | _number_                                                               | :heavy_check_mark: | Number of findings at the current policy version.  |
+| `pendingMessages`  | _number_                                                               | :heavy_check_mark: | Messages not yet analyzed.                         |
+| `policyId`         | _string_                                                               | :heavy_check_mark: | The risk policy ID.                                |
+| `policyVersion`    | _number_                                                               | :heavy_check_mark: | Current policy version.                            |
+| `totalMessages`    | _number_                                                               | :heavy_check_mark: | Total messages in the project.                     |
+| `workflowStatus`   | [components.WorkflowStatus](../../models/components/workflowstatus.md) | :heavy_check_mark: | Workflow state: running, sleeping, or not_started. |

@@ -6,10 +6,14 @@ import { safeParse } from "../../lib/schemas.js";
 import { Asset$inboundSchema } from "./asset.js";
 /** @internal */
 export const UploadChatAttachmentResult$inboundSchema = z.object({
-    asset: Asset$inboundSchema,
-    url: z.string(),
+  asset: Asset$inboundSchema,
+  url: z.string(),
 });
 export function uploadChatAttachmentResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => UploadChatAttachmentResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'UploadChatAttachmentResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => UploadChatAttachmentResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UploadChatAttachmentResult' from JSON`,
+  );
 }
 //# sourceMappingURL=uploadchatattachmentresult.js.map

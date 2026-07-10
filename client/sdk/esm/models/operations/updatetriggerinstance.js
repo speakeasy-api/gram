@@ -3,33 +3,51 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpdateTriggerInstanceForm$outboundSchema, } from "../components/updatetriggerinstanceform.js";
+import { UpdateTriggerInstanceForm$outboundSchema } from "../components/updatetriggerinstanceform.js";
 /** @internal */
-export const UpdateTriggerInstanceSecurity$outboundSchema = z.pipe(z.object({
+export const UpdateTriggerInstanceSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function updateTriggerInstanceSecurityToJSON(updateTriggerInstanceSecurity) {
-    return JSON.stringify(UpdateTriggerInstanceSecurity$outboundSchema.parse(updateTriggerInstanceSecurity));
+  }),
+);
+export function updateTriggerInstanceSecurityToJSON(
+  updateTriggerInstanceSecurity,
+) {
+  return JSON.stringify(
+    UpdateTriggerInstanceSecurity$outboundSchema.parse(
+      updateTriggerInstanceSecurity,
+    ),
+  );
 }
 /** @internal */
-export const UpdateTriggerInstanceRequest$outboundSchema = z.pipe(z.object({
+export const UpdateTriggerInstanceRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     updateTriggerInstanceForm: UpdateTriggerInstanceForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        updateTriggerInstanceForm: "UpdateTriggerInstanceForm",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      updateTriggerInstanceForm: "UpdateTriggerInstanceForm",
     });
-}));
-export function updateTriggerInstanceRequestToJSON(updateTriggerInstanceRequest) {
-    return JSON.stringify(UpdateTriggerInstanceRequest$outboundSchema.parse(updateTriggerInstanceRequest));
+  }),
+);
+export function updateTriggerInstanceRequestToJSON(
+  updateTriggerInstanceRequest,
+) {
+  return JSON.stringify(
+    UpdateTriggerInstanceRequest$outboundSchema.parse(
+      updateTriggerInstanceRequest,
+    ),
+  );
 }
 //# sourceMappingURL=updatetriggerinstance.js.map

@@ -13,7 +13,7 @@ let value: RedeemRequestBody = {
 
 ## Fields
 
-| Field                                                                                 | Type                                                                                  | Required                                                                              | Description                                                                           |
-| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `code`                                                                                | *string*                                                                              | :heavy_check_mark:                                                                    | The opaque one-time code issued by authorize.                                         |
-| `codeVerifier`                                                                        | *string*                                                                              | :heavy_check_mark:                                                                    | The PKCE code verifier whose base64url(sha256(...)) equals the stored code_challenge. |
+| Field          | Type     | Required           | Description                                                                           |
+| -------------- | -------- | ------------------ | ------------------------------------------------------------------------------------- |
+| `code`         | _string_ | :heavy_check_mark: | The opaque one-time code issued by authorize.                                         |
+| `codeVerifier` | _string_ | :heavy_check_mark: | The PKCE code verifier whose base64url(sha256(...)) equals the stored code_challenge. |

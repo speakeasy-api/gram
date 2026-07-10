@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Deployment$inboundSchema } from "./deployment.js";
 /** @internal */
 export const CreateDeploymentResult$inboundSchema = z.object({
-    deployment: z.optional(Deployment$inboundSchema),
+  deployment: z.optional(Deployment$inboundSchema),
 });
 export function createDeploymentResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => CreateDeploymentResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'CreateDeploymentResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => CreateDeploymentResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CreateDeploymentResult' from JSON`,
+  );
 }
 //# sourceMappingURL=createdeploymentresult.js.map

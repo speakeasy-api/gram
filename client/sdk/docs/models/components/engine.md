@@ -13,5 +13,5 @@ let value: Engine = "mustache";
 ## Values
 
 ```typescript
-"mustache"
+"mustache";
 ```

@@ -4,31 +4,43 @@
 import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchToolset(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildToolsetQuery(client$, request, security, options),
-    });
+export function prefetchToolset(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildToolsetQuery(client$, request, security, options),
+  });
 }
 export function buildToolsetQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyToolset({
-            slug: request.slug,
-            gramSession: request.gramSession,
-            gramKey: request.gramKey,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function toolsetQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(toolsetsGetBySlug(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyToolset({
+      slug: request.slug,
+      gramSession: request.gramSession,
+      gramKey: request.gramKey,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function toolsetQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        toolsetsGetBySlug(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyToolset(parameters) {
-    return ["@gram/client", "toolsets", "getBySlug", parameters];
+  return ["@gram/client", "toolsets", "getBySlug", parameters];
 }
 //# sourceMappingURL=toolset.core.js.map

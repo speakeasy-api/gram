@@ -7,28 +7,38 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Visibility of the collection
  */
 export const CreateRequestBody2Visibility = {
-    Public: "public",
-    Private: "private",
+  Public: "public",
+  Private: "private",
 };
 /** @internal */
-export const CreateRequestBody2Visibility$outboundSchema = z.enum(CreateRequestBody2Visibility);
+export const CreateRequestBody2Visibility$outboundSchema = z.enum(
+  CreateRequestBody2Visibility,
+);
 /** @internal */
-export const CreateRequestBody2$outboundSchema = z.pipe(z.object({
+export const CreateRequestBody2$outboundSchema = z.pipe(
+  z.object({
     description: z.optional(z.string()),
     mcpRegistryNamespace: z.string(),
     mcpServerIds: z.optional(z.array(z.string())),
     name: z.string(),
     slug: z.string(),
     toolsetIds: z.optional(z.array(z.string())),
-    visibility: z._default(CreateRequestBody2Visibility$outboundSchema, "private"),
-}), z.transform((v) => {
+    visibility: z._default(
+      CreateRequestBody2Visibility$outboundSchema,
+      "private",
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        mcpRegistryNamespace: "mcp_registry_namespace",
-        mcpServerIds: "mcp_server_ids",
-        toolsetIds: "toolset_ids",
+      mcpRegistryNamespace: "mcp_registry_namespace",
+      mcpServerIds: "mcp_server_ids",
+      toolsetIds: "toolset_ids",
     });
-}));
+  }),
+);
 export function createRequestBody2ToJSON(createRequestBody2) {
-    return JSON.stringify(CreateRequestBody2$outboundSchema.parse(createRequestBody2));
+  return JSON.stringify(
+    CreateRequestBody2$outboundSchema.parse(createRequestBody2),
+  );
 }
 //# sourceMappingURL=createrequestbody2.js.map

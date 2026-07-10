@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { AccessMember$inboundSchema } from "./accessmember.js";
 /** @internal */
 export const ListMembersResult$inboundSchema = z.object({
-    members: z.array(AccessMember$inboundSchema),
+  members: z.array(AccessMember$inboundSchema),
 });
 export function listMembersResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListMembersResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListMembersResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListMembersResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListMembersResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listmembersresult.js.map

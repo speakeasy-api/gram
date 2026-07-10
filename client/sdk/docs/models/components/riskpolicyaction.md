@@ -13,5 +13,5 @@ let value: RiskPolicyAction = "flag";
 ## Values
 
 ```typescript
-"flag" | "block"
+"flag" | "block";
 ```

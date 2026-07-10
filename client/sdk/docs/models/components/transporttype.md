@@ -13,5 +13,5 @@ let value: TransportType = "streamable-http";
 ## Values
 
 ```typescript
-"sse" | "streamable-http"
+"sse" | "streamable-http";
 ```

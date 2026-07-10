@@ -11,5 +11,5 @@ let value: AccessScope = "organization";
 ## Values
 
 ```typescript
-"organization" | "project"
+"organization" | "project";
 ```

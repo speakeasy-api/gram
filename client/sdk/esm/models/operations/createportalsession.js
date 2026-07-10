@@ -4,25 +4,37 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CreatePortalSessionSecurity$outboundSchema = z.pipe(z.object({
+export const CreatePortalSessionSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function createPortalSessionSecurityToJSON(createPortalSessionSecurity) {
-    return JSON.stringify(CreatePortalSessionSecurity$outboundSchema.parse(createPortalSessionSecurity));
+  return JSON.stringify(
+    CreatePortalSessionSecurity$outboundSchema.parse(
+      createPortalSessionSecurity,
+    ),
+  );
 }
 /** @internal */
-export const CreatePortalSessionRequest$outboundSchema = z.pipe(z.object({
+export const CreatePortalSessionRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function createPortalSessionRequestToJSON(createPortalSessionRequest) {
-    return JSON.stringify(CreatePortalSessionRequest$outboundSchema.parse(createPortalSessionRequest));
+  return JSON.stringify(
+    CreatePortalSessionRequest$outboundSchema.parse(createPortalSessionRequest),
+  );
 }
 //# sourceMappingURL=createportalsession.js.map

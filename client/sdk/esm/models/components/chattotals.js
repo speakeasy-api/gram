@@ -5,24 +5,30 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ChatTotals$inboundSchema = z
-    .pipe(z.object({
+export const ChatTotals$inboundSchema = z.pipe(
+  z.object({
     assistant_messages: z.int(),
     risk_only: z.int(),
     tool_calls: z.int(),
     tool_results: z.int(),
     total: z.int(),
     user_messages: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "assistant_messages": "assistantMessages",
-        "risk_only": "riskOnly",
-        "tool_calls": "toolCalls",
-        "tool_results": "toolResults",
-        "user_messages": "userMessages",
+      assistant_messages: "assistantMessages",
+      risk_only: "riskOnly",
+      tool_calls: "toolCalls",
+      tool_results: "toolResults",
+      user_messages: "userMessages",
     });
-}));
+  }),
+);
 export function chatTotalsFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ChatTotals$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ChatTotals' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ChatTotals$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ChatTotals' from JSON`,
+  );
 }
 //# sourceMappingURL=chattotals.js.map

@@ -12,6 +12,6 @@ let value: ToolsetOrigin = {
 
 ## Fields
 
-| Field                                                               | Type                                                                | Required                                                            | Description                                                         |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `registrySpecifier`                                                 | *string*                                                            | :heavy_check_mark:                                                  | The globally unique registry specifier this toolset originated from |
+| Field               | Type     | Required           | Description                                                         |
+| ------------------- | -------- | ------------------ | ------------------------------------------------------------------- |
+| `registrySpecifier` | _string_ | :heavy_check_mark: | The globally unique registry specifier this toolset originated from |

@@ -4,31 +4,41 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListProjectsSecurity$outboundSchema = z.pipe(z.object({
+export const ListProjectsSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function listProjectsSecurityToJSON(listProjectsSecurity) {
-    return JSON.stringify(ListProjectsSecurity$outboundSchema.parse(listProjectsSecurity));
+  return JSON.stringify(
+    ListProjectsSecurity$outboundSchema.parse(listProjectsSecurity),
+  );
 }
 /** @internal */
-export const ListProjectsRequest$outboundSchema = z.pipe(z.object({
+export const ListProjectsRequest$outboundSchema = z.pipe(
+  z.object({
     organizationId: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        organizationId: "organization_id",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
+      organizationId: "organization_id",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function listProjectsRequestToJSON(listProjectsRequest) {
-    return JSON.stringify(ListProjectsRequest$outboundSchema.parse(listProjectsRequest));
+  return JSON.stringify(
+    ListProjectsRequest$outboundSchema.parse(listProjectsRequest),
+  );
 }
 //# sourceMappingURL=listprojects.js.map

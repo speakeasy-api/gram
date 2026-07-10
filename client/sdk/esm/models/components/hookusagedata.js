@@ -4,7 +4,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const HookUsageData$outboundSchema = z.pipe(z.object({
+export const HookUsageData$outboundSchema = z.pipe(
+  z.object({
     cacheReadTokens: z.optional(z.int()),
     cacheWriteTokens: z.optional(z.int()),
     cost: z.optional(z.number()),
@@ -12,16 +13,18 @@ export const HookUsageData$outboundSchema = z.pipe(z.object({
     loopCount: z.optional(z.int()),
     outputTokens: z.optional(z.int()),
     status: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        cacheReadTokens: "cache_read_tokens",
-        cacheWriteTokens: "cache_write_tokens",
-        inputTokens: "input_tokens",
-        loopCount: "loop_count",
-        outputTokens: "output_tokens",
+      cacheReadTokens: "cache_read_tokens",
+      cacheWriteTokens: "cache_write_tokens",
+      inputTokens: "input_tokens",
+      loopCount: "loop_count",
+      outputTokens: "output_tokens",
     });
-}));
+  }),
+);
 export function hookUsageDataToJSON(hookUsageData) {
-    return JSON.stringify(HookUsageData$outboundSchema.parse(hookUsageData));
+  return JSON.stringify(HookUsageData$outboundSchema.parse(hookUsageData));
 }
 //# sourceMappingURL=hookusagedata.js.map

@@ -13,5 +13,5 @@ let value: ListToolUsageTracesPayloadSort = "desc";
 ## Values
 
 ```typescript
-"asc" | "desc"
+"asc" | "desc";
 ```

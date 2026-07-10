@@ -11,5 +11,5 @@ let value: ShadowMCPAccessRuleDisposition = "denied";
 ## Values
 
 ```typescript
-"allowed" | "denied"
+"allowed" | "denied";
 ```

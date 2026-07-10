@@ -13,10 +13,7 @@ let value: QueryResult = {
   table: [
     {
       dimensionValues: {
-        "key": [
-          "<value 1>",
-          "<value 2>",
-        ],
+        key: ["<value 1>", "<value 2>"],
       },
       groupValue: "<value>",
       measures: {
@@ -37,9 +34,9 @@ let value: QueryResult = {
 
 ## Fields
 
-| Field                                                                   | Type                                                                    | Required                                                                | Description                                                             |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `groupBy`                                                               | *string*                                                                | :heavy_check_mark:                                                      | Echoes the requested group_by dimension; empty when none was requested. |
-| `intervalSeconds`                                                       | *number*                                                                | :heavy_check_mark:                                                      | The timeseries bucket interval in seconds.                              |
-| `table`                                                                 | [components.QueryRow](../../models/components/queryrow.md)[]            | :heavy_check_mark:                                                      | Grouped totals over the full time range, ordered by sort_by descending. |
-| `timeseries`                                                            | [components.QuerySeries](../../models/components/queryseries.md)[]      | :heavy_check_mark:                                                      | One series per group value (aligned with table rows), each gap-filled.  |
+| Field             | Type                                                               | Required           | Description                                                             |
+| ----------------- | ------------------------------------------------------------------ | ------------------ | ----------------------------------------------------------------------- |
+| `groupBy`         | _string_                                                           | :heavy_check_mark: | Echoes the requested group_by dimension; empty when none was requested. |
+| `intervalSeconds` | _number_                                                           | :heavy_check_mark: | The timeseries bucket interval in seconds.                              |
+| `table`           | [components.QueryRow](../../models/components/queryrow.md)[]       | :heavy_check_mark: | Grouped totals over the full time range, ordered by sort_by descending. |
+| `timeseries`      | [components.QuerySeries](../../models/components/queryseries.md)[] | :heavy_check_mark: | One series per group value (aligned with table rows), each gap-filled.  |

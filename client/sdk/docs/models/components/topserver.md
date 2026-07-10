@@ -15,7 +15,7 @@ let value: TopServer = {
 
 ## Fields
 
-| Field                      | Type                       | Required                   | Description                |
-| -------------------------- | -------------------------- | -------------------------- | -------------------------- |
-| `serverName`               | *string*                   | :heavy_check_mark:         | MCP server name            |
-| `toolCallCount`            | *number*                   | :heavy_check_mark:         | Total number of tool calls |
+| Field           | Type     | Required           | Description                |
+| --------------- | -------- | ------------------ | -------------------------- |
+| `serverName`    | _string_ | :heavy_check_mark: | MCP server name            |
+| `toolCallCount` | _number_ | :heavy_check_mark: | Total number of tool calls |

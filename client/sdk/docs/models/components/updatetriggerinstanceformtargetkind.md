@@ -13,5 +13,5 @@ let value: UpdateTriggerInstanceFormTargetKind = "assistant";
 ## Values
 
 ```typescript
-"assistant" | "noop"
+"assistant" | "noop";
 ```

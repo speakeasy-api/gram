@@ -7,9 +7,7 @@ import { UpdateMemberRolesRequest } from "@gram/client/models/operations/updatem
 
 let value: UpdateMemberRolesRequest = {
   updateMemberRolesForm: {
-    roleIds: [
-      "<value 1>",
-    ],
+    roleIds: ["<value 1>"],
     userId: "<id>",
   },
 };
@@ -17,8 +15,8 @@ let value: UpdateMemberRolesRequest = {
 
 ## Fields
 
-| Field                                                                                | Type                                                                                 | Required                                                                             | Description                                                                          |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| `gramKey`                                                                            | *string*                                                                             | :heavy_minus_sign:                                                                   | API Key header                                                                       |
-| `gramSession`                                                                        | *string*                                                                             | :heavy_minus_sign:                                                                   | Session header                                                                       |
-| `updateMemberRolesForm`                                                              | [components.UpdateMemberRolesForm](../../models/components/updatememberrolesform.md) | :heavy_check_mark:                                                                   | N/A                                                                                  |
+| Field                   | Type                                                                                 | Required           | Description    |
+| ----------------------- | ------------------------------------------------------------------------------------ | ------------------ | -------------- |
+| `gramKey`               | _string_                                                                             | :heavy_minus_sign: | API Key header |
+| `gramSession`           | _string_                                                                             | :heavy_minus_sign: | Session header |
+| `updateMemberRolesForm` | [components.UpdateMemberRolesForm](../../models/components/updatememberrolesform.md) | :heavy_check_mark: | N/A            |

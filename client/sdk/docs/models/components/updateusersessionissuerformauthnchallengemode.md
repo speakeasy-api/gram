@@ -13,5 +13,5 @@ let value: UpdateUserSessionIssuerFormAuthnChallengeMode = "chain";
 ## Values
 
 ```typescript
-"chain" | "interactive"
+"chain" | "interactive";
 ```

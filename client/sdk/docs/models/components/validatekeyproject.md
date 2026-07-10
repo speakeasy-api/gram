@@ -14,8 +14,8 @@ let value: ValidateKeyProject = {
 
 ## Fields
 
-| Field                   | Type                    | Required                | Description             |
-| ----------------------- | ----------------------- | ----------------------- | ----------------------- |
-| `id`                    | *string*                | :heavy_check_mark:      | The ID of the project   |
-| `name`                  | *string*                | :heavy_check_mark:      | The name of the project |
-| `slug`                  | *string*                | :heavy_check_mark:      | The slug of the project |
+| Field  | Type     | Required           | Description             |
+| ------ | -------- | ------------------ | ----------------------- |
+| `id`   | _string_ | :heavy_check_mark: | The ID of the project   |
+| `name` | _string_ | :heavy_check_mark: | The name of the project |
+| `slug` | _string_ | :heavy_check_mark: | The slug of the project |

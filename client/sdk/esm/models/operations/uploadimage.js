@@ -4,66 +4,90 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const UploadImageSecurityOption1$outboundSchema = z.pipe(z.object({
+export const UploadImageSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
+  }),
+);
 export function uploadImageSecurityOption1ToJSON(uploadImageSecurityOption1) {
-    return JSON.stringify(UploadImageSecurityOption1$outboundSchema.parse(uploadImageSecurityOption1));
+  return JSON.stringify(
+    UploadImageSecurityOption1$outboundSchema.parse(uploadImageSecurityOption1),
+  );
 }
 /** @internal */
-export const UploadImageSecurityOption2$outboundSchema = z.pipe(z.object({
+export const UploadImageSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function uploadImageSecurityOption2ToJSON(uploadImageSecurityOption2) {
-    return JSON.stringify(UploadImageSecurityOption2$outboundSchema.parse(uploadImageSecurityOption2));
+  return JSON.stringify(
+    UploadImageSecurityOption2$outboundSchema.parse(uploadImageSecurityOption2),
+  );
 }
 /** @internal */
-export const UploadImageSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => UploadImageSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => UploadImageSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const UploadImageSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => UploadImageSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => UploadImageSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function uploadImageSecurityToJSON(uploadImageSecurity) {
-    return JSON.stringify(UploadImageSecurity$outboundSchema.parse(uploadImageSecurity));
+  return JSON.stringify(
+    UploadImageSecurity$outboundSchema.parse(uploadImageSecurity),
+  );
 }
 /** @internal */
-export const UploadImageRequest$outboundSchema = z.pipe(z.object({
+export const UploadImageRequest$outboundSchema = z.pipe(
+  z.object({
     contentLength: z.int(),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     requestBody: z.union([
-        z.custom(x => x instanceof ReadableStream),
-        z.custom(x => x instanceof Blob),
-        z.custom(x => x instanceof ArrayBuffer),
-        z.custom(x => x instanceof Uint8Array),
+      z.custom((x) => x instanceof ReadableStream),
+      z.custom((x) => x instanceof Blob),
+      z.custom((x) => x instanceof ArrayBuffer),
+      z.custom((x) => x instanceof Uint8Array),
     ]),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        contentLength: "Content-Length",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        gramSession: "Gram-Session",
-        requestBody: "RequestBody",
+      contentLength: "Content-Length",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      requestBody: "RequestBody",
     });
-}));
+  }),
+);
 export function uploadImageRequestToJSON(uploadImageRequest) {
-    return JSON.stringify(UploadImageRequest$outboundSchema.parse(uploadImageRequest));
+  return JSON.stringify(
+    UploadImageRequest$outboundSchema.parse(uploadImageRequest),
+  );
 }
 //# sourceMappingURL=uploadimage.js.map

@@ -13,5 +13,5 @@ let value: SessionSummaryStatus = "error";
 ## Values
 
 ```typescript
-"success" | "error"
+"success" | "error";
 ```

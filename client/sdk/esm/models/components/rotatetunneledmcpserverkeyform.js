@@ -4,9 +4,15 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const RotateTunneledMcpServerKeyForm$outboundSchema = z.object({
-    id: z.string(),
+  id: z.string(),
 });
-export function rotateTunneledMcpServerKeyFormToJSON(rotateTunneledMcpServerKeyForm) {
-    return JSON.stringify(RotateTunneledMcpServerKeyForm$outboundSchema.parse(rotateTunneledMcpServerKeyForm));
+export function rotateTunneledMcpServerKeyFormToJSON(
+  rotateTunneledMcpServerKeyForm,
+) {
+  return JSON.stringify(
+    RotateTunneledMcpServerKeyForm$outboundSchema.parse(
+      rotateTunneledMcpServerKeyForm,
+    ),
+  );
 }
 //# sourceMappingURL=rotatetunneledmcpserverkeyform.js.map

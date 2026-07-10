@@ -1,6 +1,5 @@
 # UpdatePackageResponse
 
-
 ## Supported Types
 
 ### `components.UpdatePackageResult`
@@ -25,4 +24,3 @@ const value: components.NotModified = {
   location: "<value>",
 };
 ```
-

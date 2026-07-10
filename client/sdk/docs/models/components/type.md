@@ -13,5 +13,5 @@ let value: Type = "claude";
 ## Values
 
 ```typescript
-"claude"
+"claude";
 ```

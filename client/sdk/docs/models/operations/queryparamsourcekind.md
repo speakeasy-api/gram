@@ -13,5 +13,5 @@ let value: QueryParamSourceKind = "http";
 ## Values
 
 ```typescript
-"http" | "function"
+"http" | "function";
 ```

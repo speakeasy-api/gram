@@ -7,20 +7,21 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * The type of hook event
  */
 export const HookEventName = {
-    SessionStart: "SessionStart",
-    ConfigChange: "ConfigChange",
-    PreToolUse: "PreToolUse",
-    PostToolUse: "PostToolUse",
-    PostToolUseFailure: "PostToolUseFailure",
-    UserPromptSubmit: "UserPromptSubmit",
-    Stop: "Stop",
-    SessionEnd: "SessionEnd",
-    Notification: "Notification",
+  SessionStart: "SessionStart",
+  ConfigChange: "ConfigChange",
+  PreToolUse: "PreToolUse",
+  PostToolUse: "PostToolUse",
+  PostToolUseFailure: "PostToolUseFailure",
+  UserPromptSubmit: "UserPromptSubmit",
+  Stop: "Stop",
+  SessionEnd: "SessionEnd",
+  Notification: "Notification",
 };
 /** @internal */
 export const HookEventName$outboundSchema = z.enum(HookEventName);
 /** @internal */
-export const ClaudeHookPayload$outboundSchema = z.pipe(z.object({
+export const ClaudeHookPayload$outboundSchema = z.pipe(
+  z.object({
     additionalData: z.optional(z.record(z.string(), z.any())),
     cwd: z.optional(z.string()),
     error: z.optional(z.any()),
@@ -42,24 +43,28 @@ export const ClaudeHookPayload$outboundSchema = z.pipe(z.object({
     toolUseId: z.optional(z.string()),
     transcriptPath: z.optional(z.string()),
     userEmail: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        additionalData: "additional_data",
-        hookEventName: "hook_event_name",
-        isInterrupt: "is_interrupt",
-        lastAssistantMessage: "last_assistant_message",
-        notificationType: "notification_type",
-        sessionId: "session_id",
-        stopHookActive: "stop_hook_active",
-        toolInput: "tool_input",
-        toolName: "tool_name",
-        toolResponse: "tool_response",
-        toolUseId: "tool_use_id",
-        transcriptPath: "transcript_path",
-        userEmail: "user_email",
+      additionalData: "additional_data",
+      hookEventName: "hook_event_name",
+      isInterrupt: "is_interrupt",
+      lastAssistantMessage: "last_assistant_message",
+      notificationType: "notification_type",
+      sessionId: "session_id",
+      stopHookActive: "stop_hook_active",
+      toolInput: "tool_input",
+      toolName: "tool_name",
+      toolResponse: "tool_response",
+      toolUseId: "tool_use_id",
+      transcriptPath: "transcript_path",
+      userEmail: "user_email",
     });
-}));
+  }),
+);
 export function claudeHookPayloadToJSON(claudeHookPayload) {
-    return JSON.stringify(ClaudeHookPayload$outboundSchema.parse(claudeHookPayload));
+  return JSON.stringify(
+    ClaudeHookPayload$outboundSchema.parse(claudeHookPayload),
+  );
 }
 //# sourceMappingURL=claudehookpayload.js.map

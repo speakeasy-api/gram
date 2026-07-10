@@ -7,32 +7,38 @@ import { agentworkflowsGetResponse } from "../funcs/agentworkflowsGetResponse.js
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Agentworkflows extends ClientSDK {
-    /**
-     * createResponse agentworkflows
-     *
-     * @remarks
-     * Create a new agent response. Executes an agent workflow with the provided input and tools.
-     */
-    async createResponse(request, security, options) {
-        return unwrapAsync(agentworkflowsCreateResponse(this, request, security, options));
-    }
-    /**
-     * deleteResponse agentworkflows
-     *
-     * @remarks
-     * Deletes any response associated with a given agent run.
-     */
-    async deleteResponse(request, security, options) {
-        return unwrapAsync(agentworkflowsDeleteResponse(this, request, security, options));
-    }
-    /**
-     * getResponse agentworkflows
-     *
-     * @remarks
-     * Get the status of an async agent response by its ID.
-     */
-    async getResponse(request, security, options) {
-        return unwrapAsync(agentworkflowsGetResponse(this, request, security, options));
-    }
+  /**
+   * createResponse agentworkflows
+   *
+   * @remarks
+   * Create a new agent response. Executes an agent workflow with the provided input and tools.
+   */
+  async createResponse(request, security, options) {
+    return unwrapAsync(
+      agentworkflowsCreateResponse(this, request, security, options),
+    );
+  }
+  /**
+   * deleteResponse agentworkflows
+   *
+   * @remarks
+   * Deletes any response associated with a given agent run.
+   */
+  async deleteResponse(request, security, options) {
+    return unwrapAsync(
+      agentworkflowsDeleteResponse(this, request, security, options),
+    );
+  }
+  /**
+   * getResponse agentworkflows
+   *
+   * @remarks
+   * Get the status of an async agent response by its ID.
+   */
+  async getResponse(request, security, options) {
+    return unwrapAsync(
+      agentworkflowsGetResponse(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=agentworkflows.js.map

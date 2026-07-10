@@ -12,6 +12,6 @@ let value: DeleteConfigRequestBody = {
 
 ## Fields
 
-| Field                                                                             | Type                                                                              | Required                                                                          | Description                                                                       |
-| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `provider`                                                                        | *string*                                                                          | :heavy_check_mark:                                                                | AI provider identifier. Supported values include cursor and anthropic_compliance. |
+| Field      | Type     | Required           | Description                                                                       |
+| ---------- | -------- | ------------------ | --------------------------------------------------------------------------------- |
+| `provider` | _string_ | :heavy_check_mark: | AI provider identifier. Supported values include cursor and anthropic_compliance. |

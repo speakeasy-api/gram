@@ -3,18 +3,25 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { WorkOSDomainVerificationIntentOptions$outboundSchema, } from "./workosdomainverificationintentoptions.js";
-import { WorkOSSSOIntentOptions$outboundSchema, } from "./workosssointentoptions.js";
+import { WorkOSDomainVerificationIntentOptions$outboundSchema } from "./workosdomainverificationintentoptions.js";
+import { WorkOSSSOIntentOptions$outboundSchema } from "./workosssointentoptions.js";
 /** @internal */
-export const WorkOSIntentOptions$outboundSchema = z.pipe(z.object({
-    domainVerification: z.optional(WorkOSDomainVerificationIntentOptions$outboundSchema),
+export const WorkOSIntentOptions$outboundSchema = z.pipe(
+  z.object({
+    domainVerification: z.optional(
+      WorkOSDomainVerificationIntentOptions$outboundSchema,
+    ),
     sso: z.optional(WorkOSSSOIntentOptions$outboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        domainVerification: "domain_verification",
+      domainVerification: "domain_verification",
     });
-}));
+  }),
+);
 export function workOSIntentOptionsToJSON(workOSIntentOptions) {
-    return JSON.stringify(WorkOSIntentOptions$outboundSchema.parse(workOSIntentOptions));
+  return JSON.stringify(
+    WorkOSIntentOptions$outboundSchema.parse(workOSIntentOptions),
+  );
 }
 //# sourceMappingURL=workosintentoptions.js.map

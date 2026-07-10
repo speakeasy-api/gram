@@ -13,5 +13,5 @@ let value: AuthzChallengePrincipalType = "assistant";
 ## Values
 
 ```typescript
-"user" | "api_key" | "assistant"
+"user" | "api_key" | "assistant";
 ```

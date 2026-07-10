@@ -12,6 +12,6 @@ let value: PublishPluginsResult = {
 
 ## Fields
 
-| Field                                       | Type                                        | Required                                    | Description                                 |
-| ------------------------------------------- | ------------------------------------------- | ------------------------------------------- | ------------------------------------------- |
-| `repoUrl`                                   | *string*                                    | :heavy_check_mark:                          | The URL of the published GitHub repository. |
+| Field     | Type     | Required           | Description                                 |
+| --------- | -------- | ------------------ | ------------------------------------------- |
+| `repoUrl` | _string_ | :heavy_check_mark: | The URL of the published GitHub repository. |

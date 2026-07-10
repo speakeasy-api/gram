@@ -4,16 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { CustomDomainMcpEndpoint$inboundSchema, } from "./customdomainmcpendpoint.js";
+import { CustomDomainMcpEndpoint$inboundSchema } from "./customdomainmcpendpoint.js";
 /** @internal */
-export const ListCustomDomainMcpEndpointsResult$inboundSchema = z.pipe(z.object({
+export const ListCustomDomainMcpEndpointsResult$inboundSchema = z.pipe(
+  z.object({
     mcp_endpoints: z.array(CustomDomainMcpEndpoint$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "mcp_endpoints": "mcpEndpoints",
+      mcp_endpoints: "mcpEndpoints",
     });
-}));
+  }),
+);
 export function listCustomDomainMcpEndpointsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListCustomDomainMcpEndpointsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListCustomDomainMcpEndpointsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) =>
+      ListCustomDomainMcpEndpointsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListCustomDomainMcpEndpointsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listcustomdomainmcpendpointsresult.js.map

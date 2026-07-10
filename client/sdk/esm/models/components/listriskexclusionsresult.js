@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { RiskExclusion$inboundSchema } from "./riskexclusion.js";
 /** @internal */
 export const ListRiskExclusionsResult$inboundSchema = z.object({
-    exclusions: z.array(RiskExclusion$inboundSchema),
+  exclusions: z.array(RiskExclusion$inboundSchema),
 });
 export function listRiskExclusionsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListRiskExclusionsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListRiskExclusionsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListRiskExclusionsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListRiskExclusionsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listriskexclusionsresult.js.map

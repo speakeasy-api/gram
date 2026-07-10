@@ -11,5 +11,5 @@ let value: ChallengeResolutionResolutionType = "dismissed";
 ## Values
 
 ```typescript
-"role_assigned" | "dismissed"
+"role_assigned" | "dismissed";
 ```

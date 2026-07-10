@@ -4,29 +4,41 @@
 import { accessListScopes } from "../funcs/accessListScopes.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchListScopes(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildListScopesQuery(client$, request, security, options),
-    });
+export function prefetchListScopes(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildListScopesQuery(client$, request, security, options),
+  });
 }
 export function buildListScopesQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyListScopes({
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-        }),
-        queryFn: async function listScopesQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(accessListScopes(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyListScopes({
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+    }),
+    queryFn: async function listScopesQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        accessListScopes(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyListScopes(parameters) {
-    return ["@gram/client", "access", "listScopes", parameters];
+  return ["@gram/client", "access", "listScopes", parameters];
 }
 //# sourceMappingURL=listScopes.core.js.map

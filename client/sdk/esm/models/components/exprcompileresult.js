@@ -5,10 +5,14 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const ExprCompileResult$inboundSchema = z.object({
-    error: z.string(),
-    ok: z.boolean(),
+  error: z.string(),
+  ok: z.boolean(),
 });
 export function exprCompileResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ExprCompileResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ExprCompileResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ExprCompileResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ExprCompileResult' from JSON`,
+  );
 }
 //# sourceMappingURL=exprcompileresult.js.map

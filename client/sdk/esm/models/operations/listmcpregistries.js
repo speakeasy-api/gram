@@ -4,57 +4,89 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListMCPRegistriesSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListMCPRegistriesSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listMCPRegistriesSecurityOption1ToJSON(listMCPRegistriesSecurityOption1) {
-    return JSON.stringify(ListMCPRegistriesSecurityOption1$outboundSchema.parse(listMCPRegistriesSecurityOption1));
+  }),
+);
+export function listMCPRegistriesSecurityOption1ToJSON(
+  listMCPRegistriesSecurityOption1,
+) {
+  return JSON.stringify(
+    ListMCPRegistriesSecurityOption1$outboundSchema.parse(
+      listMCPRegistriesSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListMCPRegistriesSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListMCPRegistriesSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listMCPRegistriesSecurityOption2ToJSON(listMCPRegistriesSecurityOption2) {
-    return JSON.stringify(ListMCPRegistriesSecurityOption2$outboundSchema.parse(listMCPRegistriesSecurityOption2));
+  }),
+);
+export function listMCPRegistriesSecurityOption2ToJSON(
+  listMCPRegistriesSecurityOption2,
+) {
+  return JSON.stringify(
+    ListMCPRegistriesSecurityOption2$outboundSchema.parse(
+      listMCPRegistriesSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListMCPRegistriesSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListMCPRegistriesSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListMCPRegistriesSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListMCPRegistriesSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListMCPRegistriesSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListMCPRegistriesSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function listMCPRegistriesSecurityToJSON(listMCPRegistriesSecurity) {
-    return JSON.stringify(ListMCPRegistriesSecurity$outboundSchema.parse(listMCPRegistriesSecurity));
+  return JSON.stringify(
+    ListMCPRegistriesSecurity$outboundSchema.parse(listMCPRegistriesSecurity),
+  );
 }
 /** @internal */
-export const ListMCPRegistriesRequest$outboundSchema = z.pipe(z.object({
+export const ListMCPRegistriesRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function listMCPRegistriesRequestToJSON(listMCPRegistriesRequest) {
-    return JSON.stringify(ListMCPRegistriesRequest$outboundSchema.parse(listMCPRegistriesRequest));
+  return JSON.stringify(
+    ListMCPRegistriesRequest$outboundSchema.parse(listMCPRegistriesRequest),
+  );
 }
 //# sourceMappingURL=listmcpregistries.js.map

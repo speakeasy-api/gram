@@ -12,6 +12,6 @@ let value: ServeImageForm = {
 
 ## Fields
 
-| Field                        | Type                         | Required                     | Description                  |
-| ---------------------------- | ---------------------------- | ---------------------------- | ---------------------------- |
-| `id`                         | *string*                     | :heavy_check_mark:           | The ID of the asset to serve |
+| Field | Type     | Required           | Description                  |
+| ----- | -------- | ------------------ | ---------------------------- |
+| `id`  | _string_ | :heavy_check_mark: | The ID of the asset to serve |

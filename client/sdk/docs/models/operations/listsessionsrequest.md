@@ -15,7 +15,7 @@ let value: ListSessionsRequest = {
 
 ## Fields
 
-| Field                                                                            | Type                                                                             | Required                                                                         | Description                                                                      |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `gramSession`                                                                    | *string*                                                                         | :heavy_minus_sign:                                                               | Session header                                                                   |
-| `listSessionsPayload`                                                            | [components.ListSessionsPayload](../../models/components/listsessionspayload.md) | :heavy_check_mark:                                                               | N/A                                                                              |
+| Field                 | Type                                                                             | Required           | Description    |
+| --------------------- | -------------------------------------------------------------------------------- | ------------------ | -------------- |
+| `gramSession`         | _string_                                                                         | :heavy_minus_sign: | Session header |
+| `listSessionsPayload` | [components.ListSessionsPayload](../../models/components/listsessionspayload.md) | :heavy_check_mark: | N/A            |

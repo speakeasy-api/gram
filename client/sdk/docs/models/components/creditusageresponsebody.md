@@ -13,7 +13,7 @@ let value: CreditUsageResponseBody = {
 
 ## Fields
 
-| Field                           | Type                            | Required                        | Description                     |
-| ------------------------------- | ------------------------------- | ------------------------------- | ------------------------------- |
-| `creditsUsed`                   | *number*                        | :heavy_check_mark:              | The number of credits remaining |
-| `monthlyCredits`                | *number*                        | :heavy_check_mark:              | The number of monthly credits   |
+| Field            | Type     | Required           | Description                     |
+| ---------------- | -------- | ------------------ | ------------------------------- |
+| `creditsUsed`    | _number_ | :heavy_check_mark: | The number of credits remaining |
+| `monthlyCredits` | _number_ | :heavy_check_mark: | The number of monthly credits   |

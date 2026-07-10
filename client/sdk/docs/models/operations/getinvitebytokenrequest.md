@@ -12,6 +12,6 @@ let value: GetInviteByTokenRequest = {
 
 ## Fields
 
-| Field                                  | Type                                   | Required                               | Description                            |
-| -------------------------------------- | -------------------------------------- | -------------------------------------- | -------------------------------------- |
-| `token`                                | *string*                               | :heavy_check_mark:                     | Invitation token from the invite link. |
+| Field   | Type     | Required           | Description                            |
+| ------- | -------- | ------------------ | -------------------------------------- |
+| `token` | _string_ | :heavy_check_mark: | Invitation token from the invite link. |

@@ -4,25 +4,35 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListInvitesSecurity$outboundSchema = z.pipe(z.object({
+export const ListInvitesSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function listInvitesSecurityToJSON(listInvitesSecurity) {
-    return JSON.stringify(ListInvitesSecurity$outboundSchema.parse(listInvitesSecurity));
+  return JSON.stringify(
+    ListInvitesSecurity$outboundSchema.parse(listInvitesSecurity),
+  );
 }
 /** @internal */
-export const ListInvitesRequest$outboundSchema = z.pipe(z.object({
+export const ListInvitesRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function listInvitesRequestToJSON(listInvitesRequest) {
-    return JSON.stringify(ListInvitesRequest$outboundSchema.parse(listInvitesRequest));
+  return JSON.stringify(
+    ListInvitesRequest$outboundSchema.parse(listInvitesRequest),
+  );
 }
 //# sourceMappingURL=listinvites.js.map

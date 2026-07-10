@@ -4,32 +4,44 @@
 import { mcpMetadataGet } from "../funcs/mcpMetadataGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchGetMcpMetadata(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildGetMcpMetadataQuery(client$, request, security, options),
-    });
+export function prefetchGetMcpMetadata(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildGetMcpMetadataQuery(client$, request, security, options),
+  });
 }
 export function buildGetMcpMetadataQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyGetMcpMetadata({
-            toolsetSlug: request?.toolsetSlug,
-            mcpServerId: request?.mcpServerId,
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function getMcpMetadataQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(mcpMetadataGet(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyGetMcpMetadata({
+      toolsetSlug: request?.toolsetSlug,
+      mcpServerId: request?.mcpServerId,
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function getMcpMetadataQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        mcpMetadataGet(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyGetMcpMetadata(parameters) {
-    return ["@gram/client", "mcpMetadata", "get", parameters];
+  return ["@gram/client", "mcpMetadata", "get", parameters];
 }
 //# sourceMappingURL=getMcpMetadata.core.js.map

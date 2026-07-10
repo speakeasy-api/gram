@@ -4,29 +4,46 @@
 import { externalCredentialsList } from "../funcs/externalCredentialsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchListExternalCredentials(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildListExternalCredentialsQuery(client$, request, security, options),
-    });
+export function prefetchListExternalCredentials(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildListExternalCredentialsQuery(client$, request, security, options),
+  });
 }
-export function buildListExternalCredentialsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyListExternalCredentials({
-            provider: request?.provider,
-            gramSession: request?.gramSession,
-        }),
-        queryFn: async function listExternalCredentialsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(externalCredentialsList(client$, request, security, mergedOptions));
-        },
-    };
+export function buildListExternalCredentialsQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyListExternalCredentials({
+      provider: request?.provider,
+      gramSession: request?.gramSession,
+    }),
+    queryFn: async function listExternalCredentialsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        externalCredentialsList(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyListExternalCredentials(parameters) {
-    return ["@gram/client", "externalCredentials", "list", parameters];
+  return ["@gram/client", "externalCredentials", "list", parameters];
 }
 //# sourceMappingURL=listExternalCredentials.core.js.map

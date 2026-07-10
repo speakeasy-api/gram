@@ -3,8 +3,10 @@
  */
 import * as z from "zod/v4-mini";
 export function constDateTime(val) {
-    return z.custom((v) => {
-        return (typeof v === "string" && new Date(v).getTime() === new Date(val).getTime());
-    }, `Value must be equivalent to ${val}`);
+  return z.custom((v) => {
+    return (
+      typeof v === "string" && new Date(v).getTime() === new Date(val).getTime()
+    );
+  }, `Value must be equivalent to ${val}`);
 }
 //# sourceMappingURL=constdatetime.js.map

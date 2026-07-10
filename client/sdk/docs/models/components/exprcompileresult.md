@@ -15,7 +15,7 @@ let value: ExprCompileResult = {
 
 ## Fields
 
-| Field                                                     | Type                                                      | Required                                                  | Description                                               |
-| --------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------- |
-| `error`                                                   | *string*                                                  | :heavy_check_mark:                                        | Compiler error message when ok is false; empty otherwise. |
-| `ok`                                                      | *boolean*                                                 | :heavy_check_mark:                                        | True when the expression compiled successfully.           |
+| Field   | Type      | Required           | Description                                               |
+| ------- | --------- | ------------------ | --------------------------------------------------------- |
+| `error` | _string_  | :heavy_check_mark: | Compiler error message when ok is false; empty otherwise. |
+| `ok`    | _boolean_ | :heavy_check_mark: | True when the expression compiled successfully.           |

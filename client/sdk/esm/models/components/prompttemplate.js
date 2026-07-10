@@ -4,34 +4,38 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { CanonicalToolAttributes$inboundSchema, } from "./canonicaltoolattributes.js";
-import { ToolAnnotations$inboundSchema, } from "./toolannotations.js";
+import { CanonicalToolAttributes$inboundSchema } from "./canonicaltoolattributes.js";
+import { ToolAnnotations$inboundSchema } from "./toolannotations.js";
 import { ToolVariation$inboundSchema } from "./toolvariation.js";
 /**
  * The template engine
  */
 export const Engine = {
-    Mustache: "mustache",
+  Mustache: "mustache",
 };
 /**
  * The kind of prompt the template is used for
  */
 export const PromptTemplateKind = {
-    Prompt: "prompt",
-    HigherOrderTool: "higher_order_tool",
+  Prompt: "prompt",
+  HigherOrderTool: "higher_order_tool",
 };
 /** @internal */
 export const Engine$inboundSchema = z.enum(Engine);
 /** @internal */
 export const PromptTemplateKind$inboundSchema = z.enum(PromptTemplateKind);
 /** @internal */
-export const PromptTemplate$inboundSchema = z.pipe(z.object({
+export const PromptTemplate$inboundSchema = z.pipe(
+  z.object({
     annotations: z.optional(ToolAnnotations$inboundSchema),
     canonical: z.optional(CanonicalToolAttributes$inboundSchema),
     canonical_name: z.string(),
     confirm: z.optional(z.string()),
     confirm_prompt: z.optional(z.string()),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     description: z.string(),
     engine: Engine$inboundSchema,
     history_id: z.string(),
@@ -47,24 +51,33 @@ export const PromptTemplate$inboundSchema = z.pipe(z.object({
     tool_urn: z.string(),
     tool_urns_hint: z.optional(z.array(z.string())),
     tools_hint: z.array(z.string()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     variation: z.optional(ToolVariation$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "canonical_name": "canonicalName",
-        "confirm_prompt": "confirmPrompt",
-        "created_at": "createdAt",
-        "history_id": "historyId",
-        "predecessor_id": "predecessorId",
-        "project_id": "projectId",
-        "schema_version": "schemaVersion",
-        "tool_urn": "toolUrn",
-        "tool_urns_hint": "toolUrnsHint",
-        "tools_hint": "toolsHint",
-        "updated_at": "updatedAt",
+      canonical_name: "canonicalName",
+      confirm_prompt: "confirmPrompt",
+      created_at: "createdAt",
+      history_id: "historyId",
+      predecessor_id: "predecessorId",
+      project_id: "projectId",
+      schema_version: "schemaVersion",
+      tool_urn: "toolUrn",
+      tool_urns_hint: "toolUrnsHint",
+      tools_hint: "toolsHint",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function promptTemplateFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => PromptTemplate$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'PromptTemplate' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => PromptTemplate$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'PromptTemplate' from JSON`,
+  );
 }
 //# sourceMappingURL=prompttemplate.js.map

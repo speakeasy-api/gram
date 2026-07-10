@@ -4,24 +4,31 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { PromptGuardrailMessageVerdict$inboundSchema, } from "./promptguardrailmessageverdict.js";
+import { PromptGuardrailMessageVerdict$inboundSchema } from "./promptguardrailmessageverdict.js";
 /** @internal */
-export const PromptGuardrailEvalResult$inboundSchema = z.pipe(z.object({
+export const PromptGuardrailEvalResult$inboundSchema = z.pipe(
+  z.object({
     chat_id: z.string(),
     flagged: z.boolean(),
     judged_count: z.int(),
     total_cost_usd: z.number(),
     total_latency_ms: z.int(),
     verdicts: z.array(PromptGuardrailMessageVerdict$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "chat_id": "chatId",
-        "judged_count": "judgedCount",
-        "total_cost_usd": "totalCostUsd",
-        "total_latency_ms": "totalLatencyMs",
+      chat_id: "chatId",
+      judged_count: "judgedCount",
+      total_cost_usd: "totalCostUsd",
+      total_latency_ms: "totalLatencyMs",
     });
-}));
+  }),
+);
 export function promptGuardrailEvalResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => PromptGuardrailEvalResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'PromptGuardrailEvalResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => PromptGuardrailEvalResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'PromptGuardrailEvalResult' from JSON`,
+  );
 }
 //# sourceMappingURL=promptguardrailevalresult.js.map

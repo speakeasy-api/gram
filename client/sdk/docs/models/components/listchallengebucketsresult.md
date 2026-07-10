@@ -13,7 +13,7 @@ let value: ListChallengeBucketsResult = {
 
 ## Fields
 
-| Field                                                                      | Type                                                                       | Required                                                                   | Description                                                                |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `buckets`                                                                  | [components.ChallengeBucket](../../models/components/challengebucket.md)[] | :heavy_check_mark:                                                         | The challenge buckets.                                                     |
-| `total`                                                                    | *number*                                                                   | :heavy_check_mark:                                                         | Total number of matching buckets for pagination.                           |
+| Field     | Type                                                                       | Required           | Description                                      |
+| --------- | -------------------------------------------------------------------------- | ------------------ | ------------------------------------------------ |
+| `buckets` | [components.ChallengeBucket](../../models/components/challengebucket.md)[] | :heavy_check_mark: | The challenge buckets.                           |
+| `total`   | _number_                                                                   | :heavy_check_mark: | Total number of matching buckets for pagination. |

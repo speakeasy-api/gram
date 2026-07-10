@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ToolVariation$inboundSchema = z.pipe(z.object({
+export const ToolVariation$inboundSchema = z.pipe(
+  z.object({
     confirm: z.optional(z.string()),
     confirm_prompt: z.optional(z.string()),
     created_at: z.string(),
@@ -23,21 +24,27 @@ export const ToolVariation$inboundSchema = z.pipe(z.object({
     tags: z.optional(z.array(z.string())),
     title: z.optional(z.string()),
     updated_at: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "confirm_prompt": "confirmPrompt",
-        "created_at": "createdAt",
-        "destructive_hint": "destructiveHint",
-        "group_id": "groupId",
-        "idempotent_hint": "idempotentHint",
-        "open_world_hint": "openWorldHint",
-        "read_only_hint": "readOnlyHint",
-        "src_tool_name": "srcToolName",
-        "src_tool_urn": "srcToolUrn",
-        "updated_at": "updatedAt",
+      confirm_prompt: "confirmPrompt",
+      created_at: "createdAt",
+      destructive_hint: "destructiveHint",
+      group_id: "groupId",
+      idempotent_hint: "idempotentHint",
+      open_world_hint: "openWorldHint",
+      read_only_hint: "readOnlyHint",
+      src_tool_name: "srcToolName",
+      src_tool_urn: "srcToolUrn",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function toolVariationFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolVariation$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolVariation' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolVariation$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolVariation' from JSON`,
+  );
 }
 //# sourceMappingURL=toolvariation.js.map

@@ -4,33 +4,50 @@
 import { riskOverviewRules } from "../funcs/riskOverviewRules.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchRiskRuleBreakdown(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildRiskRuleBreakdownQuery(client$, request, security, options),
-    });
+export function prefetchRiskRuleBreakdown(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildRiskRuleBreakdownQuery(client$, request, security, options),
+  });
 }
-export function buildRiskRuleBreakdownQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyRiskRuleBreakdown({
-            category: request.category,
-            from: request.from,
-            to: request.to,
-            gramKey: request.gramKey,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function riskRuleBreakdownQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(riskOverviewRules(client$, request, security, mergedOptions));
-        },
-    };
+export function buildRiskRuleBreakdownQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyRiskRuleBreakdown({
+      category: request.category,
+      from: request.from,
+      to: request.to,
+      gramKey: request.gramKey,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function riskRuleBreakdownQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        riskOverviewRules(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyRiskRuleBreakdown(parameters) {
-    return ["@gram/client", "overview", "rules", parameters];
+  return ["@gram/client", "overview", "rules", parameters];
 }
 //# sourceMappingURL=riskRuleBreakdown.core.js.map

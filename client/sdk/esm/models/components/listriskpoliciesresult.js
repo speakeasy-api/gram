@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { RiskPolicy$inboundSchema } from "./riskpolicy.js";
 /** @internal */
 export const ListRiskPoliciesResult$inboundSchema = z.object({
-    policies: z.array(RiskPolicy$inboundSchema),
+  policies: z.array(RiskPolicy$inboundSchema),
 });
 export function listRiskPoliciesResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListRiskPoliciesResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListRiskPoliciesResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListRiskPoliciesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListRiskPoliciesResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listriskpoliciesresult.js.map

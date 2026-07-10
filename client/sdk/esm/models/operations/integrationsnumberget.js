@@ -4,31 +4,49 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const IntegrationsNumberGetSecurity$outboundSchema = z.pipe(z.object({
+export const IntegrationsNumberGetSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function integrationsNumberGetSecurityToJSON(integrationsNumberGetSecurity) {
-    return JSON.stringify(IntegrationsNumberGetSecurity$outboundSchema.parse(integrationsNumberGetSecurity));
+  }),
+);
+export function integrationsNumberGetSecurityToJSON(
+  integrationsNumberGetSecurity,
+) {
+  return JSON.stringify(
+    IntegrationsNumberGetSecurity$outboundSchema.parse(
+      integrationsNumberGetSecurity,
+    ),
+  );
 }
 /** @internal */
-export const IntegrationsNumberGetRequest$outboundSchema = z.pipe(z.object({
+export const IntegrationsNumberGetRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.optional(z.string()),
     name: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
-export function integrationsNumberGetRequestToJSON(integrationsNumberGetRequest) {
-    return JSON.stringify(IntegrationsNumberGetRequest$outboundSchema.parse(integrationsNumberGetRequest));
+  }),
+);
+export function integrationsNumberGetRequestToJSON(
+  integrationsNumberGetRequest,
+) {
+  return JSON.stringify(
+    IntegrationsNumberGetRequest$outboundSchema.parse(
+      integrationsNumberGetRequest,
+    ),
+  );
 }
 //# sourceMappingURL=integrationsnumberget.js.map

@@ -13,5 +13,5 @@ let value: AuthnChallengeMode = "interactive";
 ## Values
 
 ```typescript
-"chain" | "interactive"
+"chain" | "interactive";
 ```

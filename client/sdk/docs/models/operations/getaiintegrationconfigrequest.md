@@ -12,8 +12,8 @@ let value: GetAIIntegrationConfigRequest = {
 
 ## Fields
 
-| Field                                                                             | Type                                                                              | Required                                                                          | Description                                                                       |
-| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `provider`                                                                        | *string*                                                                          | :heavy_check_mark:                                                                | AI provider identifier. Supported values include cursor and anthropic_compliance. |
-| `gramKey`                                                                         | *string*                                                                          | :heavy_minus_sign:                                                                | API Key header                                                                    |
-| `gramSession`                                                                     | *string*                                                                          | :heavy_minus_sign:                                                                | Session header                                                                    |
+| Field         | Type     | Required           | Description                                                                       |
+| ------------- | -------- | ------------------ | --------------------------------------------------------------------------------- |
+| `provider`    | _string_ | :heavy_check_mark: | AI provider identifier. Supported values include cursor and anthropic_compliance. |
+| `gramKey`     | _string_ | :heavy_minus_sign: | API Key header                                                                    |
+| `gramSession` | _string_ | :heavy_minus_sign: | Session header                                                                    |

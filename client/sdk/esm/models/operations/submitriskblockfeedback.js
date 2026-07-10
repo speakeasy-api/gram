@@ -3,29 +3,48 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { SubmitRiskBlockFeedbackRequestBody$outboundSchema, } from "../components/submitriskblockfeedbackrequestbody.js";
+import { SubmitRiskBlockFeedbackRequestBody$outboundSchema } from "../components/submitriskblockfeedbackrequestbody.js";
 /** @internal */
-export const SubmitRiskBlockFeedbackSecurity$outboundSchema = z.pipe(z.object({
+export const SubmitRiskBlockFeedbackSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function submitRiskBlockFeedbackSecurityToJSON(submitRiskBlockFeedbackSecurity) {
-    return JSON.stringify(SubmitRiskBlockFeedbackSecurity$outboundSchema.parse(submitRiskBlockFeedbackSecurity));
+  }),
+);
+export function submitRiskBlockFeedbackSecurityToJSON(
+  submitRiskBlockFeedbackSecurity,
+) {
+  return JSON.stringify(
+    SubmitRiskBlockFeedbackSecurity$outboundSchema.parse(
+      submitRiskBlockFeedbackSecurity,
+    ),
+  );
 }
 /** @internal */
-export const SubmitRiskBlockFeedbackRequest$outboundSchema = z.pipe(z.object({
+export const SubmitRiskBlockFeedbackRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-    submitRiskBlockFeedbackRequestBody: SubmitRiskBlockFeedbackRequestBody$outboundSchema,
-}), z.transform((v) => {
+    submitRiskBlockFeedbackRequestBody:
+      SubmitRiskBlockFeedbackRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        submitRiskBlockFeedbackRequestBody: "SubmitRiskBlockFeedbackRequestBody",
+      gramSession: "Gram-Session",
+      submitRiskBlockFeedbackRequestBody: "SubmitRiskBlockFeedbackRequestBody",
     });
-}));
-export function submitRiskBlockFeedbackRequestToJSON(submitRiskBlockFeedbackRequest) {
-    return JSON.stringify(SubmitRiskBlockFeedbackRequest$outboundSchema.parse(submitRiskBlockFeedbackRequest));
+  }),
+);
+export function submitRiskBlockFeedbackRequestToJSON(
+  submitRiskBlockFeedbackRequest,
+) {
+  return JSON.stringify(
+    SubmitRiskBlockFeedbackRequest$outboundSchema.parse(
+      submitRiskBlockFeedbackRequest,
+    ),
+  );
 }
 //# sourceMappingURL=submitriskblockfeedback.js.map

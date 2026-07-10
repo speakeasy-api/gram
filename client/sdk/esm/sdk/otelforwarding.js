@@ -7,32 +7,38 @@ import { otelForwardingUpsertConfig } from "../funcs/otelForwardingUpsertConfig.
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class OtelForwarding extends ClientSDK {
-    /**
-     * deleteConfig otelForwarding
-     *
-     * @remarks
-     * Delete the org-wide OTEL forwarding config.
-     */
-    async deleteConfig(request, security, options) {
-        return unwrapAsync(otelForwardingDeleteConfig(this, request, security, options));
-    }
-    /**
-     * getConfig otelForwarding
-     *
-     * @remarks
-     * Get the org-wide OTEL forwarding config. Returns an empty config (enabled=false, no URL) when none is set.
-     */
-    async getConfig(request, security, options) {
-        return unwrapAsync(otelForwardingGetConfig(this, request, security, options));
-    }
-    /**
-     * upsertConfig otelForwarding
-     *
-     * @remarks
-     * Create or update the org-wide OTEL forwarding config. Replaces the full header set on each call.
-     */
-    async upsertConfig(request, security, options) {
-        return unwrapAsync(otelForwardingUpsertConfig(this, request, security, options));
-    }
+  /**
+   * deleteConfig otelForwarding
+   *
+   * @remarks
+   * Delete the org-wide OTEL forwarding config.
+   */
+  async deleteConfig(request, security, options) {
+    return unwrapAsync(
+      otelForwardingDeleteConfig(this, request, security, options),
+    );
+  }
+  /**
+   * getConfig otelForwarding
+   *
+   * @remarks
+   * Get the org-wide OTEL forwarding config. Returns an empty config (enabled=false, no URL) when none is set.
+   */
+  async getConfig(request, security, options) {
+    return unwrapAsync(
+      otelForwardingGetConfig(this, request, security, options),
+    );
+  }
+  /**
+   * upsertConfig otelForwarding
+   *
+   * @remarks
+   * Create or update the org-wide OTEL forwarding config. Replaces the full header set on each call.
+   */
+  async upsertConfig(request, security, options) {
+    return unwrapAsync(
+      otelForwardingUpsertConfig(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=otelforwarding.js.map

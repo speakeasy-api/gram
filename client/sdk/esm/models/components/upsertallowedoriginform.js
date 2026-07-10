@@ -3,18 +3,22 @@
  */
 import * as z from "zod/v4-mini";
 export const UpsertAllowedOriginFormStatus = {
-    Pending: "pending",
-    Approved: "approved",
-    Rejected: "rejected",
+  Pending: "pending",
+  Approved: "approved",
+  Rejected: "rejected",
 };
 /** @internal */
-export const UpsertAllowedOriginFormStatus$outboundSchema = z.enum(UpsertAllowedOriginFormStatus);
+export const UpsertAllowedOriginFormStatus$outboundSchema = z.enum(
+  UpsertAllowedOriginFormStatus,
+);
 /** @internal */
 export const UpsertAllowedOriginForm$outboundSchema = z.object({
-    origin: z.string(),
-    status: z._default(UpsertAllowedOriginFormStatus$outboundSchema, "pending"),
+  origin: z.string(),
+  status: z._default(UpsertAllowedOriginFormStatus$outboundSchema, "pending"),
 });
 export function upsertAllowedOriginFormToJSON(upsertAllowedOriginForm) {
-    return JSON.stringify(UpsertAllowedOriginForm$outboundSchema.parse(upsertAllowedOriginForm));
+  return JSON.stringify(
+    UpsertAllowedOriginForm$outboundSchema.parse(upsertAllowedOriginForm),
+  );
 }
 //# sourceMappingURL=upsertallowedoriginform.js.map

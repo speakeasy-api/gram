@@ -4,18 +4,25 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ToolCallSummary$inboundSchema, } from "./toolcallsummary.js";
+import { ToolCallSummary$inboundSchema } from "./toolcallsummary.js";
 /** @internal */
-export const SearchToolCallsResult$inboundSchema = z.pipe(z.object({
+export const SearchToolCallsResult$inboundSchema = z.pipe(
+  z.object({
     next_cursor: z.optional(z.string()),
     tool_calls: z.array(ToolCallSummary$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
-        "tool_calls": "toolCalls",
+      next_cursor: "nextCursor",
+      tool_calls: "toolCalls",
     });
-}));
+  }),
+);
 export function searchToolCallsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SearchToolCallsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SearchToolCallsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SearchToolCallsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SearchToolCallsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=searchtoolcallsresult.js.map

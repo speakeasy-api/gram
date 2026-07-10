@@ -4,9 +4,15 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const DeleteCustomDetectionRuleRequestBody$outboundSchema = z.object({
-    id: z.string(),
+  id: z.string(),
 });
-export function deleteCustomDetectionRuleRequestBodyToJSON(deleteCustomDetectionRuleRequestBody) {
-    return JSON.stringify(DeleteCustomDetectionRuleRequestBody$outboundSchema.parse(deleteCustomDetectionRuleRequestBody));
+export function deleteCustomDetectionRuleRequestBodyToJSON(
+  deleteCustomDetectionRuleRequestBody,
+) {
+  return JSON.stringify(
+    DeleteCustomDetectionRuleRequestBody$outboundSchema.parse(
+      deleteCustomDetectionRuleRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=deletecustomdetectionrulerequestbody.js.map

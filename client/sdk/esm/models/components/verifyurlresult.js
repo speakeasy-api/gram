@@ -5,16 +5,23 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const VerifyURLResult$inboundSchema = z.pipe(z.object({
+export const VerifyURLResult$inboundSchema = z.pipe(
+  z.object({
     http_status: z.optional(z.int()),
     message: z.string(),
     verified: z.boolean(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "http_status": "httpStatus",
+      http_status: "httpStatus",
     });
-}));
+  }),
+);
 export function verifyURLResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => VerifyURLResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'VerifyURLResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => VerifyURLResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'VerifyURLResult' from JSON`,
+  );
 }
 //# sourceMappingURL=verifyurlresult.js.map

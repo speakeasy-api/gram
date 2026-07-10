@@ -20,8 +20,8 @@ let value: GetDeploymentLogsResult = {
 
 ## Fields
 
-| Field                                                                            | Type                                                                             | Required                                                                         | Description                                                                      |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `events`                                                                         | [components.DeploymentLogEvent](../../models/components/deploymentlogevent.md)[] | :heavy_check_mark:                                                               | The logs for the deployment                                                      |
-| `nextCursor`                                                                     | *string*                                                                         | :heavy_minus_sign:                                                               | The cursor to fetch results from                                                 |
-| `status`                                                                         | *string*                                                                         | :heavy_check_mark:                                                               | The status of the deployment                                                     |
+| Field        | Type                                                                             | Required           | Description                      |
+| ------------ | -------------------------------------------------------------------------------- | ------------------ | -------------------------------- |
+| `events`     | [components.DeploymentLogEvent](../../models/components/deploymentlogevent.md)[] | :heavy_check_mark: | The logs for the deployment      |
+| `nextCursor` | _string_                                                                         | :heavy_minus_sign: | The cursor to fetch results from |
+| `status`     | _string_                                                                         | :heavy_check_mark: | The status of the deployment     |

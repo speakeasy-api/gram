@@ -4,29 +4,41 @@
 import { pluginsGetPublishStatus } from "../funcs/pluginsGetPublishStatus.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchPublishStatus(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildPublishStatusQuery(client$, request, security, options),
-    });
+export function prefetchPublishStatus(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildPublishStatusQuery(client$, request, security, options),
+  });
 }
 export function buildPublishStatusQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyPublishStatus({
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function publishStatusQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(pluginsGetPublishStatus(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyPublishStatus({
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function publishStatusQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        pluginsGetPublishStatus(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyPublishStatus(parameters) {
-    return ["@gram/client", "plugins", "getPublishStatus", parameters];
+  return ["@gram/client", "plugins", "getPublishStatus", parameters];
 }
 //# sourceMappingURL=publishStatus.core.js.map

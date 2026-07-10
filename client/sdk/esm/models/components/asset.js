@@ -5,32 +5,45 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 export const Kind = {
-    Openapiv3: "openapiv3",
-    Image: "image",
-    Functions: "functions",
-    ChatAttachment: "chat_attachment",
-    Unknown: "unknown",
+  Openapiv3: "openapiv3",
+  Image: "image",
+  Functions: "functions",
+  ChatAttachment: "chat_attachment",
+  Unknown: "unknown",
 };
 /** @internal */
 export const Kind$inboundSchema = z.enum(Kind);
 /** @internal */
-export const Asset$inboundSchema = z.pipe(z.object({
+export const Asset$inboundSchema = z.pipe(
+  z.object({
     content_length: z.int(),
     content_type: z.string(),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     id: z.string(),
     kind: Kind$inboundSchema,
     sha256: z.string(),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "content_length": "contentLength",
-        "content_type": "contentType",
-        "created_at": "createdAt",
-        "updated_at": "updatedAt",
+      content_length: "contentLength",
+      content_type: "contentType",
+      created_at: "createdAt",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function assetFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => Asset$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'Asset' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => Asset$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'Asset' from JSON`,
+  );
 }
 //# sourceMappingURL=asset.js.map

@@ -5,14 +5,21 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const DeleteGlobalToolVariationResult$inboundSchema = z.pipe(z.object({
+export const DeleteGlobalToolVariationResult$inboundSchema = z.pipe(
+  z.object({
     variation_id: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "variation_id": "variationId",
+      variation_id: "variationId",
     });
-}));
+  }),
+);
 export function deleteGlobalToolVariationResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => DeleteGlobalToolVariationResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'DeleteGlobalToolVariationResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => DeleteGlobalToolVariationResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'DeleteGlobalToolVariationResult' from JSON`,
+  );
 }
 //# sourceMappingURL=deleteglobaltoolvariationresult.js.map

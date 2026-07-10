@@ -4,12 +4,15 @@
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ModelUsage$inboundSchema = z
-    .object({
-    count: z.int(),
-    name: z.string(),
+export const ModelUsage$inboundSchema = z.object({
+  count: z.int(),
+  name: z.string(),
 });
 export function modelUsageFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ModelUsage$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ModelUsage' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ModelUsage$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ModelUsage' from JSON`,
+  );
 }
 //# sourceMappingURL=modelusage.js.map

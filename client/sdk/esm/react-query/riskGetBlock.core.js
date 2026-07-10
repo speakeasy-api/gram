@@ -4,29 +4,41 @@
 import { riskBlocksGet } from "../funcs/riskBlocksGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchRiskGetBlock(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildRiskGetBlockQuery(client$, request, security, options),
-    });
+export function prefetchRiskGetBlock(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildRiskGetBlockQuery(client$, request, security, options),
+  });
 }
 export function buildRiskGetBlockQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyRiskGetBlock({
-            id: request.id,
-            gramSession: request.gramSession,
-        }),
-        queryFn: async function riskGetBlockQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(riskBlocksGet(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyRiskGetBlock({
+      id: request.id,
+      gramSession: request.gramSession,
+    }),
+    queryFn: async function riskGetBlockQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        riskBlocksGet(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyRiskGetBlock(parameters) {
-    return ["@gram/client", "blocks", "get", parameters];
+  return ["@gram/client", "blocks", "get", parameters];
 }
 //# sourceMappingURL=riskGetBlock.core.js.map

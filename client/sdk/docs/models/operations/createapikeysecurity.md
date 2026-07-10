@@ -10,6 +10,6 @@ let value: CreateAPIKeySecurity = {};
 
 ## Fields
 
-| Field                      | Type                       | Required                   | Description                |
-| -------------------------- | -------------------------- | -------------------------- | -------------------------- |
-| `sessionHeaderGramSession` | *string*                   | :heavy_minus_sign:         | N/A                        |
+| Field                      | Type     | Required           | Description |
+| -------------------------- | -------- | ------------------ | ----------- |
+| `sessionHeaderGramSession` | _string_ | :heavy_minus_sign: | N/A         |

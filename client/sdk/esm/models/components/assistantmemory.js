@@ -5,31 +5,60 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const AssistantMemory$inboundSchema = z.pipe(z.object({
+export const AssistantMemory$inboundSchema = z.pipe(
+  z.object({
     assistant_id: z.string(),
     content: z.string(),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-    deleted_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+    deleted_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
     id: z.string(),
-    last_access: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-    superseded_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
+    last_access: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+    superseded_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
     supersedes_id: z.optional(z.string()),
     tags: z.array(z.string()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-    valid_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+    valid_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "assistant_id": "assistantId",
-        "created_at": "createdAt",
-        "deleted_at": "deletedAt",
-        "last_access": "lastAccess",
-        "superseded_at": "supersededAt",
-        "supersedes_id": "supersedesId",
-        "updated_at": "updatedAt",
-        "valid_at": "validAt",
+      assistant_id: "assistantId",
+      created_at: "createdAt",
+      deleted_at: "deletedAt",
+      last_access: "lastAccess",
+      superseded_at: "supersededAt",
+      supersedes_id: "supersedesId",
+      updated_at: "updatedAt",
+      valid_at: "validAt",
     });
-}));
+  }),
+);
 export function assistantMemoryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => AssistantMemory$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'AssistantMemory' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => AssistantMemory$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AssistantMemory' from JSON`,
+  );
 }
 //# sourceMappingURL=assistantmemory.js.map

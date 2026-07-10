@@ -3,16 +3,25 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { ExternalOAuthServerForm$outboundSchema, } from "./externaloauthserverform.js";
+import { ExternalOAuthServerForm$outboundSchema } from "./externaloauthserverform.js";
 /** @internal */
-export const AddExternalOAuthServerRequestBody$outboundSchema = z.pipe(z.object({
+export const AddExternalOAuthServerRequestBody$outboundSchema = z.pipe(
+  z.object({
     externalOauthServer: ExternalOAuthServerForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        externalOauthServer: "external_oauth_server",
+      externalOauthServer: "external_oauth_server",
     });
-}));
-export function addExternalOAuthServerRequestBodyToJSON(addExternalOAuthServerRequestBody) {
-    return JSON.stringify(AddExternalOAuthServerRequestBody$outboundSchema.parse(addExternalOAuthServerRequestBody));
+  }),
+);
+export function addExternalOAuthServerRequestBodyToJSON(
+  addExternalOAuthServerRequestBody,
+) {
+  return JSON.stringify(
+    AddExternalOAuthServerRequestBody$outboundSchema.parse(
+      addExternalOAuthServerRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=addexternaloauthserverrequestbody.js.map

@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Plugin$inboundSchema } from "./plugin.js";
 /** @internal */
 export const ListPluginsResult$inboundSchema = z.object({
-    plugins: z.array(Plugin$inboundSchema),
+  plugins: z.array(Plugin$inboundSchema),
 });
 export function listPluginsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListPluginsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListPluginsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListPluginsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListPluginsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listpluginsresult.js.map

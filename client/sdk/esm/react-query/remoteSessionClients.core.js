@@ -6,79 +6,121 @@ import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
 import { unwrapResultIterator } from "../types/operations.js";
 import { pageIteratorToJSON } from "./_types.js";
-export function prefetchRemoteSessionClients(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildRemoteSessionClientsQuery(client$, request, security, options),
-    });
+export function prefetchRemoteSessionClients(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildRemoteSessionClientsQuery(client$, request, security, options),
+  });
 }
-export function prefetchRemoteSessionClientsInfinite(queryClient, client$, request, security, options) {
-    return queryClient.prefetchInfiniteQuery({
-        ...buildRemoteSessionClientsInfiniteQuery(client$, request, security, options),
-        initialPageParam: undefined,
-        getNextPageParam: (previousPage) => previousPage["~next"],
-    });
+export function prefetchRemoteSessionClientsInfinite(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchInfiniteQuery({
+    ...buildRemoteSessionClientsInfiniteQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: undefined,
+    getNextPageParam: (previousPage) => previousPage["~next"],
+  });
 }
-export function buildRemoteSessionClientsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyRemoteSessionClients({
-            remoteSessionIssuerId: request?.remoteSessionIssuerId,
-            userSessionIssuerId: request?.userSessionIssuerId,
-            cursor: request?.cursor,
-            limit: request?.limit,
-            gramSession: request?.gramSession,
-            gramKey: request?.gramKey,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function remoteSessionClientsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(remoteSessionClientsList(client$, request, security, mergedOptions));
-        },
-    };
+export function buildRemoteSessionClientsQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyRemoteSessionClients({
+      remoteSessionIssuerId: request?.remoteSessionIssuerId,
+      userSessionIssuerId: request?.userSessionIssuerId,
+      cursor: request?.cursor,
+      limit: request?.limit,
+      gramSession: request?.gramSession,
+      gramKey: request?.gramKey,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function remoteSessionClientsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        remoteSessionClientsList(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
-export function buildRemoteSessionClientsInfiniteQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyRemoteSessionClientsInfinite({
-            remoteSessionIssuerId: request?.remoteSessionIssuerId,
-            userSessionIssuerId: request?.userSessionIssuerId,
-            cursor: request?.cursor,
-            limit: request?.limit,
-            gramSession: request?.gramSession,
-            gramKey: request?.gramKey,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function remoteSessionClientsQuery(ctx) {
-            const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options,
-                fetchOptions: { ...options?.fetchOptions, signal: sig },
-            };
-            if (!ctx.pageParam) {
-                const pageResult = await unwrapResultIterator(remoteSessionClientsList(client$, request, security, mergedOptions));
-                return pageIteratorToJSON(pageResult);
-            }
-            const pageResult = await unwrapResultIterator(remoteSessionClientsList(client$, {
-                ...request,
-                cursor: ctx.pageParam.cursor,
-            }, security, mergedOptions));
-            return pageIteratorToJSON(pageResult);
-        },
-    };
+export function buildRemoteSessionClientsInfiniteQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyRemoteSessionClientsInfinite({
+      remoteSessionIssuerId: request?.remoteSessionIssuerId,
+      userSessionIssuerId: request?.userSessionIssuerId,
+      cursor: request?.cursor,
+      limit: request?.limit,
+      gramSession: request?.gramSession,
+      gramKey: request?.gramKey,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function remoteSessionClientsQuery(ctx) {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+      if (!ctx.pageParam) {
+        const pageResult = await unwrapResultIterator(
+          remoteSessionClientsList(client$, request, security, mergedOptions),
+        );
+        return pageIteratorToJSON(pageResult);
+      }
+      const pageResult = await unwrapResultIterator(
+        remoteSessionClientsList(
+          client$,
+          {
+            ...request,
+            cursor: ctx.pageParam.cursor,
+          },
+          security,
+          mergedOptions,
+        ),
+      );
+      return pageIteratorToJSON(pageResult);
+    },
+  };
 }
 export function queryKeyRemoteSessionClients(parameters) {
-    return ["@gram/client", "remoteSessionClients", "list", parameters];
+  return ["@gram/client", "remoteSessionClients", "list", parameters];
 }
 export function queryKeyRemoteSessionClientsInfinite(parameters) {
-    return [
-        "@gram/client",
-        "remoteSessionClients",
-        "list",
-        "infinite",
-        parameters,
-    ];
+  return [
+    "@gram/client",
+    "remoteSessionClients",
+    "list",
+    "infinite",
+    parameters,
+  ];
 }
 //# sourceMappingURL=remoteSessionClients.core.js.map

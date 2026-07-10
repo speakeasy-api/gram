@@ -3,29 +3,39 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateDomainRequestBody$outboundSchema, } from "../components/createdomainrequestbody.js";
+import { CreateDomainRequestBody$outboundSchema } from "../components/createdomainrequestbody.js";
 /** @internal */
-export const RegisterDomainSecurity$outboundSchema = z.pipe(z.object({
+export const RegisterDomainSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function registerDomainSecurityToJSON(registerDomainSecurity) {
-    return JSON.stringify(RegisterDomainSecurity$outboundSchema.parse(registerDomainSecurity));
+  return JSON.stringify(
+    RegisterDomainSecurity$outboundSchema.parse(registerDomainSecurity),
+  );
 }
 /** @internal */
-export const RegisterDomainRequest$outboundSchema = z.pipe(z.object({
+export const RegisterDomainRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     createDomainRequestBody: CreateDomainRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        createDomainRequestBody: "CreateDomainRequestBody",
+      gramSession: "Gram-Session",
+      createDomainRequestBody: "CreateDomainRequestBody",
     });
-}));
+  }),
+);
 export function registerDomainRequestToJSON(registerDomainRequest) {
-    return JSON.stringify(RegisterDomainRequest$outboundSchema.parse(registerDomainRequest));
+  return JSON.stringify(
+    RegisterDomainRequest$outboundSchema.parse(registerDomainRequest),
+  );
 }
 //# sourceMappingURL=registerdomain.js.map

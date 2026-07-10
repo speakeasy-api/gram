@@ -4,17 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { AssistantMemory$inboundSchema, } from "./assistantmemory.js";
+import { AssistantMemory$inboundSchema } from "./assistantmemory.js";
 /** @internal */
-export const ListAssistantMemoriesResult$inboundSchema = z.pipe(z.object({
+export const ListAssistantMemoriesResult$inboundSchema = z.pipe(
+  z.object({
     memories: z.array(AssistantMemory$inboundSchema),
     next_cursor: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function listAssistantMemoriesResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListAssistantMemoriesResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListAssistantMemoriesResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListAssistantMemoriesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListAssistantMemoriesResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listassistantmemoriesresult.js.map

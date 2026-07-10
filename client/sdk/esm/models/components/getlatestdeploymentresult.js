@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Deployment$inboundSchema } from "./deployment.js";
 /** @internal */
 export const GetLatestDeploymentResult$inboundSchema = z.object({
-    deployment: z.optional(Deployment$inboundSchema),
+  deployment: z.optional(Deployment$inboundSchema),
 });
 export function getLatestDeploymentResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GetLatestDeploymentResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GetLatestDeploymentResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => GetLatestDeploymentResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetLatestDeploymentResult' from JSON`,
+  );
 }
 //# sourceMappingURL=getlatestdeploymentresult.js.map

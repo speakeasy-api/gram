@@ -13,5 +13,5 @@ let value: Visibility = "user_visible";
 ## Values
 
 ```typescript
-"user_visible" | "internal"
+"user_visible" | "internal";
 ```

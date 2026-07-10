@@ -3,33 +3,43 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { ResolveChallengeForm$outboundSchema, } from "../components/resolvechallengeform.js";
+import { ResolveChallengeForm$outboundSchema } from "../components/resolvechallengeform.js";
 /** @internal */
-export const ResolveChallengeSecurity$outboundSchema = z.pipe(z.object({
+export const ResolveChallengeSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function resolveChallengeSecurityToJSON(resolveChallengeSecurity) {
-    return JSON.stringify(ResolveChallengeSecurity$outboundSchema.parse(resolveChallengeSecurity));
+  return JSON.stringify(
+    ResolveChallengeSecurity$outboundSchema.parse(resolveChallengeSecurity),
+  );
 }
 /** @internal */
-export const ResolveChallengeRequest$outboundSchema = z.pipe(z.object({
+export const ResolveChallengeRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     resolveChallengeForm: ResolveChallengeForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        resolveChallengeForm: "ResolveChallengeForm",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      resolveChallengeForm: "ResolveChallengeForm",
     });
-}));
+  }),
+);
 export function resolveChallengeRequestToJSON(resolveChallengeRequest) {
-    return JSON.stringify(ResolveChallengeRequest$outboundSchema.parse(resolveChallengeRequest));
+  return JSON.stringify(
+    ResolveChallengeRequest$outboundSchema.parse(resolveChallengeRequest),
+  );
 }
 //# sourceMappingURL=resolvechallenge.js.map

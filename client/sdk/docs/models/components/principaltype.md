@@ -13,5 +13,5 @@ let value: PrincipalType = "api_key";
 ## Values
 
 ```typescript
-"user" | "api_key" | "assistant"
+"user" | "api_key" | "assistant";
 ```

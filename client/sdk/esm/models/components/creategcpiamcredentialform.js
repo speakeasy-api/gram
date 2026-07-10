@@ -4,21 +4,26 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CreateGcpIamCredentialForm$outboundSchema = z.pipe(z.object({
+export const CreateGcpIamCredentialForm$outboundSchema = z.pipe(
+  z.object({
     impersonateServiceAccount: z.optional(z.string()),
     name: z.string(),
     wifPoolId: z.optional(z.string()),
     wifProjectNumber: z.optional(z.string()),
     wifProviderId: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        impersonateServiceAccount: "impersonate_service_account",
-        wifPoolId: "wif_pool_id",
-        wifProjectNumber: "wif_project_number",
-        wifProviderId: "wif_provider_id",
+      impersonateServiceAccount: "impersonate_service_account",
+      wifPoolId: "wif_pool_id",
+      wifProjectNumber: "wif_project_number",
+      wifProviderId: "wif_provider_id",
     });
-}));
+  }),
+);
 export function createGcpIamCredentialFormToJSON(createGcpIamCredentialForm) {
-    return JSON.stringify(CreateGcpIamCredentialForm$outboundSchema.parse(createGcpIamCredentialForm));
+  return JSON.stringify(
+    CreateGcpIamCredentialForm$outboundSchema.parse(createGcpIamCredentialForm),
+  );
 }
 //# sourceMappingURL=creategcpiamcredentialform.js.map

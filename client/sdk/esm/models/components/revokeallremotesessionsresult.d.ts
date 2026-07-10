@@ -5,12 +5,17 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  * Result type for revoking all of a client's remote_sessions.
  */
 export type RevokeAllRemoteSessionsResult = {
-    /**
-     * Number of remote_sessions revoked.
-     */
-    revokedCount: number;
+  /**
+   * Number of remote_sessions revoked.
+   */
+  revokedCount: number;
 };
 /** @internal */
-export declare const RevokeAllRemoteSessionsResult$inboundSchema: z.ZodMiniType<RevokeAllRemoteSessionsResult, unknown>;
-export declare function revokeAllRemoteSessionsResultFromJSON(jsonString: string): SafeParseResult<RevokeAllRemoteSessionsResult, SDKValidationError>;
+export declare const RevokeAllRemoteSessionsResult$inboundSchema: z.ZodMiniType<
+  RevokeAllRemoteSessionsResult,
+  unknown
+>;
+export declare function revokeAllRemoteSessionsResultFromJSON(
+  jsonString: string,
+): SafeParseResult<RevokeAllRemoteSessionsResult, SDKValidationError>;
 //# sourceMappingURL=revokeallremotesessionsresult.d.ts.map

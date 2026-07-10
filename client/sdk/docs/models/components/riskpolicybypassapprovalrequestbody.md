@@ -12,7 +12,7 @@ let value: RiskPolicyBypassApprovalRequestBody = {
 
 ## Fields
 
-| Field                                                                                      | Type                                                                                       | Required                                                                                   | Description                                                                                |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `grantedPrincipalUrns`                                                                     | *string*[]                                                                                 | :heavy_minus_sign:                                                                         | Principal URNs to grant bypass access to. Use user:all for every user in the organization. |
-| `id`                                                                                       | *string*                                                                                   | :heavy_check_mark:                                                                         | The bypass request ID.                                                                     |
+| Field                  | Type       | Required           | Description                                                                                |
+| ---------------------- | ---------- | ------------------ | ------------------------------------------------------------------------------------------ |
+| `grantedPrincipalUrns` | _string_[] | :heavy_minus_sign: | Principal URNs to grant bypass access to. Use user:all for every user in the organization. |
+| `id`                   | _string_   | :heavy_check_mark: | The bypass request ID.                                                                     |

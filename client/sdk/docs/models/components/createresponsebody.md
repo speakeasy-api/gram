@@ -15,10 +15,10 @@ let value: CreateResponseBody = {
 
 ## Fields
 
-| Field                                        | Type                                         | Required                                     | Description                                  |
-| -------------------------------------------- | -------------------------------------------- | -------------------------------------------- | -------------------------------------------- |
-| `clientToken`                                | *string*                                     | :heavy_check_mark:                           | JWT token for chat session                   |
-| `embedOrigin`                                | *string*                                     | :heavy_check_mark:                           | The origin from which the token will be used |
-| `expiresAfter`                               | *number*                                     | :heavy_check_mark:                           | Token expiration in seconds                  |
-| `status`                                     | *string*                                     | :heavy_check_mark:                           | Session status                               |
-| `userIdentifier`                             | *string*                                     | :heavy_minus_sign:                           | User identifier if provided                  |
+| Field            | Type     | Required           | Description                                  |
+| ---------------- | -------- | ------------------ | -------------------------------------------- |
+| `clientToken`    | _string_ | :heavy_check_mark: | JWT token for chat session                   |
+| `embedOrigin`    | _string_ | :heavy_check_mark: | The origin from which the token will be used |
+| `expiresAfter`   | _number_ | :heavy_check_mark: | Token expiration in seconds                  |
+| `status`         | _string_ | :heavy_check_mark: | Session status                               |
+| `userIdentifier` | _string_ | :heavy_minus_sign: | User identifier if provided                  |

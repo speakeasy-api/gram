@@ -31,6 +31,6 @@ let value: ListAssistantsResult = {
 
 ## Fields
 
-| Field                                                          | Type                                                           | Required                                                       | Description                                                    |
-| -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
-| `assistants`                                                   | [components.Assistant](../../models/components/assistant.md)[] | :heavy_check_mark:                                             | Assistants for the current project.                            |
+| Field        | Type                                                           | Required           | Description                         |
+| ------------ | -------------------------------------------------------------- | ------------------ | ----------------------------------- |
+| `assistants` | [components.Assistant](../../models/components/assistant.md)[] | :heavy_check_mark: | Assistants for the current project. |

@@ -14,10 +14,10 @@ let value: ExternalMCPRemoteHeader = {
 
 ## Fields
 
-| Field                                                 | Type                                                  | Required                                              | Description                                           |
-| ----------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------- |
-| `description`                                         | *string*                                              | :heavy_minus_sign:                                    | Description of the header                             |
-| `isRequired`                                          | *boolean*                                             | :heavy_minus_sign:                                    | Whether this header is required                       |
-| `isSecret`                                            | *boolean*                                             | :heavy_minus_sign:                                    | Whether this header value should be treated as secret |
-| `name`                                                | *string*                                              | :heavy_check_mark:                                    | Header name                                           |
-| `placeholder`                                         | *string*                                              | :heavy_minus_sign:                                    | Placeholder value to show when collecting this header |
+| Field         | Type      | Required           | Description                                           |
+| ------------- | --------- | ------------------ | ----------------------------------------------------- |
+| `description` | _string_  | :heavy_minus_sign: | Description of the header                             |
+| `isRequired`  | _boolean_ | :heavy_minus_sign: | Whether this header is required                       |
+| `isSecret`    | _boolean_ | :heavy_minus_sign: | Whether this header value should be treated as secret |
+| `name`        | _string_  | :heavy_check_mark: | Header name                                           |
+| `placeholder` | _string_  | :heavy_minus_sign: | Placeholder value to show when collecting this header |

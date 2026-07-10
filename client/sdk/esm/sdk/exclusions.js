@@ -9,50 +9,52 @@ import { riskExclusionsUpdate } from "../funcs/riskExclusionsUpdate.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Exclusions extends ClientSDK {
-    /**
-     * createRiskExclusion risk
-     *
-     * @remarks
-     * Create a risk exclusion. Omit risk_policy_id to create a global exclusion that applies to every policy in the project.
-     */
-    async create(request, security, options) {
-        return unwrapAsync(riskExclusionsCreate(this, request, security, options));
-    }
-    /**
-     * deleteRiskExclusion risk
-     *
-     * @remarks
-     * Delete a risk exclusion. Previously suppressed findings are restored.
-     */
-    async delete(request, security, options) {
-        return unwrapAsync(riskExclusionsDelete(this, request, security, options));
-    }
-    /**
-     * listBuiltinExclusions risk
-     *
-     * @remarks
-     * List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
-     */
-    async listBuiltinExclusions(request, security, options) {
-        return unwrapAsync(riskExclusionsListBuiltinExclusions(this, request, security, options));
-    }
-    /**
-     * listRiskExclusions risk
-     *
-     * @remarks
-     * List risk exclusions for the current project. Optionally filter to a single policy.
-     */
-    async list(request, security, options) {
-        return unwrapAsync(riskExclusionsList(this, request, security, options));
-    }
-    /**
-     * updateRiskExclusion risk
-     *
-     * @remarks
-     * Update a risk exclusion.
-     */
-    async update(request, security, options) {
-        return unwrapAsync(riskExclusionsUpdate(this, request, security, options));
-    }
+  /**
+   * createRiskExclusion risk
+   *
+   * @remarks
+   * Create a risk exclusion. Omit risk_policy_id to create a global exclusion that applies to every policy in the project.
+   */
+  async create(request, security, options) {
+    return unwrapAsync(riskExclusionsCreate(this, request, security, options));
+  }
+  /**
+   * deleteRiskExclusion risk
+   *
+   * @remarks
+   * Delete a risk exclusion. Previously suppressed findings are restored.
+   */
+  async delete(request, security, options) {
+    return unwrapAsync(riskExclusionsDelete(this, request, security, options));
+  }
+  /**
+   * listBuiltinExclusions risk
+   *
+   * @remarks
+   * List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
+   */
+  async listBuiltinExclusions(request, security, options) {
+    return unwrapAsync(
+      riskExclusionsListBuiltinExclusions(this, request, security, options),
+    );
+  }
+  /**
+   * listRiskExclusions risk
+   *
+   * @remarks
+   * List risk exclusions for the current project. Optionally filter to a single policy.
+   */
+  async list(request, security, options) {
+    return unwrapAsync(riskExclusionsList(this, request, security, options));
+  }
+  /**
+   * updateRiskExclusion risk
+   *
+   * @remarks
+   * Update a risk exclusion.
+   */
+  async update(request, security, options) {
+    return unwrapAsync(riskExclusionsUpdate(this, request, security, options));
+  }
 }
 //# sourceMappingURL=exclusions.js.map

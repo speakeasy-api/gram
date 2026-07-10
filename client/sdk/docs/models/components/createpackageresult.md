@@ -19,6 +19,6 @@ let value: CreatePackageResult = {
 
 ## Fields
 
-| Field                                                    | Type                                                     | Required                                                 | Description                                              |
-| -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
-| `package`                                                | [components.Package](../../models/components/package.md) | :heavy_check_mark:                                       | N/A                                                      |
+| Field     | Type                                                     | Required           | Description |
+| --------- | -------------------------------------------------------- | ------------------ | ----------- |
+| `package` | [components.Package](../../models/components/package.md) | :heavy_check_mark: | N/A         |

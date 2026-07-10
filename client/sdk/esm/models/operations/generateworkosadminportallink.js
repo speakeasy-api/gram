@@ -3,29 +3,49 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { GenerateWorkOSAdminPortalLinkRequestBody$outboundSchema, } from "../components/generateworkosadminportallinkrequestbody.js";
+import { GenerateWorkOSAdminPortalLinkRequestBody$outboundSchema } from "../components/generateworkosadminportallinkrequestbody.js";
 /** @internal */
-export const GenerateWorkOSAdminPortalLinkSecurity$outboundSchema = z.pipe(z.object({
+export const GenerateWorkOSAdminPortalLinkSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function generateWorkOSAdminPortalLinkSecurityToJSON(generateWorkOSAdminPortalLinkSecurity) {
-    return JSON.stringify(GenerateWorkOSAdminPortalLinkSecurity$outboundSchema.parse(generateWorkOSAdminPortalLinkSecurity));
+  }),
+);
+export function generateWorkOSAdminPortalLinkSecurityToJSON(
+  generateWorkOSAdminPortalLinkSecurity,
+) {
+  return JSON.stringify(
+    GenerateWorkOSAdminPortalLinkSecurity$outboundSchema.parse(
+      generateWorkOSAdminPortalLinkSecurity,
+    ),
+  );
 }
 /** @internal */
-export const GenerateWorkOSAdminPortalLinkRequest$outboundSchema = z.pipe(z.object({
+export const GenerateWorkOSAdminPortalLinkRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-    generateWorkOSAdminPortalLinkRequestBody: GenerateWorkOSAdminPortalLinkRequestBody$outboundSchema,
-}), z.transform((v) => {
+    generateWorkOSAdminPortalLinkRequestBody:
+      GenerateWorkOSAdminPortalLinkRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        generateWorkOSAdminPortalLinkRequestBody: "GenerateWorkOSAdminPortalLinkRequestBody",
+      gramSession: "Gram-Session",
+      generateWorkOSAdminPortalLinkRequestBody:
+        "GenerateWorkOSAdminPortalLinkRequestBody",
     });
-}));
-export function generateWorkOSAdminPortalLinkRequestToJSON(generateWorkOSAdminPortalLinkRequest) {
-    return JSON.stringify(GenerateWorkOSAdminPortalLinkRequest$outboundSchema.parse(generateWorkOSAdminPortalLinkRequest));
+  }),
+);
+export function generateWorkOSAdminPortalLinkRequestToJSON(
+  generateWorkOSAdminPortalLinkRequest,
+) {
+  return JSON.stringify(
+    GenerateWorkOSAdminPortalLinkRequest$outboundSchema.parse(
+      generateWorkOSAdminPortalLinkRequest,
+    ),
+  );
 }
 //# sourceMappingURL=generateworkosadminportallink.js.map

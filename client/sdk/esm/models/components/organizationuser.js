@@ -5,29 +5,47 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const OrganizationUser$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const OrganizationUser$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     email: z.string(),
     id: z.string(),
-    last_login: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
+    last_login: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
     name: z.string(),
     organization_id: z.string(),
     photo_url: z.optional(z.string()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     user_id: z.string(),
     workos_membership_id: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "last_login": "lastLogin",
-        "organization_id": "organizationId",
-        "photo_url": "photoUrl",
-        "updated_at": "updatedAt",
-        "user_id": "userId",
-        "workos_membership_id": "workosMembershipId",
+      created_at: "createdAt",
+      last_login: "lastLogin",
+      organization_id: "organizationId",
+      photo_url: "photoUrl",
+      updated_at: "updatedAt",
+      user_id: "userId",
+      workos_membership_id: "workosMembershipId",
     });
-}));
+  }),
+);
 export function organizationUserFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => OrganizationUser$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'OrganizationUser' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => OrganizationUser$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'OrganizationUser' from JSON`,
+  );
 }
 //# sourceMappingURL=organizationuser.js.map

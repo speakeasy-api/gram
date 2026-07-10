@@ -4,9 +4,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { OrganizationEntry$inboundSchema, } from "./organizationentry.js";
+import { OrganizationEntry$inboundSchema } from "./organizationentry.js";
 /** @internal */
-export const InfoResponseBody$inboundSchema = z.pipe(z.object({
+export const InfoResponseBody$inboundSchema = z.pipe(
+  z.object({
     active_organization_id: z.string(),
     gram_account_type: z.string(),
     has_active_subscription: z.boolean(),
@@ -18,20 +19,26 @@ export const InfoResponseBody$inboundSchema = z.pipe(z.object({
     user_photo_url: z.optional(z.string()),
     user_signature: z.optional(z.string()),
     whitelisted: z.boolean(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "active_organization_id": "activeOrganizationId",
-        "gram_account_type": "gramAccountType",
-        "has_active_subscription": "hasActiveSubscription",
-        "is_admin": "isAdmin",
-        "user_display_name": "userDisplayName",
-        "user_email": "userEmail",
-        "user_id": "userId",
-        "user_photo_url": "userPhotoUrl",
-        "user_signature": "userSignature",
+      active_organization_id: "activeOrganizationId",
+      gram_account_type: "gramAccountType",
+      has_active_subscription: "hasActiveSubscription",
+      is_admin: "isAdmin",
+      user_display_name: "userDisplayName",
+      user_email: "userEmail",
+      user_id: "userId",
+      user_photo_url: "userPhotoUrl",
+      user_signature: "userSignature",
     });
-}));
+  }),
+);
 export function infoResponseBodyFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => InfoResponseBody$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'InfoResponseBody' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => InfoResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'InfoResponseBody' from JSON`,
+  );
 }
 //# sourceMappingURL=inforesponsebody.js.map

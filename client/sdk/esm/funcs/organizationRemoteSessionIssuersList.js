@@ -9,124 +9,167 @@ import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import { ServiceError$inboundSchema, } from "../models/errors/serviceerror.js";
-import { ListOrganizationRemoteSessionIssuersRequest$outboundSchema, ListOrganizationRemoteSessionIssuersResponse$inboundSchema, } from "../models/operations/listorganizationremotesessionissuers.js";
+import { ServiceError$inboundSchema } from "../models/errors/serviceerror.js";
+import {
+  ListOrganizationRemoteSessionIssuersRequest$outboundSchema,
+  ListOrganizationRemoteSessionIssuersResponse$inboundSchema,
+} from "../models/operations/listorganizationremotesessionissuers.js";
 import { APIPromise } from "../types/async.js";
-import { createPageIterator, haltIterator, } from "../types/operations.js";
+import { createPageIterator, haltIterator } from "../types/operations.js";
 /**
  * listIssuers organizationRemoteSessionIssuers
  *
  * @remarks
  * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
  */
-export function organizationRemoteSessionIssuersList(client, request, security, options) {
-    return new APIPromise($do(client, request, security, options));
+export function organizationRemoteSessionIssuersList(
+  client,
+  request,
+  security,
+  options,
+) {
+  return new APIPromise($do(client, request, security, options));
 }
 async function $do(client, request, security, options) {
-    const parsed = safeParse(request, (value) => z.parse(z.optional(ListOrganizationRemoteSessionIssuersRequest$outboundSchema), value), "Input validation failed");
-    if (!parsed.ok) {
-        return [haltIterator(parsed), { status: "invalid" }];
+  const parsed = safeParse(
+    request,
+    (value) =>
+      z.parse(
+        z.optional(ListOrganizationRemoteSessionIssuersRequest$outboundSchema),
+        value,
+      ),
+    "Input validation failed",
+  );
+  if (!parsed.ok) {
+    return [haltIterator(parsed), { status: "invalid" }];
+  }
+  const payload = parsed.value;
+  const body = null;
+  const path = pathToFunc("/rpc/organizationRemoteSessionIssuers.list")();
+  const query = encodeFormQuery({
+    cursor: payload?.cursor,
+    limit: payload?.limit,
+  });
+  const headers = new Headers(
+    compactMap({
+      Accept: "application/json",
+      "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
+        explode: false,
+        charEncoding: "none",
+      }),
+      "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+        explode: false,
+        charEncoding: "none",
+      }),
+    }),
+  );
+  const requestSecurity = resolveSecurity(
+    [
+      {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.sessionHeaderGramSession,
+      },
+    ],
+    [
+      {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.apikeyHeaderGramKey,
+      },
+    ],
+  );
+  const context = {
+    options: client._options,
+    baseURL: options?.serverURL ?? client._baseURL ?? "",
+    operationID: "listOrganizationRemoteSessionIssuers",
+    oAuth2Scopes: null,
+    resolvedSecurity: requestSecurity,
+    securitySource: security,
+    retryConfig: options?.retries ||
+      client._options.retryConfig || { strategy: "none" },
+    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"],
+  };
+  const requestRes = client._createRequest(
+    context,
+    {
+      security: requestSecurity,
+      method: "GET",
+      baseURL: options?.serverURL,
+      path: path,
+      headers: headers,
+      query: query,
+      body: body,
+      userAgent: client._options.userAgent,
+      timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
+    },
+    options,
+  );
+  if (!requestRes.ok) {
+    return [haltIterator(requestRes), { status: "invalid" }];
+  }
+  const req = requestRes.value;
+  const doResult = await client._do(req, {
+    context,
+    isErrorStatusCode: (statusCode) =>
+      matchStatusCode({ status: statusCode }, ["4XX", "5XX"]),
+    retryConfig: context.retryConfig,
+    retryCodes: context.retryCodes,
+  });
+  if (!doResult.ok) {
+    return [haltIterator(doResult), { status: "request-error", request: req }];
+  }
+  const response = doResult.value;
+  const responseFields = {
+    HttpMeta: { Response: response, Request: req },
+  };
+  const [result, raw] = await M.match(
+    M.json(200, ListOrganizationRemoteSessionIssuersResponse$inboundSchema, {
+      key: "Result",
+    }),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
+    M.fail("4XX"),
+    M.fail("5XX"),
+  )(response, req, { extraFields: responseFields });
+  if (!result.ok) {
+    return [
+      haltIterator(result),
+      {
+        status: "complete",
+        request: req,
+        response,
+      },
+    ];
+  }
+  const nextFunc = (responseData) => {
+    const nextCursor = responseData.next_cursor;
+    if (typeof nextCursor !== "string") {
+      return { next: () => null };
     }
-    const payload = parsed.value;
-    const body = null;
-    const path = pathToFunc("/rpc/organizationRemoteSessionIssuers.list")();
-    const query = encodeFormQuery({
-        "cursor": payload?.cursor,
-        "limit": payload?.limit,
-    });
-    const headers = new Headers(compactMap({
-        Accept: "application/json",
-        "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
-            explode: false,
-            charEncoding: "none",
-        }),
-        "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
-            explode: false,
-            charEncoding: "none",
-        }),
-    }));
-    const requestSecurity = resolveSecurity([
+    if (nextCursor.trim() === "") {
+      return { next: () => null };
+    }
+    const nextVal = () =>
+      organizationRemoteSessionIssuersList(
+        client,
         {
-            fieldName: "Gram-Session",
-            type: "apiKey:header",
-            value: security?.sessionHeaderGramSession,
+          ...request,
+          cursor: nextCursor,
         },
-    ], [
-        {
-            fieldName: "Gram-Key",
-            type: "apiKey:header",
-            value: security?.apikeyHeaderGramKey,
-        },
-    ]);
-    const context = {
-        options: client._options,
-        baseURL: options?.serverURL ?? client._baseURL ?? "",
-        operationID: "listOrganizationRemoteSessionIssuers",
-        oAuth2Scopes: null,
-        resolvedSecurity: requestSecurity,
-        securitySource: security,
-        retryConfig: options?.retries
-            || client._options.retryConfig
-            || { strategy: "none" },
-        retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"],
-    };
-    const requestRes = client._createRequest(context, {
-        security: requestSecurity,
-        method: "GET",
-        baseURL: options?.serverURL,
-        path: path,
-        headers: headers,
-        query: query,
-        body: body,
-        userAgent: client._options.userAgent,
-        timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
-    }, options);
-    if (!requestRes.ok) {
-        return [haltIterator(requestRes), { status: "invalid" }];
-    }
-    const req = requestRes.value;
-    const doResult = await client._do(req, {
-        context,
-        isErrorStatusCode: (statusCode) => matchStatusCode({ status: statusCode }, ["4XX", "5XX"]),
-        retryConfig: context.retryConfig,
-        retryCodes: context.retryCodes,
-    });
-    if (!doResult.ok) {
-        return [haltIterator(doResult), { status: "request-error", request: req }];
-    }
-    const response = doResult.value;
-    const responseFields = {
-        HttpMeta: { Response: response, Request: req },
-    };
-    const [result, raw] = await M.match(M.json(200, ListOrganizationRemoteSessionIssuersResponse$inboundSchema, {
-        key: "Result",
-    }), M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema), M.jsonErr([500, 502], ServiceError$inboundSchema), M.fail("4XX"), M.fail("5XX"))(response, req, { extraFields: responseFields });
-    if (!result.ok) {
-        return [haltIterator(result), {
-                status: "complete",
-                request: req,
-                response,
-            }];
-    }
-    const nextFunc = (responseData) => {
-        const nextCursor = responseData.next_cursor;
-        if (typeof nextCursor !== "string") {
-            return { next: () => null };
-        }
-        if (nextCursor.trim() === "") {
-            return { next: () => null };
-        }
-        const nextVal = () => organizationRemoteSessionIssuersList(client, {
-            ...request,
-            cursor: nextCursor,
-        }, security, options);
-        return { next: nextVal, "~next": { cursor: nextCursor } };
-    };
-    const page = { ...result, ...nextFunc(raw) };
-    return [{ ...page, ...createPageIterator(page, (v) => !v.ok) }, {
-            status: "complete",
-            request: req,
-            response,
-        }];
+        security,
+        options,
+      );
+    return { next: nextVal, "~next": { cursor: nextCursor } };
+  };
+  const page = { ...result, ...nextFunc(raw) };
+  return [
+    { ...page, ...createPageIterator(page, (v) => !v.ok) },
+    {
+      status: "complete",
+      request: req,
+      response,
+    },
+  ];
 }
 //# sourceMappingURL=organizationRemoteSessionIssuersList.js.map

@@ -4,26 +4,32 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { CanonicalToolAttributes$inboundSchema, } from "./canonicaltoolattributes.js";
-import { ToolAnnotations$inboundSchema, } from "./toolannotations.js";
+import { CanonicalToolAttributes$inboundSchema } from "./canonicaltoolattributes.js";
+import { ToolAnnotations$inboundSchema } from "./toolannotations.js";
 import { ToolVariation$inboundSchema } from "./toolvariation.js";
 /**
  * The transport type used to connect to the MCP server
  */
 export const ExternalMCPToolDefinitionTransportType = {
-    StreamableHttp: "streamable-http",
-    Sse: "sse",
+  StreamableHttp: "streamable-http",
+  Sse: "sse",
 };
 /** @internal */
-export const ExternalMCPToolDefinitionTransportType$inboundSchema = z.enum(ExternalMCPToolDefinitionTransportType);
+export const ExternalMCPToolDefinitionTransportType$inboundSchema = z.enum(
+  ExternalMCPToolDefinitionTransportType,
+);
 /** @internal */
-export const ExternalMCPToolDefinition$inboundSchema = z.pipe(z.object({
+export const ExternalMCPToolDefinition$inboundSchema = z.pipe(
+  z.object({
     annotations: z.optional(ToolAnnotations$inboundSchema),
     canonical: z.optional(CanonicalToolAttributes$inboundSchema),
     canonical_name: z.string(),
     confirm: z.optional(z.string()),
     confirm_prompt: z.optional(z.string()),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     deployment_external_mcp_id: z.string(),
     deployment_id: z.string(),
     description: z.string(),
@@ -47,33 +53,42 @@ export const ExternalMCPToolDefinition$inboundSchema = z.pipe(z.object({
     tool_urn: z.string(),
     transport_type: ExternalMCPToolDefinitionTransportType$inboundSchema,
     type: z.optional(z.string()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     variation: z.optional(ToolVariation$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "canonical_name": "canonicalName",
-        "confirm_prompt": "confirmPrompt",
-        "created_at": "createdAt",
-        "deployment_external_mcp_id": "deploymentExternalMcpId",
-        "deployment_id": "deploymentId",
-        "oauth_authorization_endpoint": "oauthAuthorizationEndpoint",
-        "oauth_registration_endpoint": "oauthRegistrationEndpoint",
-        "oauth_scopes_supported": "oauthScopesSupported",
-        "oauth_token_endpoint": "oauthTokenEndpoint",
-        "oauth_version": "oauthVersion",
-        "project_id": "projectId",
-        "registry_id": "registryId",
-        "registry_server_name": "registryServerName",
-        "registry_specifier": "registrySpecifier",
-        "remote_url": "remoteUrl",
-        "requires_oauth": "requiresOauth",
-        "schema_version": "schemaVersion",
-        "tool_urn": "toolUrn",
-        "transport_type": "transportType",
-        "updated_at": "updatedAt",
+      canonical_name: "canonicalName",
+      confirm_prompt: "confirmPrompt",
+      created_at: "createdAt",
+      deployment_external_mcp_id: "deploymentExternalMcpId",
+      deployment_id: "deploymentId",
+      oauth_authorization_endpoint: "oauthAuthorizationEndpoint",
+      oauth_registration_endpoint: "oauthRegistrationEndpoint",
+      oauth_scopes_supported: "oauthScopesSupported",
+      oauth_token_endpoint: "oauthTokenEndpoint",
+      oauth_version: "oauthVersion",
+      project_id: "projectId",
+      registry_id: "registryId",
+      registry_server_name: "registryServerName",
+      registry_specifier: "registrySpecifier",
+      remote_url: "remoteUrl",
+      requires_oauth: "requiresOauth",
+      schema_version: "schemaVersion",
+      tool_urn: "toolUrn",
+      transport_type: "transportType",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function externalMCPToolDefinitionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ExternalMCPToolDefinition$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ExternalMCPToolDefinition' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ExternalMCPToolDefinition$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ExternalMCPToolDefinition' from JSON`,
+  );
 }
 //# sourceMappingURL=externalmcptooldefinition.js.map

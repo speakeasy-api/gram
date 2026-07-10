@@ -13,5 +13,5 @@ let value: TriggerInstanceStatus = "fired";
 ## Values
 
 ```typescript
-"active" | "paused" | "fired" | "cancelled"
+"active" | "paused" | "fired" | "cancelled";
 ```

@@ -3,19 +3,22 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { AssistantMCPServerRef$outboundSchema, } from "./assistantmcpserverref.js";
-import { AssistantToolsetRef$outboundSchema, } from "./assistanttoolsetref.js";
+import { AssistantMCPServerRef$outboundSchema } from "./assistantmcpserverref.js";
+import { AssistantToolsetRef$outboundSchema } from "./assistanttoolsetref.js";
 /**
  * Optional initial status.
  */
 export const CreateAssistantFormStatus = {
-    Active: "active",
-    Paused: "paused",
+  Active: "active",
+  Paused: "paused",
 };
 /** @internal */
-export const CreateAssistantFormStatus$outboundSchema = z.enum(CreateAssistantFormStatus);
+export const CreateAssistantFormStatus$outboundSchema = z.enum(
+  CreateAssistantFormStatus,
+);
 /** @internal */
-export const CreateAssistantForm$outboundSchema = z.pipe(z.object({
+export const CreateAssistantForm$outboundSchema = z.pipe(
+  z.object({
     instructions: z.string(),
     maxConcurrency: z.optional(z.int()),
     mcpServers: z.optional(z.array(AssistantMCPServerRef$outboundSchema)),
@@ -24,14 +27,18 @@ export const CreateAssistantForm$outboundSchema = z.pipe(z.object({
     status: z.optional(CreateAssistantFormStatus$outboundSchema),
     toolsets: z.array(AssistantToolsetRef$outboundSchema),
     warmTtlSeconds: z.optional(z.int()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        maxConcurrency: "max_concurrency",
-        mcpServers: "mcp_servers",
-        warmTtlSeconds: "warm_ttl_seconds",
+      maxConcurrency: "max_concurrency",
+      mcpServers: "mcp_servers",
+      warmTtlSeconds: "warm_ttl_seconds",
     });
-}));
+  }),
+);
 export function createAssistantFormToJSON(createAssistantForm) {
-    return JSON.stringify(CreateAssistantForm$outboundSchema.parse(createAssistantForm));
+  return JSON.stringify(
+    CreateAssistantForm$outboundSchema.parse(createAssistantForm),
+  );
 }
 //# sourceMappingURL=createassistantform.js.map

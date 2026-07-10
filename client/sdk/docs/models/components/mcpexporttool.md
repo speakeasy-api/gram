@@ -16,8 +16,8 @@ let value: McpExportTool = {
 
 ## Fields
 
-| Field                                       | Type                                        | Required                                    | Description                                 |
-| ------------------------------------------- | ------------------------------------------- | ------------------------------------------- | ------------------------------------------- |
-| `description`                               | *string*                                    | :heavy_check_mark:                          | Description of what the tool does           |
-| `inputSchema`                               | *any*                                       | :heavy_check_mark:                          | JSON Schema for the tool's input parameters |
-| `name`                                      | *string*                                    | :heavy_check_mark:                          | The tool name                               |
+| Field         | Type     | Required           | Description                                 |
+| ------------- | -------- | ------------------ | ------------------------------------------- |
+| `description` | _string_ | :heavy_check_mark: | Description of what the tool does           |
+| `inputSchema` | _any_    | :heavy_check_mark: | JSON Schema for the tool's input parameters |
+| `name`        | _string_ | :heavy_check_mark: | The tool name                               |

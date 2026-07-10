@@ -3,61 +3,94 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { GetProjectMetricsSummaryPayload$outboundSchema, } from "../components/getprojectmetricssummarypayload.js";
+import { GetProjectMetricsSummaryPayload$outboundSchema } from "../components/getprojectmetricssummarypayload.js";
 /** @internal */
-export const GetProjectOverviewSecurityOption1$outboundSchema = z.pipe(z.object({
+export const GetProjectOverviewSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function getProjectOverviewSecurityOption1ToJSON(getProjectOverviewSecurityOption1) {
-    return JSON.stringify(GetProjectOverviewSecurityOption1$outboundSchema.parse(getProjectOverviewSecurityOption1));
+  }),
+);
+export function getProjectOverviewSecurityOption1ToJSON(
+  getProjectOverviewSecurityOption1,
+) {
+  return JSON.stringify(
+    GetProjectOverviewSecurityOption1$outboundSchema.parse(
+      getProjectOverviewSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const GetProjectOverviewSecurityOption2$outboundSchema = z.pipe(z.object({
+export const GetProjectOverviewSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function getProjectOverviewSecurityOption2ToJSON(getProjectOverviewSecurityOption2) {
-    return JSON.stringify(GetProjectOverviewSecurityOption2$outboundSchema.parse(getProjectOverviewSecurityOption2));
+  }),
+);
+export function getProjectOverviewSecurityOption2ToJSON(
+  getProjectOverviewSecurityOption2,
+) {
+  return JSON.stringify(
+    GetProjectOverviewSecurityOption2$outboundSchema.parse(
+      getProjectOverviewSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const GetProjectOverviewSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => GetProjectOverviewSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => GetProjectOverviewSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const GetProjectOverviewSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => GetProjectOverviewSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => GetProjectOverviewSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function getProjectOverviewSecurityToJSON(getProjectOverviewSecurity) {
-    return JSON.stringify(GetProjectOverviewSecurity$outboundSchema.parse(getProjectOverviewSecurity));
+  return JSON.stringify(
+    GetProjectOverviewSecurity$outboundSchema.parse(getProjectOverviewSecurity),
+  );
 }
 /** @internal */
-export const GetProjectOverviewRequest$outboundSchema = z.pipe(z.object({
+export const GetProjectOverviewRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    getProjectMetricsSummaryPayload: GetProjectMetricsSummaryPayload$outboundSchema,
-}), z.transform((v) => {
+    getProjectMetricsSummaryPayload:
+      GetProjectMetricsSummaryPayload$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        getProjectMetricsSummaryPayload: "GetProjectMetricsSummaryPayload",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      getProjectMetricsSummaryPayload: "GetProjectMetricsSummaryPayload",
     });
-}));
+  }),
+);
 export function getProjectOverviewRequestToJSON(getProjectOverviewRequest) {
-    return JSON.stringify(GetProjectOverviewRequest$outboundSchema.parse(getProjectOverviewRequest));
+  return JSON.stringify(
+    GetProjectOverviewRequest$outboundSchema.parse(getProjectOverviewRequest),
+  );
 }
 //# sourceMappingURL=getprojectoverview.js.map

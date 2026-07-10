@@ -4,22 +4,37 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const SearchChatsFilter$outboundSchema = z.pipe(z.object({
+export const SearchChatsFilter$outboundSchema = z.pipe(
+  z.object({
     deploymentId: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
-    from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    from: z.optional(
+      z.pipe(
+        z.date(),
+        z.transform((v) => v.toISOString()),
+      ),
+    ),
     gramUrn: z.optional(z.string()),
-    to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    to: z.optional(
+      z.pipe(
+        z.date(),
+        z.transform((v) => v.toISOString()),
+      ),
+    ),
     userId: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        deploymentId: "deployment_id",
-        externalUserId: "external_user_id",
-        gramUrn: "gram_urn",
-        userId: "user_id",
+      deploymentId: "deployment_id",
+      externalUserId: "external_user_id",
+      gramUrn: "gram_urn",
+      userId: "user_id",
     });
-}));
+  }),
+);
 export function searchChatsFilterToJSON(searchChatsFilter) {
-    return JSON.stringify(SearchChatsFilter$outboundSchema.parse(searchChatsFilter));
+  return JSON.stringify(
+    SearchChatsFilter$outboundSchema.parse(searchChatsFilter),
+  );
 }
 //# sourceMappingURL=searchchatsfilter.js.map

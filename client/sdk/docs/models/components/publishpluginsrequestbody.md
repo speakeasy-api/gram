@@ -10,6 +10,6 @@ let value: PublishPluginsRequestBody = {};
 
 ## Fields
 
-| Field                                                 | Type                                                  | Required                                              | Description                                           |
-| ----------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------- |
-| `githubUsernames`                                     | *string*[]                                            | :heavy_minus_sign:                                    | GitHub usernames to add as collaborators on the repo. |
+| Field             | Type       | Required           | Description                                           |
+| ----------------- | ---------- | ------------------ | ----------------------------------------------------- |
+| `githubUsernames` | _string_[] | :heavy_minus_sign: | GitHub usernames to add as collaborators on the repo. |

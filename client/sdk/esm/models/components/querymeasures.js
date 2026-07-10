@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const QueryMeasures$inboundSchema = z.pipe(z.object({
+export const QueryMeasures$inboundSchema = z.pipe(
+  z.object({
     cache_creation_input_tokens: z.int(),
     cache_read_input_tokens: z.int(),
     total_chats: z.int(),
@@ -14,19 +15,25 @@ export const QueryMeasures$inboundSchema = z.pipe(z.object({
     total_output_tokens: z.int(),
     total_tokens: z.int(),
     total_tool_calls: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "cache_creation_input_tokens": "cacheCreationInputTokens",
-        "cache_read_input_tokens": "cacheReadInputTokens",
-        "total_chats": "totalChats",
-        "total_cost": "totalCost",
-        "total_input_tokens": "totalInputTokens",
-        "total_output_tokens": "totalOutputTokens",
-        "total_tokens": "totalTokens",
-        "total_tool_calls": "totalToolCalls",
+      cache_creation_input_tokens: "cacheCreationInputTokens",
+      cache_read_input_tokens: "cacheReadInputTokens",
+      total_chats: "totalChats",
+      total_cost: "totalCost",
+      total_input_tokens: "totalInputTokens",
+      total_output_tokens: "totalOutputTokens",
+      total_tokens: "totalTokens",
+      total_tool_calls: "totalToolCalls",
     });
-}));
+  }),
+);
 export function queryMeasuresFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => QueryMeasures$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'QueryMeasures' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => QueryMeasures$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'QueryMeasures' from JSON`,
+  );
 }
 //# sourceMappingURL=querymeasures.js.map

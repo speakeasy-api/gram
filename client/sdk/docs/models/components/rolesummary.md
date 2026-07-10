@@ -22,14 +22,14 @@ let value: RoleSummary = {
 
 ## Fields
 
-| Field                                           | Type                                            | Required                                        | Description                                     |
-| ----------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- |
-| `costPerUser`                                   | *number*                                        | :heavy_check_mark:                              | Average cost per user (total_cost / user_count) |
-| `roleId`                                        | *string*                                        | :heavy_check_mark:                              | Role identifier extracted from role URN         |
-| `roleName`                                      | *string*                                        | :heavy_check_mark:                              | Human-readable role name                        |
-| `totalChats`                                    | *number*                                        | :heavy_check_mark:                              | Total chat sessions across all users            |
-| `totalCost`                                     | *number*                                        | :heavy_check_mark:                              | Total cost across all users with this role      |
-| `totalInputTokens`                              | *number*                                        | :heavy_check_mark:                              | Sum of input tokens across all users            |
-| `totalOutputTokens`                             | *number*                                        | :heavy_check_mark:                              | Sum of output tokens across all users           |
-| `totalTokens`                                   | *number*                                        | :heavy_check_mark:                              | Sum of all tokens across all users              |
-| `userCount`                                     | *number*                                        | :heavy_check_mark:                              | Number of users with this role                  |
+| Field               | Type     | Required           | Description                                     |
+| ------------------- | -------- | ------------------ | ----------------------------------------------- |
+| `costPerUser`       | _number_ | :heavy_check_mark: | Average cost per user (total_cost / user_count) |
+| `roleId`            | _string_ | :heavy_check_mark: | Role identifier extracted from role URN         |
+| `roleName`          | _string_ | :heavy_check_mark: | Human-readable role name                        |
+| `totalChats`        | _number_ | :heavy_check_mark: | Total chat sessions across all users            |
+| `totalCost`         | _number_ | :heavy_check_mark: | Total cost across all users with this role      |
+| `totalInputTokens`  | _number_ | :heavy_check_mark: | Sum of input tokens across all users            |
+| `totalOutputTokens` | _number_ | :heavy_check_mark: | Sum of output tokens across all users           |
+| `totalTokens`       | _number_ | :heavy_check_mark: | Sum of all tokens across all users              |
+| `userCount`         | _number_ | :heavy_check_mark: | Number of users with this role                  |

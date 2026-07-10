@@ -4,7 +4,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const HookToolCallData$outboundSchema = z.pipe(z.object({
+export const HookToolCallData$outboundSchema = z.pipe(
+  z.object({
     durationMs: z.optional(z.number()),
     error: z.optional(z.any()),
     id: z.optional(z.string()),
@@ -14,14 +15,18 @@ export const HookToolCallData$outboundSchema = z.pipe(z.object({
     output: z.optional(z.any()),
     permissionType: z.optional(z.string()),
     status: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        durationMs: "duration_ms",
-        isInterrupt: "is_interrupt",
-        permissionType: "permission_type",
+      durationMs: "duration_ms",
+      isInterrupt: "is_interrupt",
+      permissionType: "permission_type",
     });
-}));
+  }),
+);
 export function hookToolCallDataToJSON(hookToolCallData) {
-    return JSON.stringify(HookToolCallData$outboundSchema.parse(hookToolCallData));
+  return JSON.stringify(
+    HookToolCallData$outboundSchema.parse(hookToolCallData),
+  );
 }
 //# sourceMappingURL=hooktoolcalldata.js.map

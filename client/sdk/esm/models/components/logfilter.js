@@ -6,22 +6,22 @@ import * as z from "zod/v4-mini";
  * Comparison operator
  */
 export const Operator = {
-    Eq: "eq",
-    NotEq: "not_eq",
-    Contains: "contains",
-    Exists: "exists",
-    NotExists: "not_exists",
-    In: "in",
+  Eq: "eq",
+  NotEq: "not_eq",
+  Contains: "contains",
+  Exists: "exists",
+  NotExists: "not_exists",
+  In: "in",
 };
 /** @internal */
 export const Operator$outboundSchema = z.enum(Operator);
 /** @internal */
 export const LogFilter$outboundSchema = z.object({
-    operator: z._default(Operator$outboundSchema, "eq"),
-    path: z.string(),
-    values: z.optional(z.array(z.string())),
+  operator: z._default(Operator$outboundSchema, "eq"),
+  path: z.string(),
+  values: z.optional(z.array(z.string())),
 });
 export function logFilterToJSON(logFilter) {
-    return JSON.stringify(LogFilter$outboundSchema.parse(logFilter));
+  return JSON.stringify(LogFilter$outboundSchema.parse(logFilter));
 }
 //# sourceMappingURL=logfilter.js.map

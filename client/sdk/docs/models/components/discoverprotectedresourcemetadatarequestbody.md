@@ -12,6 +12,6 @@ let value: DiscoverProtectedResourceMetadataRequestBody = {
 
 ## Fields
 
-| Field                                     | Type                                      | Required                                  | Description                               |
-| ----------------------------------------- | ----------------------------------------- | ----------------------------------------- | ----------------------------------------- |
-| `remoteMcpServerId`                       | *string*                                  | :heavy_check_mark:                        | The ID of the remote MCP server to probe. |
+| Field               | Type     | Required           | Description                               |
+| ------------------- | -------- | ------------------ | ----------------------------------------- |
+| `remoteMcpServerId` | _string_ | :heavy_check_mark: | The ID of the remote MCP server to probe. |

@@ -5,14 +5,14 @@ import { riskExprCompile } from "../funcs/riskExprCompile.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Expr extends ClientSDK {
-    /**
-     * compileExpr risk
-     *
-     * @remarks
-     * Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).
-     */
-    async compile(request, security, options) {
-        return unwrapAsync(riskExprCompile(this, request, security, options));
-    }
+  /**
+   * compileExpr risk
+   *
+   * @remarks
+   * Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).
+   */
+  async compile(request, security, options) {
+    return unwrapAsync(riskExprCompile(this, request, security, options));
+  }
 }
 //# sourceMappingURL=expr.js.map

@@ -5,14 +5,14 @@ import { externalReceiveWorkOSWebhook } from "../funcs/externalReceiveWorkOSWebh
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class External extends ClientSDK {
-    /**
-     * receiveWorkOSWebhook external
-     *
-     * @remarks
-     * Receive and enqueue a WorkOS webhook event.
-     */
-    async receiveWorkOSWebhook(request, options) {
-        return unwrapAsync(externalReceiveWorkOSWebhook(this, request, options));
-    }
+  /**
+   * receiveWorkOSWebhook external
+   *
+   * @remarks
+   * Receive and enqueue a WorkOS webhook event.
+   */
+  async receiveWorkOSWebhook(request, options) {
+    return unwrapAsync(externalReceiveWorkOSWebhook(this, request, options));
+  }
 }
 //# sourceMappingURL=external.js.map

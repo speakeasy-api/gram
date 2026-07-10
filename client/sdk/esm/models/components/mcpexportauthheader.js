@@ -5,15 +5,22 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const McpExportAuthHeader$inboundSchema = z.pipe(z.object({
+export const McpExportAuthHeader$inboundSchema = z.pipe(
+  z.object({
     display_name: z.string(),
     name: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "display_name": "displayName",
+      display_name: "displayName",
     });
-}));
+  }),
+);
 export function mcpExportAuthHeaderFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => McpExportAuthHeader$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'McpExportAuthHeader' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => McpExportAuthHeader$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'McpExportAuthHeader' from JSON`,
+  );
 }
 //# sourceMappingURL=mcpexportauthheader.js.map

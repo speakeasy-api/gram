@@ -7,40 +7,57 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * The kind of source that can be linked to an environment
  */
 export const SourceKind = {
-    Http: "http",
-    Function: "function",
+  Http: "http",
+  Function: "function",
 };
 /** @internal */
-export const DeleteSourceEnvironmentLinkSecurity$outboundSchema = z.pipe(z.object({
+export const DeleteSourceEnvironmentLinkSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function deleteSourceEnvironmentLinkSecurityToJSON(deleteSourceEnvironmentLinkSecurity) {
-    return JSON.stringify(DeleteSourceEnvironmentLinkSecurity$outboundSchema.parse(deleteSourceEnvironmentLinkSecurity));
+  }),
+);
+export function deleteSourceEnvironmentLinkSecurityToJSON(
+  deleteSourceEnvironmentLinkSecurity,
+) {
+  return JSON.stringify(
+    DeleteSourceEnvironmentLinkSecurity$outboundSchema.parse(
+      deleteSourceEnvironmentLinkSecurity,
+    ),
+  );
 }
 /** @internal */
-export const SourceKind$outboundSchema = z
-    .enum(SourceKind);
+export const SourceKind$outboundSchema = z.enum(SourceKind);
 /** @internal */
-export const DeleteSourceEnvironmentLinkRequest$outboundSchema = z.pipe(z.object({
+export const DeleteSourceEnvironmentLinkRequest$outboundSchema = z.pipe(
+  z.object({
     sourceKind: SourceKind$outboundSchema,
     sourceSlug: z.string(),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sourceKind: "source_kind",
-        sourceSlug: "source_slug",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      sourceKind: "source_kind",
+      sourceSlug: "source_slug",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
-export function deleteSourceEnvironmentLinkRequestToJSON(deleteSourceEnvironmentLinkRequest) {
-    return JSON.stringify(DeleteSourceEnvironmentLinkRequest$outboundSchema.parse(deleteSourceEnvironmentLinkRequest));
+  }),
+);
+export function deleteSourceEnvironmentLinkRequestToJSON(
+  deleteSourceEnvironmentLinkRequest,
+) {
+  return JSON.stringify(
+    DeleteSourceEnvironmentLinkRequest$outboundSchema.parse(
+      deleteSourceEnvironmentLinkRequest,
+    ),
+  );
 }
 //# sourceMappingURL=deletesourceenvironmentlink.js.map

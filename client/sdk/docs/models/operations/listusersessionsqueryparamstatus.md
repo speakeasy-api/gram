@@ -13,5 +13,5 @@ let value: ListUserSessionsQueryParamStatus = "all";
 ## Values
 
 ```typescript
-"active" | "expired" | "revoked" | "all"
+"active" | "expired" | "revoked" | "all";
 ```

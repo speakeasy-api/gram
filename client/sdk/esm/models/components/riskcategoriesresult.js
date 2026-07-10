@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { RiskCategoryDefinition$inboundSchema, } from "./riskcategorydefinition.js";
+import { RiskCategoryDefinition$inboundSchema } from "./riskcategorydefinition.js";
 /** @internal */
 export const RiskCategoriesResult$inboundSchema = z.object({
-    categories: z.array(RiskCategoryDefinition$inboundSchema),
+  categories: z.array(RiskCategoryDefinition$inboundSchema),
 });
 export function riskCategoriesResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskCategoriesResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskCategoriesResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskCategoriesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskCategoriesResult' from JSON`,
+  );
 }
 //# sourceMappingURL=riskcategoriesresult.js.map

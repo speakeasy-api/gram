@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ShadowMCPAccessRule$inboundSchema, } from "./shadowmcpaccessrule.js";
+import { ShadowMCPAccessRule$inboundSchema } from "./shadowmcpaccessrule.js";
 /** @internal */
 export const CreateShadowMCPAccessRuleResult$inboundSchema = z.object({
-    rules: z.array(ShadowMCPAccessRule$inboundSchema),
+  rules: z.array(ShadowMCPAccessRule$inboundSchema),
 });
 export function createShadowMCPAccessRuleResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => CreateShadowMCPAccessRuleResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'CreateShadowMCPAccessRuleResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => CreateShadowMCPAccessRuleResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CreateShadowMCPAccessRuleResult' from JSON`,
+  );
 }
 //# sourceMappingURL=createshadowmcpaccessruleresult.js.map

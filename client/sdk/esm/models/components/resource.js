@@ -4,16 +4,25 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { FunctionResourceDefinition$inboundSchema, } from "./functionresourcedefinition.js";
+import { FunctionResourceDefinition$inboundSchema } from "./functionresourcedefinition.js";
 /** @internal */
-export const Resource$inboundSchema = z.pipe(z.object({
-    function_resource_definition: z.optional(FunctionResourceDefinition$inboundSchema),
-}), z.transform((v) => {
+export const Resource$inboundSchema = z.pipe(
+  z.object({
+    function_resource_definition: z.optional(
+      FunctionResourceDefinition$inboundSchema,
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "function_resource_definition": "functionResourceDefinition",
+      function_resource_definition: "functionResourceDefinition",
     });
-}));
+  }),
+);
 export function resourceFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => Resource$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'Resource' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => Resource$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'Resource' from JSON`,
+  );
 }
 //# sourceMappingURL=resource.js.map

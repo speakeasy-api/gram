@@ -5,10 +5,13 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ChatMessage$inboundSchema = z
-    .pipe(z.object({
+export const ChatMessage$inboundSchema = z.pipe(
+  z.object({
     content: z.optional(z.any()),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     external_user_id: z.optional(z.string()),
     finish_reason: z.optional(z.string()),
     generation: z.int(),
@@ -21,19 +24,25 @@ export const ChatMessage$inboundSchema = z
     tool_call_id: z.optional(z.string()),
     tool_calls: z.optional(z.string()),
     user_id: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "external_user_id": "externalUserId",
-        "finish_reason": "finishReason",
-        "is_risk": "isRisk",
-        "prompt_id": "promptId",
-        "tool_call_id": "toolCallId",
-        "tool_calls": "toolCalls",
-        "user_id": "userId",
+      created_at: "createdAt",
+      external_user_id: "externalUserId",
+      finish_reason: "finishReason",
+      is_risk: "isRisk",
+      prompt_id: "promptId",
+      tool_call_id: "toolCallId",
+      tool_calls: "toolCalls",
+      user_id: "userId",
     });
-}));
+  }),
+);
 export function chatMessageFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ChatMessage$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ChatMessage' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ChatMessage$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ChatMessage' from JSON`,
+  );
 }
 //# sourceMappingURL=chatmessage.js.map

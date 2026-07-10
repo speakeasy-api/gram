@@ -3,33 +3,43 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreatePluginForm$outboundSchema, } from "../components/createpluginform.js";
+import { CreatePluginForm$outboundSchema } from "../components/createpluginform.js";
 /** @internal */
-export const CreatePluginSecurity$outboundSchema = z.pipe(z.object({
+export const CreatePluginSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function createPluginSecurityToJSON(createPluginSecurity) {
-    return JSON.stringify(CreatePluginSecurity$outboundSchema.parse(createPluginSecurity));
+  return JSON.stringify(
+    CreatePluginSecurity$outboundSchema.parse(createPluginSecurity),
+  );
 }
 /** @internal */
-export const CreatePluginRequest$outboundSchema = z.pipe(z.object({
+export const CreatePluginRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     createPluginForm: CreatePluginForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        createPluginForm: "CreatePluginForm",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      createPluginForm: "CreatePluginForm",
     });
-}));
+  }),
+);
 export function createPluginRequestToJSON(createPluginRequest) {
-    return JSON.stringify(CreatePluginRequest$outboundSchema.parse(createPluginRequest));
+  return JSON.stringify(
+    CreatePluginRequest$outboundSchema.parse(createPluginRequest),
+  );
 }
 //# sourceMappingURL=createplugin.js.map

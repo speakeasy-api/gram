@@ -7,21 +7,26 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * The template engine
  */
 export const CreatePromptTemplateFormEngine = {
-    Mustache: "mustache",
+  Mustache: "mustache",
 };
 /**
  * The kind of prompt the template is used for
  */
 export const CreatePromptTemplateFormKind = {
-    Prompt: "prompt",
-    HigherOrderTool: "higher_order_tool",
+  Prompt: "prompt",
+  HigherOrderTool: "higher_order_tool",
 };
 /** @internal */
-export const CreatePromptTemplateFormEngine$outboundSchema = z.enum(CreatePromptTemplateFormEngine);
+export const CreatePromptTemplateFormEngine$outboundSchema = z.enum(
+  CreatePromptTemplateFormEngine,
+);
 /** @internal */
-export const CreatePromptTemplateFormKind$outboundSchema = z.enum(CreatePromptTemplateFormKind);
+export const CreatePromptTemplateFormKind$outboundSchema = z.enum(
+  CreatePromptTemplateFormKind,
+);
 /** @internal */
-export const CreatePromptTemplateForm$outboundSchema = z.pipe(z.object({
+export const CreatePromptTemplateForm$outboundSchema = z.pipe(
+  z.object({
     arguments: z.optional(z.string()),
     description: z.optional(z.string()),
     engine: CreatePromptTemplateFormEngine$outboundSchema,
@@ -30,13 +35,17 @@ export const CreatePromptTemplateForm$outboundSchema = z.pipe(z.object({
     prompt: z.string(),
     toolUrnsHint: z.optional(z.array(z.string())),
     toolsHint: z.optional(z.array(z.string())),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        toolUrnsHint: "tool_urns_hint",
-        toolsHint: "tools_hint",
+      toolUrnsHint: "tool_urns_hint",
+      toolsHint: "tools_hint",
     });
-}));
+  }),
+);
 export function createPromptTemplateFormToJSON(createPromptTemplateForm) {
-    return JSON.stringify(CreatePromptTemplateForm$outboundSchema.parse(createPromptTemplateForm));
+  return JSON.stringify(
+    CreatePromptTemplateForm$outboundSchema.parse(createPromptTemplateForm),
+  );
 }
 //# sourceMappingURL=createprompttemplateform.js.map

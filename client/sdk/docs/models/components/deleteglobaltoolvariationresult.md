@@ -12,6 +12,6 @@ let value: DeleteGlobalToolVariationResult = {
 
 ## Fields
 
-| Field                                    | Type                                     | Required                                 | Description                              |
-| ---------------------------------------- | ---------------------------------------- | ---------------------------------------- | ---------------------------------------- |
-| `variationId`                            | *string*                                 | :heavy_check_mark:                       | The ID of the variation that was deleted |
+| Field         | Type     | Required           | Description                              |
+| ------------- | -------- | ------------------ | ---------------------------------------- |
+| `variationId` | _string_ | :heavy_check_mark: | The ID of the variation that was deleted |

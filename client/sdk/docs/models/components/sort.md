@@ -13,5 +13,5 @@ let value: Sort = "asc";
 ## Values
 
 ```typescript
-"asc" | "desc"
+"asc" | "desc";
 ```

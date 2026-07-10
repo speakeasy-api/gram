@@ -13,5 +13,5 @@ let value: ConnectionStatus = "connected";
 ## Values
 
 ```typescript
-"connected" | "inactive" | "never_connected"
+"connected" | "inactive" | "never_connected";
 ```

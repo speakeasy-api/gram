@@ -6,21 +6,30 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const AuthCallbackRequest$outboundSchema = z.object({
-    code: z.string(),
-    state: z.optional(z.string()),
+  code: z.string(),
+  state: z.optional(z.string()),
 });
 export function authCallbackRequestToJSON(authCallbackRequest) {
-    return JSON.stringify(AuthCallbackRequest$outboundSchema.parse(authCallbackRequest));
+  return JSON.stringify(
+    AuthCallbackRequest$outboundSchema.parse(authCallbackRequest),
+  );
 }
 /** @internal */
-export const AuthCallbackResponse$inboundSchema = z.pipe(z.object({
+export const AuthCallbackResponse$inboundSchema = z.pipe(
+  z.object({
     Headers: z._default(z.record(z.string(), z.array(z.string())), {}),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Headers": "headers",
+      Headers: "headers",
     });
-}));
+  }),
+);
 export function authCallbackResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => AuthCallbackResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'AuthCallbackResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => AuthCallbackResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AuthCallbackResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=authcallback.js.map

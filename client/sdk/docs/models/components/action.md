@@ -13,5 +13,5 @@ let value: Action = "block";
 ## Values
 
 ```typescript
-"flag" | "block"
+"flag" | "block";
 ```

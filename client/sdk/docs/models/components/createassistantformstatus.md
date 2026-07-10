@@ -13,5 +13,5 @@ let value: CreateAssistantFormStatus = "active";
 ## Values
 
 ```typescript
-"active" | "paused"
+"active" | "paused";
 ```

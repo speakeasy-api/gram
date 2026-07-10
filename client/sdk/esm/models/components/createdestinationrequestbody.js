@@ -3,19 +3,28 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { OtelForwardingHeaderInput$outboundSchema, } from "./otelforwardingheaderinput.js";
+import { OtelForwardingHeaderInput$outboundSchema } from "./otelforwardingheaderinput.js";
 /** @internal */
-export const CreateDestinationRequestBody$outboundSchema = z.pipe(z.object({
+export const CreateDestinationRequestBody$outboundSchema = z.pipe(
+  z.object({
     enabled: z.boolean(),
     endpointUrl: z.string(),
     headers: z.optional(z.array(OtelForwardingHeaderInput$outboundSchema)),
     name: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        endpointUrl: "endpoint_url",
+      endpointUrl: "endpoint_url",
     });
-}));
-export function createDestinationRequestBodyToJSON(createDestinationRequestBody) {
-    return JSON.stringify(CreateDestinationRequestBody$outboundSchema.parse(createDestinationRequestBody));
+  }),
+);
+export function createDestinationRequestBodyToJSON(
+  createDestinationRequestBody,
+) {
+  return JSON.stringify(
+    CreateDestinationRequestBody$outboundSchema.parse(
+      createDestinationRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=createdestinationrequestbody.js.map

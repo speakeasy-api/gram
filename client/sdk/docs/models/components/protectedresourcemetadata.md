@@ -12,10 +12,10 @@ let value: ProtectedResourceMetadata = {};
 
 ## Fields
 
-| Field                                                                 | Type                                                                  | Required                                                              | Description                                                           |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `authorizationServers`                                                | *string*[]                                                            | :heavy_minus_sign:                                                    | Authorization servers that can issue access tokens for this resource. |
-| `bearerMethodsSupported`                                              | *string*[]                                                            | :heavy_minus_sign:                                                    | Bearer token presentation methods accepted by the resource server.    |
-| `resource`                                                            | *string*                                                              | :heavy_minus_sign:                                                    | The resource server's identifier.                                     |
-| `resourceDocumentation`                                               | *string*                                                              | :heavy_minus_sign:                                                    | URL of human-readable documentation for the resource server.          |
-| `scopesSupported`                                                     | *string*[]                                                            | :heavy_minus_sign:                                                    | Scopes advertised by the resource server.                             |
+| Field                    | Type       | Required           | Description                                                           |
+| ------------------------ | ---------- | ------------------ | --------------------------------------------------------------------- |
+| `authorizationServers`   | _string_[] | :heavy_minus_sign: | Authorization servers that can issue access tokens for this resource. |
+| `bearerMethodsSupported` | _string_[] | :heavy_minus_sign: | Bearer token presentation methods accepted by the resource server.    |
+| `resource`               | _string_   | :heavy_minus_sign: | The resource server's identifier.                                     |
+| `resourceDocumentation`  | _string_   | :heavy_minus_sign: | URL of human-readable documentation for the resource server.          |
+| `scopesSupported`        | _string_[] | :heavy_minus_sign: | Scopes advertised by the resource server.                             |

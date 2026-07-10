@@ -15,7 +15,7 @@ let value: OtelForwardingHeader = {
 
 ## Fields
 
-| Field                                                                                                 | Type                                                                                                  | Required                                                                                              | Description                                                                                           |
-| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `hasValue`                                                                                            | *boolean*                                                                                             | :heavy_check_mark:                                                                                    | Whether a non-empty value is currently stored for this header. Always false on write-only operations. |
-| `name`                                                                                                | *string*                                                                                              | :heavy_check_mark:                                                                                    | Header name.                                                                                          |
+| Field      | Type      | Required           | Description                                                                                           |
+| ---------- | --------- | ------------------ | ----------------------------------------------------------------------------------------------------- |
+| `hasValue` | _boolean_ | :heavy_check_mark: | Whether a non-empty value is currently stored for this header. Always false on write-only operations. |
+| `name`     | _string_  | :heavy_check_mark: | Header name.                                                                                          |

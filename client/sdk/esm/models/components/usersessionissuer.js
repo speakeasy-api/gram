@@ -5,24 +5,37 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const UserSessionIssuer$inboundSchema = z.pipe(z.object({
+export const UserSessionIssuer$inboundSchema = z.pipe(
+  z.object({
     authn_challenge_mode: z.string(),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     id: z.string(),
     project_id: z.string(),
     session_duration_hours: z.int(),
     slug: z.string(),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "authn_challenge_mode": "authnChallengeMode",
-        "created_at": "createdAt",
-        "project_id": "projectId",
-        "session_duration_hours": "sessionDurationHours",
-        "updated_at": "updatedAt",
+      authn_challenge_mode: "authnChallengeMode",
+      created_at: "createdAt",
+      project_id: "projectId",
+      session_duration_hours: "sessionDurationHours",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function userSessionIssuerFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => UserSessionIssuer$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'UserSessionIssuer' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => UserSessionIssuer$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UserSessionIssuer' from JSON`,
+  );
 }
 //# sourceMappingURL=usersessionissuer.js.map

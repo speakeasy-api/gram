@@ -21,7 +21,7 @@ let value: ListCatalogResponseBody = {
 
 ## Fields
 
-| Field                                                                                    | Type                                                                                     | Required                                                                                 | Description                                                                              |
-| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `nextCursor`                                                                             | *string*                                                                                 | :heavy_minus_sign:                                                                       | Pagination cursor for the next page                                                      |
-| `servers`                                                                                | [components.ExternalMCPServerEntry](../../models/components/externalmcpserverentry.md)[] | :heavy_check_mark:                                                                       | List of available MCP servers                                                            |
+| Field        | Type                                                                                     | Required           | Description                         |
+| ------------ | ---------------------------------------------------------------------------------------- | ------------------ | ----------------------------------- |
+| `nextCursor` | _string_                                                                                 | :heavy_minus_sign: | Pagination cursor for the next page |
+| `servers`    | [components.ExternalMCPServerEntry](../../models/components/externalmcpserverentry.md)[] | :heavy_check_mark: | List of available MCP servers       |

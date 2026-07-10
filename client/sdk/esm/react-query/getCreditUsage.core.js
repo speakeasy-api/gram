@@ -4,26 +4,38 @@
 import { chatCreditUsage } from "../funcs/chatCreditUsage.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchGetCreditUsage(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildGetCreditUsageQuery(client$, request, security, options),
-    });
+export function prefetchGetCreditUsage(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildGetCreditUsageQuery(client$, request, security, options),
+  });
 }
 export function buildGetCreditUsageQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyGetCreditUsage({ gramSession: request?.gramSession }),
-        queryFn: async function getCreditUsageQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(chatCreditUsage(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyGetCreditUsage({ gramSession: request?.gramSession }),
+    queryFn: async function getCreditUsageQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        chatCreditUsage(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyGetCreditUsage(parameters) {
-    return ["@gram/client", "chat", "creditUsage", parameters];
+  return ["@gram/client", "chat", "creditUsage", parameters];
 }
 //# sourceMappingURL=getCreditUsage.core.js.map

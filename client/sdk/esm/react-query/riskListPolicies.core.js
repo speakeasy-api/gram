@@ -4,30 +4,47 @@
 import { riskPoliciesList } from "../funcs/riskPoliciesList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchRiskListPolicies(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildRiskListPoliciesQuery(client$, request, security, options),
-    });
+export function prefetchRiskListPolicies(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildRiskListPoliciesQuery(client$, request, security, options),
+  });
 }
-export function buildRiskListPoliciesQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyRiskListPolicies({
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function riskListPoliciesQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(riskPoliciesList(client$, request, security, mergedOptions));
-        },
-    };
+export function buildRiskListPoliciesQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyRiskListPolicies({
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function riskListPoliciesQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        riskPoliciesList(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyRiskListPolicies(parameters) {
-    return ["@gram/client", "policies", "list", parameters];
+  return ["@gram/client", "policies", "list", parameters];
 }
 //# sourceMappingURL=riskListPolicies.core.js.map

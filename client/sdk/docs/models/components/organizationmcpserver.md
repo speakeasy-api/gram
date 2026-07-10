@@ -15,11 +15,11 @@ let value: OrganizationMcpServer = {
 
 ## Fields
 
-| Field                                                                     | Type                                                                      | Required                                                                  | Description                                                               |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `id`                                                                      | *string*                                                                  | :heavy_check_mark:                                                        | The mcp_server id.                                                        |
-| `name`                                                                    | *string*                                                                  | :heavy_minus_sign:                                                        | The MCP server name; empty when unset (display falls back to the URL).    |
-| `projectId`                                                               | *string*                                                                  | :heavy_check_mark:                                                        | The owning project id.                                                    |
-| `projectSlug`                                                             | *string*                                                                  | :heavy_minus_sign:                                                        | The owning project's slug, for linking to the MCP server in its project.  |
-| `slug`                                                                    | *string*                                                                  | :heavy_minus_sign:                                                        | The MCP server slug.                                                      |
-| `url`                                                                     | *string*                                                                  | :heavy_minus_sign:                                                        | The remote MCP server URL; empty for non-remote (toolset-backed) servers. |
+| Field         | Type     | Required           | Description                                                               |
+| ------------- | -------- | ------------------ | ------------------------------------------------------------------------- |
+| `id`          | _string_ | :heavy_check_mark: | The mcp_server id.                                                        |
+| `name`        | _string_ | :heavy_minus_sign: | The MCP server name; empty when unset (display falls back to the URL).    |
+| `projectId`   | _string_ | :heavy_check_mark: | The owning project id.                                                    |
+| `projectSlug` | _string_ | :heavy_minus_sign: | The owning project's slug, for linking to the MCP server in its project.  |
+| `slug`        | _string_ | :heavy_minus_sign: | The MCP server slug.                                                      |
+| `url`         | _string_ | :heavy_minus_sign: | The remote MCP server URL; empty for non-remote (toolset-backed) servers. |

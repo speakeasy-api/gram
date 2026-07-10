@@ -4,13 +4,16 @@
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const MCPRegistry$inboundSchema = z
-    .object({
-    id: z.string(),
-    name: z.string(),
-    url: z.string(),
+export const MCPRegistry$inboundSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  url: z.string(),
 });
 export function mcpRegistryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => MCPRegistry$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'MCPRegistry' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => MCPRegistry$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'MCPRegistry' from JSON`,
+  );
 }
 //# sourceMappingURL=mcpregistry.js.map

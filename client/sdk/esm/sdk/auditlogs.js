@@ -7,23 +7,25 @@ import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 import { unwrapResultIterator } from "../types/operations.js";
 export class Auditlogs extends ClientSDK {
-    /**
-     * list auditlogs
-     *
-     * @remarks
-     * List audit logs across organization and projects.
-     */
-    async list(request, security, options) {
-        return unwrapResultIterator(auditlogsList(this, request, security, options));
-    }
-    /**
-     * listFacets auditlogs
-     *
-     * @remarks
-     * List available audit log facet values across organization and projects.
-     */
-    async listFacets(request, security, options) {
-        return unwrapAsync(auditlogsListFacets(this, request, security, options));
-    }
+  /**
+   * list auditlogs
+   *
+   * @remarks
+   * List audit logs across organization and projects.
+   */
+  async list(request, security, options) {
+    return unwrapResultIterator(
+      auditlogsList(this, request, security, options),
+    );
+  }
+  /**
+   * listFacets auditlogs
+   *
+   * @remarks
+   * List available audit log facet values across organization and projects.
+   */
+  async listFacets(request, security, options) {
+    return unwrapAsync(auditlogsListFacets(this, request, security, options));
+  }
 }
 //# sourceMappingURL=auditlogs.js.map

@@ -15,7 +15,7 @@ let value: ModelUsage = {
 
 ## Fields
 
-| Field                | Type                 | Required             | Description          |
-| -------------------- | -------------------- | -------------------- | -------------------- |
-| `count`              | *number*             | :heavy_check_mark:   | Number of times used |
-| `name`               | *string*             | :heavy_check_mark:   | Model name           |
+| Field   | Type     | Required           | Description          |
+| ------- | -------- | ------------------ | -------------------- |
+| `count` | _number_ | :heavy_check_mark: | Number of times used |
+| `name`  | _string_ | :heavy_check_mark: | Model name           |

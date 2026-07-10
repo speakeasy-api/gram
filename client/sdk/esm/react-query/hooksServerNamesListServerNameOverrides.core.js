@@ -4,35 +4,64 @@
 import { hooksServerNamesListServerNameOverrides } from "../funcs/hooksServerNamesListServerNameOverrides.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchHooksServerNamesListServerNameOverrides(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildHooksServerNamesListServerNameOverridesQuery(client$, request, security, options),
-    });
+export function prefetchHooksServerNamesListServerNameOverrides(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildHooksServerNamesListServerNameOverridesQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+  });
 }
-export function buildHooksServerNamesListServerNameOverridesQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyHooksServerNamesListServerNameOverrides({
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function hooksServerNamesListServerNameOverridesQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(hooksServerNamesListServerNameOverrides(client$, request, security, mergedOptions));
-        },
-    };
+export function buildHooksServerNamesListServerNameOverridesQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyHooksServerNamesListServerNameOverrides({
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function hooksServerNamesListServerNameOverridesQueryFn(
+      ctx,
+    ) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        hooksServerNamesListServerNameOverrides(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ),
+      );
+    },
+  };
 }
 export function queryKeyHooksServerNamesListServerNameOverrides(parameters) {
-    return [
-        "@gram/client",
-        "hooksServerNames",
-        "listServerNameOverrides",
-        parameters,
-    ];
+  return [
+    "@gram/client",
+    "hooksServerNames",
+    "listServerNameOverrides",
+    parameters,
+  ];
 }
 //# sourceMappingURL=hooksServerNamesListServerNameOverrides.core.js.map

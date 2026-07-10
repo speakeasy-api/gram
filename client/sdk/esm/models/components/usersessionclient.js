@@ -5,29 +5,50 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const UserSessionClient$inboundSchema = z.pipe(z.object({
+export const UserSessionClient$inboundSchema = z.pipe(
+  z.object({
     client_id: z.string(),
-    client_id_issued_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    client_id_issued_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     client_name: z.string(),
-    client_secret_expires_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    client_secret_expires_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     id: z.string(),
     redirect_uris: z.array(z.string()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     user_session_issuer_id: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "client_id": "clientId",
-        "client_id_issued_at": "clientIdIssuedAt",
-        "client_name": "clientName",
-        "client_secret_expires_at": "clientSecretExpiresAt",
-        "created_at": "createdAt",
-        "redirect_uris": "redirectUris",
-        "updated_at": "updatedAt",
-        "user_session_issuer_id": "userSessionIssuerId",
+      client_id: "clientId",
+      client_id_issued_at: "clientIdIssuedAt",
+      client_name: "clientName",
+      client_secret_expires_at: "clientSecretExpiresAt",
+      created_at: "createdAt",
+      redirect_uris: "redirectUris",
+      updated_at: "updatedAt",
+      user_session_issuer_id: "userSessionIssuerId",
     });
-}));
+  }),
+);
 export function userSessionClientFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => UserSessionClient$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'UserSessionClient' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => UserSessionClient$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UserSessionClient' from JSON`,
+  );
 }
 //# sourceMappingURL=usersessionclient.js.map

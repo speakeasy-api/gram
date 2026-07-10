@@ -16,8 +16,8 @@ let value: SkillTimeSeriesPoint = {
 
 ## Fields
 
-| Field                                                                 | Type                                                                  | Required                                                              | Description                                                           |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `bucketStartNs`                                                       | *string*                                                              | :heavy_check_mark:                                                    | Bucket start time in Unix nanoseconds (string for JS int64 precision) |
-| `eventCount`                                                          | *number*                                                              | :heavy_check_mark:                                                    | Number of skill use events in this bucket                             |
-| `skillName`                                                           | *string*                                                              | :heavy_check_mark:                                                    | Skill name                                                            |
+| Field           | Type     | Required           | Description                                                           |
+| --------------- | -------- | ------------------ | --------------------------------------------------------------------- |
+| `bucketStartNs` | _string_ | :heavy_check_mark: | Bucket start time in Unix nanoseconds (string for JS int64 precision) |
+| `eventCount`    | _number_ | :heavy_check_mark: | Number of skill use events in this bucket                             |
+| `skillName`     | _string_ | :heavy_check_mark: | Skill name                                                            |

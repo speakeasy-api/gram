@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ToolCallSummary$inboundSchema = z.pipe(z.object({
+export const ToolCallSummary$inboundSchema = z.pipe(
+  z.object({
     event_source: z.optional(z.string()),
     gram_urn: z.string(),
     http_status_code: z.optional(z.int()),
@@ -14,19 +15,25 @@ export const ToolCallSummary$inboundSchema = z.pipe(z.object({
     tool_name: z.optional(z.string()),
     tool_source: z.optional(z.string()),
     trace_id: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "event_source": "eventSource",
-        "gram_urn": "gramUrn",
-        "http_status_code": "httpStatusCode",
-        "log_count": "logCount",
-        "start_time_unix_nano": "startTimeUnixNano",
-        "tool_name": "toolName",
-        "tool_source": "toolSource",
-        "trace_id": "traceId",
+      event_source: "eventSource",
+      gram_urn: "gramUrn",
+      http_status_code: "httpStatusCode",
+      log_count: "logCount",
+      start_time_unix_nano: "startTimeUnixNano",
+      tool_name: "toolName",
+      tool_source: "toolSource",
+      trace_id: "traceId",
     });
-}));
+  }),
+);
 export function toolCallSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolCallSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolCallSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolCallSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolCallSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=toolcallsummary.js.map

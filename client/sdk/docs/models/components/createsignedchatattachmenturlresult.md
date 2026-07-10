@@ -13,7 +13,7 @@ let value: CreateSignedChatAttachmentURLResult = {
 
 ## Fields
 
-| Field                                                                                         | Type                                                                                          | Required                                                                                      | Description                                                                                   |
-| --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `expiresAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | When the signed URL expires                                                                   |
-| `url`                                                                                         | *string*                                                                                      | :heavy_check_mark:                                                                            | The signed URL to access the chat attachment                                                  |
+| Field       | Type                                                                                          | Required           | Description                                  |
+| ----------- | --------------------------------------------------------------------------------------------- | ------------------ | -------------------------------------------- |
+| `expiresAt` | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark: | When the signed URL expires                  |
+| `url`       | _string_                                                                                      | :heavy_check_mark: | The signed URL to access the chat attachment |

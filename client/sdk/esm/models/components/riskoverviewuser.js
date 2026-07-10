@@ -5,16 +5,23 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const RiskOverviewUser$inboundSchema = z.pipe(z.object({
+export const RiskOverviewUser$inboundSchema = z.pipe(
+  z.object({
     email: z.string(),
     external_user_id: z.string(),
     findings: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "external_user_id": "externalUserId",
+      external_user_id: "externalUserId",
     });
-}));
+  }),
+);
 export function riskOverviewUserFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskOverviewUser$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskOverviewUser' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskOverviewUser$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskOverviewUser' from JSON`,
+  );
 }
 //# sourceMappingURL=riskoverviewuser.js.map

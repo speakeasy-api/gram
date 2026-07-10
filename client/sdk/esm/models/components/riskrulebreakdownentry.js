@@ -5,16 +5,23 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const RiskRuleBreakdownEntry$inboundSchema = z.pipe(z.object({
+export const RiskRuleBreakdownEntry$inboundSchema = z.pipe(
+  z.object({
     findings: z.int(),
     rule_id: z.string(),
     source: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "rule_id": "ruleId",
+      rule_id: "ruleId",
     });
-}));
+  }),
+);
 export function riskRuleBreakdownEntryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskRuleBreakdownEntry$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskRuleBreakdownEntry' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskRuleBreakdownEntry$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskRuleBreakdownEntry' from JSON`,
+  );
 }
 //# sourceMappingURL=riskrulebreakdownentry.js.map

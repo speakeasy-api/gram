@@ -3,13 +3,17 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ChatOverviewWithResolutions$inboundSchema, } from "./chatoverviewwithresolutions.js";
+import { ChatOverviewWithResolutions$inboundSchema } from "./chatoverviewwithresolutions.js";
 /** @internal */
 export const ListChatsWithResolutionsResult$inboundSchema = z.object({
-    chats: z.array(ChatOverviewWithResolutions$inboundSchema),
-    total: z.int(),
+  chats: z.array(ChatOverviewWithResolutions$inboundSchema),
+  total: z.int(),
 });
 export function listChatsWithResolutionsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListChatsWithResolutionsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListChatsWithResolutionsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListChatsWithResolutionsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListChatsWithResolutionsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listchatswithresolutionsresult.js.map

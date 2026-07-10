@@ -7,22 +7,27 @@ import { ClaudeAgentUsage } from "./claudeagentusage.js";
  * The agent usage payload discriminator.
  */
 export declare const Type: {
-    readonly Claude: "claude";
+  readonly Claude: "claude";
 };
 /**
  * The agent usage payload discriminator.
  */
 export type Type = ClosedEnum<typeof Type>;
 export type AgentUsage = {
-    claude?: ClaudeAgentUsage | undefined;
-    /**
-     * The agent usage payload discriminator.
-     */
-    type: Type;
+  claude?: ClaudeAgentUsage | undefined;
+  /**
+   * The agent usage payload discriminator.
+   */
+  type: Type;
 };
 /** @internal */
 export declare const Type$inboundSchema: z.ZodMiniEnum<typeof Type>;
 /** @internal */
-export declare const AgentUsage$inboundSchema: z.ZodMiniType<AgentUsage, unknown>;
-export declare function agentUsageFromJSON(jsonString: string): SafeParseResult<AgentUsage, SDKValidationError>;
+export declare const AgentUsage$inboundSchema: z.ZodMiniType<
+  AgentUsage,
+  unknown
+>;
+export declare function agentUsageFromJSON(
+  jsonString: string,
+): SafeParseResult<AgentUsage, SDKValidationError>;
 //# sourceMappingURL=agentusage.d.ts.map

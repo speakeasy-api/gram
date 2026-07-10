@@ -17,9 +17,9 @@ let value: GramProductFeatures = {
 
 ## Fields
 
-| Field                                                    | Type                                                     | Required                                                 | Description                                              |
-| -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
-| `authzChallengeLoggingEnabled`                           | *boolean*                                                | :heavy_check_mark:                                       | Whether authz challenge logging to ClickHouse is enabled |
-| `logsEnabled`                                            | *boolean*                                                | :heavy_check_mark:                                       | Whether logging is enabled                               |
-| `sessionCaptureEnabled`                                  | *boolean*                                                | :heavy_check_mark:                                       | Whether Claude Code session capture is enabled           |
-| `toolIoLogsEnabled`                                      | *boolean*                                                | :heavy_check_mark:                                       | Whether tool I/O logging is enabled                      |
+| Field                          | Type      | Required           | Description                                              |
+| ------------------------------ | --------- | ------------------ | -------------------------------------------------------- |
+| `authzChallengeLoggingEnabled` | _boolean_ | :heavy_check_mark: | Whether authz challenge logging to ClickHouse is enabled |
+| `logsEnabled`                  | _boolean_ | :heavy_check_mark: | Whether logging is enabled                               |
+| `sessionCaptureEnabled`        | _boolean_ | :heavy_check_mark: | Whether Claude Code session capture is enabled           |
+| `toolIoLogsEnabled`            | _boolean_ | :heavy_check_mark: | Whether tool I/O logging is enabled                      |

@@ -4,32 +4,54 @@
 import { riskPolicyBypassRequestsList } from "../funcs/riskPolicyBypassRequestsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchRiskListPolicyBypassRequests(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildRiskListPolicyBypassRequestsQuery(client$, request, security, options),
-    });
+export function prefetchRiskListPolicyBypassRequests(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildRiskListPolicyBypassRequestsQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+  });
 }
-export function buildRiskListPolicyBypassRequestsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyRiskListPolicyBypassRequests({
-            policyId: request?.policyId,
-            status: request?.status,
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function riskListPolicyBypassRequestsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(riskPolicyBypassRequestsList(client$, request, security, mergedOptions));
-        },
-    };
+export function buildRiskListPolicyBypassRequestsQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyRiskListPolicyBypassRequests({
+      policyId: request?.policyId,
+      status: request?.status,
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function riskListPolicyBypassRequestsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        riskPolicyBypassRequestsList(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyRiskListPolicyBypassRequests(parameters) {
-    return ["@gram/client", "policyBypassRequests", "list", parameters];
+  return ["@gram/client", "policyBypassRequests", "list", parameters];
 }
 //# sourceMappingURL=riskListPolicyBypassRequests.core.js.map

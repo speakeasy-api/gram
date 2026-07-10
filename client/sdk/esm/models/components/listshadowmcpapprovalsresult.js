@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ShadowMCPApproval$inboundSchema, } from "./shadowmcpapproval.js";
+import { ShadowMCPApproval$inboundSchema } from "./shadowmcpapproval.js";
 /** @internal */
 export const ListShadowMCPApprovalsResult$inboundSchema = z.object({
-    approvals: z.array(ShadowMCPApproval$inboundSchema),
+  approvals: z.array(ShadowMCPApproval$inboundSchema),
 });
 export function listShadowMCPApprovalsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListShadowMCPApprovalsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListShadowMCPApprovalsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListShadowMCPApprovalsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListShadowMCPApprovalsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listshadowmcpapprovalsresult.js.map

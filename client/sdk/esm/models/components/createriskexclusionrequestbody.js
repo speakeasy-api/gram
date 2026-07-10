@@ -7,32 +7,41 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * How match_value is interpreted.
  */
 export const MatchType = {
-    Exact: "exact",
-    Regex: "regex",
-    RuleId: "rule_id",
-    Source: "source",
-    EntityType: "entity_type",
+  Exact: "exact",
+  Regex: "regex",
+  RuleId: "rule_id",
+  Source: "source",
+  EntityType: "entity_type",
 };
 /** @internal */
 export const MatchType$outboundSchema = z.enum(MatchType);
 /** @internal */
-export const CreateRiskExclusionRequestBody$outboundSchema = z.pipe(z.object({
+export const CreateRiskExclusionRequestBody$outboundSchema = z.pipe(
+  z.object({
     enabled: z._default(z.boolean(), true),
     matchType: MatchType$outboundSchema,
     matchValue: z.string(),
     riskPolicyId: z.optional(z.string()),
     ruleIdFilter: z._default(z.string(), ""),
     sourceFilter: z._default(z.string(), ""),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        matchType: "match_type",
-        matchValue: "match_value",
-        riskPolicyId: "risk_policy_id",
-        ruleIdFilter: "rule_id_filter",
-        sourceFilter: "source_filter",
+      matchType: "match_type",
+      matchValue: "match_value",
+      riskPolicyId: "risk_policy_id",
+      ruleIdFilter: "rule_id_filter",
+      sourceFilter: "source_filter",
     });
-}));
-export function createRiskExclusionRequestBodyToJSON(createRiskExclusionRequestBody) {
-    return JSON.stringify(CreateRiskExclusionRequestBody$outboundSchema.parse(createRiskExclusionRequestBody));
+  }),
+);
+export function createRiskExclusionRequestBodyToJSON(
+  createRiskExclusionRequestBody,
+) {
+  return JSON.stringify(
+    CreateRiskExclusionRequestBody$outboundSchema.parse(
+      createRiskExclusionRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=createriskexclusionrequestbody.js.map

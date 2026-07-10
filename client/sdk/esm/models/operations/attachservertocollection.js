@@ -3,33 +3,51 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { AttachServerRequestBody$outboundSchema, } from "../components/attachserverrequestbody.js";
+import { AttachServerRequestBody$outboundSchema } from "../components/attachserverrequestbody.js";
 /** @internal */
-export const AttachServerToCollectionSecurity$outboundSchema = z.pipe(z.object({
+export const AttachServerToCollectionSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
     apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
     });
-}));
-export function attachServerToCollectionSecurityToJSON(attachServerToCollectionSecurity) {
-    return JSON.stringify(AttachServerToCollectionSecurity$outboundSchema.parse(attachServerToCollectionSecurity));
+  }),
+);
+export function attachServerToCollectionSecurityToJSON(
+  attachServerToCollectionSecurity,
+) {
+  return JSON.stringify(
+    AttachServerToCollectionSecurity$outboundSchema.parse(
+      attachServerToCollectionSecurity,
+    ),
+  );
 }
 /** @internal */
-export const AttachServerToCollectionRequest$outboundSchema = z.pipe(z.object({
+export const AttachServerToCollectionRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     attachServerRequestBody: AttachServerRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        attachServerRequestBody: "AttachServerRequestBody",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      attachServerRequestBody: "AttachServerRequestBody",
     });
-}));
-export function attachServerToCollectionRequestToJSON(attachServerToCollectionRequest) {
-    return JSON.stringify(AttachServerToCollectionRequest$outboundSchema.parse(attachServerToCollectionRequest));
+  }),
+);
+export function attachServerToCollectionRequestToJSON(
+  attachServerToCollectionRequest,
+) {
+  return JSON.stringify(
+    AttachServerToCollectionRequest$outboundSchema.parse(
+      attachServerToCollectionRequest,
+    ),
+  );
 }
 //# sourceMappingURL=attachservertocollection.js.map

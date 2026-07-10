@@ -4,29 +4,39 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListPluginsSecurity$outboundSchema = z.pipe(z.object({
+export const ListPluginsSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function listPluginsSecurityToJSON(listPluginsSecurity) {
-    return JSON.stringify(ListPluginsSecurity$outboundSchema.parse(listPluginsSecurity));
+  return JSON.stringify(
+    ListPluginsSecurity$outboundSchema.parse(listPluginsSecurity),
+  );
 }
 /** @internal */
-export const ListPluginsRequest$outboundSchema = z.pipe(z.object({
+export const ListPluginsRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function listPluginsRequestToJSON(listPluginsRequest) {
-    return JSON.stringify(ListPluginsRequest$outboundSchema.parse(listPluginsRequest));
+  return JSON.stringify(
+    ListPluginsRequest$outboundSchema.parse(listPluginsRequest),
+  );
 }
 //# sourceMappingURL=listplugins.js.map

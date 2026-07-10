@@ -4,15 +4,18 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const VerifyURLForm$outboundSchema = z.pipe(z.object({
+export const VerifyURLForm$outboundSchema = z.pipe(
+  z.object({
     transportType: z.string(),
     url: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        transportType: "transport_type",
+      transportType: "transport_type",
     });
-}));
+  }),
+);
 export function verifyURLFormToJSON(verifyURLForm) {
-    return JSON.stringify(VerifyURLForm$outboundSchema.parse(verifyURLForm));
+  return JSON.stringify(VerifyURLForm$outboundSchema.parse(verifyURLForm));
 }
 //# sourceMappingURL=verifyurlform.js.map

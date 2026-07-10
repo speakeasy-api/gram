@@ -16,8 +16,8 @@ let value: CreateUserSessionIssuerForm = {
 
 ## Fields
 
-| Field                                                                          | Type                                                                           | Required                                                                       | Description                                                                    |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `authnChallengeMode`                                                           | [components.AuthnChallengeMode](../../models/components/authnchallengemode.md) | :heavy_check_mark:                                                             | How multi-remote authn challenges are presented: chain \| interactive.         |
-| `sessionDurationHours`                                                         | *number*                                                                       | :heavy_check_mark:                                                             | Issued user session lifetime, in hours.                                        |
-| `slug`                                                                         | *string*                                                                       | :heavy_check_mark:                                                             | Project-unique slug.                                                           |
+| Field                  | Type                                                                           | Required           | Description                                                            |
+| ---------------------- | ------------------------------------------------------------------------------ | ------------------ | ---------------------------------------------------------------------- |
+| `authnChallengeMode`   | [components.AuthnChallengeMode](../../models/components/authnchallengemode.md) | :heavy_check_mark: | How multi-remote authn challenges are presented: chain \| interactive. |
+| `sessionDurationHours` | _number_                                                                       | :heavy_check_mark: | Issued user session lifetime, in hours.                                |
+| `slug`                 | _string_                                                                       | :heavy_check_mark: | Project-unique slug.                                                   |

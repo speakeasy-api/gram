@@ -13,7 +13,7 @@ let value: UpdateMemberRoleForm = {
 
 ## Fields
 
-| Field                      | Type                       | Required                   | Description                |
-| -------------------------- | -------------------------- | -------------------------- | -------------------------- |
-| `roleId`                   | *string*                   | :heavy_check_mark:         | The new role ID to assign. |
-| `userId`                   | *string*                   | :heavy_check_mark:         | The user ID to update.     |
+| Field    | Type     | Required           | Description                |
+| -------- | -------- | ------------------ | -------------------------- |
+| `roleId` | _string_ | :heavy_check_mark: | The new role ID to assign. |
+| `userId` | _string_ | :heavy_check_mark: | The user ID to update.     |

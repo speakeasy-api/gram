@@ -4,27 +4,45 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const RemoveOrganizationUserSecurity$outboundSchema = z.pipe(z.object({
+export const RemoveOrganizationUserSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function removeOrganizationUserSecurityToJSON(removeOrganizationUserSecurity) {
-    return JSON.stringify(RemoveOrganizationUserSecurity$outboundSchema.parse(removeOrganizationUserSecurity));
+  }),
+);
+export function removeOrganizationUserSecurityToJSON(
+  removeOrganizationUserSecurity,
+) {
+  return JSON.stringify(
+    RemoveOrganizationUserSecurity$outboundSchema.parse(
+      removeOrganizationUserSecurity,
+    ),
+  );
 }
 /** @internal */
-export const RemoveOrganizationUserRequest$outboundSchema = z.pipe(z.object({
+export const RemoveOrganizationUserRequest$outboundSchema = z.pipe(
+  z.object({
     userId: z.string(),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        userId: "user_id",
-        gramSession: "Gram-Session",
+      userId: "user_id",
+      gramSession: "Gram-Session",
     });
-}));
-export function removeOrganizationUserRequestToJSON(removeOrganizationUserRequest) {
-    return JSON.stringify(RemoveOrganizationUserRequest$outboundSchema.parse(removeOrganizationUserRequest));
+  }),
+);
+export function removeOrganizationUserRequestToJSON(
+  removeOrganizationUserRequest,
+) {
+  return JSON.stringify(
+    RemoveOrganizationUserRequest$outboundSchema.parse(
+      removeOrganizationUserRequest,
+    ),
+  );
 }
 //# sourceMappingURL=removeorganizationuser.js.map

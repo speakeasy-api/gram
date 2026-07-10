@@ -3,37 +3,47 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CodexHookPayload$outboundSchema, } from "../components/codexhookpayload.js";
+import { CodexHookPayload$outboundSchema } from "../components/codexhookpayload.js";
 /** @internal */
-export const HooksNumberCodexSecurity$outboundSchema = z.pipe(z.object({
+export const HooksNumberCodexSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     projectSlugHeaderGramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
+  }),
+);
 export function hooksNumberCodexSecurityToJSON(hooksNumberCodexSecurity) {
-    return JSON.stringify(HooksNumberCodexSecurity$outboundSchema.parse(hooksNumberCodexSecurity));
+  return JSON.stringify(
+    HooksNumberCodexSecurity$outboundSchema.parse(hooksNumberCodexSecurity),
+  );
 }
 /** @internal */
-export const HooksNumberCodexRequest$outboundSchema = z.pipe(z.object({
+export const HooksNumberCodexRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     xGramHookHostname: z.optional(z.string()),
     idempotencyKey: z.optional(z.string()),
     codexHookPayload: CodexHookPayload$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        xGramHookHostname: "X-Gram-Hook-Hostname",
-        idempotencyKey: "Idempotency-Key",
-        codexHookPayload: "CodexHookPayload",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      xGramHookHostname: "X-Gram-Hook-Hostname",
+      idempotencyKey: "Idempotency-Key",
+      codexHookPayload: "CodexHookPayload",
     });
-}));
+  }),
+);
 export function hooksNumberCodexRequestToJSON(hooksNumberCodexRequest) {
-    return JSON.stringify(HooksNumberCodexRequest$outboundSchema.parse(hooksNumberCodexRequest));
+  return JSON.stringify(
+    HooksNumberCodexRequest$outboundSchema.parse(hooksNumberCodexRequest),
+  );
 }
 //# sourceMappingURL=hooksnumbercodex.js.map

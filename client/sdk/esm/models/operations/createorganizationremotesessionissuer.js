@@ -3,33 +3,53 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateIssuerRequestBody$outboundSchema, } from "../components/createissuerrequestbody.js";
+import { CreateIssuerRequestBody$outboundSchema } from "../components/createissuerrequestbody.js";
 /** @internal */
-export const CreateOrganizationRemoteSessionIssuerSecurity$outboundSchema = z.pipe(z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
-    apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const CreateOrganizationRemoteSessionIssuerSecurity$outboundSchema =
+  z.pipe(
+    z.object({
+      sessionHeaderGramSession: z.optional(z.string()),
+      apikeyHeaderGramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         sessionHeaderGramSession: "session_header_Gram-Session",
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    });
-}));
-export function createOrganizationRemoteSessionIssuerSecurityToJSON(createOrganizationRemoteSessionIssuerSecurity) {
-    return JSON.stringify(CreateOrganizationRemoteSessionIssuerSecurity$outboundSchema.parse(createOrganizationRemoteSessionIssuerSecurity));
+      });
+    }),
+  );
+export function createOrganizationRemoteSessionIssuerSecurityToJSON(
+  createOrganizationRemoteSessionIssuerSecurity,
+) {
+  return JSON.stringify(
+    CreateOrganizationRemoteSessionIssuerSecurity$outboundSchema.parse(
+      createOrganizationRemoteSessionIssuerSecurity,
+    ),
+  );
 }
 /** @internal */
-export const CreateOrganizationRemoteSessionIssuerRequest$outboundSchema = z.pipe(z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    createIssuerRequestBody: CreateIssuerRequestBody$outboundSchema,
-}), z.transform((v) => {
-    return remap$(v, {
+export const CreateOrganizationRemoteSessionIssuerRequest$outboundSchema =
+  z.pipe(
+    z.object({
+      gramSession: z.optional(z.string()),
+      gramKey: z.optional(z.string()),
+      createIssuerRequestBody: CreateIssuerRequestBody$outboundSchema,
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
         createIssuerRequestBody: "CreateIssuerRequestBody",
-    });
-}));
-export function createOrganizationRemoteSessionIssuerRequestToJSON(createOrganizationRemoteSessionIssuerRequest) {
-    return JSON.stringify(CreateOrganizationRemoteSessionIssuerRequest$outboundSchema.parse(createOrganizationRemoteSessionIssuerRequest));
+      });
+    }),
+  );
+export function createOrganizationRemoteSessionIssuerRequestToJSON(
+  createOrganizationRemoteSessionIssuerRequest,
+) {
+  return JSON.stringify(
+    CreateOrganizationRemoteSessionIssuerRequest$outboundSchema.parse(
+      createOrganizationRemoteSessionIssuerRequest,
+    ),
+  );
 }
 //# sourceMappingURL=createorganizationremotesessionissuer.js.map

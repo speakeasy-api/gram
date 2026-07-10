@@ -4,29 +4,41 @@
 import { slackListSlackApps } from "../funcs/slackListSlackApps.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchListSlackApps(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildListSlackAppsQuery(client$, request, security, options),
-    });
+export function prefetchListSlackApps(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildListSlackAppsQuery(client$, request, security, options),
+  });
 }
 export function buildListSlackAppsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyListSlackApps({
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function listSlackAppsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(slackListSlackApps(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyListSlackApps({
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function listSlackAppsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        slackListSlackApps(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyListSlackApps(parameters) {
-    return ["@gram/client", "slack", "listSlackApps", parameters];
+  return ["@gram/client", "slack", "listSlackApps", parameters];
 }
 //# sourceMappingURL=listSlackApps.core.js.map

@@ -14,7 +14,7 @@ let value: ServiceInfo = {
 
 ## Fields
 
-| Field              | Type               | Required           | Description        |
-| ------------------ | ------------------ | ------------------ | ------------------ |
-| `name`             | *string*           | :heavy_check_mark: | Service name       |
-| `version`          | *string*           | :heavy_minus_sign: | Service version    |
+| Field     | Type     | Required           | Description     |
+| --------- | -------- | ------------------ | --------------- |
+| `name`    | _string_ | :heavy_check_mark: | Service name    |
+| `version` | _string_ | :heavy_minus_sign: | Service version |

@@ -5,8 +5,12 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const FunctionResourceDefinition$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const FunctionResourceDefinition$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     deployment_id: z.string(),
     description: z.string(),
     function_id: z.string(),
@@ -18,21 +22,30 @@ export const FunctionResourceDefinition$inboundSchema = z.pipe(z.object({
     resource_urn: z.string(),
     runtime: z.string(),
     title: z.optional(z.string()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     uri: z.string(),
     variables: z.optional(z.any()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "deployment_id": "deploymentId",
-        "function_id": "functionId",
-        "mime_type": "mimeType",
-        "project_id": "projectId",
-        "resource_urn": "resourceUrn",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      deployment_id: "deploymentId",
+      function_id: "functionId",
+      mime_type: "mimeType",
+      project_id: "projectId",
+      resource_urn: "resourceUrn",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function functionResourceDefinitionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => FunctionResourceDefinition$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'FunctionResourceDefinition' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => FunctionResourceDefinition$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'FunctionResourceDefinition' from JSON`,
+  );
 }
 //# sourceMappingURL=functionresourcedefinition.js.map

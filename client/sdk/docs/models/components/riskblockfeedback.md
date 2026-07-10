@@ -13,5 +13,5 @@ let value: RiskBlockFeedback = "down";
 ## Values
 
 ```typescript
-"up" | "down"
+"up" | "down";
 ```

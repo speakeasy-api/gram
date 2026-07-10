@@ -4,14 +4,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const WorkOSDomainVerificationIntentOptions$outboundSchema = z.pipe(z.object({
+export const WorkOSDomainVerificationIntentOptions$outboundSchema = z.pipe(
+  z.object({
     domainName: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        domainName: "domain_name",
+      domainName: "domain_name",
     });
-}));
-export function workOSDomainVerificationIntentOptionsToJSON(workOSDomainVerificationIntentOptions) {
-    return JSON.stringify(WorkOSDomainVerificationIntentOptions$outboundSchema.parse(workOSDomainVerificationIntentOptions));
+  }),
+);
+export function workOSDomainVerificationIntentOptionsToJSON(
+  workOSDomainVerificationIntentOptions,
+) {
+  return JSON.stringify(
+    WorkOSDomainVerificationIntentOptions$outboundSchema.parse(
+      workOSDomainVerificationIntentOptions,
+    ),
+  );
 }
 //# sourceMappingURL=workosdomainverificationintentoptions.js.map

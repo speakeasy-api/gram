@@ -4,25 +4,43 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListOrganizationUsersSecurity$outboundSchema = z.pipe(z.object({
+export const ListOrganizationUsersSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listOrganizationUsersSecurityToJSON(listOrganizationUsersSecurity) {
-    return JSON.stringify(ListOrganizationUsersSecurity$outboundSchema.parse(listOrganizationUsersSecurity));
+  }),
+);
+export function listOrganizationUsersSecurityToJSON(
+  listOrganizationUsersSecurity,
+) {
+  return JSON.stringify(
+    ListOrganizationUsersSecurity$outboundSchema.parse(
+      listOrganizationUsersSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListOrganizationUsersRequest$outboundSchema = z.pipe(z.object({
+export const ListOrganizationUsersRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
-export function listOrganizationUsersRequestToJSON(listOrganizationUsersRequest) {
-    return JSON.stringify(ListOrganizationUsersRequest$outboundSchema.parse(listOrganizationUsersRequest));
+  }),
+);
+export function listOrganizationUsersRequestToJSON(
+  listOrganizationUsersRequest,
+) {
+  return JSON.stringify(
+    ListOrganizationUsersRequest$outboundSchema.parse(
+      listOrganizationUsersRequest,
+    ),
+  );
 }
 //# sourceMappingURL=listorganizationusers.js.map

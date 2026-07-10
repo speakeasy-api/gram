@@ -13,8 +13,8 @@ let value: CreateSignedChatAttachmentURLForm2 = {
 
 ## Fields
 
-| Field                                             | Type                                              | Required                                          | Description                                       |
-| ------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------- |
-| `id`                                              | *string*                                          | :heavy_check_mark:                                | The ID of the chat attachment                     |
-| `projectId`                                       | *string*                                          | :heavy_check_mark:                                | The project ID that the attachment belongs to     |
-| `ttlSeconds`                                      | *number*                                          | :heavy_minus_sign:                                | Time-to-live in seconds (default: 600, max: 3600) |
+| Field        | Type     | Required           | Description                                       |
+| ------------ | -------- | ------------------ | ------------------------------------------------- |
+| `id`         | _string_ | :heavy_check_mark: | The ID of the chat attachment                     |
+| `projectId`  | _string_ | :heavy_check_mark: | The project ID that the attachment belongs to     |
+| `ttlSeconds` | _number_ | :heavy_minus_sign: | Time-to-live in seconds (default: 600, max: 3600) |

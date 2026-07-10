@@ -4,27 +4,45 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const VerifyOnboardingHooksSetupSecurity$outboundSchema = z.pipe(z.object({
+export const VerifyOnboardingHooksSetupSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function verifyOnboardingHooksSetupSecurityToJSON(verifyOnboardingHooksSetupSecurity) {
-    return JSON.stringify(VerifyOnboardingHooksSetupSecurity$outboundSchema.parse(verifyOnboardingHooksSetupSecurity));
+  }),
+);
+export function verifyOnboardingHooksSetupSecurityToJSON(
+  verifyOnboardingHooksSetupSecurity,
+) {
+  return JSON.stringify(
+    VerifyOnboardingHooksSetupSecurity$outboundSchema.parse(
+      verifyOnboardingHooksSetupSecurity,
+    ),
+  );
 }
 /** @internal */
-export const VerifyOnboardingHooksSetupRequest$outboundSchema = z.pipe(z.object({
+export const VerifyOnboardingHooksSetupRequest$outboundSchema = z.pipe(
+  z.object({
     sinceUnixNano: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sinceUnixNano: "since_unix_nano",
-        gramSession: "Gram-Session",
+      sinceUnixNano: "since_unix_nano",
+      gramSession: "Gram-Session",
     });
-}));
-export function verifyOnboardingHooksSetupRequestToJSON(verifyOnboardingHooksSetupRequest) {
-    return JSON.stringify(VerifyOnboardingHooksSetupRequest$outboundSchema.parse(verifyOnboardingHooksSetupRequest));
+  }),
+);
+export function verifyOnboardingHooksSetupRequestToJSON(
+  verifyOnboardingHooksSetupRequest,
+) {
+  return JSON.stringify(
+    VerifyOnboardingHooksSetupRequest$outboundSchema.parse(
+      verifyOnboardingHooksSetupRequest,
+    ),
+  );
 }
 //# sourceMappingURL=verifyonboardinghookssetup.js.map

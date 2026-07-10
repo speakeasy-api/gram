@@ -7,32 +7,38 @@ import { aiIntegrationsUpsertConfig } from "../funcs/aiIntegrationsUpsertConfig.
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class AiIntegrations extends ClientSDK {
-    /**
-     * deleteConfig aiIntegrations
-     *
-     * @remarks
-     * Delete the org-wide AI integration config for a provider.
-     */
-    async deleteConfig(request, security, options) {
-        return unwrapAsync(aiIntegrationsDeleteConfig(this, request, security, options));
-    }
-    /**
-     * getConfig aiIntegrations
-     *
-     * @remarks
-     * Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.
-     */
-    async getConfig(request, security, options) {
-        return unwrapAsync(aiIntegrationsGetConfig(this, request, security, options));
-    }
-    /**
-     * upsertConfig aiIntegrations
-     *
-     * @remarks
-     * Create or update the org-wide AI integration config for a provider.
-     */
-    async upsertConfig(request, security, options) {
-        return unwrapAsync(aiIntegrationsUpsertConfig(this, request, security, options));
-    }
+  /**
+   * deleteConfig aiIntegrations
+   *
+   * @remarks
+   * Delete the org-wide AI integration config for a provider.
+   */
+  async deleteConfig(request, security, options) {
+    return unwrapAsync(
+      aiIntegrationsDeleteConfig(this, request, security, options),
+    );
+  }
+  /**
+   * getConfig aiIntegrations
+   *
+   * @remarks
+   * Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.
+   */
+  async getConfig(request, security, options) {
+    return unwrapAsync(
+      aiIntegrationsGetConfig(this, request, security, options),
+    );
+  }
+  /**
+   * upsertConfig aiIntegrations
+   *
+   * @remarks
+   * Create or update the org-wide AI integration config for a provider.
+   */
+  async upsertConfig(request, security, options) {
+    return unwrapAsync(
+      aiIntegrationsUpsertConfig(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=aiintegrations.js.map

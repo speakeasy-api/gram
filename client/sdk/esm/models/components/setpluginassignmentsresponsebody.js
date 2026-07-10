@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { PluginAssignment$inboundSchema, } from "./pluginassignment.js";
+import { PluginAssignment$inboundSchema } from "./pluginassignment.js";
 /** @internal */
 export const SetPluginAssignmentsResponseBody$inboundSchema = z.object({
-    assignments: z.array(PluginAssignment$inboundSchema),
+  assignments: z.array(PluginAssignment$inboundSchema),
 });
 export function setPluginAssignmentsResponseBodyFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SetPluginAssignmentsResponseBody$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SetPluginAssignmentsResponseBody' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SetPluginAssignmentsResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SetPluginAssignmentsResponseBody' from JSON`,
+  );
 }
 //# sourceMappingURL=setpluginassignmentsresponsebody.js.map

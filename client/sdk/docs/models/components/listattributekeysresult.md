@@ -14,6 +14,6 @@ let value: ListAttributeKeysResult = {
 
 ## Fields
 
-| Field                                                        | Type                                                         | Required                                                     | Description                                                  |
-| ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| `keys`                                                       | *string*[]                                                   | :heavy_check_mark:                                           | Distinct attribute keys. User attributes are prefixed with @ |
+| Field  | Type       | Required           | Description                                                  |
+| ------ | ---------- | ------------------ | ------------------------------------------------------------ |
+| `keys` | _string_[] | :heavy_check_mark: | Distinct attribute keys. User attributes are prefixed with @ |

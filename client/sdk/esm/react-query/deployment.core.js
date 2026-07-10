@@ -4,31 +4,43 @@
 import { deploymentsGetById } from "../funcs/deploymentsGetById.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchDeployment(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildDeploymentQuery(client$, request, security, options),
-    });
+export function prefetchDeployment(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildDeploymentQuery(client$, request, security, options),
+  });
 }
 export function buildDeploymentQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyDeployment({
-            id: request.id,
-            gramKey: request.gramKey,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function deploymentQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(deploymentsGetById(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyDeployment({
+      id: request.id,
+      gramKey: request.gramKey,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function deploymentQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        deploymentsGetById(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyDeployment(parameters) {
-    return ["@gram/client", "deployments", "getById", parameters];
+  return ["@gram/client", "deployments", "getById", parameters];
 }
 //# sourceMappingURL=deployment.core.js.map

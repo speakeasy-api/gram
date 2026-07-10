@@ -8,17 +8,28 @@ import { safeParse } from "../../lib/schemas.js";
  * Current request status.
  */
 export const RiskPolicyBypassRequestStatus = {
-    Requested: "requested",
-    Approved: "approved",
-    Denied: "denied",
-    Revoked: "revoked",
+  Requested: "requested",
+  Approved: "approved",
+  Denied: "denied",
+  Revoked: "revoked",
 };
 /** @internal */
-export const RiskPolicyBypassRequestStatus$inboundSchema = z.enum(RiskPolicyBypassRequestStatus);
+export const RiskPolicyBypassRequestStatus$inboundSchema = z.enum(
+  RiskPolicyBypassRequestStatus,
+);
 /** @internal */
-export const RiskPolicyBypassRequest$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-    decided_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
+export const RiskPolicyBypassRequest$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+    decided_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
     decided_by: z.optional(z.string()),
     granted_principal_urns: z.array(z.string()),
     id: z.string(),
@@ -31,24 +42,33 @@ export const RiskPolicyBypassRequest$inboundSchema = z.pipe(z.object({
     target_key: z.optional(z.string()),
     target_kind: z.optional(z.string()),
     target_label: z.optional(z.string()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "decided_at": "decidedAt",
-        "decided_by": "decidedBy",
-        "granted_principal_urns": "grantedPrincipalUrns",
-        "policy_id": "policyId",
-        "requester_email": "requesterEmail",
-        "requester_user_id": "requesterUserId",
-        "target_dimensions": "targetDimensions",
-        "target_key": "targetKey",
-        "target_kind": "targetKind",
-        "target_label": "targetLabel",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      decided_at: "decidedAt",
+      decided_by: "decidedBy",
+      granted_principal_urns: "grantedPrincipalUrns",
+      policy_id: "policyId",
+      requester_email: "requesterEmail",
+      requester_user_id: "requesterUserId",
+      target_dimensions: "targetDimensions",
+      target_key: "targetKey",
+      target_kind: "targetKind",
+      target_label: "targetLabel",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function riskPolicyBypassRequestFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskPolicyBypassRequest$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskPolicyBypassRequest' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskPolicyBypassRequest$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskPolicyBypassRequest' from JSON`,
+  );
 }
 //# sourceMappingURL=riskpolicybypassrequest.js.map

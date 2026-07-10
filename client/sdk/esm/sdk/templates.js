@@ -11,68 +11,68 @@ import { templatesUpdate } from "../funcs/templatesUpdate.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Templates extends ClientSDK {
-    /**
-     * createTemplate templates
-     *
-     * @remarks
-     * Create a new prompt template.
-     */
-    async create(request, security, options) {
-        return unwrapAsync(templatesCreate(this, request, security, options));
-    }
-    /**
-     * deleteTemplate templates
-     *
-     * @remarks
-     * Delete prompt template by its ID or name.
-     */
-    async delete(request, security, options) {
-        return unwrapAsync(templatesDelete(this, request, security, options));
-    }
-    /**
-     * getTemplate templates
-     *
-     * @remarks
-     * Get prompt template by its ID or name.
-     */
-    async get(request, security, options) {
-        return unwrapAsync(templatesGet(this, request, security, options));
-    }
-    /**
-     * listTemplates templates
-     *
-     * @remarks
-     * List available prompt template.
-     */
-    async list(request, security, options) {
-        return unwrapAsync(templatesList(this, request, security, options));
-    }
-    /**
-     * renderTemplateByID templates
-     *
-     * @remarks
-     * Render a prompt template by ID with provided input data.
-     */
-    async renderByID(request, security, options) {
-        return unwrapAsync(templatesRenderByID(this, request, security, options));
-    }
-    /**
-     * renderTemplate templates
-     *
-     * @remarks
-     * Render a prompt template directly with all template fields provided.
-     */
-    async render(request, security, options) {
-        return unwrapAsync(templatesRender(this, request, security, options));
-    }
-    /**
-     * updateTemplate templates
-     *
-     * @remarks
-     * Update a prompt template.
-     */
-    async update(request, security, options) {
-        return unwrapAsync(templatesUpdate(this, request, security, options));
-    }
+  /**
+   * createTemplate templates
+   *
+   * @remarks
+   * Create a new prompt template.
+   */
+  async create(request, security, options) {
+    return unwrapAsync(templatesCreate(this, request, security, options));
+  }
+  /**
+   * deleteTemplate templates
+   *
+   * @remarks
+   * Delete prompt template by its ID or name.
+   */
+  async delete(request, security, options) {
+    return unwrapAsync(templatesDelete(this, request, security, options));
+  }
+  /**
+   * getTemplate templates
+   *
+   * @remarks
+   * Get prompt template by its ID or name.
+   */
+  async get(request, security, options) {
+    return unwrapAsync(templatesGet(this, request, security, options));
+  }
+  /**
+   * listTemplates templates
+   *
+   * @remarks
+   * List available prompt template.
+   */
+  async list(request, security, options) {
+    return unwrapAsync(templatesList(this, request, security, options));
+  }
+  /**
+   * renderTemplateByID templates
+   *
+   * @remarks
+   * Render a prompt template by ID with provided input data.
+   */
+  async renderByID(request, security, options) {
+    return unwrapAsync(templatesRenderByID(this, request, security, options));
+  }
+  /**
+   * renderTemplate templates
+   *
+   * @remarks
+   * Render a prompt template directly with all template fields provided.
+   */
+  async render(request, security, options) {
+    return unwrapAsync(templatesRender(this, request, security, options));
+  }
+  /**
+   * updateTemplate templates
+   *
+   * @remarks
+   * Update a prompt template.
+   */
+  async update(request, security, options) {
+    return unwrapAsync(templatesUpdate(this, request, security, options));
+  }
 }
 //# sourceMappingURL=templates.js.map

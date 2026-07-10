@@ -3,29 +3,47 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateAwsIamCredentialForm$outboundSchema, } from "../components/createawsiamcredentialform.js";
+import { CreateAwsIamCredentialForm$outboundSchema } from "../components/createawsiamcredentialform.js";
 /** @internal */
-export const CreateAwsIamCredentialSecurity$outboundSchema = z.pipe(z.object({
+export const CreateAwsIamCredentialSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function createAwsIamCredentialSecurityToJSON(createAwsIamCredentialSecurity) {
-    return JSON.stringify(CreateAwsIamCredentialSecurity$outboundSchema.parse(createAwsIamCredentialSecurity));
+  }),
+);
+export function createAwsIamCredentialSecurityToJSON(
+  createAwsIamCredentialSecurity,
+) {
+  return JSON.stringify(
+    CreateAwsIamCredentialSecurity$outboundSchema.parse(
+      createAwsIamCredentialSecurity,
+    ),
+  );
 }
 /** @internal */
-export const CreateAwsIamCredentialRequest$outboundSchema = z.pipe(z.object({
+export const CreateAwsIamCredentialRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     createAwsIamCredentialForm: CreateAwsIamCredentialForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        createAwsIamCredentialForm: "CreateAwsIamCredentialForm",
+      gramSession: "Gram-Session",
+      createAwsIamCredentialForm: "CreateAwsIamCredentialForm",
     });
-}));
-export function createAwsIamCredentialRequestToJSON(createAwsIamCredentialRequest) {
-    return JSON.stringify(CreateAwsIamCredentialRequest$outboundSchema.parse(createAwsIamCredentialRequest));
+  }),
+);
+export function createAwsIamCredentialRequestToJSON(
+  createAwsIamCredentialRequest,
+) {
+  return JSON.stringify(
+    CreateAwsIamCredentialRequest$outboundSchema.parse(
+      createAwsIamCredentialRequest,
+    ),
+  );
 }
 //# sourceMappingURL=createawsiamcredential.js.map

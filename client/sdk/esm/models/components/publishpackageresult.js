@@ -4,13 +4,17 @@
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 import { Package$inboundSchema } from "./package.js";
-import { PackageVersion$inboundSchema, } from "./packageversion.js";
+import { PackageVersion$inboundSchema } from "./packageversion.js";
 /** @internal */
 export const PublishPackageResult$inboundSchema = z.object({
-    package: Package$inboundSchema,
-    version: PackageVersion$inboundSchema,
+  package: Package$inboundSchema,
+  version: PackageVersion$inboundSchema,
 });
 export function publishPackageResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => PublishPackageResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'PublishPackageResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => PublishPackageResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'PublishPackageResult' from JSON`,
+  );
 }
 //# sourceMappingURL=publishpackageresult.js.map

@@ -13,7 +13,7 @@ let value: ListBuiltinExclusionsResult = {
 
 ## Fields
 
-| Field                                                                                        | Type                                                                                         | Required                                                                                     | Description                                                                                  |
-| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `categories`                                                                                 | [components.BuiltinExclusionCategory](../../models/components/builtinexclusioncategory.md)[] | :heavy_check_mark:                                                                           | The library grouped by category.                                                             |
-| `version`                                                                                    | *string*                                                                                     | :heavy_check_mark:                                                                           | Catalog checksum/version, for provenance.                                                    |
+| Field        | Type                                                                                         | Required           | Description                               |
+| ------------ | -------------------------------------------------------------------------------------------- | ------------------ | ----------------------------------------- |
+| `categories` | [components.BuiltinExclusionCategory](../../models/components/builtinexclusioncategory.md)[] | :heavy_check_mark: | The library grouped by category.          |
+| `version`    | _string_                                                                                     | :heavy_check_mark: | Catalog checksum/version, for provenance. |

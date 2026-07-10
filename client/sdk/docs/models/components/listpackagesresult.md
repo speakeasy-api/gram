@@ -12,6 +12,6 @@ let value: ListPackagesResult = {
 
 ## Fields
 
-| Field                                                      | Type                                                       | Required                                                   | Description                                                |
-| ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
-| `packages`                                                 | [components.Package](../../models/components/package.md)[] | :heavy_check_mark:                                         | The list of packages                                       |
+| Field      | Type                                                       | Required           | Description          |
+| ---------- | ---------------------------------------------------------- | ------------------ | -------------------- |
+| `packages` | [components.Package](../../models/components/package.md)[] | :heavy_check_mark: | The list of packages |

@@ -12,7 +12,7 @@ let value: ListAuditLogsResult = {
 
 ## Fields
 
-| Field                                                        | Type                                                         | Required                                                     | Description                                                  |
-| ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| `logs`                                                       | [components.AuditLog](../../models/components/auditlog.md)[] | :heavy_check_mark:                                           | List of audit logs                                           |
-| `nextCursor`                                                 | *string*                                                     | :heavy_minus_sign:                                           | The cursor to be used for the next page of results.          |
+| Field        | Type                                                         | Required           | Description                                         |
+| ------------ | ------------------------------------------------------------ | ------------------ | --------------------------------------------------- |
+| `logs`       | [components.AuditLog](../../models/components/auditlog.md)[] | :heavy_check_mark: | List of audit logs                                  |
+| `nextCursor` | _string_                                                     | :heavy_minus_sign: | The cursor to be used for the next page of results. |

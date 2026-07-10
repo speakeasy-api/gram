@@ -4,29 +4,38 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ExternalMCPRemoteHeader$inboundSchema, } from "./externalmcpremoteheader.js";
-import { ExternalMCPRemoteVariable$inboundSchema, } from "./externalmcpremotevariable.js";
+import { ExternalMCPRemoteHeader$inboundSchema } from "./externalmcpremoteheader.js";
+import { ExternalMCPRemoteVariable$inboundSchema } from "./externalmcpremotevariable.js";
 /**
  * Transport type (sse or streamable-http)
  */
 export const TransportType = {
-    Sse: "sse",
-    StreamableHttp: "streamable-http",
+  Sse: "sse",
+  StreamableHttp: "streamable-http",
 };
 /** @internal */
 export const TransportType$inboundSchema = z.enum(TransportType);
 /** @internal */
-export const ExternalMCPRemote$inboundSchema = z.pipe(z.object({
+export const ExternalMCPRemote$inboundSchema = z.pipe(
+  z.object({
     headers: z.optional(z.array(ExternalMCPRemoteHeader$inboundSchema)),
     transport_type: TransportType$inboundSchema,
     url: z.string(),
-    variables: z.optional(z.record(z.string(), ExternalMCPRemoteVariable$inboundSchema)),
-}), z.transform((v) => {
+    variables: z.optional(
+      z.record(z.string(), ExternalMCPRemoteVariable$inboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "transport_type": "transportType",
+      transport_type: "transportType",
     });
-}));
+  }),
+);
 export function externalMCPRemoteFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ExternalMCPRemote$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ExternalMCPRemote' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ExternalMCPRemote$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ExternalMCPRemote' from JSON`,
+  );
 }
 //# sourceMappingURL=externalmcpremote.js.map

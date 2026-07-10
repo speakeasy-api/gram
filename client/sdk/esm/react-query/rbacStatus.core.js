@@ -4,26 +4,38 @@
 import { accessGetRBACStatus } from "../funcs/accessGetRBACStatus.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchRbacStatus(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildRbacStatusQuery(client$, request, security, options),
-    });
+export function prefetchRbacStatus(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildRbacStatusQuery(client$, request, security, options),
+  });
 }
 export function buildRbacStatusQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyRbacStatus({ gramSession: request?.gramSession }),
-        queryFn: async function rbacStatusQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(accessGetRBACStatus(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyRbacStatus({ gramSession: request?.gramSession }),
+    queryFn: async function rbacStatusQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        accessGetRBACStatus(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyRbacStatus(parameters) {
-    return ["@gram/client", "access", "getRBACStatus", parameters];
+  return ["@gram/client", "access", "getRBACStatus", parameters];
 }
 //# sourceMappingURL=rbacStatus.core.js.map

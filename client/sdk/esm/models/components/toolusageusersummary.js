@@ -8,15 +8,18 @@ import { safeParse } from "../../lib/schemas.js";
  * Tool usage user identity kind
  */
 export const ToolUsageUserSummaryUserKind = {
-    Email: "email",
-    ExternalUserId: "external_user_id",
-    UserId: "user_id",
-    Unknown: "unknown",
+  Email: "email",
+  ExternalUserId: "external_user_id",
+  UserId: "user_id",
+  Unknown: "unknown",
 };
 /** @internal */
-export const ToolUsageUserSummaryUserKind$inboundSchema = z.enum(ToolUsageUserSummaryUserKind);
+export const ToolUsageUserSummaryUserKind$inboundSchema = z.enum(
+  ToolUsageUserSummaryUserKind,
+);
 /** @internal */
-export const ToolUsageUserSummary$inboundSchema = z.pipe(z.object({
+export const ToolUsageUserSummary$inboundSchema = z.pipe(
+  z.object({
     event_count: z.int(),
     failure_count: z.int(),
     failure_rate: z.number(),
@@ -25,19 +28,25 @@ export const ToolUsageUserSummary$inboundSchema = z.pipe(z.object({
     user_key: z.string(),
     user_kind: ToolUsageUserSummaryUserKind$inboundSchema,
     user_label: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "event_count": "eventCount",
-        "failure_count": "failureCount",
-        "failure_rate": "failureRate",
-        "success_count": "successCount",
-        "unique_tools": "uniqueTools",
-        "user_key": "userKey",
-        "user_kind": "userKind",
-        "user_label": "userLabel",
+      event_count: "eventCount",
+      failure_count: "failureCount",
+      failure_rate: "failureRate",
+      success_count: "successCount",
+      unique_tools: "uniqueTools",
+      user_key: "userKey",
+      user_kind: "userKind",
+      user_label: "userLabel",
     });
-}));
+  }),
+);
 export function toolUsageUserSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolUsageUserSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolUsageUserSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolUsageUserSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolUsageUserSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=toolusageusersummary.js.map

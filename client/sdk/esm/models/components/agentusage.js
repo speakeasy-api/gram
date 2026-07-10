@@ -3,22 +3,25 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClaudeAgentUsage$inboundSchema, } from "./claudeagentusage.js";
+import { ClaudeAgentUsage$inboundSchema } from "./claudeagentusage.js";
 /**
  * The agent usage payload discriminator.
  */
 export const Type = {
-    Claude: "claude",
+  Claude: "claude",
 };
 /** @internal */
 export const Type$inboundSchema = z.enum(Type);
 /** @internal */
-export const AgentUsage$inboundSchema = z
-    .object({
-    claude: z.optional(ClaudeAgentUsage$inboundSchema),
-    type: Type$inboundSchema,
+export const AgentUsage$inboundSchema = z.object({
+  claude: z.optional(ClaudeAgentUsage$inboundSchema),
+  type: Type$inboundSchema,
 });
 export function agentUsageFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => AgentUsage$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'AgentUsage' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => AgentUsage$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AgentUsage' from JSON`,
+  );
 }
 //# sourceMappingURL=agentusage.js.map

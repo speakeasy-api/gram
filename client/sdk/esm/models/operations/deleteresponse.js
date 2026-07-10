@@ -4,31 +4,41 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteResponseSecurity$outboundSchema = z.pipe(z.object({
+export const DeleteResponseSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     projectSlugHeaderGramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
+  }),
+);
 export function deleteResponseSecurityToJSON(deleteResponseSecurity) {
-    return JSON.stringify(DeleteResponseSecurity$outboundSchema.parse(deleteResponseSecurity));
+  return JSON.stringify(
+    DeleteResponseSecurity$outboundSchema.parse(deleteResponseSecurity),
+  );
 }
 /** @internal */
-export const DeleteResponseRequest$outboundSchema = z.pipe(z.object({
+export const DeleteResponseRequest$outboundSchema = z.pipe(
+  z.object({
     responseId: z.string(),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        responseId: "response_id",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
+      responseId: "response_id",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function deleteResponseRequestToJSON(deleteResponseRequest) {
-    return JSON.stringify(DeleteResponseRequest$outboundSchema.parse(deleteResponseRequest));
+  return JSON.stringify(
+    DeleteResponseRequest$outboundSchema.parse(deleteResponseRequest),
+  );
 }
 //# sourceMappingURL=deleteresponse.js.map

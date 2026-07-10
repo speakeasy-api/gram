@@ -10,7 +10,7 @@ import { ServeChatAttachmentResponse } from "@gram/client/models/operations/serv
 
 ## Fields
 
-| Field                        | Type                         | Required                     | Description                  |
-| ---------------------------- | ---------------------------- | ---------------------------- | ---------------------------- |
-| `headers`                    | Record<string, *string*[]>   | :heavy_check_mark:           | N/A                          |
-| `result`                     | *ReadableStream<Uint8Array>* | :heavy_check_mark:           | N/A                          |
+| Field     | Type                         | Required           | Description |
+| --------- | ---------------------------- | ------------------ | ----------- |
+| `headers` | Record<string, _string_[]>   | :heavy_check_mark: | N/A         |
+| `result`  | _ReadableStream<Uint8Array>_ | :heavy_check_mark: | N/A         |

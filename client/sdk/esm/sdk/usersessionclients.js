@@ -8,32 +8,36 @@ import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 import { unwrapResultIterator } from "../types/operations.js";
 export class UserSessionClients extends ClientSDK {
-    /**
-     * getUserSessionClient userSessionClients
-     *
-     * @remarks
-     * Get a user_session_client by id.
-     */
-    async get(request, security, options) {
-        return unwrapAsync(userSessionClientsGet(this, request, security, options));
-    }
-    /**
-     * listUserSessionClients userSessionClients
-     *
-     * @remarks
-     * List user_session_clients in the caller's project.
-     */
-    async list(request, security, options) {
-        return unwrapResultIterator(userSessionClientsList(this, request, security, options));
-    }
-    /**
-     * revokeUserSessionClient userSessionClients
-     *
-     * @remarks
-     * Soft-delete a user_session_client. Future tokens minted for this client_id are rejected; existing live user_sessions keep working until they hit expires_at.
-     */
-    async revoke(request, security, options) {
-        return unwrapAsync(userSessionClientsRevoke(this, request, security, options));
-    }
+  /**
+   * getUserSessionClient userSessionClients
+   *
+   * @remarks
+   * Get a user_session_client by id.
+   */
+  async get(request, security, options) {
+    return unwrapAsync(userSessionClientsGet(this, request, security, options));
+  }
+  /**
+   * listUserSessionClients userSessionClients
+   *
+   * @remarks
+   * List user_session_clients in the caller's project.
+   */
+  async list(request, security, options) {
+    return unwrapResultIterator(
+      userSessionClientsList(this, request, security, options),
+    );
+  }
+  /**
+   * revokeUserSessionClient userSessionClients
+   *
+   * @remarks
+   * Soft-delete a user_session_client. Future tokens minted for this client_id are rejected; existing live user_sessions keep working until they hit expires_at.
+   */
+  async revoke(request, security, options) {
+    return unwrapAsync(
+      userSessionClientsRevoke(this, request, security, options),
+    );
+  }
 }
 //# sourceMappingURL=usersessionclients.js.map

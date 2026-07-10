@@ -3,61 +3,103 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateCimdForm$outboundSchema, } from "../components/createcimdform.js";
+import { CreateCimdForm$outboundSchema } from "../components/createcimdform.js";
 /** @internal */
-export const CreateCimdRemoteSessionClientSecurityOption1$outboundSchema = z.pipe(z.object({
-    projectSlugHeaderGramProject: z.string(),
-    sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
-    return remap$(v, {
+export const CreateCimdRemoteSessionClientSecurityOption1$outboundSchema =
+  z.pipe(
+    z.object({
+      projectSlugHeaderGramProject: z.string(),
+      sessionHeaderGramSession: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
         sessionHeaderGramSession: "session_header_Gram-Session",
-    });
-}));
-export function createCimdRemoteSessionClientSecurityOption1ToJSON(createCimdRemoteSessionClientSecurityOption1) {
-    return JSON.stringify(CreateCimdRemoteSessionClientSecurityOption1$outboundSchema.parse(createCimdRemoteSessionClientSecurityOption1));
+      });
+    }),
+  );
+export function createCimdRemoteSessionClientSecurityOption1ToJSON(
+  createCimdRemoteSessionClientSecurityOption1,
+) {
+  return JSON.stringify(
+    CreateCimdRemoteSessionClientSecurityOption1$outboundSchema.parse(
+      createCimdRemoteSessionClientSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const CreateCimdRemoteSessionClientSecurityOption2$outboundSchema = z.pipe(z.object({
-    apikeyHeaderGramKey: z.string(),
-    projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
-    return remap$(v, {
+export const CreateCimdRemoteSessionClientSecurityOption2$outboundSchema =
+  z.pipe(
+    z.object({
+      apikeyHeaderGramKey: z.string(),
+      projectSlugHeaderGramProject: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
         projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    });
-}));
-export function createCimdRemoteSessionClientSecurityOption2ToJSON(createCimdRemoteSessionClientSecurityOption2) {
-    return JSON.stringify(CreateCimdRemoteSessionClientSecurityOption2$outboundSchema.parse(createCimdRemoteSessionClientSecurityOption2));
+      });
+    }),
+  );
+export function createCimdRemoteSessionClientSecurityOption2ToJSON(
+  createCimdRemoteSessionClientSecurityOption2,
+) {
+  return JSON.stringify(
+    CreateCimdRemoteSessionClientSecurityOption2$outboundSchema.parse(
+      createCimdRemoteSessionClientSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const CreateCimdRemoteSessionClientSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => CreateCimdRemoteSessionClientSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => CreateCimdRemoteSessionClientSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const CreateCimdRemoteSessionClientSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => CreateCimdRemoteSessionClientSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => CreateCimdRemoteSessionClientSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function createCimdRemoteSessionClientSecurityToJSON(createCimdRemoteSessionClientSecurity) {
-    return JSON.stringify(CreateCimdRemoteSessionClientSecurity$outboundSchema.parse(createCimdRemoteSessionClientSecurity));
+  }),
+);
+export function createCimdRemoteSessionClientSecurityToJSON(
+  createCimdRemoteSessionClientSecurity,
+) {
+  return JSON.stringify(
+    CreateCimdRemoteSessionClientSecurity$outboundSchema.parse(
+      createCimdRemoteSessionClientSecurity,
+    ),
+  );
 }
 /** @internal */
-export const CreateCimdRemoteSessionClientRequest$outboundSchema = z.pipe(z.object({
+export const CreateCimdRemoteSessionClientRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     createCimdForm: CreateCimdForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        createCimdForm: "CreateCimdForm",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      createCimdForm: "CreateCimdForm",
     });
-}));
-export function createCimdRemoteSessionClientRequestToJSON(createCimdRemoteSessionClientRequest) {
-    return JSON.stringify(CreateCimdRemoteSessionClientRequest$outboundSchema.parse(createCimdRemoteSessionClientRequest));
+  }),
+);
+export function createCimdRemoteSessionClientRequestToJSON(
+  createCimdRemoteSessionClientRequest,
+) {
+  return JSON.stringify(
+    CreateCimdRemoteSessionClientRequest$outboundSchema.parse(
+      createCimdRemoteSessionClientRequest,
+    ),
+  );
 }
 //# sourceMappingURL=createcimdremotesessionclient.js.map

@@ -12,6 +12,6 @@ let value: CreateShadowMCPApprovalRequestForm = {
 
 ## Fields
 
-| Field                                            | Type                                             | Required                                         | Description                                      |
-| ------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------ |
-| `requestToken`                                   | *string*                                         | :heavy_check_mark:                               | Signed token from the Shadow MCP block response. |
+| Field          | Type     | Required           | Description                                      |
+| -------------- | -------- | ------------------ | ------------------------------------------------ |
+| `requestToken` | _string_ | :heavy_check_mark: | Signed token from the Shadow MCP block response. |

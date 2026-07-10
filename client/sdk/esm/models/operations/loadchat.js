@@ -4,44 +4,61 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const LoadChatSecurityOption1$outboundSchema = z.pipe(z.object({
+export const LoadChatSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function loadChatSecurityOption1ToJSON(loadChatSecurityOption1) {
-    return JSON.stringify(LoadChatSecurityOption1$outboundSchema.parse(loadChatSecurityOption1));
+  return JSON.stringify(
+    LoadChatSecurityOption1$outboundSchema.parse(loadChatSecurityOption1),
+  );
 }
 /** @internal */
-export const LoadChatSecurityOption2$outboundSchema = z.pipe(z.object({
+export const LoadChatSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     chatSessionsTokenHeaderGramChatSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        chatSessionsTokenHeaderGramChatSession: "chat_sessions_token_header_Gram-Chat-Session",
+      chatSessionsTokenHeaderGramChatSession:
+        "chat_sessions_token_header_Gram-Chat-Session",
     });
-}));
+  }),
+);
 export function loadChatSecurityOption2ToJSON(loadChatSecurityOption2) {
-    return JSON.stringify(LoadChatSecurityOption2$outboundSchema.parse(loadChatSecurityOption2));
+  return JSON.stringify(
+    LoadChatSecurityOption2$outboundSchema.parse(loadChatSecurityOption2),
+  );
 }
 /** @internal */
-export const LoadChatSecurity$outboundSchema = z.pipe(z.object({
+export const LoadChatSecurity$outboundSchema = z.pipe(
+  z.object({
     option1: z.optional(z.lazy(() => LoadChatSecurityOption1$outboundSchema)),
     option2: z.optional(z.lazy(() => LoadChatSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function loadChatSecurityToJSON(loadChatSecurity) {
-    return JSON.stringify(LoadChatSecurity$outboundSchema.parse(loadChatSecurity));
+  return JSON.stringify(
+    LoadChatSecurity$outboundSchema.parse(loadChatSecurity),
+  );
 }
 /** @internal */
-export const LoadChatRequest$outboundSchema = z.pipe(z.object({
+export const LoadChatRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     generation: z.optional(z.int()),
     limit: z._default(z.int(), 50),
@@ -53,18 +70,20 @@ export const LoadChatRequest$outboundSchema = z.pipe(z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        beforeSeq: "before_seq",
-        afterSeq: "after_seq",
-        fromStart: "from_start",
-        riskOnly: "risk_only",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        gramChatSession: "Gram-Chat-Session",
+      beforeSeq: "before_seq",
+      afterSeq: "after_seq",
+      fromStart: "from_start",
+      riskOnly: "risk_only",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      gramChatSession: "Gram-Chat-Session",
     });
-}));
+  }),
+);
 export function loadChatRequestToJSON(loadChatRequest) {
-    return JSON.stringify(LoadChatRequest$outboundSchema.parse(loadChatRequest));
+  return JSON.stringify(LoadChatRequest$outboundSchema.parse(loadChatRequest));
 }
 //# sourceMappingURL=loadchat.js.map

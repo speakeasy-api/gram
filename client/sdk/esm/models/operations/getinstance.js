@@ -4,89 +4,128 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetInstanceSecurityOption1$outboundSchema = z.pipe(z.object({
+export const GetInstanceSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function getInstanceSecurityOption1ToJSON(getInstanceSecurityOption1) {
-    return JSON.stringify(GetInstanceSecurityOption1$outboundSchema.parse(getInstanceSecurityOption1));
+  return JSON.stringify(
+    GetInstanceSecurityOption1$outboundSchema.parse(getInstanceSecurityOption1),
+  );
 }
 /** @internal */
-export const GetInstanceSecurityOption2$outboundSchema = z.pipe(z.object({
+export const GetInstanceSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
+  }),
+);
 export function getInstanceSecurityOption2ToJSON(getInstanceSecurityOption2) {
-    return JSON.stringify(GetInstanceSecurityOption2$outboundSchema.parse(getInstanceSecurityOption2));
+  return JSON.stringify(
+    GetInstanceSecurityOption2$outboundSchema.parse(getInstanceSecurityOption2),
+  );
 }
 /** @internal */
-export const GetInstanceSecurityOption3$outboundSchema = z.pipe(z.object({
+export const GetInstanceSecurityOption3$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
+  }),
+);
 export function getInstanceSecurityOption3ToJSON(getInstanceSecurityOption3) {
-    return JSON.stringify(GetInstanceSecurityOption3$outboundSchema.parse(getInstanceSecurityOption3));
+  return JSON.stringify(
+    GetInstanceSecurityOption3$outboundSchema.parse(getInstanceSecurityOption3),
+  );
 }
 /** @internal */
-export const GetInstanceSecurityOption4$outboundSchema = z.pipe(z.object({
+export const GetInstanceSecurityOption4$outboundSchema = z.pipe(
+  z.object({
     chatSessionsTokenHeaderGramChatSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        chatSessionsTokenHeaderGramChatSession: "chat_sessions_token_header_Gram-Chat-Session",
+      chatSessionsTokenHeaderGramChatSession:
+        "chat_sessions_token_header_Gram-Chat-Session",
     });
-}));
+  }),
+);
 export function getInstanceSecurityOption4ToJSON(getInstanceSecurityOption4) {
-    return JSON.stringify(GetInstanceSecurityOption4$outboundSchema.parse(getInstanceSecurityOption4));
+  return JSON.stringify(
+    GetInstanceSecurityOption4$outboundSchema.parse(getInstanceSecurityOption4),
+  );
 }
 /** @internal */
-export const GetInstanceSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => GetInstanceSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => GetInstanceSecurityOption2$outboundSchema)),
-    option3: z.optional(z.lazy(() => GetInstanceSecurityOption3$outboundSchema)),
-    option4: z.optional(z.lazy(() => GetInstanceSecurityOption4$outboundSchema)),
-}), z.transform((v) => {
+export const GetInstanceSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => GetInstanceSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => GetInstanceSecurityOption2$outboundSchema),
+    ),
+    option3: z.optional(
+      z.lazy(() => GetInstanceSecurityOption3$outboundSchema),
+    ),
+    option4: z.optional(
+      z.lazy(() => GetInstanceSecurityOption4$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
-        option3: "Option3",
-        option4: "Option4",
+      option1: "Option1",
+      option2: "Option2",
+      option3: "Option3",
+      option4: "Option4",
     });
-}));
+  }),
+);
 export function getInstanceSecurityToJSON(getInstanceSecurity) {
-    return JSON.stringify(GetInstanceSecurity$outboundSchema.parse(getInstanceSecurity));
+  return JSON.stringify(
+    GetInstanceSecurity$outboundSchema.parse(getInstanceSecurity),
+  );
 }
 /** @internal */
-export const GetInstanceRequest$outboundSchema = z.pipe(z.object({
+export const GetInstanceRequest$outboundSchema = z.pipe(
+  z.object({
     toolsetSlug: z.string(),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        toolsetSlug: "toolset_slug",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        gramKey: "Gram-Key",
-        gramChatSession: "Gram-Chat-Session",
+      toolsetSlug: "toolset_slug",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      gramKey: "Gram-Key",
+      gramChatSession: "Gram-Chat-Session",
     });
-}));
+  }),
+);
 export function getInstanceRequestToJSON(getInstanceRequest) {
-    return JSON.stringify(GetInstanceRequest$outboundSchema.parse(getInstanceRequest));
+  return JSON.stringify(
+    GetInstanceRequest$outboundSchema.parse(getInstanceRequest),
+  );
 }
 //# sourceMappingURL=getinstance.js.map

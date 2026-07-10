@@ -3,66 +3,75 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { QueryFilter$outboundSchema, } from "./queryfilter.js";
+import { QueryFilter$outboundSchema } from "./queryfilter.js";
 /**
  * Optional dimension to break results down by. When omitted, a single aggregate row/series for the whole slice is returned.
  */
 export const GroupBy = {
-    DepartmentName: "department_name",
-    JobTitle: "job_title",
-    EmployeeType: "employee_type",
-    DivisionName: "division_name",
-    CostCenterName: "cost_center_name",
-    Email: "email",
-    Model: "model",
-    HookSource: "hook_source",
-    AccountType: "account_type",
-    Provider: "provider",
-    BillingMode: "billing_mode",
-    QuerySource: "query_source",
-    SkillName: "skill_name",
-    AgentName: "agent_name",
-    McpServerName: "mcp_server_name",
-    McpToolName: "mcp_tool_name",
-    Role: "role",
-    Group: "group",
-    ProjectId: "project_id",
+  DepartmentName: "department_name",
+  JobTitle: "job_title",
+  EmployeeType: "employee_type",
+  DivisionName: "division_name",
+  CostCenterName: "cost_center_name",
+  Email: "email",
+  Model: "model",
+  HookSource: "hook_source",
+  AccountType: "account_type",
+  Provider: "provider",
+  BillingMode: "billing_mode",
+  QuerySource: "query_source",
+  SkillName: "skill_name",
+  AgentName: "agent_name",
+  McpServerName: "mcp_server_name",
+  McpToolName: "mcp_tool_name",
+  Role: "role",
+  Group: "group",
+  ProjectId: "project_id",
 };
 /**
  * Measure used to rank groups for top_n. Defaults to total_cost.
  */
 export const QueryPayloadSortBy = {
-    TotalCost: "total_cost",
-    TotalTokens: "total_tokens",
-    TotalInputTokens: "total_input_tokens",
-    TotalOutputTokens: "total_output_tokens",
-    CacheReadInputTokens: "cache_read_input_tokens",
-    CacheCreationInputTokens: "cache_creation_input_tokens",
-    TotalToolCalls: "total_tool_calls",
-    TotalChats: "total_chats",
+  TotalCost: "total_cost",
+  TotalTokens: "total_tokens",
+  TotalInputTokens: "total_input_tokens",
+  TotalOutputTokens: "total_output_tokens",
+  CacheReadInputTokens: "cache_read_input_tokens",
+  CacheCreationInputTokens: "cache_creation_input_tokens",
+  TotalToolCalls: "total_tool_calls",
+  TotalChats: "total_chats",
 };
 /** @internal */
 export const GroupBy$outboundSchema = z.enum(GroupBy);
 /** @internal */
 export const QueryPayloadSortBy$outboundSchema = z.enum(QueryPayloadSortBy);
 /** @internal */
-export const QueryPayload$outboundSchema = z.pipe(z.object({
+export const QueryPayload$outboundSchema = z.pipe(
+  z.object({
     filters: z.optional(z.array(QueryFilter$outboundSchema)),
-    from: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    from: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
     granularitySeconds: z.optional(z.int()),
     groupBy: z.optional(GroupBy$outboundSchema),
     sortBy: z._default(QueryPayloadSortBy$outboundSchema, "total_cost"),
-    to: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    to: z.pipe(
+      z.date(),
+      z.transform((v) => v.toISOString()),
+    ),
     topN: z._default(z.int(), 10),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        granularitySeconds: "granularity_seconds",
-        groupBy: "group_by",
-        sortBy: "sort_by",
-        topN: "top_n",
+      granularitySeconds: "granularity_seconds",
+      groupBy: "group_by",
+      sortBy: "sort_by",
+      topN: "top_n",
     });
-}));
+  }),
+);
 export function queryPayloadToJSON(queryPayload) {
-    return JSON.stringify(QueryPayload$outboundSchema.parse(queryPayload));
+  return JSON.stringify(QueryPayload$outboundSchema.parse(queryPayload));
 }
 //# sourceMappingURL=querypayload.js.map

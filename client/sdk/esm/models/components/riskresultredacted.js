@@ -4,14 +4,18 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { RiskSpanRedacted$inboundSchema, } from "./riskspanredacted.js";
+import { RiskSpanRedacted$inboundSchema } from "./riskspanredacted.js";
 /** @internal */
-export const RiskResultRedacted$inboundSchema = z.pipe(z.object({
+export const RiskResultRedacted$inboundSchema = z.pipe(
+  z.object({
     chat_id: z.optional(z.string()),
     chat_message_id: z.string(),
     chat_title: z.optional(z.string()),
     confidence: z.optional(z.number()),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     description: z.optional(z.string()),
     id: z.string(),
     match_redacted: z.string(),
@@ -23,22 +27,28 @@ export const RiskResultRedacted$inboundSchema = z.pipe(z.object({
     spans_redacted: z.optional(z.array(RiskSpanRedacted$inboundSchema)),
     tags: z.optional(z.array(z.string())),
     user_id: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "chat_id": "chatId",
-        "chat_message_id": "chatMessageId",
-        "chat_title": "chatTitle",
-        "created_at": "createdAt",
-        "match_redacted": "matchRedacted",
-        "policy_id": "policyId",
-        "policy_version": "policyVersion",
-        "position_known": "positionKnown",
-        "rule_id": "ruleId",
-        "spans_redacted": "spansRedacted",
-        "user_id": "userId",
+      chat_id: "chatId",
+      chat_message_id: "chatMessageId",
+      chat_title: "chatTitle",
+      created_at: "createdAt",
+      match_redacted: "matchRedacted",
+      policy_id: "policyId",
+      policy_version: "policyVersion",
+      position_known: "positionKnown",
+      rule_id: "ruleId",
+      spans_redacted: "spansRedacted",
+      user_id: "userId",
     });
-}));
+  }),
+);
 export function riskResultRedactedFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskResultRedacted$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskResultRedacted' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskResultRedacted$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskResultRedacted' from JSON`,
+  );
 }
 //# sourceMappingURL=riskresultredacted.js.map

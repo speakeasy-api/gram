@@ -6,9 +6,14 @@ import { OrganizationMcpServer } from "./organizationmcpserver.js";
  * Result type for the MCP servers attached to a remote_session_client.
  */
 export type ListOrganizationMcpServersResult = {
-    items: Array<OrganizationMcpServer>;
+  items: Array<OrganizationMcpServer>;
 };
 /** @internal */
-export declare const ListOrganizationMcpServersResult$inboundSchema: z.ZodMiniType<ListOrganizationMcpServersResult, unknown>;
-export declare function listOrganizationMcpServersResultFromJSON(jsonString: string): SafeParseResult<ListOrganizationMcpServersResult, SDKValidationError>;
+export declare const ListOrganizationMcpServersResult$inboundSchema: z.ZodMiniType<
+  ListOrganizationMcpServersResult,
+  unknown
+>;
+export declare function listOrganizationMcpServersResultFromJSON(
+  jsonString: string,
+): SafeParseResult<ListOrganizationMcpServersResult, SDKValidationError>;
 //# sourceMappingURL=listorganizationmcpserversresult.d.ts.map

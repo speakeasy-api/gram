@@ -11,5 +11,5 @@ let value: AuthzChallengeOutcome = "error";
 ## Values
 
 ```typescript
-"allow" | "deny" | "error"
+"allow" | "deny" | "error";
 ```

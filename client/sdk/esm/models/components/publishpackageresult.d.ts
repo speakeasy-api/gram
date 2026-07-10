@@ -4,10 +4,15 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { Package } from "./package.js";
 import { PackageVersion } from "./packageversion.js";
 export type PublishPackageResult = {
-    package: Package;
-    version: PackageVersion;
+  package: Package;
+  version: PackageVersion;
 };
 /** @internal */
-export declare const PublishPackageResult$inboundSchema: z.ZodMiniType<PublishPackageResult, unknown>;
-export declare function publishPackageResultFromJSON(jsonString: string): SafeParseResult<PublishPackageResult, SDKValidationError>;
+export declare const PublishPackageResult$inboundSchema: z.ZodMiniType<
+  PublishPackageResult,
+  unknown
+>;
+export declare function publishPackageResultFromJSON(
+  jsonString: string,
+): SafeParseResult<PublishPackageResult, SDKValidationError>;
 //# sourceMappingURL=publishpackageresult.d.ts.map

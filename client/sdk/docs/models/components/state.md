@@ -13,5 +13,5 @@ let value: State = "pending";
 ## Values
 
 ```typescript
-"pending" | "accepted" | "expired" | "revoked"
+"pending" | "accepted" | "expired" | "revoked";
 ```

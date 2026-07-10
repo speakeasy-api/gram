@@ -10,8 +10,8 @@ let value: SwitchAuthScopesRequest = {};
 
 ## Fields
 
-| Field                                  | Type                                   | Required                               | Description                            |
-| -------------------------------------- | -------------------------------------- | -------------------------------------- | -------------------------------------- |
-| `organizationId`                       | *string*                               | :heavy_minus_sign:                     | The organization slug to switch scopes |
-| `projectId`                            | *string*                               | :heavy_minus_sign:                     | The project id to switch scopes too    |
-| `gramSession`                          | *string*                               | :heavy_minus_sign:                     | Session header                         |
+| Field            | Type     | Required           | Description                            |
+| ---------------- | -------- | ------------------ | -------------------------------------- |
+| `organizationId` | _string_ | :heavy_minus_sign: | The organization slug to switch scopes |
+| `projectId`      | _string_ | :heavy_minus_sign: | The project id to switch scopes too    |
+| `gramSession`    | _string_ | :heavy_minus_sign: | Session header                         |

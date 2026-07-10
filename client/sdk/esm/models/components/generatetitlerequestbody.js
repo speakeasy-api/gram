@@ -4,10 +4,12 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const GenerateTitleRequestBody$outboundSchema = z.object({
-    id: z.string(),
-    title: z.optional(z.string()),
+  id: z.string(),
+  title: z.optional(z.string()),
 });
 export function generateTitleRequestBodyToJSON(generateTitleRequestBody) {
-    return JSON.stringify(GenerateTitleRequestBody$outboundSchema.parse(generateTitleRequestBody));
+  return JSON.stringify(
+    GenerateTitleRequestBody$outboundSchema.parse(generateTitleRequestBody),
+  );
 }
 //# sourceMappingURL=generatetitlerequestbody.js.map

@@ -13,5 +13,5 @@ let value: ServerClass = "local";
 ## Values
 
 ```typescript
-"gram" | "external" | "local"
+"gram" | "external" | "local";
 ```

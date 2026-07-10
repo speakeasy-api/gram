@@ -4,20 +4,29 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const UpsertAIIntegrationConfigRequest$outboundSchema = z.pipe(z.object({
+export const UpsertAIIntegrationConfigRequest$outboundSchema = z.pipe(
+  z.object({
     apiKey: z.string(),
     billingMode: z.optional(z.string()),
     enabled: z.boolean(),
     externalOrganizationId: z.optional(z.string()),
     provider: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apiKey: "api_key",
-        billingMode: "billing_mode",
-        externalOrganizationId: "external_organization_id",
+      apiKey: "api_key",
+      billingMode: "billing_mode",
+      externalOrganizationId: "external_organization_id",
     });
-}));
-export function upsertAIIntegrationConfigRequestToJSON(upsertAIIntegrationConfigRequest) {
-    return JSON.stringify(UpsertAIIntegrationConfigRequest$outboundSchema.parse(upsertAIIntegrationConfigRequest));
+  }),
+);
+export function upsertAIIntegrationConfigRequestToJSON(
+  upsertAIIntegrationConfigRequest,
+) {
+  return JSON.stringify(
+    UpsertAIIntegrationConfigRequest$outboundSchema.parse(
+      upsertAIIntegrationConfigRequest,
+    ),
+  );
 }
 //# sourceMappingURL=upsertaiintegrationconfigrequest.js.map

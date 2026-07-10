@@ -12,6 +12,6 @@ let value: RevokeAllClientSessionsRequestBody = {
 
 ## Fields
 
-| Field                         | Type                          | Required                      | Description                   |
-| ----------------------------- | ----------------------------- | ----------------------------- | ----------------------------- |
-| `clientId`                    | *string*                      | :heavy_check_mark:            | The remote_session_client id. |
+| Field      | Type     | Required           | Description                   |
+| ---------- | -------- | ------------------ | ----------------------------- |
+| `clientId` | _string_ | :heavy_check_mark: | The remote_session_client id. |

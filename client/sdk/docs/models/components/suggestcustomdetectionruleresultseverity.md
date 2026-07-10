@@ -13,5 +13,5 @@ let value: SuggestCustomDetectionRuleResultSeverity = "high";
 ## Values
 
 ```typescript
-"info" | "low" | "medium" | "high" | "critical"
+"info" | "low" | "medium" | "high" | "critical";
 ```

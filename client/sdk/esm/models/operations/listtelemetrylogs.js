@@ -7,99 +7,148 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Severity level filter
  */
 export const SeverityText = {
-    Debug: "DEBUG",
-    Info: "INFO",
-    Warn: "WARN",
-    Error: "ERROR",
-    Fatal: "FATAL",
+  Debug: "DEBUG",
+  Info: "INFO",
+  Warn: "WARN",
+  Error: "ERROR",
+  Fatal: "FATAL",
 };
 /**
  * HTTP method filter
  */
 export const HttpMethod = {
-    Get: "GET",
-    Post: "POST",
-    Put: "PUT",
-    Patch: "PATCH",
-    Delete: "DELETE",
-    Head: "HEAD",
-    Options: "OPTIONS",
+  Get: "GET",
+  Post: "POST",
+  Put: "PUT",
+  Patch: "PATCH",
+  Delete: "DELETE",
+  Head: "HEAD",
+  Options: "OPTIONS",
 };
 /**
  * Sort order
  */
 export const QueryParamSort = {
-    Asc: "asc",
-    Desc: "desc",
+  Asc: "asc",
+  Desc: "desc",
 };
 /** @internal */
-export const ListTelemetryLogsSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListTelemetryLogsSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listTelemetryLogsSecurityOption1ToJSON(listTelemetryLogsSecurityOption1) {
-    return JSON.stringify(ListTelemetryLogsSecurityOption1$outboundSchema.parse(listTelemetryLogsSecurityOption1));
+  }),
+);
+export function listTelemetryLogsSecurityOption1ToJSON(
+  listTelemetryLogsSecurityOption1,
+) {
+  return JSON.stringify(
+    ListTelemetryLogsSecurityOption1$outboundSchema.parse(
+      listTelemetryLogsSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListTelemetryLogsSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListTelemetryLogsSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listTelemetryLogsSecurityOption2ToJSON(listTelemetryLogsSecurityOption2) {
-    return JSON.stringify(ListTelemetryLogsSecurityOption2$outboundSchema.parse(listTelemetryLogsSecurityOption2));
+  }),
+);
+export function listTelemetryLogsSecurityOption2ToJSON(
+  listTelemetryLogsSecurityOption2,
+) {
+  return JSON.stringify(
+    ListTelemetryLogsSecurityOption2$outboundSchema.parse(
+      listTelemetryLogsSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListTelemetryLogsSecurityOption3$outboundSchema = z.pipe(z.object({
+export const ListTelemetryLogsSecurityOption3$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listTelemetryLogsSecurityOption3ToJSON(listTelemetryLogsSecurityOption3) {
-    return JSON.stringify(ListTelemetryLogsSecurityOption3$outboundSchema.parse(listTelemetryLogsSecurityOption3));
+  }),
+);
+export function listTelemetryLogsSecurityOption3ToJSON(
+  listTelemetryLogsSecurityOption3,
+) {
+  return JSON.stringify(
+    ListTelemetryLogsSecurityOption3$outboundSchema.parse(
+      listTelemetryLogsSecurityOption3,
+    ),
+  );
 }
 /** @internal */
-export const ListTelemetryLogsSecurityOption4$outboundSchema = z.pipe(z.object({
+export const ListTelemetryLogsSecurityOption4$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listTelemetryLogsSecurityOption4ToJSON(listTelemetryLogsSecurityOption4) {
-    return JSON.stringify(ListTelemetryLogsSecurityOption4$outboundSchema.parse(listTelemetryLogsSecurityOption4));
+  }),
+);
+export function listTelemetryLogsSecurityOption4ToJSON(
+  listTelemetryLogsSecurityOption4,
+) {
+  return JSON.stringify(
+    ListTelemetryLogsSecurityOption4$outboundSchema.parse(
+      listTelemetryLogsSecurityOption4,
+    ),
+  );
 }
 /** @internal */
-export const ListTelemetryLogsSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListTelemetryLogsSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListTelemetryLogsSecurityOption2$outboundSchema)),
-    option3: z.optional(z.lazy(() => ListTelemetryLogsSecurityOption3$outboundSchema)),
-    option4: z.optional(z.lazy(() => ListTelemetryLogsSecurityOption4$outboundSchema)),
-}), z.transform((v) => {
+export const ListTelemetryLogsSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListTelemetryLogsSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListTelemetryLogsSecurityOption2$outboundSchema),
+    ),
+    option3: z.optional(
+      z.lazy(() => ListTelemetryLogsSecurityOption3$outboundSchema),
+    ),
+    option4: z.optional(
+      z.lazy(() => ListTelemetryLogsSecurityOption4$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
-        option3: "Option3",
-        option4: "Option4",
+      option1: "Option1",
+      option2: "Option2",
+      option3: "Option3",
+      option4: "Option4",
     });
-}));
+  }),
+);
 export function listTelemetryLogsSecurityToJSON(listTelemetryLogsSecurity) {
-    return JSON.stringify(ListTelemetryLogsSecurity$outboundSchema.parse(listTelemetryLogsSecurity));
+  return JSON.stringify(
+    ListTelemetryLogsSecurity$outboundSchema.parse(listTelemetryLogsSecurity),
+  );
 }
 /** @internal */
 export const SeverityText$outboundSchema = z.enum(SeverityText);
@@ -108,7 +157,8 @@ export const HttpMethod$outboundSchema = z.enum(HttpMethod);
 /** @internal */
 export const QueryParamSort$outboundSchema = z.enum(QueryParamSort);
 /** @internal */
-export const ListTelemetryLogsRequest$outboundSchema = z.pipe(z.object({
+export const ListTelemetryLogsRequest$outboundSchema = z.pipe(
+  z.object({
     timeStart: z.optional(z.int()),
     timeEnd: z.optional(z.int()),
     gramUrn: z.optional(z.string()),
@@ -126,25 +176,29 @@ export const ListTelemetryLogsRequest$outboundSchema = z.pipe(z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        timeStart: "time_start",
-        timeEnd: "time_end",
-        gramUrn: "gram_urn",
-        traceId: "trace_id",
-        deploymentId: "deployment_id",
-        functionId: "function_id",
-        severityText: "severity_text",
-        httpStatusCode: "http_status_code",
-        httpRoute: "http_route",
-        httpMethod: "http_method",
-        serviceName: "service_name",
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      timeStart: "time_start",
+      timeEnd: "time_end",
+      gramUrn: "gram_urn",
+      traceId: "trace_id",
+      deploymentId: "deployment_id",
+      functionId: "function_id",
+      severityText: "severity_text",
+      httpStatusCode: "http_status_code",
+      httpRoute: "http_route",
+      httpMethod: "http_method",
+      serviceName: "service_name",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function listTelemetryLogsRequestToJSON(listTelemetryLogsRequest) {
-    return JSON.stringify(ListTelemetryLogsRequest$outboundSchema.parse(listTelemetryLogsRequest));
+  return JSON.stringify(
+    ListTelemetryLogsRequest$outboundSchema.parse(listTelemetryLogsRequest),
+  );
 }
 //# sourceMappingURL=listtelemetrylogs.js.map

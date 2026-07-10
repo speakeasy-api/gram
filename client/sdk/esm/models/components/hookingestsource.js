@@ -4,18 +4,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const HookIngestSource$outboundSchema = z.pipe(z.object({
+export const HookIngestSource$outboundSchema = z.pipe(
+  z.object({
     adapter: z.string(),
     adapterVersion: z.optional(z.string()),
     hostname: z.optional(z.string()),
     rawEventName: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        adapterVersion: "adapter_version",
-        rawEventName: "raw_event_name",
+      adapterVersion: "adapter_version",
+      rawEventName: "raw_event_name",
     });
-}));
+  }),
+);
 export function hookIngestSourceToJSON(hookIngestSource) {
-    return JSON.stringify(HookIngestSource$outboundSchema.parse(hookIngestSource));
+  return JSON.stringify(
+    HookIngestSource$outboundSchema.parse(hookIngestSource),
+  );
 }
 //# sourceMappingURL=hookingestsource.js.map

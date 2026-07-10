@@ -21,6 +21,6 @@ let value: ListExternalCredentialsResult = {
 
 ## Fields
 
-| Field                                                                                          | Type                                                                                           | Required                                                                                       | Description                                                                                    |
-| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `credentials`                                                                                  | [components.ExternalCredentialSummary](../../models/components/externalcredentialsummary.md)[] | :heavy_check_mark:                                                                             | The organization's external credentials.                                                       |
+| Field         | Type                                                                                           | Required           | Description                              |
+| ------------- | ---------------------------------------------------------------------------------------------- | ------------------ | ---------------------------------------- |
+| `credentials` | [components.ExternalCredentialSummary](../../models/components/externalcredentialsummary.md)[] | :heavy_check_mark: | The organization's external credentials. |

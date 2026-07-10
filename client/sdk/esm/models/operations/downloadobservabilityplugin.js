@@ -8,50 +8,76 @@ import { safeParse } from "../../lib/schemas.js";
  * Target platform.
  */
 export const Platform = {
-    Claude: "claude",
-    Cursor: "cursor",
-    Codex: "codex",
+  Claude: "claude",
+  Cursor: "cursor",
+  Codex: "codex",
 };
 /** @internal */
-export const DownloadObservabilityPluginSecurity$outboundSchema = z.pipe(z.object({
+export const DownloadObservabilityPluginSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function downloadObservabilityPluginSecurityToJSON(downloadObservabilityPluginSecurity) {
-    return JSON.stringify(DownloadObservabilityPluginSecurity$outboundSchema.parse(downloadObservabilityPluginSecurity));
+  }),
+);
+export function downloadObservabilityPluginSecurityToJSON(
+  downloadObservabilityPluginSecurity,
+) {
+  return JSON.stringify(
+    DownloadObservabilityPluginSecurity$outboundSchema.parse(
+      downloadObservabilityPluginSecurity,
+    ),
+  );
 }
 /** @internal */
 export const Platform$outboundSchema = z.enum(Platform);
 /** @internal */
-export const DownloadObservabilityPluginRequest$outboundSchema = z.pipe(z.object({
+export const DownloadObservabilityPluginRequest$outboundSchema = z.pipe(
+  z.object({
     platform: Platform$outboundSchema,
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
-export function downloadObservabilityPluginRequestToJSON(downloadObservabilityPluginRequest) {
-    return JSON.stringify(DownloadObservabilityPluginRequest$outboundSchema.parse(downloadObservabilityPluginRequest));
+  }),
+);
+export function downloadObservabilityPluginRequestToJSON(
+  downloadObservabilityPluginRequest,
+) {
+  return JSON.stringify(
+    DownloadObservabilityPluginRequest$outboundSchema.parse(
+      downloadObservabilityPluginRequest,
+    ),
+  );
 }
 /** @internal */
-export const DownloadObservabilityPluginResponse$inboundSchema = z.pipe(z.object({
+export const DownloadObservabilityPluginResponse$inboundSchema = z.pipe(
+  z.object({
     Headers: z._default(z.record(z.string(), z.array(z.string())), {}),
-    Result: z.custom(x => x instanceof ReadableStream),
-}), z.transform((v) => {
+    Result: z.custom((x) => x instanceof ReadableStream),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Headers": "headers",
-        "Result": "result",
+      Headers: "headers",
+      Result: "result",
     });
-}));
+  }),
+);
 export function downloadObservabilityPluginResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => DownloadObservabilityPluginResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'DownloadObservabilityPluginResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) =>
+      DownloadObservabilityPluginResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'DownloadObservabilityPluginResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=downloadobservabilityplugin.js.map

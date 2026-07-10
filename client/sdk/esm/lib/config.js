@@ -5,27 +5,25 @@ import { pathToFunc } from "./url.js";
 /**
  * Contains the list of servers available to the SDK
  */
-export const ServerList = [
-    "https://app.getgram.ai",
-];
+export const ServerList = ["https://app.getgram.ai"];
 export function serverURLFromOptions(options) {
-    let serverURL = options.serverURL;
-    const params = {};
-    if (!serverURL) {
-        const serverIdx = options.serverIdx ?? 0;
-        if (serverIdx < 0 || serverIdx >= ServerList.length) {
-            throw new Error(`Invalid server index ${serverIdx}`);
-        }
-        serverURL = ServerList[serverIdx] || "";
+  let serverURL = options.serverURL;
+  const params = {};
+  if (!serverURL) {
+    const serverIdx = options.serverIdx ?? 0;
+    if (serverIdx < 0 || serverIdx >= ServerList.length) {
+      throw new Error(`Invalid server index ${serverIdx}`);
     }
-    const u = pathToFunc(serverURL)(params);
-    return new URL(u);
+    serverURL = ServerList[serverIdx] || "";
+  }
+  const u = pathToFunc(serverURL)(params);
+  return new URL(u);
 }
 export const SDK_METADATA = {
-    language: "typescript",
-    openapiDocVersion: "0.0.1",
-    sdkVersion: "0.33.8",
-    genVersion: "2.915.0",
-    userAgent: "speakeasy-sdk/typescript 0.33.8 2.915.0 0.0.1 @gram/client",
+  language: "typescript",
+  openapiDocVersion: "0.0.1",
+  sdkVersion: "0.33.8",
+  genVersion: "2.915.0",
+  userAgent: "speakeasy-sdk/typescript 0.33.8 2.915.0 0.0.1 @gram/client",
 };
 //# sourceMappingURL=config.js.map

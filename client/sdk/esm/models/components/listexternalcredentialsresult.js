@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ExternalCredentialSummary$inboundSchema, } from "./externalcredentialsummary.js";
+import { ExternalCredentialSummary$inboundSchema } from "./externalcredentialsummary.js";
 /** @internal */
 export const ListExternalCredentialsResult$inboundSchema = z.object({
-    credentials: z.array(ExternalCredentialSummary$inboundSchema),
+  credentials: z.array(ExternalCredentialSummary$inboundSchema),
 });
 export function listExternalCredentialsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListExternalCredentialsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListExternalCredentialsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListExternalCredentialsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListExternalCredentialsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listexternalcredentialsresult.js.map

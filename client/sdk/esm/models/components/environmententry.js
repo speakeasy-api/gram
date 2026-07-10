@@ -5,18 +5,31 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const EnvironmentEntry$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const EnvironmentEntry$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     name: z.string(),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     value: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function environmentEntryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => EnvironmentEntry$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'EnvironmentEntry' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => EnvironmentEntry$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'EnvironmentEntry' from JSON`,
+  );
 }
 //# sourceMappingURL=environmententry.js.map

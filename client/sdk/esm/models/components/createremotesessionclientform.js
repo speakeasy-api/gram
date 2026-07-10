@@ -7,32 +7,43 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
  */
 export const CreateRemoteSessionClientFormTokenEndpointAuthMethod = {
-    ClientSecretBasic: "client_secret_basic",
-    ClientSecretPost: "client_secret_post",
-    None: "none",
+  ClientSecretBasic: "client_secret_basic",
+  ClientSecretPost: "client_secret_post",
+  None: "none",
 };
 /** @internal */
-export const CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema = z
-    .enum(CreateRemoteSessionClientFormTokenEndpointAuthMethod);
+export const CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema =
+  z.enum(CreateRemoteSessionClientFormTokenEndpointAuthMethod);
 /** @internal */
-export const CreateRemoteSessionClientForm$outboundSchema = z.pipe(z.object({
+export const CreateRemoteSessionClientForm$outboundSchema = z.pipe(
+  z.object({
     audience: z.optional(z.string()),
     clientId: z.string(),
     clientSecret: z.optional(z.string()),
     remoteSessionIssuerId: z.string(),
     scope: z.optional(z.array(z.string())),
-    tokenEndpointAuthMethod: z.optional(CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema),
+    tokenEndpointAuthMethod: z.optional(
+      CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
+    ),
     userSessionIssuerIds: z.optional(z.array(z.string())),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        clientId: "client_id",
-        clientSecret: "client_secret",
-        remoteSessionIssuerId: "remote_session_issuer_id",
-        tokenEndpointAuthMethod: "token_endpoint_auth_method",
-        userSessionIssuerIds: "user_session_issuer_ids",
+      clientId: "client_id",
+      clientSecret: "client_secret",
+      remoteSessionIssuerId: "remote_session_issuer_id",
+      tokenEndpointAuthMethod: "token_endpoint_auth_method",
+      userSessionIssuerIds: "user_session_issuer_ids",
     });
-}));
-export function createRemoteSessionClientFormToJSON(createRemoteSessionClientForm) {
-    return JSON.stringify(CreateRemoteSessionClientForm$outboundSchema.parse(createRemoteSessionClientForm));
+  }),
+);
+export function createRemoteSessionClientFormToJSON(
+  createRemoteSessionClientForm,
+) {
+  return JSON.stringify(
+    CreateRemoteSessionClientForm$outboundSchema.parse(
+      createRemoteSessionClientForm,
+    ),
+  );
 }
 //# sourceMappingURL=createremotesessionclientform.js.map

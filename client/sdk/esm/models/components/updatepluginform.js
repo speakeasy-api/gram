@@ -4,12 +4,14 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const UpdatePluginForm$outboundSchema = z.object({
-    description: z.optional(z.string()),
-    id: z.string(),
-    name: z.string(),
-    slug: z.string(),
+  description: z.optional(z.string()),
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
 });
 export function updatePluginFormToJSON(updatePluginForm) {
-    return JSON.stringify(UpdatePluginForm$outboundSchema.parse(updatePluginForm));
+  return JSON.stringify(
+    UpdatePluginForm$outboundSchema.parse(updatePluginForm),
+  );
 }
 //# sourceMappingURL=updatepluginform.js.map

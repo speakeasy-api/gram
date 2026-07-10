@@ -15,11 +15,11 @@ let value: DeploymentLogEvent = {
 
 ## Fields
 
-| Field                                       | Type                                        | Required                                    | Description                                 |
-| ------------------------------------------- | ------------------------------------------- | ------------------------------------------- | ------------------------------------------- |
-| `attachmentId`                              | *string*                                    | :heavy_minus_sign:                          | The ID of the asset tied to the log event   |
-| `attachmentType`                            | *string*                                    | :heavy_minus_sign:                          | The type of the asset tied to the log event |
-| `createdAt`                                 | *string*                                    | :heavy_check_mark:                          | The creation date of the log event          |
-| `event`                                     | *string*                                    | :heavy_check_mark:                          | The type of event that occurred             |
-| `id`                                        | *string*                                    | :heavy_check_mark:                          | The ID of the log event                     |
-| `message`                                   | *string*                                    | :heavy_check_mark:                          | The message of the log event                |
+| Field            | Type     | Required           | Description                                 |
+| ---------------- | -------- | ------------------ | ------------------------------------------- |
+| `attachmentId`   | _string_ | :heavy_minus_sign: | The ID of the asset tied to the log event   |
+| `attachmentType` | _string_ | :heavy_minus_sign: | The type of the asset tied to the log event |
+| `createdAt`      | _string_ | :heavy_check_mark: | The creation date of the log event          |
+| `event`          | _string_ | :heavy_check_mark: | The type of event that occurred             |
+| `id`             | _string_ | :heavy_check_mark: | The ID of the log event                     |
+| `message`        | _string_ | :heavy_check_mark: | The message of the log event                |

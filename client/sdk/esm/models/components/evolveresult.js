@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Deployment$inboundSchema } from "./deployment.js";
 /** @internal */
 export const EvolveResult$inboundSchema = z.object({
-    deployment: z.optional(Deployment$inboundSchema),
+  deployment: z.optional(Deployment$inboundSchema),
 });
 export function evolveResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => EvolveResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'EvolveResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => EvolveResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'EvolveResult' from JSON`,
+  );
 }
 //# sourceMappingURL=evolveresult.js.map

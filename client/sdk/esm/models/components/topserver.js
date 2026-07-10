@@ -5,17 +5,23 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const TopServer$inboundSchema = z
-    .pipe(z.object({
+export const TopServer$inboundSchema = z.pipe(
+  z.object({
     server_name: z.string(),
     tool_call_count: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "server_name": "serverName",
-        "tool_call_count": "toolCallCount",
+      server_name: "serverName",
+      tool_call_count: "toolCallCount",
     });
-}));
+  }),
+);
 export function topServerFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TopServer$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TopServer' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TopServer$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TopServer' from JSON`,
+  );
 }
 //# sourceMappingURL=topserver.js.map

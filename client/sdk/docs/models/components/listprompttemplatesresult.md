@@ -12,6 +12,6 @@ let value: ListPromptTemplatesResult = {
 
 ## Fields
 
-| Field                                                                    | Type                                                                     | Required                                                                 | Description                                                              |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| `templates`                                                              | [components.PromptTemplate](../../models/components/prompttemplate.md)[] | :heavy_check_mark:                                                       | The created prompt template                                              |
+| Field       | Type                                                                     | Required           | Description                 |
+| ----------- | ------------------------------------------------------------------------ | ------------------ | --------------------------- |
+| `templates` | [components.PromptTemplate](../../models/components/prompttemplate.md)[] | :heavy_check_mark: | The created prompt template |

@@ -4,19 +4,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { CanonicalToolAttributes$inboundSchema, } from "./canonicaltoolattributes.js";
-import { ResponseFilter$inboundSchema, } from "./responsefilter.js";
-import { ToolAnnotations$inboundSchema, } from "./toolannotations.js";
+import { CanonicalToolAttributes$inboundSchema } from "./canonicaltoolattributes.js";
+import { ResponseFilter$inboundSchema } from "./responsefilter.js";
+import { ToolAnnotations$inboundSchema } from "./toolannotations.js";
 import { ToolVariation$inboundSchema } from "./toolvariation.js";
 /** @internal */
-export const HTTPToolDefinition$inboundSchema = z.pipe(z.object({
+export const HTTPToolDefinition$inboundSchema = z.pipe(
+  z.object({
     annotations: z.optional(ToolAnnotations$inboundSchema),
     asset_id: z.string(),
     canonical: z.optional(CanonicalToolAttributes$inboundSchema),
     canonical_name: z.string(),
     confirm: z.optional(z.string()),
     confirm_prompt: z.optional(z.string()),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     default_server_url: z.optional(z.string()),
     deployment_id: z.string(),
     description: z.string(),
@@ -36,28 +40,37 @@ export const HTTPToolDefinition$inboundSchema = z.pipe(z.object({
     summary: z.string(),
     tags: z.array(z.string()),
     tool_urn: z.string(),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     variation: z.optional(ToolVariation$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "asset_id": "assetId",
-        "canonical_name": "canonicalName",
-        "confirm_prompt": "confirmPrompt",
-        "created_at": "createdAt",
-        "default_server_url": "defaultServerUrl",
-        "deployment_id": "deploymentId",
-        "http_method": "httpMethod",
-        "openapiv3_document_id": "openapiv3DocumentId",
-        "openapiv3_operation": "openapiv3Operation",
-        "package_name": "packageName",
-        "project_id": "projectId",
-        "response_filter": "responseFilter",
-        "schema_version": "schemaVersion",
-        "tool_urn": "toolUrn",
-        "updated_at": "updatedAt",
+      asset_id: "assetId",
+      canonical_name: "canonicalName",
+      confirm_prompt: "confirmPrompt",
+      created_at: "createdAt",
+      default_server_url: "defaultServerUrl",
+      deployment_id: "deploymentId",
+      http_method: "httpMethod",
+      openapiv3_document_id: "openapiv3DocumentId",
+      openapiv3_operation: "openapiv3Operation",
+      package_name: "packageName",
+      project_id: "projectId",
+      response_filter: "responseFilter",
+      schema_version: "schemaVersion",
+      tool_urn: "toolUrn",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function httpToolDefinitionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => HTTPToolDefinition$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'HTTPToolDefinition' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => HTTPToolDefinition$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'HTTPToolDefinition' from JSON`,
+  );
 }
 //# sourceMappingURL=httptooldefinition.js.map

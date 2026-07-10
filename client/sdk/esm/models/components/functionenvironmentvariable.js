@@ -5,16 +5,23 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const FunctionEnvironmentVariable$inboundSchema = z.pipe(z.object({
+export const FunctionEnvironmentVariable$inboundSchema = z.pipe(
+  z.object({
     auth_input_type: z.optional(z.string()),
     description: z.optional(z.string()),
     name: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "auth_input_type": "authInputType",
+      auth_input_type: "authInputType",
     });
-}));
+  }),
+);
 export function functionEnvironmentVariableFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => FunctionEnvironmentVariable$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'FunctionEnvironmentVariable' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => FunctionEnvironmentVariable$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'FunctionEnvironmentVariable' from JSON`,
+  );
 }
 //# sourceMappingURL=functionenvironmentvariable.js.map

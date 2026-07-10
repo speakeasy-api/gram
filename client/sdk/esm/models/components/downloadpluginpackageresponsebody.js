@@ -6,9 +6,13 @@ import * as b64$ from "../../lib/base64.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const DownloadPluginPackageResponseBody$inboundSchema = z.object({
-    body: b64$.zodInbound,
+  body: b64$.zodInbound,
 });
 export function downloadPluginPackageResponseBodyFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => DownloadPluginPackageResponseBody$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'DownloadPluginPackageResponseBody' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => DownloadPluginPackageResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'DownloadPluginPackageResponseBody' from JSON`,
+  );
 }
 //# sourceMappingURL=downloadpluginpackageresponsebody.js.map

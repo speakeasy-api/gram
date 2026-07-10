@@ -8,44 +8,69 @@ import { safeParse } from "../../lib/schemas.js";
  * How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
  */
 export const RemoteSessionClientTokenEndpointAuthMethod = {
-    ClientSecretBasic: "client_secret_basic",
-    ClientSecretPost: "client_secret_post",
-    None: "none",
+  ClientSecretBasic: "client_secret_basic",
+  ClientSecretPost: "client_secret_post",
+  None: "none",
 };
 /** @internal */
-export const RemoteSessionClientTokenEndpointAuthMethod$inboundSchema = z.enum(RemoteSessionClientTokenEndpointAuthMethod);
+export const RemoteSessionClientTokenEndpointAuthMethod$inboundSchema = z.enum(
+  RemoteSessionClientTokenEndpointAuthMethod,
+);
 /** @internal */
-export const RemoteSessionClient$inboundSchema = z.pipe(z.object({
+export const RemoteSessionClient$inboundSchema = z.pipe(
+  z.object({
     audience: z.optional(z.string()),
     client_id: z.string(),
-    client_id_issued_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    client_id_issued_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     client_id_metadata_uri: z.optional(z.string()),
-    client_secret_expires_at: z.optional(z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v)))),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    client_secret_expires_at: z.optional(
+      z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform((v) => new Date(v)),
+      ),
+    ),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     id: z.string(),
     organization_id: z.string(),
     project_id: z.string(),
     remote_session_issuer_id: z.string(),
     scope: z.optional(z.array(z.string())),
-    token_endpoint_auth_method: z.optional(RemoteSessionClientTokenEndpointAuthMethod$inboundSchema),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    token_endpoint_auth_method: z.optional(
+      RemoteSessionClientTokenEndpointAuthMethod$inboundSchema,
+    ),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     user_session_issuer_ids: z.array(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "client_id": "clientId",
-        "client_id_issued_at": "clientIdIssuedAt",
-        "client_id_metadata_uri": "clientIdMetadataUri",
-        "client_secret_expires_at": "clientSecretExpiresAt",
-        "created_at": "createdAt",
-        "organization_id": "organizationId",
-        "project_id": "projectId",
-        "remote_session_issuer_id": "remoteSessionIssuerId",
-        "token_endpoint_auth_method": "tokenEndpointAuthMethod",
-        "updated_at": "updatedAt",
-        "user_session_issuer_ids": "userSessionIssuerIds",
+      client_id: "clientId",
+      client_id_issued_at: "clientIdIssuedAt",
+      client_id_metadata_uri: "clientIdMetadataUri",
+      client_secret_expires_at: "clientSecretExpiresAt",
+      created_at: "createdAt",
+      organization_id: "organizationId",
+      project_id: "projectId",
+      remote_session_issuer_id: "remoteSessionIssuerId",
+      token_endpoint_auth_method: "tokenEndpointAuthMethod",
+      updated_at: "updatedAt",
+      user_session_issuer_ids: "userSessionIssuerIds",
     });
-}));
+  }),
+);
 export function remoteSessionClientFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RemoteSessionClient$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RemoteSessionClient' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RemoteSessionClient$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RemoteSessionClient' from JSON`,
+  );
 }
 //# sourceMappingURL=remotesessionclient.js.map

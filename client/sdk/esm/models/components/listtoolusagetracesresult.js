@@ -4,17 +4,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ToolUsageTraceSummary$inboundSchema, } from "./toolusagetracesummary.js";
+import { ToolUsageTraceSummary$inboundSchema } from "./toolusagetracesummary.js";
 /** @internal */
-export const ListToolUsageTracesResult$inboundSchema = z.pipe(z.object({
+export const ListToolUsageTracesResult$inboundSchema = z.pipe(
+  z.object({
     next_cursor: z.optional(z.string()),
     traces: z.array(ToolUsageTraceSummary$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function listToolUsageTracesResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListToolUsageTracesResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListToolUsageTracesResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListToolUsageTracesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListToolUsageTracesResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listtoolusagetracesresult.js.map

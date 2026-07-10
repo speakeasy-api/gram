@@ -13,5 +13,5 @@ let value: SourceEnvironmentLinkSourceKind = "http";
 ## Values
 
 ```typescript
-"http" | "function"
+"http" | "function";
 ```

@@ -15,7 +15,7 @@ let value: LLMClientUsage = {
 
 ## Fields
 
-| Field                                                            | Type                                                             | Required                                                         | Description                                                      |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `activityCount`                                                  | *number*                                                         | :heavy_check_mark:                                               | Number of messages (session mode) or tool calls (tool_call mode) |
-| `clientName`                                                     | *string*                                                         | :heavy_check_mark:                                               | Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')      |
+| Field           | Type     | Required           | Description                                                      |
+| --------------- | -------- | ------------------ | ---------------------------------------------------------------- |
+| `activityCount` | _number_ | :heavy_check_mark: | Number of messages (session mode) or tool calls (tool_call mode) |
+| `clientName`    | _string_ | :heavy_check_mark: | Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')      |

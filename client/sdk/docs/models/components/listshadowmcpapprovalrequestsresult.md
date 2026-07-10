@@ -24,7 +24,7 @@ let value: ListShadowMCPApprovalRequestsResult = {
 
 ## Fields
 
-| Field                                                                                        | Type                                                                                         | Required                                                                                     | Description                                                                                  |
-| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `nextCursor`                                                                                 | *string*                                                                                     | :heavy_minus_sign:                                                                           | Cursor for the next page of results.                                                         |
-| `requests`                                                                                   | [components.ShadowMCPApprovalRequest](../../models/components/shadowmcpapprovalrequest.md)[] | :heavy_check_mark:                                                                           | N/A                                                                                          |
+| Field        | Type                                                                                         | Required           | Description                          |
+| ------------ | -------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------ |
+| `nextCursor` | _string_                                                                                     | :heavy_minus_sign: | Cursor for the next page of results. |
+| `requests`   | [components.ShadowMCPApprovalRequest](../../models/components/shadowmcpapprovalrequest.md)[] | :heavy_check_mark: | N/A                                  |

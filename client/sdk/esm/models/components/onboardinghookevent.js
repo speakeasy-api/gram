@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const OnboardingHookEvent$inboundSchema = z.pipe(z.object({
+export const OnboardingHookEvent$inboundSchema = z.pipe(
+  z.object({
     chat_id: z.optional(z.string()),
     event_name: z.optional(z.string()),
     project_slug: z.string(),
@@ -14,17 +15,23 @@ export const OnboardingHookEvent$inboundSchema = z.pipe(z.object({
     time_unix_nano: z.string(),
     tool_name: z.optional(z.string()),
     user_email: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "chat_id": "chatId",
-        "event_name": "eventName",
-        "project_slug": "projectSlug",
-        "time_unix_nano": "timeUnixNano",
-        "tool_name": "toolName",
-        "user_email": "userEmail",
+      chat_id: "chatId",
+      event_name: "eventName",
+      project_slug: "projectSlug",
+      time_unix_nano: "timeUnixNano",
+      tool_name: "toolName",
+      user_email: "userEmail",
     });
-}));
+  }),
+);
 export function onboardingHookEventFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => OnboardingHookEvent$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'OnboardingHookEvent' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => OnboardingHookEvent$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'OnboardingHookEvent' from JSON`,
+  );
 }
 //# sourceMappingURL=onboardinghookevent.js.map

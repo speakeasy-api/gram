@@ -6,13 +6,18 @@ import { RemoteSession } from "./remotesession.js";
  * Result type for listing remote_sessions.
  */
 export type ListRemoteSessionsResult = {
-    items: Array<RemoteSession>;
-    /**
-     * Cursor for the next page; empty when exhausted.
-     */
-    nextCursor?: string | undefined;
+  items: Array<RemoteSession>;
+  /**
+   * Cursor for the next page; empty when exhausted.
+   */
+  nextCursor?: string | undefined;
 };
 /** @internal */
-export declare const ListRemoteSessionsResult$inboundSchema: z.ZodMiniType<ListRemoteSessionsResult, unknown>;
-export declare function listRemoteSessionsResultFromJSON(jsonString: string): SafeParseResult<ListRemoteSessionsResult, SDKValidationError>;
+export declare const ListRemoteSessionsResult$inboundSchema: z.ZodMiniType<
+  ListRemoteSessionsResult,
+  unknown
+>;
+export declare function listRemoteSessionsResultFromJSON(
+  jsonString: string,
+): SafeParseResult<ListRemoteSessionsResult, SDKValidationError>;
 //# sourceMappingURL=listremotesessionsresult.d.ts.map

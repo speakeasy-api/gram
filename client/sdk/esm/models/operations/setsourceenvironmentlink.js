@@ -3,33 +3,53 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { SetSourceEnvironmentLinkRequestBody$outboundSchema, } from "../components/setsourceenvironmentlinkrequestbody.js";
+import { SetSourceEnvironmentLinkRequestBody$outboundSchema } from "../components/setsourceenvironmentlinkrequestbody.js";
 /** @internal */
-export const SetSourceEnvironmentLinkSecurity$outboundSchema = z.pipe(z.object({
+export const SetSourceEnvironmentLinkSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function setSourceEnvironmentLinkSecurityToJSON(setSourceEnvironmentLinkSecurity) {
-    return JSON.stringify(SetSourceEnvironmentLinkSecurity$outboundSchema.parse(setSourceEnvironmentLinkSecurity));
+  }),
+);
+export function setSourceEnvironmentLinkSecurityToJSON(
+  setSourceEnvironmentLinkSecurity,
+) {
+  return JSON.stringify(
+    SetSourceEnvironmentLinkSecurity$outboundSchema.parse(
+      setSourceEnvironmentLinkSecurity,
+    ),
+  );
 }
 /** @internal */
-export const SetSourceEnvironmentLinkRequest$outboundSchema = z.pipe(z.object({
+export const SetSourceEnvironmentLinkRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    setSourceEnvironmentLinkRequestBody: SetSourceEnvironmentLinkRequestBody$outboundSchema,
-}), z.transform((v) => {
+    setSourceEnvironmentLinkRequestBody:
+      SetSourceEnvironmentLinkRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        setSourceEnvironmentLinkRequestBody: "SetSourceEnvironmentLinkRequestBody",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      setSourceEnvironmentLinkRequestBody:
+        "SetSourceEnvironmentLinkRequestBody",
     });
-}));
-export function setSourceEnvironmentLinkRequestToJSON(setSourceEnvironmentLinkRequest) {
-    return JSON.stringify(SetSourceEnvironmentLinkRequest$outboundSchema.parse(setSourceEnvironmentLinkRequest));
+  }),
+);
+export function setSourceEnvironmentLinkRequestToJSON(
+  setSourceEnvironmentLinkRequest,
+) {
+  return JSON.stringify(
+    SetSourceEnvironmentLinkRequest$outboundSchema.parse(
+      setSourceEnvironmentLinkRequest,
+    ),
+  );
 }
 //# sourceMappingURL=setsourceenvironmentlink.js.map

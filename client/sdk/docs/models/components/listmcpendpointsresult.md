@@ -23,6 +23,6 @@ let value: ListMcpEndpointsResult = {
 
 ## Fields
 
-| Field                                                              | Type                                                               | Required                                                           | Description                                                        |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `mcpEndpoints`                                                     | [components.McpEndpoint](../../models/components/mcpendpoint.md)[] | :heavy_check_mark:                                                 | N/A                                                                |
+| Field          | Type                                                               | Required           | Description |
+| -------------- | ------------------------------------------------------------------ | ------------------ | ----------- |
+| `mcpEndpoints` | [components.McpEndpoint](../../models/components/mcpendpoint.md)[] | :heavy_check_mark: | N/A         |

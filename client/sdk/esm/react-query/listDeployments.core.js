@@ -4,31 +4,43 @@
 import { deploymentsList } from "../funcs/deploymentsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchListDeployments(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildListDeploymentsQuery(client$, request, security, options),
-    });
+export function prefetchListDeployments(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildListDeploymentsQuery(client$, request, security, options),
+  });
 }
 export function buildListDeploymentsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyListDeployments({
-            cursor: request?.cursor,
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function listDeploymentsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(deploymentsList(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyListDeployments({
+      cursor: request?.cursor,
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function listDeploymentsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        deploymentsList(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyListDeployments(parameters) {
-    return ["@gram/client", "deployments", "list", parameters];
+  return ["@gram/client", "deployments", "list", parameters];
 }
 //# sourceMappingURL=listDeployments.core.js.map

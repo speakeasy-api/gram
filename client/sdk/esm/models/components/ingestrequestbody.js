@@ -3,24 +3,29 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { HookIngestData$outboundSchema, } from "./hookingestdata.js";
-import { HookIngestEvent$outboundSchema, } from "./hookingestevent.js";
-import { HookIngestSession$outboundSchema, } from "./hookingestsession.js";
-import { HookIngestSource$outboundSchema, } from "./hookingestsource.js";
+import { HookIngestData$outboundSchema } from "./hookingestdata.js";
+import { HookIngestEvent$outboundSchema } from "./hookingestevent.js";
+import { HookIngestSession$outboundSchema } from "./hookingestsession.js";
+import { HookIngestSource$outboundSchema } from "./hookingestsource.js";
 /** @internal */
-export const IngestRequestBody$outboundSchema = z.pipe(z.object({
+export const IngestRequestBody$outboundSchema = z.pipe(
+  z.object({
     data: z.optional(HookIngestData$outboundSchema),
     event: HookIngestEvent$outboundSchema,
     raw: z.optional(z.any()),
     schemaVersion: z.string(),
     session: z.optional(HookIngestSession$outboundSchema),
     source: HookIngestSource$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        schemaVersion: "schema_version",
+      schemaVersion: "schema_version",
     });
-}));
+  }),
+);
 export function ingestRequestBodyToJSON(ingestRequestBody) {
-    return JSON.stringify(IngestRequestBody$outboundSchema.parse(ingestRequestBody));
+  return JSON.stringify(
+    IngestRequestBody$outboundSchema.parse(ingestRequestBody),
+  );
 }
 //# sourceMappingURL=ingestrequestbody.js.map

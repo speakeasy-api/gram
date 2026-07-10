@@ -4,26 +4,33 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 export const UpdatePluginServerFormPolicy = {
-    Required: "required",
-    Optional: "optional",
+  Required: "required",
+  Optional: "optional",
 };
 /** @internal */
-export const UpdatePluginServerFormPolicy$outboundSchema = z.enum(UpdatePluginServerFormPolicy);
+export const UpdatePluginServerFormPolicy$outboundSchema = z.enum(
+  UpdatePluginServerFormPolicy,
+);
 /** @internal */
-export const UpdatePluginServerForm$outboundSchema = z.pipe(z.object({
+export const UpdatePluginServerForm$outboundSchema = z.pipe(
+  z.object({
     displayName: z.string(),
     id: z.string(),
     pluginId: z.string(),
     policy: z._default(UpdatePluginServerFormPolicy$outboundSchema, "required"),
     sortOrder: z._default(z.int(), 0),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        displayName: "display_name",
-        pluginId: "plugin_id",
-        sortOrder: "sort_order",
+      displayName: "display_name",
+      pluginId: "plugin_id",
+      sortOrder: "sort_order",
     });
-}));
+  }),
+);
 export function updatePluginServerFormToJSON(updatePluginServerForm) {
-    return JSON.stringify(UpdatePluginServerForm$outboundSchema.parse(updatePluginServerForm));
+  return JSON.stringify(
+    UpdatePluginServerForm$outboundSchema.parse(updatePluginServerForm),
+  );
 }
 //# sourceMappingURL=updatepluginserverform.js.map

@@ -12,6 +12,6 @@ let value: ListRegistriesResponseBody = {
 
 ## Fields
 
-| Field                                                              | Type                                                               | Required                                                           | Description                                                        |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `registries`                                                       | [components.MCPRegistry](../../models/components/mcpregistry.md)[] | :heavy_check_mark:                                                 | List of MCP registries                                             |
+| Field        | Type                                                               | Required           | Description            |
+| ------------ | ------------------------------------------------------------------ | ------------------ | ---------------------- |
+| `registries` | [components.MCPRegistry](../../models/components/mcpregistry.md)[] | :heavy_check_mark: | List of MCP registries |

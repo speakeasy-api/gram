@@ -3,61 +3,93 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpdateMcpServerForm$outboundSchema, } from "../components/updatemcpserverform.js";
+import { UpdateMcpServerForm$outboundSchema } from "../components/updatemcpserverform.js";
 /** @internal */
-export const UpdateMcpServerSecurityOption1$outboundSchema = z.pipe(z.object({
+export const UpdateMcpServerSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function updateMcpServerSecurityOption1ToJSON(updateMcpServerSecurityOption1) {
-    return JSON.stringify(UpdateMcpServerSecurityOption1$outboundSchema.parse(updateMcpServerSecurityOption1));
+  }),
+);
+export function updateMcpServerSecurityOption1ToJSON(
+  updateMcpServerSecurityOption1,
+) {
+  return JSON.stringify(
+    UpdateMcpServerSecurityOption1$outboundSchema.parse(
+      updateMcpServerSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const UpdateMcpServerSecurityOption2$outboundSchema = z.pipe(z.object({
+export const UpdateMcpServerSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function updateMcpServerSecurityOption2ToJSON(updateMcpServerSecurityOption2) {
-    return JSON.stringify(UpdateMcpServerSecurityOption2$outboundSchema.parse(updateMcpServerSecurityOption2));
+  }),
+);
+export function updateMcpServerSecurityOption2ToJSON(
+  updateMcpServerSecurityOption2,
+) {
+  return JSON.stringify(
+    UpdateMcpServerSecurityOption2$outboundSchema.parse(
+      updateMcpServerSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const UpdateMcpServerSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => UpdateMcpServerSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => UpdateMcpServerSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const UpdateMcpServerSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => UpdateMcpServerSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => UpdateMcpServerSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function updateMcpServerSecurityToJSON(updateMcpServerSecurity) {
-    return JSON.stringify(UpdateMcpServerSecurity$outboundSchema.parse(updateMcpServerSecurity));
+  return JSON.stringify(
+    UpdateMcpServerSecurity$outboundSchema.parse(updateMcpServerSecurity),
+  );
 }
 /** @internal */
-export const UpdateMcpServerRequest$outboundSchema = z.pipe(z.object({
+export const UpdateMcpServerRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     updateMcpServerForm: UpdateMcpServerForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        updateMcpServerForm: "UpdateMcpServerForm",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      updateMcpServerForm: "UpdateMcpServerForm",
     });
-}));
+  }),
+);
 export function updateMcpServerRequestToJSON(updateMcpServerRequest) {
-    return JSON.stringify(UpdateMcpServerRequest$outboundSchema.parse(updateMcpServerRequest));
+  return JSON.stringify(
+    UpdateMcpServerRequest$outboundSchema.parse(updateMcpServerRequest),
+  );
 }
 //# sourceMappingURL=updatemcpserver.js.map

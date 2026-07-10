@@ -11,5 +11,5 @@ let value: Disposition = "allowed";
 ## Values
 
 ```typescript
-"allowed" | "denied"
+"allowed" | "denied";
 ```

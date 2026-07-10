@@ -4,57 +4,91 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetRiskCapabilitiesSecurityOption1$outboundSchema = z.pipe(z.object({
+export const GetRiskCapabilitiesSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function getRiskCapabilitiesSecurityOption1ToJSON(getRiskCapabilitiesSecurityOption1) {
-    return JSON.stringify(GetRiskCapabilitiesSecurityOption1$outboundSchema.parse(getRiskCapabilitiesSecurityOption1));
+  }),
+);
+export function getRiskCapabilitiesSecurityOption1ToJSON(
+  getRiskCapabilitiesSecurityOption1,
+) {
+  return JSON.stringify(
+    GetRiskCapabilitiesSecurityOption1$outboundSchema.parse(
+      getRiskCapabilitiesSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const GetRiskCapabilitiesSecurityOption2$outboundSchema = z.pipe(z.object({
+export const GetRiskCapabilitiesSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function getRiskCapabilitiesSecurityOption2ToJSON(getRiskCapabilitiesSecurityOption2) {
-    return JSON.stringify(GetRiskCapabilitiesSecurityOption2$outboundSchema.parse(getRiskCapabilitiesSecurityOption2));
+  }),
+);
+export function getRiskCapabilitiesSecurityOption2ToJSON(
+  getRiskCapabilitiesSecurityOption2,
+) {
+  return JSON.stringify(
+    GetRiskCapabilitiesSecurityOption2$outboundSchema.parse(
+      getRiskCapabilitiesSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const GetRiskCapabilitiesSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => GetRiskCapabilitiesSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => GetRiskCapabilitiesSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const GetRiskCapabilitiesSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => GetRiskCapabilitiesSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => GetRiskCapabilitiesSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function getRiskCapabilitiesSecurityToJSON(getRiskCapabilitiesSecurity) {
-    return JSON.stringify(GetRiskCapabilitiesSecurity$outboundSchema.parse(getRiskCapabilitiesSecurity));
+  return JSON.stringify(
+    GetRiskCapabilitiesSecurity$outboundSchema.parse(
+      getRiskCapabilitiesSecurity,
+    ),
+  );
 }
 /** @internal */
-export const GetRiskCapabilitiesRequest$outboundSchema = z.pipe(z.object({
+export const GetRiskCapabilitiesRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function getRiskCapabilitiesRequestToJSON(getRiskCapabilitiesRequest) {
-    return JSON.stringify(GetRiskCapabilitiesRequest$outboundSchema.parse(getRiskCapabilitiesRequest));
+  return JSON.stringify(
+    GetRiskCapabilitiesRequest$outboundSchema.parse(getRiskCapabilitiesRequest),
+  );
 }
 //# sourceMappingURL=getriskcapabilities.js.map

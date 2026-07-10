@@ -3,61 +3,95 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { ListToolUsageTracesPayload$outboundSchema, } from "../components/listtoolusagetracespayload.js";
+import { ListToolUsageTracesPayload$outboundSchema } from "../components/listtoolusagetracespayload.js";
 /** @internal */
-export const ListToolUsageTracesSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListToolUsageTracesSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listToolUsageTracesSecurityOption1ToJSON(listToolUsageTracesSecurityOption1) {
-    return JSON.stringify(ListToolUsageTracesSecurityOption1$outboundSchema.parse(listToolUsageTracesSecurityOption1));
+  }),
+);
+export function listToolUsageTracesSecurityOption1ToJSON(
+  listToolUsageTracesSecurityOption1,
+) {
+  return JSON.stringify(
+    ListToolUsageTracesSecurityOption1$outboundSchema.parse(
+      listToolUsageTracesSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListToolUsageTracesSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListToolUsageTracesSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listToolUsageTracesSecurityOption2ToJSON(listToolUsageTracesSecurityOption2) {
-    return JSON.stringify(ListToolUsageTracesSecurityOption2$outboundSchema.parse(listToolUsageTracesSecurityOption2));
+  }),
+);
+export function listToolUsageTracesSecurityOption2ToJSON(
+  listToolUsageTracesSecurityOption2,
+) {
+  return JSON.stringify(
+    ListToolUsageTracesSecurityOption2$outboundSchema.parse(
+      listToolUsageTracesSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListToolUsageTracesSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListToolUsageTracesSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListToolUsageTracesSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListToolUsageTracesSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListToolUsageTracesSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListToolUsageTracesSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function listToolUsageTracesSecurityToJSON(listToolUsageTracesSecurity) {
-    return JSON.stringify(ListToolUsageTracesSecurity$outboundSchema.parse(listToolUsageTracesSecurity));
+  return JSON.stringify(
+    ListToolUsageTracesSecurity$outboundSchema.parse(
+      listToolUsageTracesSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListToolUsageTracesRequest$outboundSchema = z.pipe(z.object({
+export const ListToolUsageTracesRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     listToolUsageTracesPayload: ListToolUsageTracesPayload$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        listToolUsageTracesPayload: "ListToolUsageTracesPayload",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      listToolUsageTracesPayload: "ListToolUsageTracesPayload",
     });
-}));
+  }),
+);
 export function listToolUsageTracesRequestToJSON(listToolUsageTracesRequest) {
-    return JSON.stringify(ListToolUsageTracesRequest$outboundSchema.parse(listToolUsageTracesRequest));
+  return JSON.stringify(
+    ListToolUsageTracesRequest$outboundSchema.parse(listToolUsageTracesRequest),
+  );
 }
 //# sourceMappingURL=listtoolusagetraces.js.map

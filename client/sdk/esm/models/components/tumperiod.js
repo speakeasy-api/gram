@@ -6,19 +6,31 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { TUMPeriodDay$inboundSchema } from "./tumperiodday.js";
 /** @internal */
-export const TUMPeriod$inboundSchema = z
-    .pipe(z.object({
+export const TUMPeriod$inboundSchema = z.pipe(
+  z.object({
     days: z.array(TUMPeriodDay$inboundSchema),
-    period_end: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-    period_start: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    period_end: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+    period_start: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     tokens: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "period_end": "periodEnd",
-        "period_start": "periodStart",
+      period_end: "periodEnd",
+      period_start: "periodStart",
     });
-}));
+  }),
+);
 export function tumPeriodFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TUMPeriod$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TUMPeriod' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TUMPeriod$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TUMPeriod' from JSON`,
+  );
 }
 //# sourceMappingURL=tumperiod.js.map

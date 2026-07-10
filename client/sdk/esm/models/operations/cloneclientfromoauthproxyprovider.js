@@ -3,61 +3,109 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CloneClientFromOAuthProxyProviderForm$outboundSchema, } from "../components/cloneclientfromoauthproxyproviderform.js";
+import { CloneClientFromOAuthProxyProviderForm$outboundSchema } from "../components/cloneclientfromoauthproxyproviderform.js";
 /** @internal */
-export const CloneClientFromOAuthProxyProviderSecurityOption1$outboundSchema = z.pipe(z.object({
-    projectSlugHeaderGramProject: z.string(),
-    sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
-    return remap$(v, {
+export const CloneClientFromOAuthProxyProviderSecurityOption1$outboundSchema =
+  z.pipe(
+    z.object({
+      projectSlugHeaderGramProject: z.string(),
+      sessionHeaderGramSession: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
         sessionHeaderGramSession: "session_header_Gram-Session",
-    });
-}));
-export function cloneClientFromOAuthProxyProviderSecurityOption1ToJSON(cloneClientFromOAuthProxyProviderSecurityOption1) {
-    return JSON.stringify(CloneClientFromOAuthProxyProviderSecurityOption1$outboundSchema.parse(cloneClientFromOAuthProxyProviderSecurityOption1));
+      });
+    }),
+  );
+export function cloneClientFromOAuthProxyProviderSecurityOption1ToJSON(
+  cloneClientFromOAuthProxyProviderSecurityOption1,
+) {
+  return JSON.stringify(
+    CloneClientFromOAuthProxyProviderSecurityOption1$outboundSchema.parse(
+      cloneClientFromOAuthProxyProviderSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const CloneClientFromOAuthProxyProviderSecurityOption2$outboundSchema = z.pipe(z.object({
-    apikeyHeaderGramKey: z.string(),
-    projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
-    return remap$(v, {
+export const CloneClientFromOAuthProxyProviderSecurityOption2$outboundSchema =
+  z.pipe(
+    z.object({
+      apikeyHeaderGramKey: z.string(),
+      projectSlugHeaderGramProject: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
         projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    });
-}));
-export function cloneClientFromOAuthProxyProviderSecurityOption2ToJSON(cloneClientFromOAuthProxyProviderSecurityOption2) {
-    return JSON.stringify(CloneClientFromOAuthProxyProviderSecurityOption2$outboundSchema.parse(cloneClientFromOAuthProxyProviderSecurityOption2));
+      });
+    }),
+  );
+export function cloneClientFromOAuthProxyProviderSecurityOption2ToJSON(
+  cloneClientFromOAuthProxyProviderSecurityOption2,
+) {
+  return JSON.stringify(
+    CloneClientFromOAuthProxyProviderSecurityOption2$outboundSchema.parse(
+      cloneClientFromOAuthProxyProviderSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const CloneClientFromOAuthProxyProviderSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => CloneClientFromOAuthProxyProviderSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => CloneClientFromOAuthProxyProviderSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const CloneClientFromOAuthProxyProviderSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(
+        () => CloneClientFromOAuthProxyProviderSecurityOption1$outboundSchema,
+      ),
+    ),
+    option2: z.optional(
+      z.lazy(
+        () => CloneClientFromOAuthProxyProviderSecurityOption2$outboundSchema,
+      ),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function cloneClientFromOAuthProxyProviderSecurityToJSON(cloneClientFromOAuthProxyProviderSecurity) {
-    return JSON.stringify(CloneClientFromOAuthProxyProviderSecurity$outboundSchema.parse(cloneClientFromOAuthProxyProviderSecurity));
+  }),
+);
+export function cloneClientFromOAuthProxyProviderSecurityToJSON(
+  cloneClientFromOAuthProxyProviderSecurity,
+) {
+  return JSON.stringify(
+    CloneClientFromOAuthProxyProviderSecurity$outboundSchema.parse(
+      cloneClientFromOAuthProxyProviderSecurity,
+    ),
+  );
 }
 /** @internal */
-export const CloneClientFromOAuthProxyProviderRequest$outboundSchema = z.pipe(z.object({
+export const CloneClientFromOAuthProxyProviderRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    cloneClientFromOAuthProxyProviderForm: CloneClientFromOAuthProxyProviderForm$outboundSchema,
-}), z.transform((v) => {
+    cloneClientFromOAuthProxyProviderForm:
+      CloneClientFromOAuthProxyProviderForm$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        cloneClientFromOAuthProxyProviderForm: "CloneClientFromOAuthProxyProviderForm",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      cloneClientFromOAuthProxyProviderForm:
+        "CloneClientFromOAuthProxyProviderForm",
     });
-}));
-export function cloneClientFromOAuthProxyProviderRequestToJSON(cloneClientFromOAuthProxyProviderRequest) {
-    return JSON.stringify(CloneClientFromOAuthProxyProviderRequest$outboundSchema.parse(cloneClientFromOAuthProxyProviderRequest));
+  }),
+);
+export function cloneClientFromOAuthProxyProviderRequestToJSON(
+  cloneClientFromOAuthProxyProviderRequest,
+) {
+  return JSON.stringify(
+    CloneClientFromOAuthProxyProviderRequest$outboundSchema.parse(
+      cloneClientFromOAuthProxyProviderRequest,
+    ),
+  );
 }
 //# sourceMappingURL=cloneclientfromoauthproxyprovider.js.map

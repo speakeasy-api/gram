@@ -4,23 +4,30 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ToolFilterScope$inboundSchema, } from "./toolfilterscope.js";
-import { ToolFilterTool$inboundSchema, } from "./toolfiltertool.js";
+import { ToolFilterScope$inboundSchema } from "./toolfilterscope.js";
+import { ToolFilterTool$inboundSchema } from "./toolfiltertool.js";
 /** @internal */
-export const ListToolFiltersResult$inboundSchema = z.pipe(z.object({
+export const ListToolFiltersResult$inboundSchema = z.pipe(
+  z.object({
     excluded: z.array(ToolFilterTool$inboundSchema),
     filtering_enabled: z.boolean(),
     scopes: z.array(ToolFilterScope$inboundSchema),
     tool_variations_group_id: z.optional(z.string()),
     tool_variations_group_name: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "filtering_enabled": "filteringEnabled",
-        "tool_variations_group_id": "toolVariationsGroupId",
-        "tool_variations_group_name": "toolVariationsGroupName",
+      filtering_enabled: "filteringEnabled",
+      tool_variations_group_id: "toolVariationsGroupId",
+      tool_variations_group_name: "toolVariationsGroupName",
     });
-}));
+  }),
+);
 export function listToolFiltersResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListToolFiltersResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListToolFiltersResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListToolFiltersResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListToolFiltersResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listtoolfiltersresult.js.map

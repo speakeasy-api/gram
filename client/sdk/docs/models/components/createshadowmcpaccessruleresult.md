@@ -25,6 +25,6 @@ let value: CreateShadowMCPAccessRuleResult = {
 
 ## Fields
 
-| Field                                                                              | Type                                                                               | Required                                                                           | Description                                                                        |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `rules`                                                                            | [components.ShadowMCPAccessRule](../../models/components/shadowmcpaccessrule.md)[] | :heavy_check_mark:                                                                 | N/A                                                                                |
+| Field   | Type                                                                               | Required           | Description |
+| ------- | ---------------------------------------------------------------------------------- | ------------------ | ----------- |
+| `rules` | [components.ShadowMCPAccessRule](../../models/components/shadowmcpaccessrule.md)[] | :heavy_check_mark: | N/A         |

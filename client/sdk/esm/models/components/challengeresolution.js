@@ -5,15 +5,21 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 export const ChallengeResolutionResolutionType = {
-    RoleAssigned: "role_assigned",
-    Dismissed: "dismissed",
+  RoleAssigned: "role_assigned",
+  Dismissed: "dismissed",
 };
 /** @internal */
-export const ChallengeResolutionResolutionType$inboundSchema = z.enum(ChallengeResolutionResolutionType);
+export const ChallengeResolutionResolutionType$inboundSchema = z.enum(
+  ChallengeResolutionResolutionType,
+);
 /** @internal */
-export const ChallengeResolution$inboundSchema = z.pipe(z.object({
+export const ChallengeResolution$inboundSchema = z.pipe(
+  z.object({
     challenge_id: z.string(),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     id: z.string(),
     organization_id: z.string(),
     principal_urn: z.string(),
@@ -23,20 +29,26 @@ export const ChallengeResolution$inboundSchema = z.pipe(z.object({
     resource_kind: z.optional(z.string()),
     role_slug: z.optional(z.string()),
     scope: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "challenge_id": "challengeId",
-        "created_at": "createdAt",
-        "organization_id": "organizationId",
-        "principal_urn": "principalUrn",
-        "resolution_type": "resolutionType",
-        "resolved_by": "resolvedBy",
-        "resource_id": "resourceId",
-        "resource_kind": "resourceKind",
-        "role_slug": "roleSlug",
+      challenge_id: "challengeId",
+      created_at: "createdAt",
+      organization_id: "organizationId",
+      principal_urn: "principalUrn",
+      resolution_type: "resolutionType",
+      resolved_by: "resolvedBy",
+      resource_id: "resourceId",
+      resource_kind: "resourceKind",
+      role_slug: "roleSlug",
     });
-}));
+  }),
+);
 export function challengeResolutionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ChallengeResolution$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ChallengeResolution' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ChallengeResolution$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ChallengeResolution' from JSON`,
+  );
 }
 //# sourceMappingURL=challengeresolution.js.map

@@ -13,7 +13,7 @@ let value: EvaluatePromptGuardrailSecurityOption2 = {
 
 ## Fields
 
-| Field                          | Type                           | Required                       | Description                    |
-| ------------------------------ | ------------------------------ | ------------------------------ | ------------------------------ |
-| `projectSlugHeaderGramProject` | *string*                       | :heavy_check_mark:             | N/A                            |
-| `sessionHeaderGramSession`     | *string*                       | :heavy_check_mark:             | N/A                            |
+| Field                          | Type     | Required           | Description |
+| ------------------------------ | -------- | ------------------ | ----------- |
+| `projectSlugHeaderGramProject` | _string_ | :heavy_check_mark: | N/A         |
+| `sessionHeaderGramSession`     | _string_ | :heavy_check_mark: | N/A         |

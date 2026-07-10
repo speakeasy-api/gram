@@ -26,7 +26,7 @@ let value: SearchLogsResult = {
 
 ## Fields
 
-| Field                                                                            | Type                                                                             | Required                                                                         | Description                                                                      |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `logs`                                                                           | [components.TelemetryLogRecord](../../models/components/telemetrylogrecord.md)[] | :heavy_check_mark:                                                               | List of telemetry log records                                                    |
-| `nextCursor`                                                                     | *string*                                                                         | :heavy_minus_sign:                                                               | Cursor for next page                                                             |
+| Field        | Type                                                                             | Required           | Description                   |
+| ------------ | -------------------------------------------------------------------------------- | ------------------ | ----------------------------- |
+| `logs`       | [components.TelemetryLogRecord](../../models/components/telemetrylogrecord.md)[] | :heavy_check_mark: | List of telemetry log records |
+| `nextCursor` | _string_                                                                         | :heavy_minus_sign: | Cursor for next page          |

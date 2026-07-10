@@ -12,8 +12,8 @@ let value: OTELSum = {};
 
 ## Fields
 
-| Field                                                                              | Type                                                                               | Required                                                                           | Description                                                                        |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `aggregationTemporality`                                                           | *any*                                                                              | :heavy_minus_sign:                                                                 | Aggregation temporality (number or enum string)                                    |
-| `dataPoints`                                                                       | [components.OTELNumberDataPoint](../../models/components/otelnumberdatapoint.md)[] | :heavy_minus_sign:                                                                 | Data points                                                                        |
-| `isMonotonic`                                                                      | *boolean*                                                                          | :heavy_minus_sign:                                                                 | Whether the sum is monotonic                                                       |
+| Field                    | Type                                                                               | Required           | Description                                     |
+| ------------------------ | ---------------------------------------------------------------------------------- | ------------------ | ----------------------------------------------- |
+| `aggregationTemporality` | _any_                                                                              | :heavy_minus_sign: | Aggregation temporality (number or enum string) |
+| `dataPoints`             | [components.OTELNumberDataPoint](../../models/components/otelnumberdatapoint.md)[] | :heavy_minus_sign: | Data points                                     |
+| `isMonotonic`            | _boolean_                                                                          | :heavy_minus_sign: | Whether the sum is monotonic                    |

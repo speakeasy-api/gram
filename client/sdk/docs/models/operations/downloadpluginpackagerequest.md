@@ -13,9 +13,9 @@ let value: DownloadPluginPackageRequest = {
 
 ## Fields
 
-| Field                                                                          | Type                                                                           | Required                                                                       | Description                                                                    |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `pluginId`                                                                     | *string*                                                                       | :heavy_check_mark:                                                             | The plugin to download.                                                        |
-| `platform`                                                                     | [operations.QueryParamPlatform](../../models/operations/queryparamplatform.md) | :heavy_check_mark:                                                             | Target platform to download plugins for.                                       |
-| `gramSession`                                                                  | *string*                                                                       | :heavy_minus_sign:                                                             | Session header                                                                 |
-| `gramProject`                                                                  | *string*                                                                       | :heavy_minus_sign:                                                             | project header                                                                 |
+| Field         | Type                                                                           | Required           | Description                              |
+| ------------- | ------------------------------------------------------------------------------ | ------------------ | ---------------------------------------- |
+| `pluginId`    | _string_                                                                       | :heavy_check_mark: | The plugin to download.                  |
+| `platform`    | [operations.QueryParamPlatform](../../models/operations/queryparamplatform.md) | :heavy_check_mark: | Target platform to download plugins for. |
+| `gramSession` | _string_                                                                       | :heavy_minus_sign: | Session header                           |
+| `gramProject` | _string_                                                                       | :heavy_minus_sign: | project header                           |

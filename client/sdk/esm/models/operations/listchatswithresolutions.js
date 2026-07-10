@@ -7,61 +7,93 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.
  */
 export const HasRisk = {
-    Unknown: "",
-    True: "true",
-    False: "false",
+  Unknown: "",
+  True: "true",
+  False: "false",
 };
 /**
  * Field to sort by
  */
 export const SortBy = {
-    CreatedAt: "created_at",
-    NumMessages: "num_messages",
-    Score: "score",
+  CreatedAt: "created_at",
+  NumMessages: "num_messages",
+  Score: "score",
 };
 /**
  * Sort order
  */
 export const SortOrder = {
-    Asc: "asc",
-    Desc: "desc",
+  Asc: "asc",
+  Desc: "desc",
 };
 /** @internal */
-export const ListChatsWithResolutionsSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListChatsWithResolutionsSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listChatsWithResolutionsSecurityOption1ToJSON(listChatsWithResolutionsSecurityOption1) {
-    return JSON.stringify(ListChatsWithResolutionsSecurityOption1$outboundSchema.parse(listChatsWithResolutionsSecurityOption1));
+  }),
+);
+export function listChatsWithResolutionsSecurityOption1ToJSON(
+  listChatsWithResolutionsSecurityOption1,
+) {
+  return JSON.stringify(
+    ListChatsWithResolutionsSecurityOption1$outboundSchema.parse(
+      listChatsWithResolutionsSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListChatsWithResolutionsSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListChatsWithResolutionsSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     chatSessionsTokenHeaderGramChatSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        chatSessionsTokenHeaderGramChatSession: "chat_sessions_token_header_Gram-Chat-Session",
+      chatSessionsTokenHeaderGramChatSession:
+        "chat_sessions_token_header_Gram-Chat-Session",
     });
-}));
-export function listChatsWithResolutionsSecurityOption2ToJSON(listChatsWithResolutionsSecurityOption2) {
-    return JSON.stringify(ListChatsWithResolutionsSecurityOption2$outboundSchema.parse(listChatsWithResolutionsSecurityOption2));
+  }),
+);
+export function listChatsWithResolutionsSecurityOption2ToJSON(
+  listChatsWithResolutionsSecurityOption2,
+) {
+  return JSON.stringify(
+    ListChatsWithResolutionsSecurityOption2$outboundSchema.parse(
+      listChatsWithResolutionsSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListChatsWithResolutionsSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListChatsWithResolutionsSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListChatsWithResolutionsSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListChatsWithResolutionsSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListChatsWithResolutionsSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListChatsWithResolutionsSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function listChatsWithResolutionsSecurityToJSON(listChatsWithResolutionsSecurity) {
-    return JSON.stringify(ListChatsWithResolutionsSecurity$outboundSchema.parse(listChatsWithResolutionsSecurity));
+  }),
+);
+export function listChatsWithResolutionsSecurityToJSON(
+  listChatsWithResolutionsSecurity,
+) {
+  return JSON.stringify(
+    ListChatsWithResolutionsSecurity$outboundSchema.parse(
+      listChatsWithResolutionsSecurity,
+    ),
+  );
 }
 /** @internal */
 export const HasRisk$outboundSchema = z.enum(HasRisk);
@@ -70,14 +102,25 @@ export const SortBy$outboundSchema = z.enum(SortBy);
 /** @internal */
 export const SortOrder$outboundSchema = z.enum(SortOrder);
 /** @internal */
-export const ListChatsWithResolutionsRequest$outboundSchema = z.pipe(z.object({
+export const ListChatsWithResolutionsRequest$outboundSchema = z.pipe(
+  z.object({
     search: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
     assistantId: z.optional(z.string()),
     resolutionStatus: z.optional(z.string()),
     hasRisk: z.optional(HasRisk$outboundSchema),
-    from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
-    to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    from: z.optional(
+      z.pipe(
+        z.date(),
+        z.transform((v) => v.toISOString()),
+      ),
+    ),
+    to: z.optional(
+      z.pipe(
+        z.date(),
+        z.transform((v) => v.toISOString()),
+      ),
+    ),
     limit: z._default(z.int(), 50),
     offset: z._default(z.int(), 0),
     sortBy: z._default(SortBy$outboundSchema, "created_at"),
@@ -85,20 +128,28 @@ export const ListChatsWithResolutionsRequest$outboundSchema = z.pipe(z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        externalUserId: "external_user_id",
-        assistantId: "assistant_id",
-        resolutionStatus: "resolution_status",
-        hasRisk: "has_risk",
-        sortBy: "sort_by",
-        sortOrder: "sort_order",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        gramChatSession: "Gram-Chat-Session",
+      externalUserId: "external_user_id",
+      assistantId: "assistant_id",
+      resolutionStatus: "resolution_status",
+      hasRisk: "has_risk",
+      sortBy: "sort_by",
+      sortOrder: "sort_order",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      gramChatSession: "Gram-Chat-Session",
     });
-}));
-export function listChatsWithResolutionsRequestToJSON(listChatsWithResolutionsRequest) {
-    return JSON.stringify(ListChatsWithResolutionsRequest$outboundSchema.parse(listChatsWithResolutionsRequest));
+  }),
+);
+export function listChatsWithResolutionsRequestToJSON(
+  listChatsWithResolutionsRequest,
+) {
+  return JSON.stringify(
+    ListChatsWithResolutionsRequest$outboundSchema.parse(
+      listChatsWithResolutionsRequest,
+    ),
+  );
 }
 //# sourceMappingURL=listchatswithresolutions.js.map

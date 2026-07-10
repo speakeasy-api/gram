@@ -13,10 +13,10 @@ let value: GetMCPServerDetailsRequest = {
 
 ## Fields
 
-| Field                                            | Type                                             | Required                                         | Description                                      |
-| ------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------ |
-| `registryId`                                     | *string*                                         | :heavy_check_mark:                               | ID of the registry                               |
-| `serverSpecifier`                                | *string*                                         | :heavy_check_mark:                               | Server specifier (e.g., 'io.github.user/server') |
-| `gramSession`                                    | *string*                                         | :heavy_minus_sign:                               | Session header                                   |
-| `gramKey`                                        | *string*                                         | :heavy_minus_sign:                               | API Key header                                   |
-| `gramProject`                                    | *string*                                         | :heavy_minus_sign:                               | project header                                   |
+| Field             | Type     | Required           | Description                                      |
+| ----------------- | -------- | ------------------ | ------------------------------------------------ |
+| `registryId`      | _string_ | :heavy_check_mark: | ID of the registry                               |
+| `serverSpecifier` | _string_ | :heavy_check_mark: | Server specifier (e.g., 'io.github.user/server') |
+| `gramSession`     | _string_ | :heavy_minus_sign: | Session header                                   |
+| `gramKey`         | _string_ | :heavy_minus_sign: | API Key header                                   |
+| `gramProject`     | _string_ | :heavy_minus_sign: | project header                                   |

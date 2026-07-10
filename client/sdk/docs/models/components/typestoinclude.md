@@ -11,5 +11,5 @@ let value: TypesToInclude = "local";
 ## Values
 
 ```typescript
-"mcp" | "local" | "skill"
+"mcp" | "local" | "skill";
 ```

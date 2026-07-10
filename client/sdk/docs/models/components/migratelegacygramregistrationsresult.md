@@ -14,6 +14,6 @@ let value: MigrateLegacyGramRegistrationsResult = {
 
 ## Fields
 
-| Field                                                                                        | Type                                                                                         | Required                                                                                     | Description                                                                                  |
-| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `migratedCount`                                                                              | *number*                                                                                     | :heavy_check_mark:                                                                           | Number of user_session_clients newly inserted; already-migrated registrations count as zero. |
+| Field           | Type     | Required           | Description                                                                                  |
+| --------------- | -------- | ------------------ | -------------------------------------------------------------------------------------------- |
+| `migratedCount` | _number_ | :heavy_check_mark: | Number of user_session_clients newly inserted; already-migrated registrations count as zero. |

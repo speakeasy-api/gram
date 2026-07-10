@@ -3,35 +3,55 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { RemoveClientFromMcpServerRequestBody$outboundSchema, } from "../components/removeclientfrommcpserverrequestbody.js";
+import { RemoveClientFromMcpServerRequestBody$outboundSchema } from "../components/removeclientfrommcpserverrequestbody.js";
 /** @internal */
-export const RemoveOrganizationRemoteSessionClientFromMcpServerSecurity$outboundSchema = z.pipe(z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
-    apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const RemoveOrganizationRemoteSessionClientFromMcpServerSecurity$outboundSchema =
+  z.pipe(
+    z.object({
+      sessionHeaderGramSession: z.optional(z.string()),
+      apikeyHeaderGramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         sessionHeaderGramSession: "session_header_Gram-Session",
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    });
-}));
-export function removeOrganizationRemoteSessionClientFromMcpServerSecurityToJSON(removeOrganizationRemoteSessionClientFromMcpServerSecurity) {
-    return JSON.stringify(RemoveOrganizationRemoteSessionClientFromMcpServerSecurity$outboundSchema
-        .parse(removeOrganizationRemoteSessionClientFromMcpServerSecurity));
+      });
+    }),
+  );
+export function removeOrganizationRemoteSessionClientFromMcpServerSecurityToJSON(
+  removeOrganizationRemoteSessionClientFromMcpServerSecurity,
+) {
+  return JSON.stringify(
+    RemoveOrganizationRemoteSessionClientFromMcpServerSecurity$outboundSchema.parse(
+      removeOrganizationRemoteSessionClientFromMcpServerSecurity,
+    ),
+  );
 }
 /** @internal */
-export const RemoveOrganizationRemoteSessionClientFromMcpServerRequest$outboundSchema = z.pipe(z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    removeClientFromMcpServerRequestBody: RemoveClientFromMcpServerRequestBody$outboundSchema,
-}), z.transform((v) => {
-    return remap$(v, {
+export const RemoveOrganizationRemoteSessionClientFromMcpServerRequest$outboundSchema =
+  z.pipe(
+    z.object({
+      gramSession: z.optional(z.string()),
+      gramKey: z.optional(z.string()),
+      removeClientFromMcpServerRequestBody:
+        RemoveClientFromMcpServerRequestBody$outboundSchema,
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
-        removeClientFromMcpServerRequestBody: "RemoveClientFromMcpServerRequestBody",
-    });
-}));
-export function removeOrganizationRemoteSessionClientFromMcpServerRequestToJSON(removeOrganizationRemoteSessionClientFromMcpServerRequest) {
-    return JSON.stringify(RemoveOrganizationRemoteSessionClientFromMcpServerRequest$outboundSchema
-        .parse(removeOrganizationRemoteSessionClientFromMcpServerRequest));
+        removeClientFromMcpServerRequestBody:
+          "RemoveClientFromMcpServerRequestBody",
+      });
+    }),
+  );
+export function removeOrganizationRemoteSessionClientFromMcpServerRequestToJSON(
+  removeOrganizationRemoteSessionClientFromMcpServerRequest,
+) {
+  return JSON.stringify(
+    RemoveOrganizationRemoteSessionClientFromMcpServerRequest$outboundSchema.parse(
+      removeOrganizationRemoteSessionClientFromMcpServerRequest,
+    ),
+  );
 }
 //# sourceMappingURL=removeorganizationremotesessionclientfrommcpserver.js.map

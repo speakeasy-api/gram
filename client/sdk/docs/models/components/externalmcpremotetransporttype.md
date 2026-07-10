@@ -13,5 +13,5 @@ let value: ExternalMCPRemoteTransportType = "sse";
 ## Values
 
 ```typescript
-"sse" | "streamable-http"
+"sse" | "streamable-http";
 ```

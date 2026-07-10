@@ -7,23 +7,30 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * How multi-remote authn challenges are presented: chain | interactive.
  */
 export const AuthnChallengeMode = {
-    Chain: "chain",
-    Interactive: "interactive",
+  Chain: "chain",
+  Interactive: "interactive",
 };
 /** @internal */
 export const AuthnChallengeMode$outboundSchema = z.enum(AuthnChallengeMode);
 /** @internal */
-export const CreateUserSessionIssuerForm$outboundSchema = z.pipe(z.object({
+export const CreateUserSessionIssuerForm$outboundSchema = z.pipe(
+  z.object({
     authnChallengeMode: AuthnChallengeMode$outboundSchema,
     sessionDurationHours: z.int(),
     slug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        authnChallengeMode: "authn_challenge_mode",
-        sessionDurationHours: "session_duration_hours",
+      authnChallengeMode: "authn_challenge_mode",
+      sessionDurationHours: "session_duration_hours",
     });
-}));
+  }),
+);
 export function createUserSessionIssuerFormToJSON(createUserSessionIssuerForm) {
-    return JSON.stringify(CreateUserSessionIssuerForm$outboundSchema.parse(createUserSessionIssuerForm));
+  return JSON.stringify(
+    CreateUserSessionIssuerForm$outboundSchema.parse(
+      createUserSessionIssuerForm,
+    ),
+  );
 }
 //# sourceMappingURL=createusersessionissuerform.js.map

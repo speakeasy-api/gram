@@ -19,11 +19,11 @@ let value: HooksBreakdownRow = {
 
 ## Fields
 
-| Field                                     | Type                                      | Required                                  | Description                               |
-| ----------------------------------------- | ----------------------------------------- | ----------------------------------------- | ----------------------------------------- |
-| `eventCount`                              | *number*                                  | :heavy_check_mark:                        | Total events for this combination         |
-| `failureCount`                            | *number*                                  | :heavy_check_mark:                        | Number of failures for this combination   |
-| `hookSource`                              | *string*                                  | :heavy_check_mark:                        | Hook source (e.g. claude-desktop, cursor) |
-| `serverName`                              | *string*                                  | :heavy_check_mark:                        | Server name ('local' for non-MCP tools)   |
-| `toolName`                                | *string*                                  | :heavy_check_mark:                        | Tool name                                 |
-| `userEmail`                               | *string*                                  | :heavy_check_mark:                        | User email address                        |
+| Field          | Type     | Required           | Description                               |
+| -------------- | -------- | ------------------ | ----------------------------------------- |
+| `eventCount`   | _number_ | :heavy_check_mark: | Total events for this combination         |
+| `failureCount` | _number_ | :heavy_check_mark: | Number of failures for this combination   |
+| `hookSource`   | _string_ | :heavy_check_mark: | Hook source (e.g. claude-desktop, cursor) |
+| `serverName`   | _string_ | :heavy_check_mark: | Server name ('local' for non-MCP tools)   |
+| `toolName`     | _string_ | :heavy_check_mark: | Tool name                                 |
+| `userEmail`    | _string_ | :heavy_check_mark: | User email address                        |

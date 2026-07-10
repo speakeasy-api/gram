@@ -8,32 +8,41 @@ import { safeParse } from "../../lib/schemas.js";
  * Tool usage user identity kind
  */
 export const ToolUsageUserTimeSeriesPointUserKind = {
-    Email: "email",
-    ExternalUserId: "external_user_id",
-    UserId: "user_id",
-    Unknown: "unknown",
+  Email: "email",
+  ExternalUserId: "external_user_id",
+  UserId: "user_id",
+  Unknown: "unknown",
 };
 /** @internal */
-export const ToolUsageUserTimeSeriesPointUserKind$inboundSchema = z.enum(ToolUsageUserTimeSeriesPointUserKind);
+export const ToolUsageUserTimeSeriesPointUserKind$inboundSchema = z.enum(
+  ToolUsageUserTimeSeriesPointUserKind,
+);
 /** @internal */
-export const ToolUsageUserTimeSeriesPoint$inboundSchema = z.pipe(z.object({
+export const ToolUsageUserTimeSeriesPoint$inboundSchema = z.pipe(
+  z.object({
     bucket_start_ns: z.string(),
     event_count: z.int(),
     failure_count: z.int(),
     user_key: z.string(),
     user_kind: ToolUsageUserTimeSeriesPointUserKind$inboundSchema,
     user_label: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "bucket_start_ns": "bucketStartNs",
-        "event_count": "eventCount",
-        "failure_count": "failureCount",
-        "user_key": "userKey",
-        "user_kind": "userKind",
-        "user_label": "userLabel",
+      bucket_start_ns: "bucketStartNs",
+      event_count: "eventCount",
+      failure_count: "failureCount",
+      user_key: "userKey",
+      user_kind: "userKind",
+      user_label: "userLabel",
     });
-}));
+  }),
+);
 export function toolUsageUserTimeSeriesPointFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolUsageUserTimeSeriesPoint$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolUsageUserTimeSeriesPoint' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolUsageUserTimeSeriesPoint$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolUsageUserTimeSeriesPoint' from JSON`,
+  );
 }
 //# sourceMappingURL=toolusageusertimeseriespoint.js.map

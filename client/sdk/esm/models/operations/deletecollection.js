@@ -4,31 +4,41 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteCollectionSecurity$outboundSchema = z.pipe(z.object({
+export const DeleteCollectionSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
     apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
     });
-}));
+  }),
+);
 export function deleteCollectionSecurityToJSON(deleteCollectionSecurity) {
-    return JSON.stringify(DeleteCollectionSecurity$outboundSchema.parse(deleteCollectionSecurity));
+  return JSON.stringify(
+    DeleteCollectionSecurity$outboundSchema.parse(deleteCollectionSecurity),
+  );
 }
 /** @internal */
-export const DeleteCollectionRequest$outboundSchema = z.pipe(z.object({
+export const DeleteCollectionRequest$outboundSchema = z.pipe(
+  z.object({
     collectionId: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        collectionId: "collection_id",
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
+      collectionId: "collection_id",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
     });
-}));
+  }),
+);
 export function deleteCollectionRequestToJSON(deleteCollectionRequest) {
-    return JSON.stringify(DeleteCollectionRequest$outboundSchema.parse(deleteCollectionRequest));
+  return JSON.stringify(
+    DeleteCollectionRequest$outboundSchema.parse(deleteCollectionRequest),
+  );
 }
 //# sourceMappingURL=deletecollection.js.map

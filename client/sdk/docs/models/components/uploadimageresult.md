@@ -20,6 +20,6 @@ let value: UploadImageResult = {
 
 ## Fields
 
-| Field                                                | Type                                                 | Required                                             | Description                                          |
-| ---------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------- |
-| `asset`                                              | [components.Asset](../../models/components/asset.md) | :heavy_check_mark:                                   | N/A                                                  |
+| Field   | Type                                                 | Required           | Description |
+| ------- | ---------------------------------------------------- | ------------------ | ----------- |
+| `asset` | [components.Asset](../../models/components/asset.md) | :heavy_check_mark: | N/A         |

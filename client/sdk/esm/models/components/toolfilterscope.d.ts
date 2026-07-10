@@ -6,20 +6,25 @@ import { ToolFilterTool } from "./toolfiltertool.js";
  * A filter tag ("scope") and the tools reachable when filtering by it via the runtime ?tags= parameter.
  */
 export type ToolFilterScope = {
-    /**
-     * The filter tag
-     */
-    tag: string;
-    /**
-     * The number of tools under this scope
-     */
-    toolCount: number;
-    /**
-     * The tools under this scope
-     */
-    tools: Array<ToolFilterTool>;
+  /**
+   * The filter tag
+   */
+  tag: string;
+  /**
+   * The number of tools under this scope
+   */
+  toolCount: number;
+  /**
+   * The tools under this scope
+   */
+  tools: Array<ToolFilterTool>;
 };
 /** @internal */
-export declare const ToolFilterScope$inboundSchema: z.ZodMiniType<ToolFilterScope, unknown>;
-export declare function toolFilterScopeFromJSON(jsonString: string): SafeParseResult<ToolFilterScope, SDKValidationError>;
+export declare const ToolFilterScope$inboundSchema: z.ZodMiniType<
+  ToolFilterScope,
+  unknown
+>;
+export declare function toolFilterScopeFromJSON(
+  jsonString: string,
+): SafeParseResult<ToolFilterScope, SDKValidationError>;
 //# sourceMappingURL=toolfilterscope.d.ts.map

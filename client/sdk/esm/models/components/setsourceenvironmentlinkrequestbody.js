@@ -7,25 +7,33 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * The kind of source (http or function)
  */
 export const SourceKind = {
-    Http: "http",
-    Function: "function",
+  Http: "http",
+  Function: "function",
 };
 /** @internal */
-export const SourceKind$outboundSchema = z
-    .enum(SourceKind);
+export const SourceKind$outboundSchema = z.enum(SourceKind);
 /** @internal */
-export const SetSourceEnvironmentLinkRequestBody$outboundSchema = z.pipe(z.object({
+export const SetSourceEnvironmentLinkRequestBody$outboundSchema = z.pipe(
+  z.object({
     environmentId: z.string(),
     sourceKind: SourceKind$outboundSchema,
     sourceSlug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        environmentId: "environment_id",
-        sourceKind: "source_kind",
-        sourceSlug: "source_slug",
+      environmentId: "environment_id",
+      sourceKind: "source_kind",
+      sourceSlug: "source_slug",
     });
-}));
-export function setSourceEnvironmentLinkRequestBodyToJSON(setSourceEnvironmentLinkRequestBody) {
-    return JSON.stringify(SetSourceEnvironmentLinkRequestBody$outboundSchema.parse(setSourceEnvironmentLinkRequestBody));
+  }),
+);
+export function setSourceEnvironmentLinkRequestBodyToJSON(
+  setSourceEnvironmentLinkRequestBody,
+) {
+  return JSON.stringify(
+    SetSourceEnvironmentLinkRequestBody$outboundSchema.parse(
+      setSourceEnvironmentLinkRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=setsourceenvironmentlinkrequestbody.js.map

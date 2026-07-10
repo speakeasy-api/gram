@@ -4,9 +4,11 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const DeleteConfigRequestBody$outboundSchema = z.object({
-    provider: z.string(),
+  provider: z.string(),
 });
 export function deleteConfigRequestBodyToJSON(deleteConfigRequestBody) {
-    return JSON.stringify(DeleteConfigRequestBody$outboundSchema.parse(deleteConfigRequestBody));
+  return JSON.stringify(
+    DeleteConfigRequestBody$outboundSchema.parse(deleteConfigRequestBody),
+  );
 }
 //# sourceMappingURL=deleteconfigrequestbody.js.map

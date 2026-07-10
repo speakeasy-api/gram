@@ -3,61 +3,101 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpsertRequestBody$outboundSchema, } from "../components/upsertrequestbody.js";
+import { UpsertRequestBody$outboundSchema } from "../components/upsertrequestbody.js";
 /** @internal */
-export const UpsertServerNameOverrideSecurityOption1$outboundSchema = z.pipe(z.object({
+export const UpsertServerNameOverrideSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function upsertServerNameOverrideSecurityOption1ToJSON(upsertServerNameOverrideSecurityOption1) {
-    return JSON.stringify(UpsertServerNameOverrideSecurityOption1$outboundSchema.parse(upsertServerNameOverrideSecurityOption1));
+  }),
+);
+export function upsertServerNameOverrideSecurityOption1ToJSON(
+  upsertServerNameOverrideSecurityOption1,
+) {
+  return JSON.stringify(
+    UpsertServerNameOverrideSecurityOption1$outboundSchema.parse(
+      upsertServerNameOverrideSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const UpsertServerNameOverrideSecurityOption2$outboundSchema = z.pipe(z.object({
+export const UpsertServerNameOverrideSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function upsertServerNameOverrideSecurityOption2ToJSON(upsertServerNameOverrideSecurityOption2) {
-    return JSON.stringify(UpsertServerNameOverrideSecurityOption2$outboundSchema.parse(upsertServerNameOverrideSecurityOption2));
+  }),
+);
+export function upsertServerNameOverrideSecurityOption2ToJSON(
+  upsertServerNameOverrideSecurityOption2,
+) {
+  return JSON.stringify(
+    UpsertServerNameOverrideSecurityOption2$outboundSchema.parse(
+      upsertServerNameOverrideSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const UpsertServerNameOverrideSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => UpsertServerNameOverrideSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => UpsertServerNameOverrideSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const UpsertServerNameOverrideSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => UpsertServerNameOverrideSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => UpsertServerNameOverrideSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function upsertServerNameOverrideSecurityToJSON(upsertServerNameOverrideSecurity) {
-    return JSON.stringify(UpsertServerNameOverrideSecurity$outboundSchema.parse(upsertServerNameOverrideSecurity));
+  }),
+);
+export function upsertServerNameOverrideSecurityToJSON(
+  upsertServerNameOverrideSecurity,
+) {
+  return JSON.stringify(
+    UpsertServerNameOverrideSecurity$outboundSchema.parse(
+      upsertServerNameOverrideSecurity,
+    ),
+  );
 }
 /** @internal */
-export const UpsertServerNameOverrideRequest$outboundSchema = z.pipe(z.object({
+export const UpsertServerNameOverrideRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     upsertRequestBody: UpsertRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        upsertRequestBody: "UpsertRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      upsertRequestBody: "UpsertRequestBody",
     });
-}));
-export function upsertServerNameOverrideRequestToJSON(upsertServerNameOverrideRequest) {
-    return JSON.stringify(UpsertServerNameOverrideRequest$outboundSchema.parse(upsertServerNameOverrideRequest));
+  }),
+);
+export function upsertServerNameOverrideRequestToJSON(
+  upsertServerNameOverrideRequest,
+) {
+  return JSON.stringify(
+    UpsertServerNameOverrideRequest$outboundSchema.parse(
+      upsertServerNameOverrideRequest,
+    ),
+  );
 }
 //# sourceMappingURL=upsertservernameoverride.js.map

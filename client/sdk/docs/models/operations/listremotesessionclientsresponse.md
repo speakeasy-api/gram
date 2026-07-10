@@ -26,6 +26,6 @@ let value: ListRemoteSessionClientsResponse = {
 
 ## Fields
 
-| Field                                                                                                  | Type                                                                                                   | Required                                                                                               | Description                                                                                            |
-| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `result`                                                                                               | [components.ListRemoteSessionClientsResult](../../models/components/listremotesessionclientsresult.md) | :heavy_check_mark:                                                                                     | N/A                                                                                                    |
+| Field    | Type                                                                                                   | Required           | Description |
+| -------- | ------------------------------------------------------------------------------------------------------ | ------------------ | ----------- |
+| `result` | [components.ListRemoteSessionClientsResult](../../models/components/listremotesessionclientsresult.md) | :heavy_check_mark: | N/A         |

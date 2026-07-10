@@ -20,6 +20,6 @@ let value: ListFilterOptionsResult = {
 
 ## Fields
 
-| Field                                                                | Type                                                                 | Required                                                             | Description                                                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `options`                                                            | [components.FilterOption](../../models/components/filteroption.md)[] | :heavy_check_mark:                                                   | List of filter options                                               |
+| Field     | Type                                                                 | Required           | Description            |
+| --------- | -------------------------------------------------------------------- | ------------------ | ---------------------- |
+| `options` | [components.FilterOption](../../models/components/filteroption.md)[] | :heavy_check_mark: | List of filter options |

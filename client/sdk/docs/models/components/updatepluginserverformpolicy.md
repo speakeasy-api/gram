@@ -11,5 +11,5 @@ let value: UpdatePluginServerFormPolicy = "required";
 ## Values
 
 ```typescript
-"required" | "optional"
+"required" | "optional";
 ```

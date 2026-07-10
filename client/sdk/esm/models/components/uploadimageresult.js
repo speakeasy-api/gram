@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Asset$inboundSchema } from "./asset.js";
 /** @internal */
 export const UploadImageResult$inboundSchema = z.object({
-    asset: Asset$inboundSchema,
+  asset: Asset$inboundSchema,
 });
 export function uploadImageResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => UploadImageResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'UploadImageResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => UploadImageResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UploadImageResult' from JSON`,
+  );
 }
 //# sourceMappingURL=uploadimageresult.js.map

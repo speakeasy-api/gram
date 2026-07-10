@@ -5,15 +5,19 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const ClaudeHookResult$inboundSchema = z.object({
-    continue: z.optional(z.boolean()),
-    decision: z.optional(z.string()),
-    hookSpecificOutput: z.optional(z.any()),
-    reason: z.optional(z.string()),
-    stopReason: z.optional(z.string()),
-    suppressOutput: z.optional(z.boolean()),
-    systemMessage: z.optional(z.string()),
+  continue: z.optional(z.boolean()),
+  decision: z.optional(z.string()),
+  hookSpecificOutput: z.optional(z.any()),
+  reason: z.optional(z.string()),
+  stopReason: z.optional(z.string()),
+  suppressOutput: z.optional(z.boolean()),
+  systemMessage: z.optional(z.string()),
 });
 export function claudeHookResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ClaudeHookResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ClaudeHookResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ClaudeHookResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ClaudeHookResult' from JSON`,
+  );
 }
 //# sourceMappingURL=claudehookresult.js.map

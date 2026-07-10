@@ -6,9 +6,14 @@ import { RemoteMcpServer } from "./remotemcpserver.js";
  * Result type for listing remote MCP servers
  */
 export type ListServersResult = {
-    remoteMcpServers: Array<RemoteMcpServer>;
+  remoteMcpServers: Array<RemoteMcpServer>;
 };
 /** @internal */
-export declare const ListServersResult$inboundSchema: z.ZodMiniType<ListServersResult, unknown>;
-export declare function listServersResultFromJSON(jsonString: string): SafeParseResult<ListServersResult, SDKValidationError>;
+export declare const ListServersResult$inboundSchema: z.ZodMiniType<
+  ListServersResult,
+  unknown
+>;
+export declare function listServersResultFromJSON(
+  jsonString: string,
+): SafeParseResult<ListServersResult, SDKValidationError>;
 //# sourceMappingURL=listserversresult.d.ts.map

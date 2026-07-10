@@ -4,32 +4,49 @@
 import { assetsServeChatAttachment } from "../funcs/assetsServeChatAttachment.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchServeChatAttachment(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildServeChatAttachmentQuery(client$, request, security, options),
-    });
+export function prefetchServeChatAttachment(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildServeChatAttachmentQuery(client$, request, security, options),
+  });
 }
-export function buildServeChatAttachmentQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyServeChatAttachment({
-            id: request.id,
-            projectId: request.projectId,
-            gramKey: request.gramKey,
-            gramSession: request.gramSession,
-            gramChatSession: request.gramChatSession,
-        }),
-        queryFn: async function serveChatAttachmentQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(assetsServeChatAttachment(client$, request, security, mergedOptions));
-        },
-    };
+export function buildServeChatAttachmentQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyServeChatAttachment({
+      id: request.id,
+      projectId: request.projectId,
+      gramKey: request.gramKey,
+      gramSession: request.gramSession,
+      gramChatSession: request.gramChatSession,
+    }),
+    queryFn: async function serveChatAttachmentQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        assetsServeChatAttachment(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyServeChatAttachment(parameters) {
-    return ["@gram/client", "assets", "serveChatAttachment", parameters];
+  return ["@gram/client", "assets", "serveChatAttachment", parameters];
 }
 //# sourceMappingURL=serveChatAttachment.core.js.map

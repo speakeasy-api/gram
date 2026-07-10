@@ -16,6 +16,6 @@ let value: WorkflowAgentResponseText = {
 
 ## Fields
 
-| Field                                                                                    | Type                                                                                     | Required                                                                                 | Description                                                                              |
-| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `format`                                                                                 | [components.WorkflowAgentTextFormat](../../models/components/workflowagenttextformat.md) | :heavy_check_mark:                                                                       | Text format type                                                                         |
+| Field    | Type                                                                                     | Required           | Description      |
+| -------- | ---------------------------------------------------------------------------------------- | ------------------ | ---------------- |
+| `format` | [components.WorkflowAgentTextFormat](../../models/components/workflowagenttextformat.md) | :heavy_check_mark: | Text format type |

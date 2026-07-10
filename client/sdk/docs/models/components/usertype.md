@@ -13,5 +13,5 @@ let value: UserType = "external";
 ## Values
 
 ```typescript
-"internal" | "external"
+"internal" | "external";
 ```

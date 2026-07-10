@@ -3,33 +3,54 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpdateRemoteSessionClientForm$outboundSchema, } from "../components/updateremotesessionclientform.js";
+import { UpdateRemoteSessionClientForm$outboundSchema } from "../components/updateremotesessionclientform.js";
 /** @internal */
-export const UpdateOrganizationRemoteSessionClientSecurity$outboundSchema = z.pipe(z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
-    apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const UpdateOrganizationRemoteSessionClientSecurity$outboundSchema =
+  z.pipe(
+    z.object({
+      sessionHeaderGramSession: z.optional(z.string()),
+      apikeyHeaderGramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         sessionHeaderGramSession: "session_header_Gram-Session",
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    });
-}));
-export function updateOrganizationRemoteSessionClientSecurityToJSON(updateOrganizationRemoteSessionClientSecurity) {
-    return JSON.stringify(UpdateOrganizationRemoteSessionClientSecurity$outboundSchema.parse(updateOrganizationRemoteSessionClientSecurity));
+      });
+    }),
+  );
+export function updateOrganizationRemoteSessionClientSecurityToJSON(
+  updateOrganizationRemoteSessionClientSecurity,
+) {
+  return JSON.stringify(
+    UpdateOrganizationRemoteSessionClientSecurity$outboundSchema.parse(
+      updateOrganizationRemoteSessionClientSecurity,
+    ),
+  );
 }
 /** @internal */
-export const UpdateOrganizationRemoteSessionClientRequest$outboundSchema = z.pipe(z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    updateRemoteSessionClientForm: UpdateRemoteSessionClientForm$outboundSchema,
-}), z.transform((v) => {
-    return remap$(v, {
+export const UpdateOrganizationRemoteSessionClientRequest$outboundSchema =
+  z.pipe(
+    z.object({
+      gramSession: z.optional(z.string()),
+      gramKey: z.optional(z.string()),
+      updateRemoteSessionClientForm:
+        UpdateRemoteSessionClientForm$outboundSchema,
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
         updateRemoteSessionClientForm: "UpdateRemoteSessionClientForm",
-    });
-}));
-export function updateOrganizationRemoteSessionClientRequestToJSON(updateOrganizationRemoteSessionClientRequest) {
-    return JSON.stringify(UpdateOrganizationRemoteSessionClientRequest$outboundSchema.parse(updateOrganizationRemoteSessionClientRequest));
+      });
+    }),
+  );
+export function updateOrganizationRemoteSessionClientRequestToJSON(
+  updateOrganizationRemoteSessionClientRequest,
+) {
+  return JSON.stringify(
+    UpdateOrganizationRemoteSessionClientRequest$outboundSchema.parse(
+      updateOrganizationRemoteSessionClientRequest,
+    ),
+  );
 }
 //# sourceMappingURL=updateorganizationremotesessionclient.js.map

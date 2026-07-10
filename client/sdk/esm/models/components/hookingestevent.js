@@ -7,31 +7,39 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Canonical Gram hook event type.
  */
 export const HookIngestEventType = {
-    SessionStarted: "session.started",
-    SessionUpdated: "session.updated",
-    SessionEnded: "session.ended",
-    PromptSubmitted: "prompt.submitted",
-    ToolRequested: "tool.requested",
-    ToolCompleted: "tool.completed",
-    ToolFailed: "tool.failed",
-    AssistantResponded: "assistant.responded",
-    AssistantThought: "assistant.thought",
-    UsageReported: "usage.reported",
-    SkillActivated: "skill.activated",
-    NotificationReported: "notification.reported",
+  SessionStarted: "session.started",
+  SessionUpdated: "session.updated",
+  SessionEnded: "session.ended",
+  PromptSubmitted: "prompt.submitted",
+  ToolRequested: "tool.requested",
+  ToolCompleted: "tool.completed",
+  ToolFailed: "tool.failed",
+  AssistantResponded: "assistant.responded",
+  AssistantThought: "assistant.thought",
+  UsageReported: "usage.reported",
+  SkillActivated: "skill.activated",
+  NotificationReported: "notification.reported",
 };
 /** @internal */
 export const HookIngestEventType$outboundSchema = z.enum(HookIngestEventType);
 /** @internal */
-export const HookIngestEvent$outboundSchema = z.pipe(z.object({
-    occurredAt: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+export const HookIngestEvent$outboundSchema = z.pipe(
+  z.object({
+    occurredAt: z.optional(
+      z.pipe(
+        z.date(),
+        z.transform((v) => v.toISOString()),
+      ),
+    ),
     type: HookIngestEventType$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        occurredAt: "occurred_at",
+      occurredAt: "occurred_at",
     });
-}));
+  }),
+);
 export function hookIngestEventToJSON(hookIngestEvent) {
-    return JSON.stringify(HookIngestEvent$outboundSchema.parse(hookIngestEvent));
+  return JSON.stringify(HookIngestEvent$outboundSchema.parse(hookIngestEvent));
 }
 //# sourceMappingURL=hookingestevent.js.map

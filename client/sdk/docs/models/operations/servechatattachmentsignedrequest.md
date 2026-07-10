@@ -12,6 +12,6 @@ let value: ServeChatAttachmentSignedRequest = {
 
 ## Fields
 
-| Field                | Type                 | Required             | Description          |
-| -------------------- | -------------------- | -------------------- | -------------------- |
-| `token`              | *string*             | :heavy_check_mark:   | The signed JWT token |
+| Field   | Type     | Required           | Description          |
+| ------- | -------- | ------------------ | -------------------- |
+| `token` | _string_ | :heavy_check_mark: | The signed JWT token |

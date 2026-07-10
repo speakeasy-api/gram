@@ -4,18 +4,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const UpdateSlackAppRequestBody$outboundSchema = z.pipe(z.object({
+export const UpdateSlackAppRequestBody$outboundSchema = z.pipe(
+  z.object({
     iconAssetId: z.optional(z.string()),
     id: z.string(),
     name: z.optional(z.string()),
     systemPrompt: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        iconAssetId: "icon_asset_id",
-        systemPrompt: "system_prompt",
+      iconAssetId: "icon_asset_id",
+      systemPrompt: "system_prompt",
     });
-}));
+  }),
+);
 export function updateSlackAppRequestBodyToJSON(updateSlackAppRequestBody) {
-    return JSON.stringify(UpdateSlackAppRequestBody$outboundSchema.parse(updateSlackAppRequestBody));
+  return JSON.stringify(
+    UpdateSlackAppRequestBody$outboundSchema.parse(updateSlackAppRequestBody),
+  );
 }
 //# sourceMappingURL=updateslackapprequestbody.js.map

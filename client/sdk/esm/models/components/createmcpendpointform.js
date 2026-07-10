@@ -4,17 +4,22 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CreateMcpEndpointForm$outboundSchema = z.pipe(z.object({
+export const CreateMcpEndpointForm$outboundSchema = z.pipe(
+  z.object({
     customDomainId: z.optional(z.string()),
     mcpServerId: z.string(),
     slug: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        customDomainId: "custom_domain_id",
-        mcpServerId: "mcp_server_id",
+      customDomainId: "custom_domain_id",
+      mcpServerId: "mcp_server_id",
     });
-}));
+  }),
+);
 export function createMcpEndpointFormToJSON(createMcpEndpointForm) {
-    return JSON.stringify(CreateMcpEndpointForm$outboundSchema.parse(createMcpEndpointForm));
+  return JSON.stringify(
+    CreateMcpEndpointForm$outboundSchema.parse(createMcpEndpointForm),
+  );
 }
 //# sourceMappingURL=createmcpendpointform.js.map

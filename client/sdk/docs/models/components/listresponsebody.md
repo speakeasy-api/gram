@@ -12,6 +12,6 @@ let value: ListResponseBody = {
 
 ## Fields
 
-| Field                                                                  | Type                                                                   | Required                                                               | Description                                                            |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `collections`                                                          | [components.MCPCollection](../../models/components/mcpcollection.md)[] | :heavy_check_mark:                                                     | List of collections                                                    |
+| Field         | Type                                                                   | Required           | Description         |
+| ------------- | ---------------------------------------------------------------------- | ------------------ | ------------------- |
+| `collections` | [components.MCPCollection](../../models/components/mcpcollection.md)[] | :heavy_check_mark: | List of collections |

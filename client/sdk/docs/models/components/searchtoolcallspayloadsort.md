@@ -13,5 +13,5 @@ let value: SearchToolCallsPayloadSort = "asc";
 ## Values
 
 ```typescript
-"asc" | "desc"
+"asc" | "desc";
 ```

@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { OrganizationInvitation$inboundSchema, } from "./organizationinvitation.js";
+import { OrganizationInvitation$inboundSchema } from "./organizationinvitation.js";
 /** @internal */
 export const ListInvitesResult$inboundSchema = z.object({
-    invitations: z.array(OrganizationInvitation$inboundSchema),
+  invitations: z.array(OrganizationInvitation$inboundSchema),
 });
 export function listInvitesResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListInvitesResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListInvitesResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListInvitesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListInvitesResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listinvitesresult.js.map

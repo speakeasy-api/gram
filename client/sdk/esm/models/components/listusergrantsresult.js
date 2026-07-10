@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { ListRoleGrant$inboundSchema } from "./listrolegrant.js";
 /** @internal */
 export const ListUserGrantsResult$inboundSchema = z.object({
-    grants: z.array(ListRoleGrant$inboundSchema),
+  grants: z.array(ListRoleGrant$inboundSchema),
 });
 export function listUserGrantsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListUserGrantsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListUserGrantsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListUserGrantsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListUserGrantsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listusergrantsresult.js.map

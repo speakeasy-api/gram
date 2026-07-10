@@ -13,5 +13,5 @@ let value: WorkflowStatus = "running";
 ## Values
 
 ```typescript
-"running" | "sleeping" | "not_started"
+"running" | "sleeping" | "not_started";
 ```

@@ -3,29 +3,39 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { UpdateInviteRoleRequestBody$outboundSchema, } from "../components/updateinviterolerequestbody.js";
+import { UpdateInviteRoleRequestBody$outboundSchema } from "../components/updateinviterolerequestbody.js";
 /** @internal */
-export const UpdateInviteRoleSecurity$outboundSchema = z.pipe(z.object({
+export const UpdateInviteRoleSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function updateInviteRoleSecurityToJSON(updateInviteRoleSecurity) {
-    return JSON.stringify(UpdateInviteRoleSecurity$outboundSchema.parse(updateInviteRoleSecurity));
+  return JSON.stringify(
+    UpdateInviteRoleSecurity$outboundSchema.parse(updateInviteRoleSecurity),
+  );
 }
 /** @internal */
-export const UpdateInviteRoleRequest$outboundSchema = z.pipe(z.object({
+export const UpdateInviteRoleRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     updateInviteRoleRequestBody: UpdateInviteRoleRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        updateInviteRoleRequestBody: "UpdateInviteRoleRequestBody",
+      gramSession: "Gram-Session",
+      updateInviteRoleRequestBody: "UpdateInviteRoleRequestBody",
     });
-}));
+  }),
+);
 export function updateInviteRoleRequestToJSON(updateInviteRoleRequest) {
-    return JSON.stringify(UpdateInviteRoleRequest$outboundSchema.parse(updateInviteRoleRequest));
+  return JSON.stringify(
+    UpdateInviteRoleRequest$outboundSchema.parse(updateInviteRoleRequest),
+  );
 }
 //# sourceMappingURL=updateinviterole.js.map

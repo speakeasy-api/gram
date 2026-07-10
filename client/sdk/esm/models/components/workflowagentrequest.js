@@ -3,10 +3,11 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { WorkflowAgentToolset$outboundSchema, } from "./workflowagenttoolset.js";
-import { WorkflowSubAgent$outboundSchema, } from "./workflowsubagent.js";
+import { WorkflowAgentToolset$outboundSchema } from "./workflowagenttoolset.js";
+import { WorkflowSubAgent$outboundSchema } from "./workflowsubagent.js";
 /** @internal */
-export const WorkflowAgentRequest$outboundSchema = z.pipe(z.object({
+export const WorkflowAgentRequest$outboundSchema = z.pipe(
+  z.object({
     async: z.optional(z.boolean()),
     input: z.any(),
     instructions: z.optional(z.string()),
@@ -16,13 +17,17 @@ export const WorkflowAgentRequest$outboundSchema = z.pipe(z.object({
     subAgents: z.optional(z.array(WorkflowSubAgent$outboundSchema)),
     temperature: z.optional(z.number()),
     toolsets: z.optional(z.array(WorkflowAgentToolset$outboundSchema)),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        previousResponseId: "previous_response_id",
-        subAgents: "sub_agents",
+      previousResponseId: "previous_response_id",
+      subAgents: "sub_agents",
     });
-}));
+  }),
+);
 export function workflowAgentRequestToJSON(workflowAgentRequest) {
-    return JSON.stringify(WorkflowAgentRequest$outboundSchema.parse(workflowAgentRequest));
+  return JSON.stringify(
+    WorkflowAgentRequest$outboundSchema.parse(workflowAgentRequest),
+  );
 }
 //# sourceMappingURL=workflowagentrequest.js.map

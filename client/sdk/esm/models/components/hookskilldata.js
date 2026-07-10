@@ -4,10 +4,10 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const HookSkillData$outboundSchema = z.object({
-    name: z.string(),
-    source: z.optional(z.string()),
+  name: z.string(),
+  source: z.optional(z.string()),
 });
 export function hookSkillDataToJSON(hookSkillData) {
-    return JSON.stringify(HookSkillData$outboundSchema.parse(hookSkillData));
+  return JSON.stringify(HookSkillData$outboundSchema.parse(hookSkillData));
 }
 //# sourceMappingURL=hookskilldata.js.map

@@ -5,15 +5,21 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const RBACStatus$inboundSchema = z
-    .pipe(z.object({
+export const RBACStatus$inboundSchema = z.pipe(
+  z.object({
     rbac_enabled: z.boolean(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "rbac_enabled": "rbacEnabled",
+      rbac_enabled: "rbacEnabled",
     });
-}));
+  }),
+);
 export function rbacStatusFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RBACStatus$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RBACStatus' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RBACStatus$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RBACStatus' from JSON`,
+  );
 }
 //# sourceMappingURL=rbacstatus.js.map

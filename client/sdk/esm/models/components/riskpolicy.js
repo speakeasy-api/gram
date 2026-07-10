@@ -4,43 +4,48 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { RiskPolicyModelConfig$inboundSchema, } from "./riskpolicymodelconfig.js";
+import { RiskPolicyModelConfig$inboundSchema } from "./riskpolicymodelconfig.js";
 /**
  * Policy action: flag (log only) or block (deny in real-time).
  */
 export const RiskPolicyAction = {
-    Flag: "flag",
-    Block: "block",
+  Flag: "flag",
+  Block: "block",
 };
 /**
  * Policy audience type: everyone or targeted.
  */
 export const RiskPolicyAudienceType = {
-    Everyone: "everyone",
-    Targeted: "targeted",
+  Everyone: "everyone",
+  Targeted: "targeted",
 };
 /**
  * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
  */
 export const RiskPolicyPolicyType = {
-    Standard: "standard",
-    PromptBased: "prompt_based",
+  Standard: "standard",
+  PromptBased: "prompt_based",
 };
 /** @internal */
 export const RiskPolicyAction$inboundSchema = z.enum(RiskPolicyAction);
 /** @internal */
-export const RiskPolicyAudienceType$inboundSchema = z.enum(RiskPolicyAudienceType);
+export const RiskPolicyAudienceType$inboundSchema = z.enum(
+  RiskPolicyAudienceType,
+);
 /** @internal */
 export const RiskPolicyPolicyType$inboundSchema = z.enum(RiskPolicyPolicyType);
 /** @internal */
-export const RiskPolicy$inboundSchema = z
-    .pipe(z.object({
+export const RiskPolicy$inboundSchema = z.pipe(
+  z.object({
     action: z._default(RiskPolicyAction$inboundSchema, "flag"),
     approved_email_domains: z.optional(z.array(z.string())),
     audience_principal_urns: z.array(z.string()),
     audience_type: z._default(RiskPolicyAudienceType$inboundSchema, "everyone"),
     auto_name: z.boolean(),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     custom_rule_ids: z.optional(z.array(z.string())),
     disabled_rules: z.optional(z.array(z.string())),
     enabled: z.boolean(),
@@ -59,34 +64,43 @@ export const RiskPolicy$inboundSchema = z
     scope_include: z.optional(z.string()),
     sources: z.array(z.string()),
     total_messages: z.int(),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     user_message: z.optional(z.string()),
     version: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "approved_email_domains": "approvedEmailDomains",
-        "audience_principal_urns": "audiencePrincipalUrns",
-        "audience_type": "audienceType",
-        "auto_name": "autoName",
-        "created_at": "createdAt",
-        "custom_rule_ids": "customRuleIds",
-        "disabled_rules": "disabledRules",
-        "message_types": "messageTypes",
-        "model_config": "modelConfig",
-        "pending_messages": "pendingMessages",
-        "policy_type": "policyType",
-        "presidio_entities": "presidioEntities",
-        "presidio_score_threshold": "presidioScoreThreshold",
-        "project_id": "projectId",
-        "prompt_injection_rules": "promptInjectionRules",
-        "scope_exempt": "scopeExempt",
-        "scope_include": "scopeInclude",
-        "total_messages": "totalMessages",
-        "updated_at": "updatedAt",
-        "user_message": "userMessage",
+      approved_email_domains: "approvedEmailDomains",
+      audience_principal_urns: "audiencePrincipalUrns",
+      audience_type: "audienceType",
+      auto_name: "autoName",
+      created_at: "createdAt",
+      custom_rule_ids: "customRuleIds",
+      disabled_rules: "disabledRules",
+      message_types: "messageTypes",
+      model_config: "modelConfig",
+      pending_messages: "pendingMessages",
+      policy_type: "policyType",
+      presidio_entities: "presidioEntities",
+      presidio_score_threshold: "presidioScoreThreshold",
+      project_id: "projectId",
+      prompt_injection_rules: "promptInjectionRules",
+      scope_exempt: "scopeExempt",
+      scope_include: "scopeInclude",
+      total_messages: "totalMessages",
+      updated_at: "updatedAt",
+      user_message: "userMessage",
     });
-}));
+  }),
+);
 export function riskPolicyFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskPolicy$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskPolicy' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskPolicy$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskPolicy' from JSON`,
+  );
 }
 //# sourceMappingURL=riskpolicy.js.map

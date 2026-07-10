@@ -4,30 +4,42 @@
 import { telemetryGetHooksSummary } from "../funcs/telemetryGetHooksSummary.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchGetHooksSummary(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildGetHooksSummaryQuery(client$, request, security, options),
-    });
+export function prefetchGetHooksSummary(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildGetHooksSummaryQuery(client$, request, security, options),
+  });
 }
 export function buildGetHooksSummaryQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyGetHooksSummary({
-            gramKey: request.gramKey,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function getHooksSummaryQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(telemetryGetHooksSummary(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyGetHooksSummary({
+      gramKey: request.gramKey,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function getHooksSummaryQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        telemetryGetHooksSummary(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyGetHooksSummary(parameters) {
-    return ["@gram/client", "telemetry", "getHooksSummary", parameters];
+  return ["@gram/client", "telemetry", "getHooksSummary", parameters];
 }
 //# sourceMappingURL=getHooksSummary.core.js.map

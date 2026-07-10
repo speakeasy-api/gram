@@ -9,50 +9,50 @@ import { packagesUpdate } from "../funcs/packagesUpdate.js";
 import { ClientSDK } from "../lib/sdks.js";
 import { unwrapAsync } from "../types/fp.js";
 export class Packages extends ClientSDK {
-    /**
-     * createPackage packages
-     *
-     * @remarks
-     * Create a new package for a project.
-     */
-    async create(request, security, options) {
-        return unwrapAsync(packagesCreate(this, request, security, options));
-    }
-    /**
-     * listPackages packages
-     *
-     * @remarks
-     * List all packages for a project.
-     */
-    async list(request, security, options) {
-        return unwrapAsync(packagesList(this, request, security, options));
-    }
-    /**
-     * listVersions packages
-     *
-     * @remarks
-     * List published versions of a package.
-     */
-    async listVersions(request, security, options) {
-        return unwrapAsync(packagesListVersions(this, request, security, options));
-    }
-    /**
-     * publish packages
-     *
-     * @remarks
-     * Publish a new version of a package.
-     */
-    async publish(request, security, options) {
-        return unwrapAsync(packagesPublish(this, request, security, options));
-    }
-    /**
-     * updatePackage packages
-     *
-     * @remarks
-     * Update package details.
-     */
-    async update(request, security, options) {
-        return unwrapAsync(packagesUpdate(this, request, security, options));
-    }
+  /**
+   * createPackage packages
+   *
+   * @remarks
+   * Create a new package for a project.
+   */
+  async create(request, security, options) {
+    return unwrapAsync(packagesCreate(this, request, security, options));
+  }
+  /**
+   * listPackages packages
+   *
+   * @remarks
+   * List all packages for a project.
+   */
+  async list(request, security, options) {
+    return unwrapAsync(packagesList(this, request, security, options));
+  }
+  /**
+   * listVersions packages
+   *
+   * @remarks
+   * List published versions of a package.
+   */
+  async listVersions(request, security, options) {
+    return unwrapAsync(packagesListVersions(this, request, security, options));
+  }
+  /**
+   * publish packages
+   *
+   * @remarks
+   * Publish a new version of a package.
+   */
+  async publish(request, security, options) {
+    return unwrapAsync(packagesPublish(this, request, security, options));
+  }
+  /**
+   * updatePackage packages
+   *
+   * @remarks
+   * Update package details.
+   */
+  async update(request, security, options) {
+    return unwrapAsync(packagesUpdate(this, request, security, options));
+  }
 }
 //# sourceMappingURL=packages.js.map

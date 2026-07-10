@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ObservabilitySummary$inboundSchema = z.pipe(z.object({
+export const ObservabilitySummary$inboundSchema = z.pipe(
+  z.object({
     avg_latency_ms: z.number(),
     avg_resolution_time_ms: z.number(),
     avg_session_duration_ms: z.number(),
@@ -20,25 +21,31 @@ export const ObservabilitySummary$inboundSchema = z.pipe(z.object({
     total_output_tokens: z.int(),
     total_tokens: z.int(),
     total_tool_calls: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "avg_latency_ms": "avgLatencyMs",
-        "avg_resolution_time_ms": "avgResolutionTimeMs",
-        "avg_session_duration_ms": "avgSessionDurationMs",
-        "cache_creation_input_tokens": "cacheCreationInputTokens",
-        "cache_read_input_tokens": "cacheReadInputTokens",
-        "failed_chats": "failedChats",
-        "failed_tool_calls": "failedToolCalls",
-        "resolved_chats": "resolvedChats",
-        "total_chats": "totalChats",
-        "total_cost": "totalCost",
-        "total_input_tokens": "totalInputTokens",
-        "total_output_tokens": "totalOutputTokens",
-        "total_tokens": "totalTokens",
-        "total_tool_calls": "totalToolCalls",
+      avg_latency_ms: "avgLatencyMs",
+      avg_resolution_time_ms: "avgResolutionTimeMs",
+      avg_session_duration_ms: "avgSessionDurationMs",
+      cache_creation_input_tokens: "cacheCreationInputTokens",
+      cache_read_input_tokens: "cacheReadInputTokens",
+      failed_chats: "failedChats",
+      failed_tool_calls: "failedToolCalls",
+      resolved_chats: "resolvedChats",
+      total_chats: "totalChats",
+      total_cost: "totalCost",
+      total_input_tokens: "totalInputTokens",
+      total_output_tokens: "totalOutputTokens",
+      total_tokens: "totalTokens",
+      total_tool_calls: "totalToolCalls",
     });
-}));
+  }),
+);
 export function observabilitySummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ObservabilitySummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ObservabilitySummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ObservabilitySummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ObservabilitySummary' from JSON`,
+  );
 }
 //# sourceMappingURL=observabilitysummary.js.map

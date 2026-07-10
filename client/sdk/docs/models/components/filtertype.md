@@ -13,5 +13,5 @@ let value: FilterType = "agent";
 ## Values
 
 ```typescript
-"api_key" | "user" | "internal_user" | "agent"
+"api_key" | "user" | "internal_user" | "agent";
 ```

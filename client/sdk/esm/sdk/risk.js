@@ -14,38 +14,47 @@ import { PolicyBypassRequests } from "./policybypassrequests.js";
 import { Results } from "./results.js";
 import { Rules } from "./rules.js";
 export class Risk extends ClientSDK {
-    get policyBypassRequests() {
-        return (this._policyBypassRequests ?? (this._policyBypassRequests = new PolicyBypassRequests(this._options)));
-    }
-    get expr() {
-        return (this._expr ?? (this._expr = new Expr(this._options)));
-    }
-    get customRules() {
-        return (this._customRules ?? (this._customRules = new CustomRules(this._options)));
-    }
-    get exclusions() {
-        return (this._exclusions ?? (this._exclusions = new Exclusions(this._options)));
-    }
-    get policies() {
-        return (this._policies ?? (this._policies = new Policies(this._options)));
-    }
-    get blocks() {
-        return (this._blocks ?? (this._blocks = new Blocks(this._options)));
-    }
-    get overview() {
-        return (this._overview ?? (this._overview = new Overview(this._options)));
-    }
-    get categories() {
-        return (this._categories ?? (this._categories = new Categories(this._options)));
-    }
-    get results() {
-        return (this._results ?? (this._results = new Results(this._options)));
-    }
-    get rules() {
-        return (this._rules ?? (this._rules = new Rules(this._options)));
-    }
-    get evals() {
-        return (this._evals ?? (this._evals = new Evals(this._options)));
-    }
+  get policyBypassRequests() {
+    return (
+      this._policyBypassRequests ??
+      (this._policyBypassRequests = new PolicyBypassRequests(this._options))
+    );
+  }
+  get expr() {
+    return this._expr ?? (this._expr = new Expr(this._options));
+  }
+  get customRules() {
+    return (
+      this._customRules ?? (this._customRules = new CustomRules(this._options))
+    );
+  }
+  get exclusions() {
+    return (
+      this._exclusions ?? (this._exclusions = new Exclusions(this._options))
+    );
+  }
+  get policies() {
+    return this._policies ?? (this._policies = new Policies(this._options));
+  }
+  get blocks() {
+    return this._blocks ?? (this._blocks = new Blocks(this._options));
+  }
+  get overview() {
+    return this._overview ?? (this._overview = new Overview(this._options));
+  }
+  get categories() {
+    return (
+      this._categories ?? (this._categories = new Categories(this._options))
+    );
+  }
+  get results() {
+    return this._results ?? (this._results = new Results(this._options));
+  }
+  get rules() {
+    return this._rules ?? (this._rules = new Rules(this._options));
+  }
+  get evals() {
+    return this._evals ?? (this._evals = new Evals(this._options));
+  }
 }
 //# sourceMappingURL=risk.js.map

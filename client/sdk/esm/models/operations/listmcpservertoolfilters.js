@@ -4,59 +4,99 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListMcpServerToolFiltersSecurityOption1$outboundSchema = z.pipe(z.object({
+export const ListMcpServerToolFiltersSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listMcpServerToolFiltersSecurityOption1ToJSON(listMcpServerToolFiltersSecurityOption1) {
-    return JSON.stringify(ListMcpServerToolFiltersSecurityOption1$outboundSchema.parse(listMcpServerToolFiltersSecurityOption1));
+  }),
+);
+export function listMcpServerToolFiltersSecurityOption1ToJSON(
+  listMcpServerToolFiltersSecurityOption1,
+) {
+  return JSON.stringify(
+    ListMcpServerToolFiltersSecurityOption1$outboundSchema.parse(
+      listMcpServerToolFiltersSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ListMcpServerToolFiltersSecurityOption2$outboundSchema = z.pipe(z.object({
+export const ListMcpServerToolFiltersSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function listMcpServerToolFiltersSecurityOption2ToJSON(listMcpServerToolFiltersSecurityOption2) {
-    return JSON.stringify(ListMcpServerToolFiltersSecurityOption2$outboundSchema.parse(listMcpServerToolFiltersSecurityOption2));
+  }),
+);
+export function listMcpServerToolFiltersSecurityOption2ToJSON(
+  listMcpServerToolFiltersSecurityOption2,
+) {
+  return JSON.stringify(
+    ListMcpServerToolFiltersSecurityOption2$outboundSchema.parse(
+      listMcpServerToolFiltersSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ListMcpServerToolFiltersSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ListMcpServerToolFiltersSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ListMcpServerToolFiltersSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ListMcpServerToolFiltersSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => ListMcpServerToolFiltersSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => ListMcpServerToolFiltersSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function listMcpServerToolFiltersSecurityToJSON(listMcpServerToolFiltersSecurity) {
-    return JSON.stringify(ListMcpServerToolFiltersSecurity$outboundSchema.parse(listMcpServerToolFiltersSecurity));
+  }),
+);
+export function listMcpServerToolFiltersSecurityToJSON(
+  listMcpServerToolFiltersSecurity,
+) {
+  return JSON.stringify(
+    ListMcpServerToolFiltersSecurity$outboundSchema.parse(
+      listMcpServerToolFiltersSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ListMcpServerToolFiltersRequest$outboundSchema = z.pipe(z.object({
+export const ListMcpServerToolFiltersRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.optional(z.string()),
     slug: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
     });
-}));
-export function listMcpServerToolFiltersRequestToJSON(listMcpServerToolFiltersRequest) {
-    return JSON.stringify(ListMcpServerToolFiltersRequest$outboundSchema.parse(listMcpServerToolFiltersRequest));
+  }),
+);
+export function listMcpServerToolFiltersRequestToJSON(
+  listMcpServerToolFiltersRequest,
+) {
+  return JSON.stringify(
+    ListMcpServerToolFiltersRequest$outboundSchema.parse(
+      listMcpServerToolFiltersRequest,
+    ),
+  );
 }
 //# sourceMappingURL=listmcpservertoolfilters.js.map

@@ -4,30 +4,47 @@
 import { telemetryListToolUsageTraces } from "../funcs/telemetryListToolUsageTraces.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchListToolUsageTraces(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildListToolUsageTracesQuery(client$, request, security, options),
-    });
+export function prefetchListToolUsageTraces(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildListToolUsageTracesQuery(client$, request, security, options),
+  });
 }
-export function buildListToolUsageTracesQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyListToolUsageTraces({
-            gramKey: request.gramKey,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function listToolUsageTracesQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(telemetryListToolUsageTraces(client$, request, security, mergedOptions));
-        },
-    };
+export function buildListToolUsageTracesQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyListToolUsageTraces({
+      gramKey: request.gramKey,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function listToolUsageTracesQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        telemetryListToolUsageTraces(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyListToolUsageTraces(parameters) {
-    return ["@gram/client", "telemetry", "listToolUsageTraces", parameters];
+  return ["@gram/client", "telemetry", "listToolUsageTraces", parameters];
 }
 //# sourceMappingURL=listToolUsageTraces.core.js.map

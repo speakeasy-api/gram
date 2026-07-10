@@ -4,25 +4,43 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetTokensUnderManagementSecurity$outboundSchema = z.pipe(z.object({
+export const GetTokensUnderManagementSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function getTokensUnderManagementSecurityToJSON(getTokensUnderManagementSecurity) {
-    return JSON.stringify(GetTokensUnderManagementSecurity$outboundSchema.parse(getTokensUnderManagementSecurity));
+  }),
+);
+export function getTokensUnderManagementSecurityToJSON(
+  getTokensUnderManagementSecurity,
+) {
+  return JSON.stringify(
+    GetTokensUnderManagementSecurity$outboundSchema.parse(
+      getTokensUnderManagementSecurity,
+    ),
+  );
 }
 /** @internal */
-export const GetTokensUnderManagementRequest$outboundSchema = z.pipe(z.object({
+export const GetTokensUnderManagementRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
-export function getTokensUnderManagementRequestToJSON(getTokensUnderManagementRequest) {
-    return JSON.stringify(GetTokensUnderManagementRequest$outboundSchema.parse(getTokensUnderManagementRequest));
+  }),
+);
+export function getTokensUnderManagementRequestToJSON(
+  getTokensUnderManagementRequest,
+) {
+  return JSON.stringify(
+    GetTokensUnderManagementRequest$outboundSchema.parse(
+      getTokensUnderManagementRequest,
+    ),
+  );
 }
 //# sourceMappingURL=gettokensundermanagement.js.map

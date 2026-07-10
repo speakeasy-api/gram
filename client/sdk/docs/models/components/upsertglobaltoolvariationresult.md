@@ -19,6 +19,6 @@ let value: UpsertGlobalToolVariationResult = {
 
 ## Fields
 
-| Field                                                                | Type                                                                 | Required                                                             | Description                                                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `variation`                                                          | [components.ToolVariation](../../models/components/toolvariation.md) | :heavy_check_mark:                                                   | N/A                                                                  |
+| Field       | Type                                                                 | Required           | Description |
+| ----------- | -------------------------------------------------------------------- | ------------------ | ----------- |
+| `variation` | [components.ToolVariation](../../models/components/toolvariation.md) | :heavy_check_mark: | N/A         |

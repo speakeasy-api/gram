@@ -7,33 +7,36 @@ import { GramError } from "./gramerror.js";
  * unauthorized access
  */
 export class ServiceError extends GramError {
-    constructor(err, httpMeta) {
-        const message = err.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.fault = err.fault;
-        this.id = err.id;
-        this.temporary = err.temporary;
-        this.timeout = err.timeout;
-        this.name = "ServiceError";
-    }
+  constructor(err, httpMeta) {
+    const message = err.message || `API error occurred: ${JSON.stringify(err)}`;
+    super(message, httpMeta);
+    this.data$ = err;
+    this.fault = err.fault;
+    this.id = err.id;
+    this.temporary = err.temporary;
+    this.timeout = err.timeout;
+    this.name = "ServiceError";
+  }
 }
 /** @internal */
-export const ServiceError$inboundSchema = z.pipe(z.object({
+export const ServiceError$inboundSchema = z.pipe(
+  z.object({
     fault: z.boolean(),
     id: z.string(),
     message: z.string(),
     name: z.string(),
     temporary: z.boolean(),
     timeout: z.boolean(),
-    request$: z.custom(x => x instanceof Request),
-    response$: z.custom(x => x instanceof Response),
+    request$: z.custom((x) => x instanceof Request),
+    response$: z.custom((x) => x instanceof Response),
     body$: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return new ServiceError(v, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$,
+      request: v.request$,
+      response: v.response$,
+      body: v.body$,
     });
-}));
+  }),
+);
 //# sourceMappingURL=serviceerror.js.map

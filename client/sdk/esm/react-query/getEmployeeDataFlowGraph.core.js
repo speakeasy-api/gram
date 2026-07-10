@@ -4,30 +4,52 @@
 import { telemetryGetEmployeeDataFlowGraph } from "../funcs/telemetryGetEmployeeDataFlowGraph.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchGetEmployeeDataFlowGraph(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildGetEmployeeDataFlowGraphQuery(client$, request, security, options),
-    });
+export function prefetchGetEmployeeDataFlowGraph(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildGetEmployeeDataFlowGraphQuery(client$, request, security, options),
+  });
 }
-export function buildGetEmployeeDataFlowGraphQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyGetEmployeeDataFlowGraph({
-            gramKey: request.gramKey,
-            gramSession: request.gramSession,
-            gramProject: request.gramProject,
-        }),
-        queryFn: async function getEmployeeDataFlowGraphQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(telemetryGetEmployeeDataFlowGraph(client$, request, security, mergedOptions));
-        },
-    };
+export function buildGetEmployeeDataFlowGraphQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyGetEmployeeDataFlowGraph({
+      gramKey: request.gramKey,
+      gramSession: request.gramSession,
+      gramProject: request.gramProject,
+    }),
+    queryFn: async function getEmployeeDataFlowGraphQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        telemetryGetEmployeeDataFlowGraph(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ),
+      );
+    },
+  };
 }
 export function queryKeyGetEmployeeDataFlowGraph(parameters) {
-    return ["@gram/client", "telemetry", "getEmployeeDataFlowGraph", parameters];
+  return ["@gram/client", "telemetry", "getEmployeeDataFlowGraph", parameters];
 }
 //# sourceMappingURL=getEmployeeDataFlowGraph.core.js.map

@@ -3,29 +3,48 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateShadowMCPApprovalRequestForm$outboundSchema, } from "../components/createshadowmcpapprovalrequestform.js";
+import { CreateShadowMCPApprovalRequestForm$outboundSchema } from "../components/createshadowmcpapprovalrequestform.js";
 /** @internal */
-export const CreateShadowMCPApprovalRequestSecurity$outboundSchema = z.pipe(z.object({
+export const CreateShadowMCPApprovalRequestSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function createShadowMCPApprovalRequestSecurityToJSON(createShadowMCPApprovalRequestSecurity) {
-    return JSON.stringify(CreateShadowMCPApprovalRequestSecurity$outboundSchema.parse(createShadowMCPApprovalRequestSecurity));
+  }),
+);
+export function createShadowMCPApprovalRequestSecurityToJSON(
+  createShadowMCPApprovalRequestSecurity,
+) {
+  return JSON.stringify(
+    CreateShadowMCPApprovalRequestSecurity$outboundSchema.parse(
+      createShadowMCPApprovalRequestSecurity,
+    ),
+  );
 }
 /** @internal */
-export const CreateShadowMCPApprovalRequestRequest$outboundSchema = z.pipe(z.object({
+export const CreateShadowMCPApprovalRequestRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-    createShadowMCPApprovalRequestForm: CreateShadowMCPApprovalRequestForm$outboundSchema,
-}), z.transform((v) => {
+    createShadowMCPApprovalRequestForm:
+      CreateShadowMCPApprovalRequestForm$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        createShadowMCPApprovalRequestForm: "CreateShadowMCPApprovalRequestForm",
+      gramSession: "Gram-Session",
+      createShadowMCPApprovalRequestForm: "CreateShadowMCPApprovalRequestForm",
     });
-}));
-export function createShadowMCPApprovalRequestRequestToJSON(createShadowMCPApprovalRequestRequest) {
-    return JSON.stringify(CreateShadowMCPApprovalRequestRequest$outboundSchema.parse(createShadowMCPApprovalRequestRequest));
+  }),
+);
+export function createShadowMCPApprovalRequestRequestToJSON(
+  createShadowMCPApprovalRequestRequest,
+) {
+  return JSON.stringify(
+    CreateShadowMCPApprovalRequestRequest$outboundSchema.parse(
+      createShadowMCPApprovalRequestRequest,
+    ),
+  );
 }
 //# sourceMappingURL=createshadowmcpapprovalrequest.js.map

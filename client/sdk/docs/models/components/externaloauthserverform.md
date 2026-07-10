@@ -13,7 +13,7 @@ let value: ExternalOAuthServerForm = {
 
 ## Fields
 
-| Field                                                           | Type                                                            | Required                                                        | Description                                                     |
-| --------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
-| `metadata`                                                      | *any*                                                           | :heavy_check_mark:                                              | The metadata for the external OAuth server                      |
-| `slug`                                                          | *string*                                                        | :heavy_check_mark:                                              | A short url-friendly label that uniquely identifies a resource. |
+| Field      | Type     | Required           | Description                                                     |
+| ---------- | -------- | ------------------ | --------------------------------------------------------------- |
+| `metadata` | _any_    | :heavy_check_mark: | The metadata for the external OAuth server                      |
+| `slug`     | _string_ | :heavy_check_mark: | A short url-friendly label that uniquely identifies a resource. |

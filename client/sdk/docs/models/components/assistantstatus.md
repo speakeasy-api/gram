@@ -13,5 +13,5 @@ let value: AssistantStatus = "active";
 ## Values
 
 ```typescript
-"active" | "paused"
+"active" | "paused";
 ```

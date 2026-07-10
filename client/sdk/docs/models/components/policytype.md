@@ -13,5 +13,5 @@ let value: PolicyType = "prompt_based";
 ## Values
 
 ```typescript
-"standard" | "prompt_based"
+"standard" | "prompt_based";
 ```

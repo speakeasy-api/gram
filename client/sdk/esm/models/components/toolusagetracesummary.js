@@ -4,53 +4,62 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ToolUsageTraceLogGroup$inboundSchema, } from "./toolusagetraceloggroup.js";
+import { ToolUsageTraceLogGroup$inboundSchema } from "./toolusagetraceloggroup.js";
 /**
  * Hook execution status when the row came from hook telemetry
  */
 export const ToolUsageTraceSummaryHookStatus = {
-    Success: "success",
-    Failure: "failure",
-    Blocked: "blocked",
-    Pending: "pending",
+  Success: "success",
+  Failure: "failure",
+  Blocked: "blocked",
+  Pending: "pending",
 };
 /**
  * Tool usage aggregation target kind
  */
 export const ToolUsageTraceSummaryTargetKind = {
-    Server: "server",
-    LocalTools: "local_tools",
-    Skill: "skill",
+  Server: "server",
+  LocalTools: "local_tools",
+  Skill: "skill",
 };
 /**
  * Tool usage target type
  */
 export const ToolUsageTraceSummaryTargetType = {
-    HostedMcpServer: "hosted_mcp_server",
-    TunneledMcpServer: "tunneled_mcp_server",
-    ShadowMcpServer: "shadow_mcp_server",
-    LocalTool: "local_tool",
-    Skill: "skill",
+  HostedMcpServer: "hosted_mcp_server",
+  TunneledMcpServer: "tunneled_mcp_server",
+  ShadowMcpServer: "shadow_mcp_server",
+  LocalTool: "local_tool",
+  Skill: "skill",
 };
 /**
  * Tool usage user identity kind
  */
 export const ToolUsageTraceSummaryUserKind = {
-    Email: "email",
-    ExternalUserId: "external_user_id",
-    UserId: "user_id",
-    Unknown: "unknown",
+  Email: "email",
+  ExternalUserId: "external_user_id",
+  UserId: "user_id",
+  Unknown: "unknown",
 };
 /** @internal */
-export const ToolUsageTraceSummaryHookStatus$inboundSchema = z.enum(ToolUsageTraceSummaryHookStatus);
+export const ToolUsageTraceSummaryHookStatus$inboundSchema = z.enum(
+  ToolUsageTraceSummaryHookStatus,
+);
 /** @internal */
-export const ToolUsageTraceSummaryTargetKind$inboundSchema = z.enum(ToolUsageTraceSummaryTargetKind);
+export const ToolUsageTraceSummaryTargetKind$inboundSchema = z.enum(
+  ToolUsageTraceSummaryTargetKind,
+);
 /** @internal */
-export const ToolUsageTraceSummaryTargetType$inboundSchema = z.enum(ToolUsageTraceSummaryTargetType);
+export const ToolUsageTraceSummaryTargetType$inboundSchema = z.enum(
+  ToolUsageTraceSummaryTargetType,
+);
 /** @internal */
-export const ToolUsageTraceSummaryUserKind$inboundSchema = z.enum(ToolUsageTraceSummaryUserKind);
+export const ToolUsageTraceSummaryUserKind$inboundSchema = z.enum(
+  ToolUsageTraceSummaryUserKind,
+);
 /** @internal */
-export const ToolUsageTraceSummary$inboundSchema = z.pipe(z.object({
+export const ToolUsageTraceSummary$inboundSchema = z.pipe(
+  z.object({
     account_type: z.optional(z.string()),
     block_reason: z.optional(z.string()),
     event_source: z.string(),
@@ -71,30 +80,36 @@ export const ToolUsageTraceSummary$inboundSchema = z.pipe(z.object({
     user_key: z.string(),
     user_kind: ToolUsageTraceSummaryUserKind$inboundSchema,
     user_label: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "account_type": "accountType",
-        "block_reason": "blockReason",
-        "event_source": "eventSource",
-        "gram_urn": "gramUrn",
-        "hook_source": "hookSource",
-        "hook_status": "hookStatus",
-        "http_status_code": "httpStatusCode",
-        "log_count": "logCount",
-        "log_group": "logGroup",
-        "start_time_unix_nano": "startTimeUnixNano",
-        "target_id": "targetId",
-        "target_kind": "targetKind",
-        "target_label": "targetLabel",
-        "target_type": "targetType",
-        "tool_name": "toolName",
-        "trace_id": "traceId",
-        "user_key": "userKey",
-        "user_kind": "userKind",
-        "user_label": "userLabel",
+      account_type: "accountType",
+      block_reason: "blockReason",
+      event_source: "eventSource",
+      gram_urn: "gramUrn",
+      hook_source: "hookSource",
+      hook_status: "hookStatus",
+      http_status_code: "httpStatusCode",
+      log_count: "logCount",
+      log_group: "logGroup",
+      start_time_unix_nano: "startTimeUnixNano",
+      target_id: "targetId",
+      target_kind: "targetKind",
+      target_label: "targetLabel",
+      target_type: "targetType",
+      tool_name: "toolName",
+      trace_id: "traceId",
+      user_key: "userKey",
+      user_kind: "userKind",
+      user_label: "userLabel",
     });
-}));
+  }),
+);
 export function toolUsageTraceSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolUsageTraceSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolUsageTraceSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolUsageTraceSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolUsageTraceSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=toolusagetracesummary.js.map

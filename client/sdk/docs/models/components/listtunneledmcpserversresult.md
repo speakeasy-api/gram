@@ -27,6 +27,6 @@ let value: ListTunneledMcpServersResult = {
 
 ## Fields
 
-| Field                                                                          | Type                                                                           | Required                                                                       | Description                                                                    |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `tunneledMcpServers`                                                           | [components.TunneledMcpServer](../../models/components/tunneledmcpserver.md)[] | :heavy_check_mark:                                                             | N/A                                                                            |
+| Field                | Type                                                                           | Required           | Description |
+| -------------------- | ------------------------------------------------------------------------------ | ------------------ | ----------- |
+| `tunneledMcpServers` | [components.TunneledMcpServer](../../models/components/tunneledmcpserver.md)[] | :heavy_check_mark: | N/A         |

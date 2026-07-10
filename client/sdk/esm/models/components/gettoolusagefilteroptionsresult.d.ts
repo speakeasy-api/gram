@@ -8,20 +8,25 @@ import { ToolUsageUserFilterOption } from "./toolusageuserfilteroption.js";
  * Filter options for target-aware MCP and tool usage metrics
  */
 export type GetToolUsageFilterOptionsResult = {
-    /**
-     * Hosted MCP servers with usage in the selected time range
-     */
-    hostedServers: Array<ToolUsageHostedServerFilterOption>;
-    /**
-     * Shadow MCP servers with usage in the selected time range
-     */
-    shadowServers: Array<ToolUsageShadowServerFilterOption>;
-    /**
-     * User identities with usage in the selected time range
-     */
-    users: Array<ToolUsageUserFilterOption>;
+  /**
+   * Hosted MCP servers with usage in the selected time range
+   */
+  hostedServers: Array<ToolUsageHostedServerFilterOption>;
+  /**
+   * Shadow MCP servers with usage in the selected time range
+   */
+  shadowServers: Array<ToolUsageShadowServerFilterOption>;
+  /**
+   * User identities with usage in the selected time range
+   */
+  users: Array<ToolUsageUserFilterOption>;
 };
 /** @internal */
-export declare const GetToolUsageFilterOptionsResult$inboundSchema: z.ZodMiniType<GetToolUsageFilterOptionsResult, unknown>;
-export declare function getToolUsageFilterOptionsResultFromJSON(jsonString: string): SafeParseResult<GetToolUsageFilterOptionsResult, SDKValidationError>;
+export declare const GetToolUsageFilterOptionsResult$inboundSchema: z.ZodMiniType<
+  GetToolUsageFilterOptionsResult,
+  unknown
+>;
+export declare function getToolUsageFilterOptionsResultFromJSON(
+  jsonString: string,
+): SafeParseResult<GetToolUsageFilterOptionsResult, SDKValidationError>;
 //# sourceMappingURL=gettoolusagefilteroptionsresult.d.ts.map

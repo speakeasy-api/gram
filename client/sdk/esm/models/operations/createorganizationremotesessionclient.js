@@ -3,33 +3,55 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateOrganizationRemoteSessionClientForm$outboundSchema, } from "../components/createorganizationremotesessionclientform.js";
+import { CreateOrganizationRemoteSessionClientForm$outboundSchema } from "../components/createorganizationremotesessionclientform.js";
 /** @internal */
-export const CreateOrganizationRemoteSessionClientSecurity$outboundSchema = z.pipe(z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
-    apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
-    return remap$(v, {
+export const CreateOrganizationRemoteSessionClientSecurity$outboundSchema =
+  z.pipe(
+    z.object({
+      sessionHeaderGramSession: z.optional(z.string()),
+      apikeyHeaderGramKey: z.optional(z.string()),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         sessionHeaderGramSession: "session_header_Gram-Session",
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    });
-}));
-export function createOrganizationRemoteSessionClientSecurityToJSON(createOrganizationRemoteSessionClientSecurity) {
-    return JSON.stringify(CreateOrganizationRemoteSessionClientSecurity$outboundSchema.parse(createOrganizationRemoteSessionClientSecurity));
+      });
+    }),
+  );
+export function createOrganizationRemoteSessionClientSecurityToJSON(
+  createOrganizationRemoteSessionClientSecurity,
+) {
+  return JSON.stringify(
+    CreateOrganizationRemoteSessionClientSecurity$outboundSchema.parse(
+      createOrganizationRemoteSessionClientSecurity,
+    ),
+  );
 }
 /** @internal */
-export const CreateOrganizationRemoteSessionClientRequest$outboundSchema = z.pipe(z.object({
-    gramSession: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
-    createOrganizationRemoteSessionClientForm: CreateOrganizationRemoteSessionClientForm$outboundSchema,
-}), z.transform((v) => {
-    return remap$(v, {
+export const CreateOrganizationRemoteSessionClientRequest$outboundSchema =
+  z.pipe(
+    z.object({
+      gramSession: z.optional(z.string()),
+      gramKey: z.optional(z.string()),
+      createOrganizationRemoteSessionClientForm:
+        CreateOrganizationRemoteSessionClientForm$outboundSchema,
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
-        createOrganizationRemoteSessionClientForm: "CreateOrganizationRemoteSessionClientForm",
-    });
-}));
-export function createOrganizationRemoteSessionClientRequestToJSON(createOrganizationRemoteSessionClientRequest) {
-    return JSON.stringify(CreateOrganizationRemoteSessionClientRequest$outboundSchema.parse(createOrganizationRemoteSessionClientRequest));
+        createOrganizationRemoteSessionClientForm:
+          "CreateOrganizationRemoteSessionClientForm",
+      });
+    }),
+  );
+export function createOrganizationRemoteSessionClientRequestToJSON(
+  createOrganizationRemoteSessionClientRequest,
+) {
+  return JSON.stringify(
+    CreateOrganizationRemoteSessionClientRequest$outboundSchema.parse(
+      createOrganizationRemoteSessionClientRequest,
+    ),
+  );
 }
 //# sourceMappingURL=createorganizationremotesessionclient.js.map

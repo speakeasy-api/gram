@@ -4,16 +4,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const CloneEnvironmentRequestBody$outboundSchema = z.pipe(z.object({
+export const CloneEnvironmentRequestBody$outboundSchema = z.pipe(
+  z.object({
     copyValues: z.optional(z.boolean()),
     newName: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        copyValues: "copy_values",
-        newName: "new_name",
+      copyValues: "copy_values",
+      newName: "new_name",
     });
-}));
+  }),
+);
 export function cloneEnvironmentRequestBodyToJSON(cloneEnvironmentRequestBody) {
-    return JSON.stringify(CloneEnvironmentRequestBody$outboundSchema.parse(cloneEnvironmentRequestBody));
+  return JSON.stringify(
+    CloneEnvironmentRequestBody$outboundSchema.parse(
+      cloneEnvironmentRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=cloneenvironmentrequestbody.js.map

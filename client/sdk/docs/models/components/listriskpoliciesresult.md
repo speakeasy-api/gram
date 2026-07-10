@@ -12,6 +12,6 @@ let value: ListRiskPoliciesResult = {
 
 ## Fields
 
-| Field                                                            | Type                                                             | Required                                                         | Description                                                      |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `policies`                                                       | [components.RiskPolicy](../../models/components/riskpolicy.md)[] | :heavy_check_mark:                                               | The list of risk policies.                                       |
+| Field      | Type                                                             | Required           | Description                |
+| ---------- | ---------------------------------------------------------------- | ------------------ | -------------------------- |
+| `policies` | [components.RiskPolicy](../../models/components/riskpolicy.md)[] | :heavy_check_mark: | The list of risk policies. |

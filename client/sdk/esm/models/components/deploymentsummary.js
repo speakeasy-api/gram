@@ -5,8 +5,12 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const DeploymentSummary$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const DeploymentSummary$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     external_mcp_asset_count: z.int(),
     external_mcp_tool_count: z.int(),
     functions_asset_count: z.int(),
@@ -16,19 +20,25 @@ export const DeploymentSummary$inboundSchema = z.pipe(z.object({
     openapiv3_tool_count: z.int(),
     status: z.string(),
     user_id: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "external_mcp_asset_count": "externalMcpAssetCount",
-        "external_mcp_tool_count": "externalMcpToolCount",
-        "functions_asset_count": "functionsAssetCount",
-        "functions_tool_count": "functionsToolCount",
-        "openapiv3_asset_count": "openapiv3AssetCount",
-        "openapiv3_tool_count": "openapiv3ToolCount",
-        "user_id": "userId",
+      created_at: "createdAt",
+      external_mcp_asset_count: "externalMcpAssetCount",
+      external_mcp_tool_count: "externalMcpToolCount",
+      functions_asset_count: "functionsAssetCount",
+      functions_tool_count: "functionsToolCount",
+      openapiv3_asset_count: "openapiv3AssetCount",
+      openapiv3_tool_count: "openapiv3ToolCount",
+      user_id: "userId",
     });
-}));
+  }),
+);
 export function deploymentSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => DeploymentSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'DeploymentSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => DeploymentSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'DeploymentSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=deploymentsummary.js.map

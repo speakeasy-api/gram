@@ -3,11 +3,14 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { McpEnvironmentConfigInput$outboundSchema, } from "./mcpenvironmentconfiginput.js";
+import { McpEnvironmentConfigInput$outboundSchema } from "./mcpenvironmentconfiginput.js";
 /** @internal */
-export const SetMcpMetadataRequestBody$outboundSchema = z.pipe(z.object({
+export const SetMcpMetadataRequestBody$outboundSchema = z.pipe(
+  z.object({
     defaultEnvironmentId: z.optional(z.string()),
-    environmentConfigs: z.optional(z.array(McpEnvironmentConfigInput$outboundSchema)),
+    environmentConfigs: z.optional(
+      z.array(McpEnvironmentConfigInput$outboundSchema),
+    ),
     externalDocumentationText: z.optional(z.string()),
     externalDocumentationUrl: z.optional(z.string()),
     installationOverrideUrl: z.optional(z.string()),
@@ -15,19 +18,23 @@ export const SetMcpMetadataRequestBody$outboundSchema = z.pipe(z.object({
     logoAssetId: z.optional(z.string()),
     mcpServerId: z.optional(z.string()),
     toolsetSlug: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        defaultEnvironmentId: "default_environment_id",
-        environmentConfigs: "environment_configs",
-        externalDocumentationText: "external_documentation_text",
-        externalDocumentationUrl: "external_documentation_url",
-        installationOverrideUrl: "installation_override_url",
-        logoAssetId: "logo_asset_id",
-        mcpServerId: "mcp_server_id",
-        toolsetSlug: "toolset_slug",
+      defaultEnvironmentId: "default_environment_id",
+      environmentConfigs: "environment_configs",
+      externalDocumentationText: "external_documentation_text",
+      externalDocumentationUrl: "external_documentation_url",
+      installationOverrideUrl: "installation_override_url",
+      logoAssetId: "logo_asset_id",
+      mcpServerId: "mcp_server_id",
+      toolsetSlug: "toolset_slug",
     });
-}));
+  }),
+);
 export function setMcpMetadataRequestBodyToJSON(setMcpMetadataRequestBody) {
-    return JSON.stringify(SetMcpMetadataRequestBody$outboundSchema.parse(setMcpMetadataRequestBody));
+  return JSON.stringify(
+    SetMcpMetadataRequestBody$outboundSchema.parse(setMcpMetadataRequestBody),
+  );
 }
 //# sourceMappingURL=setmcpmetadatarequestbody.js.map

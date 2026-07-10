@@ -12,7 +12,7 @@ let value: OTELScopeMetrics = {};
 
 ## Fields
 
-| Field                                                            | Type                                                             | Required                                                         | Description                                                      |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `metrics`                                                        | [components.OTELMetric](../../models/components/otelmetric.md)[] | :heavy_minus_sign:                                               | Array of metrics                                                 |
-| `scope`                                                          | [components.OTELScope](../../models/components/otelscope.md)     | :heavy_minus_sign:                                               | OTEL instrumentation scope                                       |
+| Field     | Type                                                             | Required           | Description                |
+| --------- | ---------------------------------------------------------------- | ------------------ | -------------------------- |
+| `metrics` | [components.OTELMetric](../../models/components/otelmetric.md)[] | :heavy_minus_sign: | Array of metrics           |
+| `scope`   | [components.OTELScope](../../models/components/otelscope.md)     | :heavy_minus_sign: | OTEL instrumentation scope |

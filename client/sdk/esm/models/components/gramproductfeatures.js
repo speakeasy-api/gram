@@ -5,20 +5,27 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const GramProductFeatures$inboundSchema = z.pipe(z.object({
+export const GramProductFeatures$inboundSchema = z.pipe(
+  z.object({
     authz_challenge_logging_enabled: z.boolean(),
     logs_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
-        "logs_enabled": "logsEnabled",
-        "session_capture_enabled": "sessionCaptureEnabled",
-        "tool_io_logs_enabled": "toolIoLogsEnabled",
+      authz_challenge_logging_enabled: "authzChallengeLoggingEnabled",
+      logs_enabled: "logsEnabled",
+      session_capture_enabled: "sessionCaptureEnabled",
+      tool_io_logs_enabled: "toolIoLogsEnabled",
     });
-}));
+  }),
+);
 export function gramProductFeaturesFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GramProductFeatures$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GramProductFeatures' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => GramProductFeatures$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GramProductFeatures' from JSON`,
+  );
 }
 //# sourceMappingURL=gramproductfeatures.js.map

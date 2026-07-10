@@ -4,30 +4,42 @@
 import { auditlogsListFacets } from "../funcs/auditlogsListFacets.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchAuditLogFacets(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildAuditLogFacetsQuery(client$, request, security, options),
-    });
+export function prefetchAuditLogFacets(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildAuditLogFacetsQuery(client$, request, security, options),
+  });
 }
 export function buildAuditLogFacetsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyAuditLogFacets({
-            projectSlug: request?.projectSlug,
-            gramKey: request?.gramKey,
-            gramSession: request?.gramSession,
-        }),
-        queryFn: async function auditLogFacetsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(auditlogsListFacets(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyAuditLogFacets({
+      projectSlug: request?.projectSlug,
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+    }),
+    queryFn: async function auditLogFacetsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        auditlogsListFacets(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyAuditLogFacets(parameters) {
-    return ["@gram/client", "auditlogs", "listFacets", parameters];
+  return ["@gram/client", "auditlogs", "listFacets", parameters];
 }
 //# sourceMappingURL=auditLogFacets.core.js.map

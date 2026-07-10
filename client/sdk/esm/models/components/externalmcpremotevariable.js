@@ -5,19 +5,26 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ExternalMCPRemoteVariable$inboundSchema = z.pipe(z.object({
+export const ExternalMCPRemoteVariable$inboundSchema = z.pipe(
+  z.object({
     choices: z.optional(z.array(z.string())),
     default: z.optional(z.string()),
     description: z.optional(z.string()),
     is_required: z.optional(z.boolean()),
     is_secret: z.optional(z.boolean()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "is_required": "isRequired",
-        "is_secret": "isSecret",
+      is_required: "isRequired",
+      is_secret: "isSecret",
     });
-}));
+  }),
+);
 export function externalMCPRemoteVariableFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ExternalMCPRemoteVariable$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ExternalMCPRemoteVariable' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ExternalMCPRemoteVariable$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ExternalMCPRemoteVariable' from JSON`,
+  );
 }
 //# sourceMappingURL=externalmcpremotevariable.js.map

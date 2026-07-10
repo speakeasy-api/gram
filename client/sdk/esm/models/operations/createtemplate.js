@@ -3,61 +3,93 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreatePromptTemplateForm$outboundSchema, } from "../components/createprompttemplateform.js";
+import { CreatePromptTemplateForm$outboundSchema } from "../components/createprompttemplateform.js";
 /** @internal */
-export const CreateTemplateSecurityOption1$outboundSchema = z.pipe(z.object({
+export const CreateTemplateSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function createTemplateSecurityOption1ToJSON(createTemplateSecurityOption1) {
-    return JSON.stringify(CreateTemplateSecurityOption1$outboundSchema.parse(createTemplateSecurityOption1));
+  }),
+);
+export function createTemplateSecurityOption1ToJSON(
+  createTemplateSecurityOption1,
+) {
+  return JSON.stringify(
+    CreateTemplateSecurityOption1$outboundSchema.parse(
+      createTemplateSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const CreateTemplateSecurityOption2$outboundSchema = z.pipe(z.object({
+export const CreateTemplateSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function createTemplateSecurityOption2ToJSON(createTemplateSecurityOption2) {
-    return JSON.stringify(CreateTemplateSecurityOption2$outboundSchema.parse(createTemplateSecurityOption2));
+  }),
+);
+export function createTemplateSecurityOption2ToJSON(
+  createTemplateSecurityOption2,
+) {
+  return JSON.stringify(
+    CreateTemplateSecurityOption2$outboundSchema.parse(
+      createTemplateSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const CreateTemplateSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => CreateTemplateSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => CreateTemplateSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const CreateTemplateSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => CreateTemplateSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => CreateTemplateSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function createTemplateSecurityToJSON(createTemplateSecurity) {
-    return JSON.stringify(CreateTemplateSecurity$outboundSchema.parse(createTemplateSecurity));
+  return JSON.stringify(
+    CreateTemplateSecurity$outboundSchema.parse(createTemplateSecurity),
+  );
 }
 /** @internal */
-export const CreateTemplateRequest$outboundSchema = z.pipe(z.object({
+export const CreateTemplateRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     createPromptTemplateForm: CreatePromptTemplateForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        createPromptTemplateForm: "CreatePromptTemplateForm",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      createPromptTemplateForm: "CreatePromptTemplateForm",
     });
-}));
+  }),
+);
 export function createTemplateRequestToJSON(createTemplateRequest) {
-    return JSON.stringify(CreateTemplateRequest$outboundSchema.parse(createTemplateRequest));
+  return JSON.stringify(
+    CreateTemplateRequest$outboundSchema.parse(createTemplateRequest),
+  );
 }
 //# sourceMappingURL=createtemplate.js.map

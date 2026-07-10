@@ -4,14 +4,19 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetSignedAssetURLForm$outboundSchema = z.pipe(z.object({
+export const GetSignedAssetURLForm$outboundSchema = z.pipe(
+  z.object({
     assetId: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        assetId: "asset_id",
+      assetId: "asset_id",
     });
-}));
+  }),
+);
 export function getSignedAssetURLFormToJSON(getSignedAssetURLForm) {
-    return JSON.stringify(GetSignedAssetURLForm$outboundSchema.parse(getSignedAssetURLForm));
+  return JSON.stringify(
+    GetSignedAssetURLForm$outboundSchema.parse(getSignedAssetURLForm),
+  );
 }
 //# sourceMappingURL=getsignedasseturlform.js.map

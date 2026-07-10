@@ -20,6 +20,6 @@ let value: ListAllowedOriginsResult = {
 
 ## Fields
 
-| Field                                                                  | Type                                                                   | Required                                                               | Description                                                            |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `allowedOrigins`                                                       | [components.AllowedOrigin](../../models/components/allowedorigin.md)[] | :heavy_check_mark:                                                     | The list of allowed origins                                            |
+| Field            | Type                                                                   | Required           | Description                 |
+| ---------------- | ---------------------------------------------------------------------- | ------------------ | --------------------------- |
+| `allowedOrigins` | [components.AllowedOrigin](../../models/components/allowedorigin.md)[] | :heavy_check_mark: | The list of allowed origins |

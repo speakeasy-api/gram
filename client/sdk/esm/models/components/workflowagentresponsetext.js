@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { WorkflowAgentTextFormat$inboundSchema, } from "./workflowagenttextformat.js";
+import { WorkflowAgentTextFormat$inboundSchema } from "./workflowagenttextformat.js";
 /** @internal */
 export const WorkflowAgentResponseText$inboundSchema = z.object({
-    format: WorkflowAgentTextFormat$inboundSchema,
+  format: WorkflowAgentTextFormat$inboundSchema,
 });
 export function workflowAgentResponseTextFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => WorkflowAgentResponseText$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'WorkflowAgentResponseText' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => WorkflowAgentResponseText$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'WorkflowAgentResponseText' from JSON`,
+  );
 }
 //# sourceMappingURL=workflowagentresponsetext.js.map

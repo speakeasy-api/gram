@@ -5,8 +5,8 @@ import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { pathToFunc } from "../lib/url.js";
-import { UsageTiers$inboundSchema, } from "../models/components/usagetiers.js";
-import { ServiceError$inboundSchema, } from "../models/errors/serviceerror.js";
+import { UsageTiers$inboundSchema } from "../models/components/usagetiers.js";
+import { ServiceError$inboundSchema } from "../models/errors/serviceerror.js";
 import { APIPromise } from "../types/async.js";
 /**
  * getUsageTiers usage
@@ -15,54 +15,66 @@ import { APIPromise } from "../types/async.js";
  * Get the usage tiers
  */
 export function usageGetUsageTiers(client, options) {
-    return new APIPromise($do(client, options));
+  return new APIPromise($do(client, options));
 }
 async function $do(client, options) {
-    const path = pathToFunc("/rpc/usage.getUsageTiers")();
-    const headers = new Headers(compactMap({
-        Accept: "application/json",
-    }));
-    const context = {
-        options: client._options,
-        baseURL: options?.serverURL ?? client._baseURL ?? "",
-        operationID: "getUsageTiers",
-        oAuth2Scopes: null,
-        resolvedSecurity: null,
-        securitySource: null,
-        retryConfig: options?.retries
-            || client._options.retryConfig
-            || { strategy: "none" },
-        retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"],
-    };
-    const requestRes = client._createRequest(context, {
-        method: "GET",
-        baseURL: options?.serverURL,
-        path: path,
-        headers: headers,
-        userAgent: client._options.userAgent,
-        timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
-    }, options);
-    if (!requestRes.ok) {
-        return [requestRes, { status: "invalid" }];
-    }
-    const req = requestRes.value;
-    const doResult = await client._do(req, {
-        context,
-        isErrorStatusCode: (statusCode) => matchStatusCode({ status: statusCode }, ["4XX", "5XX"]),
-        retryConfig: context.retryConfig,
-        retryCodes: context.retryCodes,
-    });
-    if (!doResult.ok) {
-        return [doResult, { status: "request-error", request: req }];
-    }
-    const response = doResult.value;
-    const responseFields = {
-        HttpMeta: { Response: response, Request: req },
-    };
-    const [result] = await M.match(M.json(200, UsageTiers$inboundSchema), M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema), M.jsonErr([500, 502], ServiceError$inboundSchema), M.fail("4XX"), M.fail("5XX"))(response, req, { extraFields: responseFields });
-    if (!result.ok) {
-        return [result, { status: "complete", request: req, response }];
-    }
+  const path = pathToFunc("/rpc/usage.getUsageTiers")();
+  const headers = new Headers(
+    compactMap({
+      Accept: "application/json",
+    }),
+  );
+  const context = {
+    options: client._options,
+    baseURL: options?.serverURL ?? client._baseURL ?? "",
+    operationID: "getUsageTiers",
+    oAuth2Scopes: null,
+    resolvedSecurity: null,
+    securitySource: null,
+    retryConfig: options?.retries ||
+      client._options.retryConfig || { strategy: "none" },
+    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"],
+  };
+  const requestRes = client._createRequest(
+    context,
+    {
+      method: "GET",
+      baseURL: options?.serverURL,
+      path: path,
+      headers: headers,
+      userAgent: client._options.userAgent,
+      timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
+    },
+    options,
+  );
+  if (!requestRes.ok) {
+    return [requestRes, { status: "invalid" }];
+  }
+  const req = requestRes.value;
+  const doResult = await client._do(req, {
+    context,
+    isErrorStatusCode: (statusCode) =>
+      matchStatusCode({ status: statusCode }, ["4XX", "5XX"]),
+    retryConfig: context.retryConfig,
+    retryCodes: context.retryCodes,
+  });
+  if (!doResult.ok) {
+    return [doResult, { status: "request-error", request: req }];
+  }
+  const response = doResult.value;
+  const responseFields = {
+    HttpMeta: { Response: response, Request: req },
+  };
+  const [result] = await M.match(
+    M.json(200, UsageTiers$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
+    M.fail("4XX"),
+    M.fail("5XX"),
+  )(response, req, { extraFields: responseFields });
+  if (!result.ok) {
     return [result, { status: "complete", request: req, response }];
+  }
+  return [result, { status: "complete", request: req, response }];
 }
 //# sourceMappingURL=usageGetUsageTiers.js.map

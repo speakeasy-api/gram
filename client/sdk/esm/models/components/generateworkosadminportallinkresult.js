@@ -5,9 +5,14 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const GenerateWorkOSAdminPortalLinkResult$inboundSchema = z.object({
-    url: z.string(),
+  url: z.string(),
 });
 export function generateWorkOSAdminPortalLinkResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GenerateWorkOSAdminPortalLinkResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GenerateWorkOSAdminPortalLinkResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) =>
+      GenerateWorkOSAdminPortalLinkResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GenerateWorkOSAdminPortalLinkResult' from JSON`,
+  );
 }
 //# sourceMappingURL=generateworkosadminportallinkresult.js.map

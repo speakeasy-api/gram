@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { MCPCollection$inboundSchema } from "./mcpcollection.js";
 /** @internal */
 export const ListResponseBody$inboundSchema = z.object({
-    collections: z.array(MCPCollection$inboundSchema),
+  collections: z.array(MCPCollection$inboundSchema),
 });
 export function listResponseBodyFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListResponseBody$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListResponseBody' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListResponseBody' from JSON`,
+  );
 }
 //# sourceMappingURL=listresponsebody.js.map

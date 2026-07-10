@@ -5,14 +5,21 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const OAuthEnablementMetadata$inboundSchema = z.pipe(z.object({
+export const OAuthEnablementMetadata$inboundSchema = z.pipe(
+  z.object({
     oauth2_security_count: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "oauth2_security_count": "oauth2SecurityCount",
+      oauth2_security_count: "oauth2SecurityCount",
     });
-}));
+  }),
+);
 export function oAuthEnablementMetadataFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => OAuthEnablementMetadata$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'OAuthEnablementMetadata' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => OAuthEnablementMetadata$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'OAuthEnablementMetadata' from JSON`,
+  );
 }
 //# sourceMappingURL=oauthenablementmetadata.js.map

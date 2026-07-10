@@ -5,9 +5,13 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const RenderTemplateResult$inboundSchema = z.object({
-    prompt: z.string(),
+  prompt: z.string(),
 });
 export function renderTemplateResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RenderTemplateResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RenderTemplateResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RenderTemplateResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RenderTemplateResult' from JSON`,
+  );
 }
 //# sourceMappingURL=rendertemplateresult.js.map

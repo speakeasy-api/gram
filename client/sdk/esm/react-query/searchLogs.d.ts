@@ -3,29 +3,62 @@ import { GramCore } from "../core.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { SearchLogsResult } from "../models/components/searchlogsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
-import { ConnectionError, InvalidRequestError, RequestAbortedError, RequestTimeoutError, UnexpectedClientError } from "../models/errors/httpclienterrors.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { SearchLogsRequest, SearchLogsSecurity } from "../models/operations/searchlogs.js";
+import {
+  SearchLogsRequest,
+  SearchLogsSecurity,
+} from "../models/operations/searchlogs.js";
 import { MutationHookOptions } from "./_types.js";
 export type SearchLogsMutationVariables = {
-    request: SearchLogsRequest;
-    security?: SearchLogsSecurity | undefined;
-    options?: RequestOptions;
+  request: SearchLogsRequest;
+  security?: SearchLogsSecurity | undefined;
+  options?: RequestOptions;
 };
 export type SearchLogsMutationData = SearchLogsResult;
-export type SearchLogsMutationError = ServiceError | GramError | ResponseValidationError | ConnectionError | RequestAbortedError | RequestTimeoutError | InvalidRequestError | UnexpectedClientError | SDKValidationError;
+export type SearchLogsMutationError =
+  | ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 /**
  * searchLogs telemetry
  *
  * @remarks
  * Search and list telemetry logs that match a search filter
  */
-export declare function useSearchLogsMutation(options?: MutationHookOptions<SearchLogsMutationData, SearchLogsMutationError, SearchLogsMutationVariables>): UseMutationResult<SearchLogsMutationData, SearchLogsMutationError, SearchLogsMutationVariables>;
+export declare function useSearchLogsMutation(
+  options?: MutationHookOptions<
+    SearchLogsMutationData,
+    SearchLogsMutationError,
+    SearchLogsMutationVariables
+  >,
+): UseMutationResult<
+  SearchLogsMutationData,
+  SearchLogsMutationError,
+  SearchLogsMutationVariables
+>;
 export declare function mutationKeySearchLogs(): MutationKey;
-export declare function buildSearchLogsMutation(client$: GramCore, hookOptions?: RequestOptions): {
-    mutationKey: MutationKey;
-    mutationFn: (variables: SearchLogsMutationVariables) => Promise<SearchLogsMutationData>;
+export declare function buildSearchLogsMutation(
+  client$: GramCore,
+  hookOptions?: RequestOptions,
+): {
+  mutationKey: MutationKey;
+  mutationFn: (
+    variables: SearchLogsMutationVariables,
+  ) => Promise<SearchLogsMutationData>;
 };
 //# sourceMappingURL=searchLogs.d.ts.map

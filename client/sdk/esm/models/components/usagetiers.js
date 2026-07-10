@@ -5,13 +5,16 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 import { TierLimits$inboundSchema } from "./tierlimits.js";
 /** @internal */
-export const UsageTiers$inboundSchema = z
-    .object({
-    enterprise: TierLimits$inboundSchema,
-    free: TierLimits$inboundSchema,
-    pro: TierLimits$inboundSchema,
+export const UsageTiers$inboundSchema = z.object({
+  enterprise: TierLimits$inboundSchema,
+  free: TierLimits$inboundSchema,
+  pro: TierLimits$inboundSchema,
 });
 export function usageTiersFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => UsageTiers$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'UsageTiers' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => UsageTiers$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UsageTiers' from JSON`,
+  );
 }
 //# sourceMappingURL=usagetiers.js.map

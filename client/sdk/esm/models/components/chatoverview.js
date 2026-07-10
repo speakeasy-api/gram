@@ -5,13 +5,20 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ChatOverview$inboundSchema = z.pipe(z.object({
+export const ChatOverview$inboundSchema = z.pipe(
+  z.object({
     account_email: z.optional(z.string()),
     account_type: z.optional(z.string()),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     external_user_id: z.optional(z.string()),
     id: z.string(),
-    last_message_timestamp: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    last_message_timestamp: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     num_messages: z.int(),
     risk_findings_count: z.optional(z.int()),
     source: z.optional(z.string()),
@@ -20,26 +27,35 @@ export const ChatOverview$inboundSchema = z.pipe(z.object({
     total_input_tokens: z.optional(z.int()),
     total_output_tokens: z.optional(z.int()),
     total_tokens: z.optional(z.int()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     user_id: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "account_email": "accountEmail",
-        "account_type": "accountType",
-        "created_at": "createdAt",
-        "external_user_id": "externalUserId",
-        "last_message_timestamp": "lastMessageTimestamp",
-        "num_messages": "numMessages",
-        "risk_findings_count": "riskFindingsCount",
-        "total_cost": "totalCost",
-        "total_input_tokens": "totalInputTokens",
-        "total_output_tokens": "totalOutputTokens",
-        "total_tokens": "totalTokens",
-        "updated_at": "updatedAt",
-        "user_id": "userId",
+      account_email: "accountEmail",
+      account_type: "accountType",
+      created_at: "createdAt",
+      external_user_id: "externalUserId",
+      last_message_timestamp: "lastMessageTimestamp",
+      num_messages: "numMessages",
+      risk_findings_count: "riskFindingsCount",
+      total_cost: "totalCost",
+      total_input_tokens: "totalInputTokens",
+      total_output_tokens: "totalOutputTokens",
+      total_tokens: "totalTokens",
+      updated_at: "updatedAt",
+      user_id: "userId",
     });
-}));
+  }),
+);
 export function chatOverviewFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ChatOverview$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ChatOverview' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ChatOverview$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ChatOverview' from JSON`,
+  );
 }
 //# sourceMappingURL=chatoverview.js.map

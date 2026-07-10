@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Environment$inboundSchema } from "./environment.js";
 /** @internal */
 export const ListEnvironmentsResult$inboundSchema = z.object({
-    environments: z.array(Environment$inboundSchema),
+  environments: z.array(Environment$inboundSchema),
 });
 export function listEnvironmentsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListEnvironmentsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListEnvironmentsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListEnvironmentsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListEnvironmentsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listenvironmentsresult.js.map

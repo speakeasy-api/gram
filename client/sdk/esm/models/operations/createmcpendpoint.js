@@ -3,61 +3,93 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateMcpEndpointForm$outboundSchema, } from "../components/createmcpendpointform.js";
+import { CreateMcpEndpointForm$outboundSchema } from "../components/createmcpendpointform.js";
 /** @internal */
-export const CreateMcpEndpointSecurityOption1$outboundSchema = z.pipe(z.object({
+export const CreateMcpEndpointSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function createMcpEndpointSecurityOption1ToJSON(createMcpEndpointSecurityOption1) {
-    return JSON.stringify(CreateMcpEndpointSecurityOption1$outboundSchema.parse(createMcpEndpointSecurityOption1));
+  }),
+);
+export function createMcpEndpointSecurityOption1ToJSON(
+  createMcpEndpointSecurityOption1,
+) {
+  return JSON.stringify(
+    CreateMcpEndpointSecurityOption1$outboundSchema.parse(
+      createMcpEndpointSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const CreateMcpEndpointSecurityOption2$outboundSchema = z.pipe(z.object({
+export const CreateMcpEndpointSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function createMcpEndpointSecurityOption2ToJSON(createMcpEndpointSecurityOption2) {
-    return JSON.stringify(CreateMcpEndpointSecurityOption2$outboundSchema.parse(createMcpEndpointSecurityOption2));
+  }),
+);
+export function createMcpEndpointSecurityOption2ToJSON(
+  createMcpEndpointSecurityOption2,
+) {
+  return JSON.stringify(
+    CreateMcpEndpointSecurityOption2$outboundSchema.parse(
+      createMcpEndpointSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const CreateMcpEndpointSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => CreateMcpEndpointSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => CreateMcpEndpointSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const CreateMcpEndpointSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => CreateMcpEndpointSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => CreateMcpEndpointSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function createMcpEndpointSecurityToJSON(createMcpEndpointSecurity) {
-    return JSON.stringify(CreateMcpEndpointSecurity$outboundSchema.parse(createMcpEndpointSecurity));
+  return JSON.stringify(
+    CreateMcpEndpointSecurity$outboundSchema.parse(createMcpEndpointSecurity),
+  );
 }
 /** @internal */
-export const CreateMcpEndpointRequest$outboundSchema = z.pipe(z.object({
+export const CreateMcpEndpointRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     createMcpEndpointForm: CreateMcpEndpointForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
-        createMcpEndpointForm: "CreateMcpEndpointForm",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
+      createMcpEndpointForm: "CreateMcpEndpointForm",
     });
-}));
+  }),
+);
 export function createMcpEndpointRequestToJSON(createMcpEndpointRequest) {
-    return JSON.stringify(CreateMcpEndpointRequest$outboundSchema.parse(createMcpEndpointRequest));
+  return JSON.stringify(
+    CreateMcpEndpointRequest$outboundSchema.parse(createMcpEndpointRequest),
+  );
 }
 //# sourceMappingURL=createmcpendpoint.js.map

@@ -6,15 +6,22 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Resource$inboundSchema } from "./resource.js";
 /** @internal */
-export const ListResourcesResult$inboundSchema = z.pipe(z.object({
+export const ListResourcesResult$inboundSchema = z.pipe(
+  z.object({
     next_cursor: z.optional(z.string()),
     resources: z.array(Resource$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function listResourcesResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListResourcesResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListResourcesResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListResourcesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListResourcesResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listresourcesresult.js.map

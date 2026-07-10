@@ -3,14 +3,18 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { EmployeeDataFlowEdge$inboundSchema, } from "./employeedataflowedge.js";
-import { EmployeeDataFlowNode$inboundSchema, } from "./employeedataflownode.js";
+import { EmployeeDataFlowEdge$inboundSchema } from "./employeedataflowedge.js";
+import { EmployeeDataFlowNode$inboundSchema } from "./employeedataflownode.js";
 /** @internal */
 export const GetEmployeeDataFlowGraphResult$inboundSchema = z.object({
-    edges: z.array(EmployeeDataFlowEdge$inboundSchema),
-    nodes: z.array(EmployeeDataFlowNode$inboundSchema),
+  edges: z.array(EmployeeDataFlowEdge$inboundSchema),
+  nodes: z.array(EmployeeDataFlowNode$inboundSchema),
 });
 export function getEmployeeDataFlowGraphResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GetEmployeeDataFlowGraphResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GetEmployeeDataFlowGraphResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => GetEmployeeDataFlowGraphResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetEmployeeDataFlowGraphResult' from JSON`,
+  );
 }
 //# sourceMappingURL=getemployeedataflowgraphresult.js.map

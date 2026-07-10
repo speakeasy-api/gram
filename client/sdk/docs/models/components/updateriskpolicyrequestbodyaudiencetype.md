@@ -13,5 +13,5 @@ let value: UpdateRiskPolicyRequestBodyAudienceType = "targeted";
 ## Values
 
 ```typescript
-"everyone" | "targeted"
+"everyone" | "targeted";
 ```

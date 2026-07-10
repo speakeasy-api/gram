@@ -6,16 +6,22 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { QueryPoint$inboundSchema } from "./querypoint.js";
 /** @internal */
-export const QuerySeries$inboundSchema = z
-    .pipe(z.object({
+export const QuerySeries$inboundSchema = z.pipe(
+  z.object({
     group_value: z.string(),
     points: z.array(QueryPoint$inboundSchema),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "group_value": "groupValue",
+      group_value: "groupValue",
     });
-}));
+  }),
+);
 export function querySeriesFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => QuerySeries$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'QuerySeries' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => QuerySeries$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'QuerySeries' from JSON`,
+  );
 }
 //# sourceMappingURL=queryseries.js.map

@@ -6,16 +6,21 @@ import { HookTraceSummary } from "./hooktracesummary.js";
  * Result of listing hook traces
  */
 export type ListHooksTracesResult = {
-    /**
-     * Cursor for next page
-     */
-    nextCursor?: string | undefined;
-    /**
-     * List of hook trace summaries
-     */
-    traces: Array<HookTraceSummary>;
+  /**
+   * Cursor for next page
+   */
+  nextCursor?: string | undefined;
+  /**
+   * List of hook trace summaries
+   */
+  traces: Array<HookTraceSummary>;
 };
 /** @internal */
-export declare const ListHooksTracesResult$inboundSchema: z.ZodMiniType<ListHooksTracesResult, unknown>;
-export declare function listHooksTracesResultFromJSON(jsonString: string): SafeParseResult<ListHooksTracesResult, SDKValidationError>;
+export declare const ListHooksTracesResult$inboundSchema: z.ZodMiniType<
+  ListHooksTracesResult,
+  unknown
+>;
+export declare function listHooksTracesResultFromJSON(
+  jsonString: string,
+): SafeParseResult<ListHooksTracesResult, SDKValidationError>;
 //# sourceMappingURL=listhookstracesresult.d.ts.map

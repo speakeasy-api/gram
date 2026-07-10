@@ -7,24 +7,35 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * The reviewer's ground-truth verdict for this session.
  */
 export const SaveRiskEvalReviewRequestBodyVerdict = {
-    Correct: "correct",
-    FalsePositive: "false_positive",
-    Missed: "missed",
+  Correct: "correct",
+  FalsePositive: "false_positive",
+  Missed: "missed",
 };
 /** @internal */
-export const SaveRiskEvalReviewRequestBodyVerdict$outboundSchema = z.enum(SaveRiskEvalReviewRequestBodyVerdict);
+export const SaveRiskEvalReviewRequestBodyVerdict$outboundSchema = z.enum(
+  SaveRiskEvalReviewRequestBodyVerdict,
+);
 /** @internal */
-export const SaveRiskEvalReviewRequestBody$outboundSchema = z.pipe(z.object({
+export const SaveRiskEvalReviewRequestBody$outboundSchema = z.pipe(
+  z.object({
     chatId: z.string(),
     policyId: z.string(),
     verdict: SaveRiskEvalReviewRequestBodyVerdict$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        chatId: "chat_id",
-        policyId: "policy_id",
+      chatId: "chat_id",
+      policyId: "policy_id",
     });
-}));
-export function saveRiskEvalReviewRequestBodyToJSON(saveRiskEvalReviewRequestBody) {
-    return JSON.stringify(SaveRiskEvalReviewRequestBody$outboundSchema.parse(saveRiskEvalReviewRequestBody));
+  }),
+);
+export function saveRiskEvalReviewRequestBodyToJSON(
+  saveRiskEvalReviewRequestBody,
+) {
+  return JSON.stringify(
+    SaveRiskEvalReviewRequestBody$outboundSchema.parse(
+      saveRiskEvalReviewRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=saveriskevalreviewrequestbody.js.map

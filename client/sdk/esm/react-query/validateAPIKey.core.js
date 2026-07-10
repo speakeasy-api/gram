@@ -4,26 +4,38 @@
 import { keysValidate } from "../funcs/keysValidate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchValidateAPIKey(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildValidateAPIKeyQuery(client$, request, security, options),
-    });
+export function prefetchValidateAPIKey(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildValidateAPIKeyQuery(client$, request, security, options),
+  });
 }
 export function buildValidateAPIKeyQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyValidateAPIKey({ gramKey: request?.gramKey }),
-        queryFn: async function validateAPIKeyQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(keysValidate(client$, request, security, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyValidateAPIKey({ gramKey: request?.gramKey }),
+    queryFn: async function validateAPIKeyQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        keysValidate(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyValidateAPIKey(parameters) {
-    return ["@gram/client", "keys", "validate", parameters];
+  return ["@gram/client", "keys", "validate", parameters];
 }
 //# sourceMappingURL=validateAPIKey.core.js.map

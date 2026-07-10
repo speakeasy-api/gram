@@ -3,29 +3,48 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { CreateShadowMCPApprovalRequestForm$outboundSchema, } from "../components/createshadowmcpapprovalrequestform.js";
+import { CreateShadowMCPApprovalRequestForm$outboundSchema } from "../components/createshadowmcpapprovalrequestform.js";
 /** @internal */
-export const CreateRiskPolicyBypassRequestSecurity$outboundSchema = z.pipe(z.object({
+export const CreateRiskPolicyBypassRequestSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function createRiskPolicyBypassRequestSecurityToJSON(createRiskPolicyBypassRequestSecurity) {
-    return JSON.stringify(CreateRiskPolicyBypassRequestSecurity$outboundSchema.parse(createRiskPolicyBypassRequestSecurity));
+  }),
+);
+export function createRiskPolicyBypassRequestSecurityToJSON(
+  createRiskPolicyBypassRequestSecurity,
+) {
+  return JSON.stringify(
+    CreateRiskPolicyBypassRequestSecurity$outboundSchema.parse(
+      createRiskPolicyBypassRequestSecurity,
+    ),
+  );
 }
 /** @internal */
-export const CreateRiskPolicyBypassRequestRequest$outboundSchema = z.pipe(z.object({
+export const CreateRiskPolicyBypassRequestRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-    createShadowMCPApprovalRequestForm: CreateShadowMCPApprovalRequestForm$outboundSchema,
-}), z.transform((v) => {
+    createShadowMCPApprovalRequestForm:
+      CreateShadowMCPApprovalRequestForm$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        createShadowMCPApprovalRequestForm: "CreateShadowMCPApprovalRequestForm",
+      gramSession: "Gram-Session",
+      createShadowMCPApprovalRequestForm: "CreateShadowMCPApprovalRequestForm",
     });
-}));
-export function createRiskPolicyBypassRequestRequestToJSON(createRiskPolicyBypassRequestRequest) {
-    return JSON.stringify(CreateRiskPolicyBypassRequestRequest$outboundSchema.parse(createRiskPolicyBypassRequestRequest));
+  }),
+);
+export function createRiskPolicyBypassRequestRequestToJSON(
+  createRiskPolicyBypassRequestRequest,
+) {
+  return JSON.stringify(
+    CreateRiskPolicyBypassRequestRequest$outboundSchema.parse(
+      createRiskPolicyBypassRequestRequest,
+    ),
+  );
 }
 //# sourceMappingURL=createriskpolicybypassrequest.js.map

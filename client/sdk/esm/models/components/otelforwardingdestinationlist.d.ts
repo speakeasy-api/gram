@@ -6,9 +6,14 @@ import { OtelForwardingDestination } from "./otelforwardingdestination.js";
  * Wraps a list of forwarding destinations.
  */
 export type OtelForwardingDestinationList = {
-    destinations: Array<OtelForwardingDestination>;
+  destinations: Array<OtelForwardingDestination>;
 };
 /** @internal */
-export declare const OtelForwardingDestinationList$inboundSchema: z.ZodMiniType<OtelForwardingDestinationList, unknown>;
-export declare function otelForwardingDestinationListFromJSON(jsonString: string): SafeParseResult<OtelForwardingDestinationList, SDKValidationError>;
+export declare const OtelForwardingDestinationList$inboundSchema: z.ZodMiniType<
+  OtelForwardingDestinationList,
+  unknown
+>;
+export declare function otelForwardingDestinationListFromJSON(
+  jsonString: string,
+): SafeParseResult<OtelForwardingDestinationList, SDKValidationError>;
 //# sourceMappingURL=otelforwardingdestinationlist.d.ts.map

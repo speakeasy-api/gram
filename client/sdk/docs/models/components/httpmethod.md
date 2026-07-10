@@ -13,5 +13,5 @@ let value: HttpMethod = "HEAD";
 ## Values
 
 ```typescript
-"GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS"
+"GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
 ```

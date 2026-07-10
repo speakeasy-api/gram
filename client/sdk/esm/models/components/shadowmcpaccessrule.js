@@ -5,28 +5,35 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 export const ShadowMCPAccessRuleAccessScope = {
-    Organization: "organization",
-    Project: "project",
+  Organization: "organization",
+  Project: "project",
 };
 export const Disposition = {
-    Allowed: "allowed",
-    Denied: "denied",
+  Allowed: "allowed",
+  Denied: "denied",
 };
 export const ShadowMCPAccessRuleMatchBreadth = {
-    FullUrl: "full_url",
-    UrlHost: "url_host",
+  FullUrl: "full_url",
+  UrlHost: "url_host",
 };
 /** @internal */
-export const ShadowMCPAccessRuleAccessScope$inboundSchema = z.enum(ShadowMCPAccessRuleAccessScope);
+export const ShadowMCPAccessRuleAccessScope$inboundSchema = z.enum(
+  ShadowMCPAccessRuleAccessScope,
+);
 /** @internal */
-export const Disposition$inboundSchema = z
-    .enum(Disposition);
+export const Disposition$inboundSchema = z.enum(Disposition);
 /** @internal */
-export const ShadowMCPAccessRuleMatchBreadth$inboundSchema = z.enum(ShadowMCPAccessRuleMatchBreadth);
+export const ShadowMCPAccessRuleMatchBreadth$inboundSchema = z.enum(
+  ShadowMCPAccessRuleMatchBreadth,
+);
 /** @internal */
-export const ShadowMCPAccessRule$inboundSchema = z.pipe(z.object({
+export const ShadowMCPAccessRule$inboundSchema = z.pipe(
+  z.object({
     access_scope: ShadowMCPAccessRuleAccessScope$inboundSchema,
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     created_by: z.optional(z.string()),
     display_name: z.string(),
     disposition: Disposition$inboundSchema,
@@ -41,28 +48,37 @@ export const ShadowMCPAccessRule$inboundSchema = z.pipe(z.object({
     reason: z.optional(z.string()),
     resource_type: z.string(),
     source_request_id: z.optional(z.string()),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     updated_by: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "access_scope": "accessScope",
-        "created_at": "createdAt",
-        "created_by": "createdBy",
-        "display_name": "displayName",
-        "match_breadth": "matchBreadth",
-        "match_value": "matchValue",
-        "observed_full_url": "observedFullUrl",
-        "observed_server_identity": "observedServerIdentity",
-        "observed_url_host": "observedUrlHost",
-        "organization_id": "organizationId",
-        "project_id": "projectId",
-        "resource_type": "resourceType",
-        "source_request_id": "sourceRequestId",
-        "updated_at": "updatedAt",
-        "updated_by": "updatedBy",
+      access_scope: "accessScope",
+      created_at: "createdAt",
+      created_by: "createdBy",
+      display_name: "displayName",
+      match_breadth: "matchBreadth",
+      match_value: "matchValue",
+      observed_full_url: "observedFullUrl",
+      observed_server_identity: "observedServerIdentity",
+      observed_url_host: "observedUrlHost",
+      organization_id: "organizationId",
+      project_id: "projectId",
+      resource_type: "resourceType",
+      source_request_id: "sourceRequestId",
+      updated_at: "updatedAt",
+      updated_by: "updatedBy",
     });
-}));
+  }),
+);
 export function shadowMCPAccessRuleFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ShadowMCPAccessRule$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ShadowMCPAccessRule' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ShadowMCPAccessRule$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ShadowMCPAccessRule' from JSON`,
+  );
 }
 //# sourceMappingURL=shadowmcpaccessrule.js.map

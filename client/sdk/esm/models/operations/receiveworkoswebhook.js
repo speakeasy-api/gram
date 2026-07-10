@@ -4,14 +4,21 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ReceiveWorkOSWebhookRequest$outboundSchema = z.pipe(z.object({
+export const ReceiveWorkOSWebhookRequest$outboundSchema = z.pipe(
+  z.object({
     workOSSignature: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        workOSSignature: "WorkOS-Signature",
+      workOSSignature: "WorkOS-Signature",
     });
-}));
+  }),
+);
 export function receiveWorkOSWebhookRequestToJSON(receiveWorkOSWebhookRequest) {
-    return JSON.stringify(ReceiveWorkOSWebhookRequest$outboundSchema.parse(receiveWorkOSWebhookRequest));
+  return JSON.stringify(
+    ReceiveWorkOSWebhookRequest$outboundSchema.parse(
+      receiveWorkOSWebhookRequest,
+    ),
+  );
 }
 //# sourceMappingURL=receiveworkoswebhook.js.map

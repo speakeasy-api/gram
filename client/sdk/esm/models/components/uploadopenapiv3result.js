@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Asset$inboundSchema } from "./asset.js";
 /** @internal */
 export const UploadOpenAPIv3Result$inboundSchema = z.object({
-    asset: Asset$inboundSchema,
+  asset: Asset$inboundSchema,
 });
 export function uploadOpenAPIv3ResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => UploadOpenAPIv3Result$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'UploadOpenAPIv3Result' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => UploadOpenAPIv3Result$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'UploadOpenAPIv3Result' from JSON`,
+  );
 }
 //# sourceMappingURL=uploadopenapiv3result.js.map

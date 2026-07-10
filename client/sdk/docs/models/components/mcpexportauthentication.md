@@ -20,7 +20,7 @@ let value: McpExportAuthentication = {
 
 ## Fields
 
-| Field                                                                              | Type                                                                               | Required                                                                           | Description                                                                        |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `headers`                                                                          | [components.McpExportAuthHeader](../../models/components/mcpexportauthheader.md)[] | :heavy_check_mark:                                                                 | Required authentication headers                                                    |
-| `required`                                                                         | *boolean*                                                                          | :heavy_check_mark:                                                                 | Whether authentication is required                                                 |
+| Field      | Type                                                                               | Required           | Description                        |
+| ---------- | ---------------------------------------------------------------------------------- | ------------------ | ---------------------------------- |
+| `headers`  | [components.McpExportAuthHeader](../../models/components/mcpexportauthheader.md)[] | :heavy_check_mark: | Required authentication headers    |
+| `required` | _boolean_                                                                          | :heavy_check_mark: | Whether authentication is required |

@@ -16,8 +16,8 @@ let value: ToolUsageHostedServerFilterOption = {
 
 ## Fields
 
-| Field                                                          | Type                                                           | Required                                                       | Description                                                    |
-| -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
-| `eventCount`                                                   | *number*                                                       | :heavy_check_mark:                                             | Number of tool usage events observed for the hosted MCP server |
-| `toolsetName`                                                  | *string*                                                       | :heavy_check_mark:                                             | Hosted MCP toolset display name                                |
-| `toolsetSlug`                                                  | *string*                                                       | :heavy_check_mark:                                             | Hosted MCP toolset slug                                        |
+| Field         | Type     | Required           | Description                                                    |
+| ------------- | -------- | ------------------ | -------------------------------------------------------------- |
+| `eventCount`  | _number_ | :heavy_check_mark: | Number of tool usage events observed for the hosted MCP server |
+| `toolsetName` | _string_ | :heavy_check_mark: | Hosted MCP toolset display name                                |
+| `toolsetSlug` | _string_ | :heavy_check_mark: | Hosted MCP toolset slug                                        |

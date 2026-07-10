@@ -3,10 +3,17 @@
  */
 import * as z from "zod/v4-mini";
 /** @internal */
-export const SendEnterpriseAdminOnboardingEmailRequestBody$outboundSchema = z.object({
+export const SendEnterpriseAdminOnboardingEmailRequestBody$outboundSchema =
+  z.object({
     recipients: z.array(z.string()),
-});
-export function sendEnterpriseAdminOnboardingEmailRequestBodyToJSON(sendEnterpriseAdminOnboardingEmailRequestBody) {
-    return JSON.stringify(SendEnterpriseAdminOnboardingEmailRequestBody$outboundSchema.parse(sendEnterpriseAdminOnboardingEmailRequestBody));
+  });
+export function sendEnterpriseAdminOnboardingEmailRequestBodyToJSON(
+  sendEnterpriseAdminOnboardingEmailRequestBody,
+) {
+  return JSON.stringify(
+    SendEnterpriseAdminOnboardingEmailRequestBody$outboundSchema.parse(
+      sendEnterpriseAdminOnboardingEmailRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=sendenterpriseadminonboardingemailrequestbody.js.map

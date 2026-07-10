@@ -14,6 +14,6 @@ let value: RotateTunneledMcpServerKeyForm = {
 
 ## Fields
 
-| Field                             | Type                              | Required                          | Description                       |
-| --------------------------------- | --------------------------------- | --------------------------------- | --------------------------------- |
-| `id`                              | *string*                          | :heavy_check_mark:                | The ID of the tunneled MCP server |
+| Field | Type     | Required           | Description                       |
+| ----- | -------- | ------------------ | --------------------------------- |
+| `id`  | _string_ | :heavy_check_mark: | The ID of the tunneled MCP server |

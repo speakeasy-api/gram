@@ -12,6 +12,6 @@ let value: ListChatSourcesSecurityOption2 = {
 
 ## Fields
 
-| Field                                    | Type                                     | Required                                 | Description                              |
-| ---------------------------------------- | ---------------------------------------- | ---------------------------------------- | ---------------------------------------- |
-| `chatSessionsTokenHeaderGramChatSession` | *string*                                 | :heavy_check_mark:                       | N/A                                      |
+| Field                                    | Type     | Required           | Description |
+| ---------------------------------------- | -------- | ------------------ | ----------- |
+| `chatSessionsTokenHeaderGramChatSession` | _string_ | :heavy_check_mark: | N/A         |

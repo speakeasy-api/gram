@@ -7,23 +7,28 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * PKCE challenge method. Only S256 is supported.
  */
 export const CodeChallengeMethod = {
-    S256: "S256",
+  S256: "S256",
 };
 /** @internal */
 export const CodeChallengeMethod$outboundSchema = z.enum(CodeChallengeMethod);
 /** @internal */
-export const AuthorizeRequestBody$outboundSchema = z.pipe(z.object({
+export const AuthorizeRequestBody$outboundSchema = z.pipe(
+  z.object({
     codeChallenge: z.string(),
     codeChallengeMethod: CodeChallengeMethod$outboundSchema,
     projectSlug: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        codeChallenge: "code_challenge",
-        codeChallengeMethod: "code_challenge_method",
-        projectSlug: "project_slug",
+      codeChallenge: "code_challenge",
+      codeChallengeMethod: "code_challenge_method",
+      projectSlug: "project_slug",
     });
-}));
+  }),
+);
 export function authorizeRequestBodyToJSON(authorizeRequestBody) {
-    return JSON.stringify(AuthorizeRequestBody$outboundSchema.parse(authorizeRequestBody));
+  return JSON.stringify(
+    AuthorizeRequestBody$outboundSchema.parse(authorizeRequestBody),
+  );
 }
 //# sourceMappingURL=authorizerequestbody.js.map

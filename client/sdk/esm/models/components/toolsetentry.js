@@ -4,22 +4,30 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ExternalMCPHeaderDefinition$inboundSchema, } from "./externalmcpheaderdefinition.js";
-import { FunctionEnvironmentVariable$inboundSchema, } from "./functionenvironmentvariable.js";
-import { PromptTemplateEntry$inboundSchema, } from "./prompttemplateentry.js";
+import { ExternalMCPHeaderDefinition$inboundSchema } from "./externalmcpheaderdefinition.js";
+import { FunctionEnvironmentVariable$inboundSchema } from "./functionenvironmentvariable.js";
+import { PromptTemplateEntry$inboundSchema } from "./prompttemplateentry.js";
 import { ResourceEntry$inboundSchema } from "./resourceentry.js";
-import { SecurityVariable$inboundSchema, } from "./securityvariable.js";
-import { ServerVariable$inboundSchema, } from "./servervariable.js";
+import { SecurityVariable$inboundSchema } from "./securityvariable.js";
+import { ServerVariable$inboundSchema } from "./servervariable.js";
 import { ToolEntry$inboundSchema } from "./toolentry.js";
 import { ToolsetOrigin$inboundSchema } from "./toolsetorigin.js";
 /** @internal */
-export const ToolsetEntry$inboundSchema = z.pipe(z.object({
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+export const ToolsetEntry$inboundSchema = z.pipe(
+  z.object({
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     custom_domain_id: z.optional(z.string()),
     default_environment_slug: z.optional(z.string()),
     description: z.optional(z.string()),
-    external_mcp_header_definitions: z.optional(z.array(ExternalMCPHeaderDefinition$inboundSchema)),
-    function_environment_variables: z.optional(z.array(FunctionEnvironmentVariable$inboundSchema)),
+    external_mcp_header_definitions: z.optional(
+      z.array(ExternalMCPHeaderDefinition$inboundSchema),
+    ),
+    function_environment_variables: z.optional(
+      z.array(FunctionEnvironmentVariable$inboundSchema),
+    ),
     id: z.string(),
     mcp_enabled: z.optional(z.boolean()),
     mcp_is_public: z.optional(z.boolean()),
@@ -37,29 +45,38 @@ export const ToolsetEntry$inboundSchema = z.pipe(z.object({
     tool_selection_mode: z.string(),
     tool_urns: z.array(z.string()),
     tools: z.array(ToolEntry$inboundSchema),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "custom_domain_id": "customDomainId",
-        "default_environment_slug": "defaultEnvironmentSlug",
-        "external_mcp_header_definitions": "externalMcpHeaderDefinitions",
-        "function_environment_variables": "functionEnvironmentVariables",
-        "mcp_enabled": "mcpEnabled",
-        "mcp_is_public": "mcpIsPublic",
-        "mcp_slug": "mcpSlug",
-        "organization_id": "organizationId",
-        "project_id": "projectId",
-        "prompt_templates": "promptTemplates",
-        "resource_urns": "resourceUrns",
-        "security_variables": "securityVariables",
-        "server_variables": "serverVariables",
-        "tool_selection_mode": "toolSelectionMode",
-        "tool_urns": "toolUrns",
-        "updated_at": "updatedAt",
+      created_at: "createdAt",
+      custom_domain_id: "customDomainId",
+      default_environment_slug: "defaultEnvironmentSlug",
+      external_mcp_header_definitions: "externalMcpHeaderDefinitions",
+      function_environment_variables: "functionEnvironmentVariables",
+      mcp_enabled: "mcpEnabled",
+      mcp_is_public: "mcpIsPublic",
+      mcp_slug: "mcpSlug",
+      organization_id: "organizationId",
+      project_id: "projectId",
+      prompt_templates: "promptTemplates",
+      resource_urns: "resourceUrns",
+      security_variables: "securityVariables",
+      server_variables: "serverVariables",
+      tool_selection_mode: "toolSelectionMode",
+      tool_urns: "toolUrns",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function toolsetEntryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolsetEntry$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolsetEntry' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolsetEntry$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolsetEntry' from JSON`,
+  );
 }
 //# sourceMappingURL=toolsetentry.js.map

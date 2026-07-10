@@ -6,9 +6,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Asset$inboundSchema } from "./asset.js";
 /** @internal */
 export const ListAssetsResult$inboundSchema = z.object({
-    assets: z.array(Asset$inboundSchema),
+  assets: z.array(Asset$inboundSchema),
 });
 export function listAssetsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListAssetsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListAssetsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListAssetsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListAssetsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listassetsresult.js.map

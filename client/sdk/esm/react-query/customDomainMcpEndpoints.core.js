@@ -4,28 +4,45 @@
 import { domainsListMcpEndpoints } from "../funcs/domainsListMcpEndpoints.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchCustomDomainMcpEndpoints(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildCustomDomainMcpEndpointsQuery(client$, request, security, options),
-    });
+export function prefetchCustomDomainMcpEndpoints(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildCustomDomainMcpEndpointsQuery(client$, request, security, options),
+  });
 }
-export function buildCustomDomainMcpEndpointsQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyCustomDomainMcpEndpoints({
-            gramSession: request?.gramSession,
-        }),
-        queryFn: async function customDomainMcpEndpointsQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(domainsListMcpEndpoints(client$, request, security, mergedOptions));
-        },
-    };
+export function buildCustomDomainMcpEndpointsQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyCustomDomainMcpEndpoints({
+      gramSession: request?.gramSession,
+    }),
+    queryFn: async function customDomainMcpEndpointsQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        domainsListMcpEndpoints(client$, request, security, mergedOptions),
+      );
+    },
+  };
 }
 export function queryKeyCustomDomainMcpEndpoints(parameters) {
-    return ["@gram/client", "domains", "listMcpEndpoints", parameters];
+  return ["@gram/client", "domains", "listMcpEndpoints", parameters];
 }
 //# sourceMappingURL=customDomainMcpEndpoints.core.js.map

@@ -4,10 +4,12 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const SetPinnedRequestBody$outboundSchema = z.object({
-    id: z.string(),
-    pinned: z.boolean(),
+  id: z.string(),
+  pinned: z.boolean(),
 });
 export function setPinnedRequestBodyToJSON(setPinnedRequestBody) {
-    return JSON.stringify(SetPinnedRequestBody$outboundSchema.parse(setPinnedRequestBody));
+  return JSON.stringify(
+    SetPinnedRequestBody$outboundSchema.parse(setPinnedRequestBody),
+  );
 }
 //# sourceMappingURL=setpinnedrequestbody.js.map

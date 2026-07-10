@@ -21,13 +21,13 @@ let value: QueryMeasures = {
 
 ## Fields
 
-| Field                              | Type                               | Required                           | Description                        |
-| ---------------------------------- | ---------------------------------- | ---------------------------------- | ---------------------------------- |
-| `cacheCreationInputTokens`         | *number*                           | :heavy_check_mark:                 | Sum of cache creation input tokens |
-| `cacheReadInputTokens`             | *number*                           | :heavy_check_mark:                 | Sum of cache read input tokens     |
-| `totalChats`                       | *number*                           | :heavy_check_mark:                 | Number of distinct chat sessions   |
-| `totalCost`                        | *number*                           | :heavy_check_mark:                 | Total cost in USD                  |
-| `totalInputTokens`                 | *number*                           | :heavy_check_mark:                 | Sum of input tokens                |
-| `totalOutputTokens`                | *number*                           | :heavy_check_mark:                 | Sum of output tokens               |
-| `totalTokens`                      | *number*                           | :heavy_check_mark:                 | Sum of all tokens                  |
-| `totalToolCalls`                   | *number*                           | :heavy_check_mark:                 | Total number of tool calls         |
+| Field                      | Type     | Required           | Description                        |
+| -------------------------- | -------- | ------------------ | ---------------------------------- |
+| `cacheCreationInputTokens` | _number_ | :heavy_check_mark: | Sum of cache creation input tokens |
+| `cacheReadInputTokens`     | _number_ | :heavy_check_mark: | Sum of cache read input tokens     |
+| `totalChats`               | _number_ | :heavy_check_mark: | Number of distinct chat sessions   |
+| `totalCost`                | _number_ | :heavy_check_mark: | Total cost in USD                  |
+| `totalInputTokens`         | _number_ | :heavy_check_mark: | Sum of input tokens                |
+| `totalOutputTokens`        | _number_ | :heavy_check_mark: | Sum of output tokens               |
+| `totalTokens`              | _number_ | :heavy_check_mark: | Sum of all tokens                  |
+| `totalToolCalls`           | _number_ | :heavy_check_mark: | Total number of tool calls         |

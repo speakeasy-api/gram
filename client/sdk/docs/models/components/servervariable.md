@@ -13,7 +13,7 @@ let value: ServerVariable = {
 
 ## Fields
 
-| Field                              | Type                               | Required                           | Description                        |
-| ---------------------------------- | ---------------------------------- | ---------------------------------- | ---------------------------------- |
-| `description`                      | *string*                           | :heavy_check_mark:                 | Description of the server variable |
-| `envVariables`                     | *string*[]                         | :heavy_check_mark:                 | The environment variables          |
+| Field          | Type       | Required           | Description                        |
+| -------------- | ---------- | ------------------ | ---------------------------------- |
+| `description`  | _string_   | :heavy_check_mark: | Description of the server variable |
+| `envVariables` | _string_[] | :heavy_check_mark: | The environment variables          |

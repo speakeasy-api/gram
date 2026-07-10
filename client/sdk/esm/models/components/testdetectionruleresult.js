@@ -3,14 +3,18 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { TestDetectionRuleMatch$inboundSchema, } from "./testdetectionrulematch.js";
+import { TestDetectionRuleMatch$inboundSchema } from "./testdetectionrulematch.js";
 /** @internal */
 export const TestDetectionRuleResult$inboundSchema = z.object({
-    matches: z.array(TestDetectionRuleMatch$inboundSchema),
-    reason: z.optional(z.string()),
-    supported: z.boolean(),
+  matches: z.array(TestDetectionRuleMatch$inboundSchema),
+  reason: z.optional(z.string()),
+  supported: z.boolean(),
 });
 export function testDetectionRuleResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TestDetectionRuleResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TestDetectionRuleResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TestDetectionRuleResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TestDetectionRuleResult' from JSON`,
+  );
 }
 //# sourceMappingURL=testdetectionruleresult.js.map

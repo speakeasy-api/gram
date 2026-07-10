@@ -12,6 +12,6 @@ let value: OTELMetricsPayload = {};
 
 ## Fields
 
-| Field                                                                              | Type                                                                               | Required                                                                           | Description                                                                        |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `resourceMetrics`                                                                  | [components.OTELResourceMetrics](../../models/components/otelresourcemetrics.md)[] | :heavy_minus_sign:                                                                 | Array of resource metrics                                                          |
+| Field             | Type                                                                               | Required           | Description               |
+| ----------------- | ---------------------------------------------------------------------------------- | ------------------ | ------------------------- |
+| `resourceMetrics` | [components.OTELResourceMetrics](../../models/components/otelresourcemetrics.md)[] | :heavy_minus_sign: | Array of resource metrics |

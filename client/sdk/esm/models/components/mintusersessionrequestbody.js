@@ -4,16 +4,21 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const MintUserSessionRequestBody$outboundSchema = z.pipe(z.object({
+export const MintUserSessionRequestBody$outboundSchema = z.pipe(
+  z.object({
     mcpServerId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        mcpServerId: "mcp_server_id",
-        toolsetId: "toolset_id",
+      mcpServerId: "mcp_server_id",
+      toolsetId: "toolset_id",
     });
-}));
+  }),
+);
 export function mintUserSessionRequestBodyToJSON(mintUserSessionRequestBody) {
-    return JSON.stringify(MintUserSessionRequestBody$outboundSchema.parse(mintUserSessionRequestBody));
+  return JSON.stringify(
+    MintUserSessionRequestBody$outboundSchema.parse(mintUserSessionRequestBody),
+  );
 }
 //# sourceMappingURL=mintusersessionrequestbody.js.map

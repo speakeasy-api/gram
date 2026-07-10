@@ -2,7 +2,13 @@ import { GramCore } from "../core.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
-import { ConnectionError, InvalidRequestError, RequestAbortedError, RequestTimeoutError, UnexpectedClientError } from "../models/errors/httpclienterrors.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
 import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
@@ -15,5 +21,23 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Create a new Slack app and generate its manifest.
  */
-export declare function slackCreateSlackApp(client: GramCore, request: operations.CreateSlackAppRequest, security?: operations.CreateSlackAppSecurity | undefined, options?: RequestOptions): APIPromise<Result<components.CreateSlackAppResult, errors.ServiceError | GramError | ResponseValidationError | ConnectionError | RequestAbortedError | RequestTimeoutError | InvalidRequestError | UnexpectedClientError | SDKValidationError>>;
+export declare function slackCreateSlackApp(
+  client: GramCore,
+  request: operations.CreateSlackAppRequest,
+  security?: operations.CreateSlackAppSecurity | undefined,
+  options?: RequestOptions,
+): APIPromise<
+  Result<
+    components.CreateSlackAppResult,
+    | errors.ServiceError
+    | GramError
+    | ResponseValidationError
+    | ConnectionError
+    | RequestAbortedError
+    | RequestTimeoutError
+    | InvalidRequestError
+    | UnexpectedClientError
+    | SDKValidationError
+  >
+>;
 //# sourceMappingURL=slackCreateSlackApp.d.ts.map

@@ -4,58 +4,98 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteUserSessionIssuerSecurityOption1$outboundSchema = z.pipe(z.object({
+export const DeleteUserSessionIssuerSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function deleteUserSessionIssuerSecurityOption1ToJSON(deleteUserSessionIssuerSecurityOption1) {
-    return JSON.stringify(DeleteUserSessionIssuerSecurityOption1$outboundSchema.parse(deleteUserSessionIssuerSecurityOption1));
+  }),
+);
+export function deleteUserSessionIssuerSecurityOption1ToJSON(
+  deleteUserSessionIssuerSecurityOption1,
+) {
+  return JSON.stringify(
+    DeleteUserSessionIssuerSecurityOption1$outboundSchema.parse(
+      deleteUserSessionIssuerSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const DeleteUserSessionIssuerSecurityOption2$outboundSchema = z.pipe(z.object({
+export const DeleteUserSessionIssuerSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function deleteUserSessionIssuerSecurityOption2ToJSON(deleteUserSessionIssuerSecurityOption2) {
-    return JSON.stringify(DeleteUserSessionIssuerSecurityOption2$outboundSchema.parse(deleteUserSessionIssuerSecurityOption2));
+  }),
+);
+export function deleteUserSessionIssuerSecurityOption2ToJSON(
+  deleteUserSessionIssuerSecurityOption2,
+) {
+  return JSON.stringify(
+    DeleteUserSessionIssuerSecurityOption2$outboundSchema.parse(
+      deleteUserSessionIssuerSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const DeleteUserSessionIssuerSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => DeleteUserSessionIssuerSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => DeleteUserSessionIssuerSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const DeleteUserSessionIssuerSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => DeleteUserSessionIssuerSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => DeleteUserSessionIssuerSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function deleteUserSessionIssuerSecurityToJSON(deleteUserSessionIssuerSecurity) {
-    return JSON.stringify(DeleteUserSessionIssuerSecurity$outboundSchema.parse(deleteUserSessionIssuerSecurity));
+  }),
+);
+export function deleteUserSessionIssuerSecurityToJSON(
+  deleteUserSessionIssuerSecurity,
+) {
+  return JSON.stringify(
+    DeleteUserSessionIssuerSecurity$outboundSchema.parse(
+      deleteUserSessionIssuerSecurity,
+    ),
+  );
 }
 /** @internal */
-export const DeleteUserSessionIssuerRequest$outboundSchema = z.pipe(z.object({
+export const DeleteUserSessionIssuerRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
     });
-}));
-export function deleteUserSessionIssuerRequestToJSON(deleteUserSessionIssuerRequest) {
-    return JSON.stringify(DeleteUserSessionIssuerRequest$outboundSchema.parse(deleteUserSessionIssuerRequest));
+  }),
+);
+export function deleteUserSessionIssuerRequestToJSON(
+  deleteUserSessionIssuerRequest,
+) {
+  return JSON.stringify(
+    DeleteUserSessionIssuerRequest$outboundSchema.parse(
+      deleteUserSessionIssuerRequest,
+    ),
+  );
 }
 //# sourceMappingURL=deleteusersessionissuer.js.map

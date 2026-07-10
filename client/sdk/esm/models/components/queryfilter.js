@@ -6,34 +6,34 @@ import * as z from "zod/v4-mini";
  * Dimension to filter on
  */
 export const Dimension = {
-    DepartmentName: "department_name",
-    JobTitle: "job_title",
-    EmployeeType: "employee_type",
-    DivisionName: "division_name",
-    CostCenterName: "cost_center_name",
-    Email: "email",
-    Model: "model",
-    HookSource: "hook_source",
-    AccountType: "account_type",
-    Provider: "provider",
-    BillingMode: "billing_mode",
-    QuerySource: "query_source",
-    SkillName: "skill_name",
-    AgentName: "agent_name",
-    McpServerName: "mcp_server_name",
-    McpToolName: "mcp_tool_name",
-    Role: "role",
-    Group: "group",
-    ProjectId: "project_id",
+  DepartmentName: "department_name",
+  JobTitle: "job_title",
+  EmployeeType: "employee_type",
+  DivisionName: "division_name",
+  CostCenterName: "cost_center_name",
+  Email: "email",
+  Model: "model",
+  HookSource: "hook_source",
+  AccountType: "account_type",
+  Provider: "provider",
+  BillingMode: "billing_mode",
+  QuerySource: "query_source",
+  SkillName: "skill_name",
+  AgentName: "agent_name",
+  McpServerName: "mcp_server_name",
+  McpToolName: "mcp_tool_name",
+  Role: "role",
+  Group: "group",
+  ProjectId: "project_id",
 };
 /** @internal */
 export const Dimension$outboundSchema = z.enum(Dimension);
 /** @internal */
 export const QueryFilter$outboundSchema = z.object({
-    dimension: Dimension$outboundSchema,
-    values: z.array(z.string()),
+  dimension: Dimension$outboundSchema,
+  values: z.array(z.string()),
 });
 export function queryFilterToJSON(queryFilter) {
-    return JSON.stringify(QueryFilter$outboundSchema.parse(queryFilter));
+  return JSON.stringify(QueryFilter$outboundSchema.parse(queryFilter));
 }
 //# sourceMappingURL=queryfilter.js.map

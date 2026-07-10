@@ -8,14 +8,14 @@ import { safeParse } from "../../lib/schemas.js";
  * Chat session status
  */
 export const ChatSummaryStatus = {
-    Success: "success",
-    Error: "error",
+  Success: "success",
+  Error: "error",
 };
 /** @internal */
 export const ChatSummaryStatus$inboundSchema = z.enum(ChatSummaryStatus);
 /** @internal */
-export const ChatSummary$inboundSchema = z
-    .pipe(z.object({
+export const ChatSummary$inboundSchema = z.pipe(
+  z.object({
     duration_seconds: z.number(),
     end_time_unix_nano: z.string(),
     gram_chat_id: z.string(),
@@ -29,22 +29,28 @@ export const ChatSummary$inboundSchema = z
     total_output_tokens: z.int(),
     total_tokens: z.int(),
     user_id: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "duration_seconds": "durationSeconds",
-        "end_time_unix_nano": "endTimeUnixNano",
-        "gram_chat_id": "gramChatId",
-        "log_count": "logCount",
-        "message_count": "messageCount",
-        "start_time_unix_nano": "startTimeUnixNano",
-        "tool_call_count": "toolCallCount",
-        "total_input_tokens": "totalInputTokens",
-        "total_output_tokens": "totalOutputTokens",
-        "total_tokens": "totalTokens",
-        "user_id": "userId",
+      duration_seconds: "durationSeconds",
+      end_time_unix_nano: "endTimeUnixNano",
+      gram_chat_id: "gramChatId",
+      log_count: "logCount",
+      message_count: "messageCount",
+      start_time_unix_nano: "startTimeUnixNano",
+      tool_call_count: "toolCallCount",
+      total_input_tokens: "totalInputTokens",
+      total_output_tokens: "totalOutputTokens",
+      total_tokens: "totalTokens",
+      user_id: "userId",
     });
-}));
+  }),
+);
 export function chatSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ChatSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ChatSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ChatSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ChatSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=chatsummary.js.map

@@ -5,18 +5,25 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const SkillTimeSeriesPoint$inboundSchema = z.pipe(z.object({
+export const SkillTimeSeriesPoint$inboundSchema = z.pipe(
+  z.object({
     bucket_start_ns: z.string(),
     event_count: z.int(),
     skill_name: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "bucket_start_ns": "bucketStartNs",
-        "event_count": "eventCount",
-        "skill_name": "skillName",
+      bucket_start_ns: "bucketStartNs",
+      event_count: "eventCount",
+      skill_name: "skillName",
     });
-}));
+  }),
+);
 export function skillTimeSeriesPointFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SkillTimeSeriesPoint$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SkillTimeSeriesPoint' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SkillTimeSeriesPoint$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SkillTimeSeriesPoint' from JSON`,
+  );
 }
 //# sourceMappingURL=skilltimeseriespoint.js.map

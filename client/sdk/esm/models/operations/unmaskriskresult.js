@@ -3,61 +3,93 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { RiskIDRequestBody$outboundSchema, } from "../components/riskidrequestbody.js";
+import { RiskIDRequestBody$outboundSchema } from "../components/riskidrequestbody.js";
 /** @internal */
-export const UnmaskRiskResultSecurityOption1$outboundSchema = z.pipe(z.object({
+export const UnmaskRiskResultSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function unmaskRiskResultSecurityOption1ToJSON(unmaskRiskResultSecurityOption1) {
-    return JSON.stringify(UnmaskRiskResultSecurityOption1$outboundSchema.parse(unmaskRiskResultSecurityOption1));
+  }),
+);
+export function unmaskRiskResultSecurityOption1ToJSON(
+  unmaskRiskResultSecurityOption1,
+) {
+  return JSON.stringify(
+    UnmaskRiskResultSecurityOption1$outboundSchema.parse(
+      unmaskRiskResultSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const UnmaskRiskResultSecurityOption2$outboundSchema = z.pipe(z.object({
+export const UnmaskRiskResultSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function unmaskRiskResultSecurityOption2ToJSON(unmaskRiskResultSecurityOption2) {
-    return JSON.stringify(UnmaskRiskResultSecurityOption2$outboundSchema.parse(unmaskRiskResultSecurityOption2));
+  }),
+);
+export function unmaskRiskResultSecurityOption2ToJSON(
+  unmaskRiskResultSecurityOption2,
+) {
+  return JSON.stringify(
+    UnmaskRiskResultSecurityOption2$outboundSchema.parse(
+      unmaskRiskResultSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const UnmaskRiskResultSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => UnmaskRiskResultSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => UnmaskRiskResultSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const UnmaskRiskResultSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => UnmaskRiskResultSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => UnmaskRiskResultSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function unmaskRiskResultSecurityToJSON(unmaskRiskResultSecurity) {
-    return JSON.stringify(UnmaskRiskResultSecurity$outboundSchema.parse(unmaskRiskResultSecurity));
+  return JSON.stringify(
+    UnmaskRiskResultSecurity$outboundSchema.parse(unmaskRiskResultSecurity),
+  );
 }
 /** @internal */
-export const UnmaskRiskResultRequest$outboundSchema = z.pipe(z.object({
+export const UnmaskRiskResultRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     riskIDRequestBody: RiskIDRequestBody$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        riskIDRequestBody: "RiskIDRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      riskIDRequestBody: "RiskIDRequestBody",
     });
-}));
+  }),
+);
 export function unmaskRiskResultRequestToJSON(unmaskRiskResultRequest) {
-    return JSON.stringify(UnmaskRiskResultRequest$outboundSchema.parse(unmaskRiskResultRequest));
+  return JSON.stringify(
+    UnmaskRiskResultRequest$outboundSchema.parse(unmaskRiskResultRequest),
+  );
 }
 //# sourceMappingURL=unmaskriskresult.js.map

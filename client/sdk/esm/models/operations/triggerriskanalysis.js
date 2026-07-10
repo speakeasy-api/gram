@@ -3,61 +3,96 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { TriggerRiskAnalysisRequestBody$outboundSchema, } from "../components/triggerriskanalysisrequestbody.js";
+import { TriggerRiskAnalysisRequestBody$outboundSchema } from "../components/triggerriskanalysisrequestbody.js";
 /** @internal */
-export const TriggerRiskAnalysisSecurityOption1$outboundSchema = z.pipe(z.object({
+export const TriggerRiskAnalysisSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function triggerRiskAnalysisSecurityOption1ToJSON(triggerRiskAnalysisSecurityOption1) {
-    return JSON.stringify(TriggerRiskAnalysisSecurityOption1$outboundSchema.parse(triggerRiskAnalysisSecurityOption1));
+  }),
+);
+export function triggerRiskAnalysisSecurityOption1ToJSON(
+  triggerRiskAnalysisSecurityOption1,
+) {
+  return JSON.stringify(
+    TriggerRiskAnalysisSecurityOption1$outboundSchema.parse(
+      triggerRiskAnalysisSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const TriggerRiskAnalysisSecurityOption2$outboundSchema = z.pipe(z.object({
+export const TriggerRiskAnalysisSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function triggerRiskAnalysisSecurityOption2ToJSON(triggerRiskAnalysisSecurityOption2) {
-    return JSON.stringify(TriggerRiskAnalysisSecurityOption2$outboundSchema.parse(triggerRiskAnalysisSecurityOption2));
+  }),
+);
+export function triggerRiskAnalysisSecurityOption2ToJSON(
+  triggerRiskAnalysisSecurityOption2,
+) {
+  return JSON.stringify(
+    TriggerRiskAnalysisSecurityOption2$outboundSchema.parse(
+      triggerRiskAnalysisSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const TriggerRiskAnalysisSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => TriggerRiskAnalysisSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => TriggerRiskAnalysisSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const TriggerRiskAnalysisSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => TriggerRiskAnalysisSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => TriggerRiskAnalysisSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function triggerRiskAnalysisSecurityToJSON(triggerRiskAnalysisSecurity) {
-    return JSON.stringify(TriggerRiskAnalysisSecurity$outboundSchema.parse(triggerRiskAnalysisSecurity));
+  return JSON.stringify(
+    TriggerRiskAnalysisSecurity$outboundSchema.parse(
+      triggerRiskAnalysisSecurity,
+    ),
+  );
 }
 /** @internal */
-export const TriggerRiskAnalysisRequest$outboundSchema = z.pipe(z.object({
+export const TriggerRiskAnalysisRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    triggerRiskAnalysisRequestBody: TriggerRiskAnalysisRequestBody$outboundSchema,
-}), z.transform((v) => {
+    triggerRiskAnalysisRequestBody:
+      TriggerRiskAnalysisRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        triggerRiskAnalysisRequestBody: "TriggerRiskAnalysisRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      triggerRiskAnalysisRequestBody: "TriggerRiskAnalysisRequestBody",
     });
-}));
+  }),
+);
 export function triggerRiskAnalysisRequestToJSON(triggerRiskAnalysisRequest) {
-    return JSON.stringify(TriggerRiskAnalysisRequest$outboundSchema.parse(triggerRiskAnalysisRequest));
+  return JSON.stringify(
+    TriggerRiskAnalysisRequest$outboundSchema.parse(triggerRiskAnalysisRequest),
+  );
 }
 //# sourceMappingURL=triggerriskanalysis.js.map

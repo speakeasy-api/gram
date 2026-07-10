@@ -5,11 +5,15 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const FilterOption$inboundSchema = z.object({
-    count: z.int(),
-    id: z.string(),
-    label: z.string(),
+  count: z.int(),
+  id: z.string(),
+  label: z.string(),
 });
 export function filterOptionFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => FilterOption$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'FilterOption' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => FilterOption$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'FilterOption' from JSON`,
+  );
 }
 //# sourceMappingURL=filteroption.js.map

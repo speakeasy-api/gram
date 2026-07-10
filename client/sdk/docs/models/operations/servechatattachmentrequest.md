@@ -13,10 +13,10 @@ let value: ServeChatAttachmentRequest = {
 
 ## Fields
 
-| Field                                         | Type                                          | Required                                      | Description                                   |
-| --------------------------------------------- | --------------------------------------------- | --------------------------------------------- | --------------------------------------------- |
-| `id`                                          | *string*                                      | :heavy_check_mark:                            | The ID of the attachment to serve             |
-| `projectId`                                   | *string*                                      | :heavy_check_mark:                            | The project ID that the attachment belongs to |
-| `gramKey`                                     | *string*                                      | :heavy_minus_sign:                            | API Key header                                |
-| `gramSession`                                 | *string*                                      | :heavy_minus_sign:                            | Session header                                |
-| `gramChatSession`                             | *string*                                      | :heavy_minus_sign:                            | Chat Sessions token header                    |
+| Field             | Type     | Required           | Description                                   |
+| ----------------- | -------- | ------------------ | --------------------------------------------- |
+| `id`              | _string_ | :heavy_check_mark: | The ID of the attachment to serve             |
+| `projectId`       | _string_ | :heavy_check_mark: | The project ID that the attachment belongs to |
+| `gramKey`         | _string_ | :heavy_minus_sign: | API Key header                                |
+| `gramSession`     | _string_ | :heavy_minus_sign: | Session header                                |
+| `gramChatSession` | _string_ | :heavy_minus_sign: | Chat Sessions token header                    |

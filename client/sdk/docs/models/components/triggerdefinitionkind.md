@@ -13,5 +13,5 @@ let value: TriggerDefinitionKind = "webhook";
 ## Values
 
 ```typescript
-"webhook" | "schedule"
+"webhook" | "schedule";
 ```

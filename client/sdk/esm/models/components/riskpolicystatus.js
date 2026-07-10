@@ -8,14 +8,15 @@ import { safeParse } from "../../lib/schemas.js";
  * Workflow state: running, sleeping, or not_started.
  */
 export const WorkflowStatus = {
-    Running: "running",
-    Sleeping: "sleeping",
-    NotStarted: "not_started",
+  Running: "running",
+  Sleeping: "sleeping",
+  NotStarted: "not_started",
 };
 /** @internal */
 export const WorkflowStatus$inboundSchema = z.enum(WorkflowStatus);
 /** @internal */
-export const RiskPolicyStatus$inboundSchema = z.pipe(z.object({
+export const RiskPolicyStatus$inboundSchema = z.pipe(
+  z.object({
     analyzed_messages: z.int(),
     findings_count: z.int(),
     pending_messages: z.int(),
@@ -23,18 +24,24 @@ export const RiskPolicyStatus$inboundSchema = z.pipe(z.object({
     policy_version: z.int(),
     total_messages: z.int(),
     workflow_status: WorkflowStatus$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "analyzed_messages": "analyzedMessages",
-        "findings_count": "findingsCount",
-        "pending_messages": "pendingMessages",
-        "policy_id": "policyId",
-        "policy_version": "policyVersion",
-        "total_messages": "totalMessages",
-        "workflow_status": "workflowStatus",
+      analyzed_messages: "analyzedMessages",
+      findings_count: "findingsCount",
+      pending_messages: "pendingMessages",
+      policy_id: "policyId",
+      policy_version: "policyVersion",
+      total_messages: "totalMessages",
+      workflow_status: "workflowStatus",
     });
-}));
+  }),
+);
 export function riskPolicyStatusFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RiskPolicyStatus$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RiskPolicyStatus' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RiskPolicyStatus$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RiskPolicyStatus' from JSON`,
+  );
 }
 //# sourceMappingURL=riskpolicystatus.js.map

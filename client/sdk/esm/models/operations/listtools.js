@@ -7,29 +7,35 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * The type of tool
  */
 export const ToolTypes = {
-    Http: "http",
-    Prompt: "prompt",
-    Function: "function",
-    Platform: "platform",
-    Externalmcp: "externalmcp",
+  Http: "http",
+  Prompt: "prompt",
+  Function: "function",
+  Platform: "platform",
+  Externalmcp: "externalmcp",
 };
 /** @internal */
-export const ListToolsSecurity$outboundSchema = z.pipe(z.object({
+export const ListToolsSecurity$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function listToolsSecurityToJSON(listToolsSecurity) {
-    return JSON.stringify(ListToolsSecurity$outboundSchema.parse(listToolsSecurity));
+  return JSON.stringify(
+    ListToolsSecurity$outboundSchema.parse(listToolsSecurity),
+  );
 }
 /** @internal */
 export const ToolTypes$outboundSchema = z.enum(ToolTypes);
 /** @internal */
-export const ListToolsRequest$outboundSchema = z.pipe(z.object({
+export const ListToolsRequest$outboundSchema = z.pipe(
+  z.object({
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     deploymentId: z.optional(z.string()),
@@ -37,16 +43,20 @@ export const ListToolsRequest$outboundSchema = z.pipe(z.object({
     toolTypes: z.optional(z.array(ToolTypes$outboundSchema)),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        deploymentId: "deployment_id",
-        urnPrefix: "urn_prefix",
-        toolTypes: "tool_types",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
+      deploymentId: "deployment_id",
+      urnPrefix: "urn_prefix",
+      toolTypes: "tool_types",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function listToolsRequestToJSON(listToolsRequest) {
-    return JSON.stringify(ListToolsRequest$outboundSchema.parse(listToolsRequest));
+  return JSON.stringify(
+    ListToolsRequest$outboundSchema.parse(listToolsRequest),
+  );
 }
 //# sourceMappingURL=listtools.js.map

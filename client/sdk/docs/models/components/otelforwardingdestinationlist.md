@@ -25,6 +25,6 @@ let value: OtelForwardingDestinationList = {
 
 ## Fields
 
-| Field                                                                                          | Type                                                                                           | Required                                                                                       | Description                                                                                    |
-| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `destinations`                                                                                 | [components.OtelForwardingDestination](../../models/components/otelforwardingdestination.md)[] | :heavy_check_mark:                                                                             | N/A                                                                                            |
+| Field          | Type                                                                                           | Required           | Description |
+| -------------- | ---------------------------------------------------------------------------------------------- | ------------------ | ----------- |
+| `destinations` | [components.OtelForwardingDestination](../../models/components/otelforwardingdestination.md)[] | :heavy_check_mark: | N/A         |

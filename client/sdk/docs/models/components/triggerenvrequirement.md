@@ -13,8 +13,8 @@ let value: TriggerEnvRequirement = {
 
 ## Fields
 
-| Field                             | Type                              | Required                          | Description                       |
-| --------------------------------- | --------------------------------- | --------------------------------- | --------------------------------- |
-| `description`                     | *string*                          | :heavy_minus_sign:                | Description of the variable.      |
-| `name`                            | *string*                          | :heavy_check_mark:                | The environment variable name.    |
-| `required`                        | *boolean*                         | :heavy_check_mark:                | Whether the variable is required. |
+| Field         | Type      | Required           | Description                       |
+| ------------- | --------- | ------------------ | --------------------------------- |
+| `description` | _string_  | :heavy_minus_sign: | Description of the variable.      |
+| `name`        | _string_  | :heavy_check_mark: | The environment variable name.    |
+| `required`    | _boolean_ | :heavy_check_mark: | Whether the variable is required. |

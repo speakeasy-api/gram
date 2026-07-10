@@ -12,6 +12,6 @@ let value: ListToolsetSummariesResult = {
 
 ## Fields
 
-| Field                                                                    | Type                                                                     | Required                                                                 | Description                                                              |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| `toolsets`                                                               | [components.ToolsetSummary](../../models/components/toolsetsummary.md)[] | :heavy_check_mark:                                                       | The list of toolset summaries                                            |
+| Field      | Type                                                                     | Required           | Description                   |
+| ---------- | ------------------------------------------------------------------------ | ------------------ | ----------------------------- |
+| `toolsets` | [components.ToolsetSummary](../../models/components/toolsetsummary.md)[] | :heavy_check_mark: | The list of toolset summaries |

@@ -5,16 +5,26 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const SendEnterpriseAdminOnboardingEmailResult$inboundSchema = z.pipe(z.object({
+export const SendEnterpriseAdminOnboardingEmailResult$inboundSchema = z.pipe(
+  z.object({
     sent_count: z.int(),
     setup_link: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "sent_count": "sentCount",
-        "setup_link": "setupLink",
+      sent_count: "sentCount",
+      setup_link: "setupLink",
     });
-}));
+  }),
+);
 export function sendEnterpriseAdminOnboardingEmailResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SendEnterpriseAdminOnboardingEmailResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SendEnterpriseAdminOnboardingEmailResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) =>
+      SendEnterpriseAdminOnboardingEmailResult$inboundSchema.parse(
+        JSON.parse(x),
+      ),
+    `Failed to parse 'SendEnterpriseAdminOnboardingEmailResult' from JSON`,
+  );
 }
 //# sourceMappingURL=sendenterpriseadminonboardingemailresult.js.map

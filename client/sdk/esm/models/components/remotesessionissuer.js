@@ -5,10 +5,14 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const RemoteSessionIssuer$inboundSchema = z.pipe(z.object({
+export const RemoteSessionIssuer$inboundSchema = z.pipe(
+  z.object({
     authorization_endpoint: z.optional(z.string()),
     client_id_metadata_document_supported: z.boolean(),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     grant_types_supported: z.optional(z.array(z.string())),
     id: z.string(),
     issuer: z.string(),
@@ -25,26 +29,37 @@ export const RemoteSessionIssuer$inboundSchema = z.pipe(z.object({
     slug: z.string(),
     token_endpoint: z.optional(z.string()),
     token_endpoint_auth_methods_supported: z.optional(z.array(z.string())),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-}), z.transform((v) => {
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "authorization_endpoint": "authorizationEndpoint",
-        "client_id_metadata_document_supported": "clientIdMetadataDocumentSupported",
-        "created_at": "createdAt",
-        "grant_types_supported": "grantTypesSupported",
-        "jwks_uri": "jwksUri",
-        "logo_asset_id": "logoAssetId",
-        "organization_id": "organizationId",
-        "project_id": "projectId",
-        "registration_endpoint": "registrationEndpoint",
-        "response_types_supported": "responseTypesSupported",
-        "scopes_supported": "scopesSupported",
-        "token_endpoint": "tokenEndpoint",
-        "token_endpoint_auth_methods_supported": "tokenEndpointAuthMethodsSupported",
-        "updated_at": "updatedAt",
+      authorization_endpoint: "authorizationEndpoint",
+      client_id_metadata_document_supported:
+        "clientIdMetadataDocumentSupported",
+      created_at: "createdAt",
+      grant_types_supported: "grantTypesSupported",
+      jwks_uri: "jwksUri",
+      logo_asset_id: "logoAssetId",
+      organization_id: "organizationId",
+      project_id: "projectId",
+      registration_endpoint: "registrationEndpoint",
+      response_types_supported: "responseTypesSupported",
+      scopes_supported: "scopesSupported",
+      token_endpoint: "tokenEndpoint",
+      token_endpoint_auth_methods_supported:
+        "tokenEndpointAuthMethodsSupported",
+      updated_at: "updatedAt",
     });
-}));
+  }),
+);
 export function remoteSessionIssuerFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => RemoteSessionIssuer$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'RemoteSessionIssuer' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => RemoteSessionIssuer$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'RemoteSessionIssuer' from JSON`,
+  );
 }
 //# sourceMappingURL=remotesessionissuer.js.map

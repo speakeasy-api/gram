@@ -11,5 +11,5 @@ let value: UpsertAllowedOriginFormStatus = "rejected";
 ## Values
 
 ```typescript
-"pending" | "approved" | "rejected"
+"pending" | "approved" | "rejected";
 ```

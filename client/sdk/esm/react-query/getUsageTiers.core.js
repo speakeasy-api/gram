@@ -5,25 +5,29 @@ import { usageGetUsageTiers } from "../funcs/usageGetUsageTiers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
 export function prefetchGetUsageTiers(queryClient, client$, options) {
-    return queryClient.prefetchQuery({
-        ...buildGetUsageTiersQuery(client$, options),
-    });
+  return queryClient.prefetchQuery({
+    ...buildGetUsageTiersQuery(client$, options),
+  });
 }
 export function buildGetUsageTiersQuery(client$, options) {
-    return {
-        queryKey: queryKeyGetUsageTiers(),
-        queryFn: async function getUsageTiersQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(usageGetUsageTiers(client$, mergedOptions));
-        },
-    };
+  return {
+    queryKey: queryKeyGetUsageTiers(),
+    queryFn: async function getUsageTiersQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(usageGetUsageTiers(client$, mergedOptions));
+    },
+  };
 }
 export function queryKeyGetUsageTiers() {
-    return ["@gram/client", "usage", "getUsageTiers"];
+  return ["@gram/client", "usage", "getUsageTiers"];
 }
 //# sourceMappingURL=getUsageTiers.core.js.map

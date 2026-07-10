@@ -5,10 +5,14 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
 export const CodexHookResult$inboundSchema = z.object({
-    decision: z.optional(z.string()),
-    reason: z.optional(z.string()),
+  decision: z.optional(z.string()),
+  reason: z.optional(z.string()),
 });
 export function codexHookResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => CodexHookResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'CodexHookResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => CodexHookResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'CodexHookResult' from JSON`,
+  );
 }
 //# sourceMappingURL=codexhookresult.js.map

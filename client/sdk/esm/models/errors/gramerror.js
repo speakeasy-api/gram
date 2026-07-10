@@ -3,14 +3,14 @@
  */
 /** The base class for all HTTP error responses */
 export class GramError extends Error {
-    constructor(message, httpMeta) {
-        super(message);
-        this.statusCode = httpMeta.response.status;
-        this.body = httpMeta.body;
-        this.headers = httpMeta.response.headers;
-        this.contentType = httpMeta.response.headers.get("content-type") || "";
-        this.rawResponse = httpMeta.response;
-        this.name = "GramError";
-    }
+  constructor(message, httpMeta) {
+    super(message);
+    this.statusCode = httpMeta.response.status;
+    this.body = httpMeta.body;
+    this.headers = httpMeta.response.headers;
+    this.contentType = httpMeta.response.headers.get("content-type") || "";
+    this.rawResponse = httpMeta.response;
+    this.name = "GramError";
+  }
 }
 //# sourceMappingURL=gramerror.js.map

@@ -5,18 +5,25 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const SkillSummary$inboundSchema = z.pipe(z.object({
+export const SkillSummary$inboundSchema = z.pipe(
+  z.object({
     skill_name: z.string(),
     unique_users: z.int(),
     use_count: z.int(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "skill_name": "skillName",
-        "unique_users": "uniqueUsers",
-        "use_count": "useCount",
+      skill_name: "skillName",
+      unique_users: "uniqueUsers",
+      use_count: "useCount",
     });
-}));
+  }),
+);
 export function skillSummaryFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => SkillSummary$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'SkillSummary' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => SkillSummary$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SkillSummary' from JSON`,
+  );
 }
 //# sourceMappingURL=skillsummary.js.map

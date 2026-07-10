@@ -13,5 +13,5 @@ let value: HasRisk = "false";
 ## Values
 
 ```typescript
-"" | "true" | "false"
+"" | "true" | "false";
 ```

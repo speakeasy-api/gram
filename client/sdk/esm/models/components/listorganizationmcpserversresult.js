@@ -3,12 +3,16 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { OrganizationMcpServer$inboundSchema, } from "./organizationmcpserver.js";
+import { OrganizationMcpServer$inboundSchema } from "./organizationmcpserver.js";
 /** @internal */
 export const ListOrganizationMcpServersResult$inboundSchema = z.object({
-    items: z.array(OrganizationMcpServer$inboundSchema),
+  items: z.array(OrganizationMcpServer$inboundSchema),
 });
 export function listOrganizationMcpServersResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListOrganizationMcpServersResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListOrganizationMcpServersResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListOrganizationMcpServersResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListOrganizationMcpServersResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listorganizationmcpserversresult.js.map

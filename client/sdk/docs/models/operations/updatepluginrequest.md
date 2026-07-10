@@ -16,8 +16,8 @@ let value: UpdatePluginRequest = {
 
 ## Fields
 
-| Field                                                                      | Type                                                                       | Required                                                                   | Description                                                                |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `gramSession`                                                              | *string*                                                                   | :heavy_minus_sign:                                                         | Session header                                                             |
-| `gramProject`                                                              | *string*                                                                   | :heavy_minus_sign:                                                         | project header                                                             |
-| `updatePluginForm`                                                         | [components.UpdatePluginForm](../../models/components/updatepluginform.md) | :heavy_check_mark:                                                         | N/A                                                                        |
+| Field              | Type                                                                       | Required           | Description    |
+| ------------------ | -------------------------------------------------------------------------- | ------------------ | -------------- |
+| `gramSession`      | _string_                                                                   | :heavy_minus_sign: | Session header |
+| `gramProject`      | _string_                                                                   | :heavy_minus_sign: | project header |
+| `updatePluginForm` | [components.UpdatePluginForm](../../models/components/updatepluginform.md) | :heavy_check_mark: | N/A            |

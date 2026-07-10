@@ -9,17 +9,24 @@ import { ChatMessage$inboundSchema } from "./chatmessage.js";
 import { ChatTotals$inboundSchema } from "./chattotals.js";
 import { RiskSegment$inboundSchema } from "./risksegment.js";
 /** @internal */
-export const Chat$inboundSchema = z.pipe(z.object({
+export const Chat$inboundSchema = z.pipe(
+  z.object({
     account_email: z.optional(z.string()),
     account_type: z.optional(z.string()),
     agent_usage: z.optional(AgentUsage$inboundSchema),
-    created_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     external_user_id: z.optional(z.string()),
     generation: z.int(),
     has_more_after: z.boolean(),
     has_more_before: z.boolean(),
     id: z.string(),
-    last_message_timestamp: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    last_message_timestamp: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     match_segments: z.optional(z.array(RiskSegment$inboundSchema)),
     max_generation: z.int(),
     messages: z.array(ChatMessage$inboundSchema),
@@ -33,32 +40,41 @@ export const Chat$inboundSchema = z.pipe(z.object({
     total_output_tokens: z.optional(z.int()),
     total_tokens: z.optional(z.int()),
     totals: z.optional(ChatTotals$inboundSchema),
-    updated_at: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    updated_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     user_id: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "account_email": "accountEmail",
-        "account_type": "accountType",
-        "agent_usage": "agentUsage",
-        "created_at": "createdAt",
-        "external_user_id": "externalUserId",
-        "has_more_after": "hasMoreAfter",
-        "has_more_before": "hasMoreBefore",
-        "last_message_timestamp": "lastMessageTimestamp",
-        "match_segments": "matchSegments",
-        "max_generation": "maxGeneration",
-        "num_messages": "numMessages",
-        "risk_findings_count": "riskFindingsCount",
-        "risk_segments": "riskSegments",
-        "total_cost": "totalCost",
-        "total_input_tokens": "totalInputTokens",
-        "total_output_tokens": "totalOutputTokens",
-        "total_tokens": "totalTokens",
-        "updated_at": "updatedAt",
-        "user_id": "userId",
+      account_email: "accountEmail",
+      account_type: "accountType",
+      agent_usage: "agentUsage",
+      created_at: "createdAt",
+      external_user_id: "externalUserId",
+      has_more_after: "hasMoreAfter",
+      has_more_before: "hasMoreBefore",
+      last_message_timestamp: "lastMessageTimestamp",
+      match_segments: "matchSegments",
+      max_generation: "maxGeneration",
+      num_messages: "numMessages",
+      risk_findings_count: "riskFindingsCount",
+      risk_segments: "riskSegments",
+      total_cost: "totalCost",
+      total_input_tokens: "totalInputTokens",
+      total_output_tokens: "totalOutputTokens",
+      total_tokens: "totalTokens",
+      updated_at: "updatedAt",
+      user_id: "userId",
     });
-}));
+  }),
+);
 export function chatFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => Chat$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'Chat' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => Chat$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'Chat' from JSON`,
+  );
 }
 //# sourceMappingURL=chat.js.map

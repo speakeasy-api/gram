@@ -18,6 +18,6 @@ let value: UpsertAllowedOriginResult = {
 
 ## Fields
 
-| Field                                                                | Type                                                                 | Required                                                             | Description                                                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `allowedOrigin`                                                      | [components.AllowedOrigin](../../models/components/allowedorigin.md) | :heavy_check_mark:                                                   | N/A                                                                  |
+| Field           | Type                                                                 | Required           | Description |
+| --------------- | -------------------------------------------------------------------- | ------------------ | ----------- |
+| `allowedOrigin` | [components.AllowedOrigin](../../models/components/allowedorigin.md) | :heavy_check_mark: | N/A         |

@@ -3,13 +3,17 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { AuthzChallenge$inboundSchema, } from "./authzchallenge.js";
+import { AuthzChallenge$inboundSchema } from "./authzchallenge.js";
 /** @internal */
 export const ListChallengesResult$inboundSchema = z.object({
-    challenges: z.array(AuthzChallenge$inboundSchema),
-    total: z.int(),
+  challenges: z.array(AuthzChallenge$inboundSchema),
+  total: z.int(),
 });
 export function listChallengesResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListChallengesResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListChallengesResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ListChallengesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListChallengesResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listchallengesresult.js.map

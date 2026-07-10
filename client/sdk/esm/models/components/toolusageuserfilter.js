@@ -6,19 +6,23 @@ import * as z from "zod/v4-mini";
  * Tool usage user identity kind
  */
 export const ToolUsageUserFilterKind = {
-    Email: "email",
-    ExternalUserId: "external_user_id",
-    UserId: "user_id",
-    Unknown: "unknown",
+  Email: "email",
+  ExternalUserId: "external_user_id",
+  UserId: "user_id",
+  Unknown: "unknown",
 };
 /** @internal */
-export const ToolUsageUserFilterKind$outboundSchema = z.enum(ToolUsageUserFilterKind);
+export const ToolUsageUserFilterKind$outboundSchema = z.enum(
+  ToolUsageUserFilterKind,
+);
 /** @internal */
 export const ToolUsageUserFilter$outboundSchema = z.object({
-    key: z.string(),
-    kind: ToolUsageUserFilterKind$outboundSchema,
+  key: z.string(),
+  kind: ToolUsageUserFilterKind$outboundSchema,
 });
 export function toolUsageUserFilterToJSON(toolUsageUserFilter) {
-    return JSON.stringify(ToolUsageUserFilter$outboundSchema.parse(toolUsageUserFilter));
+  return JSON.stringify(
+    ToolUsageUserFilter$outboundSchema.parse(toolUsageUserFilter),
+  );
 }
 //# sourceMappingURL=toolusageuserfilter.js.map

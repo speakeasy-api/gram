@@ -3,23 +3,26 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { RoleGrant$outboundSchema, } from "./rolegrant.js";
+import { RoleGrant$outboundSchema } from "./rolegrant.js";
 /** @internal */
-export const UpdateRoleForm$outboundSchema = z.pipe(z.object({
+export const UpdateRoleForm$outboundSchema = z.pipe(
+  z.object({
     addGrants: z.optional(z.array(RoleGrant$outboundSchema)),
     description: z.optional(z.string()),
     id: z.string(),
     memberIds: z.optional(z.array(z.string())),
     name: z.optional(z.string()),
     removeGrants: z.optional(z.array(RoleGrant$outboundSchema)),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        addGrants: "add_grants",
-        memberIds: "member_ids",
-        removeGrants: "remove_grants",
+      addGrants: "add_grants",
+      memberIds: "member_ids",
+      removeGrants: "remove_grants",
     });
-}));
+  }),
+);
 export function updateRoleFormToJSON(updateRoleForm) {
-    return JSON.stringify(UpdateRoleForm$outboundSchema.parse(updateRoleForm));
+  return JSON.stringify(UpdateRoleForm$outboundSchema.parse(updateRoleForm));
 }
 //# sourceMappingURL=updateroleform.js.map

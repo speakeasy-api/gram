@@ -13,5 +13,5 @@ let value: Pinned = "false";
 ## Values
 
 ```typescript
-"" | "true" | "false"
+"" | "true" | "false";
 ```

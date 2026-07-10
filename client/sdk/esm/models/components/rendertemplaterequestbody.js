@@ -6,27 +6,33 @@ import * as z from "zod/v4-mini";
  * The template engine
  */
 export const RenderTemplateRequestBodyEngine = {
-    Mustache: "mustache",
+  Mustache: "mustache",
 };
 /**
  * The kind of prompt the template is used for
  */
 export const RenderTemplateRequestBodyKind = {
-    Prompt: "prompt",
-    HigherOrderTool: "higher_order_tool",
+  Prompt: "prompt",
+  HigherOrderTool: "higher_order_tool",
 };
 /** @internal */
-export const RenderTemplateRequestBodyEngine$outboundSchema = z.enum(RenderTemplateRequestBodyEngine);
+export const RenderTemplateRequestBodyEngine$outboundSchema = z.enum(
+  RenderTemplateRequestBodyEngine,
+);
 /** @internal */
-export const RenderTemplateRequestBodyKind$outboundSchema = z.enum(RenderTemplateRequestBodyKind);
+export const RenderTemplateRequestBodyKind$outboundSchema = z.enum(
+  RenderTemplateRequestBodyKind,
+);
 /** @internal */
 export const RenderTemplateRequestBody$outboundSchema = z.object({
-    arguments: z.record(z.string(), z.any()),
-    engine: RenderTemplateRequestBodyEngine$outboundSchema,
-    kind: RenderTemplateRequestBodyKind$outboundSchema,
-    prompt: z.string(),
+  arguments: z.record(z.string(), z.any()),
+  engine: RenderTemplateRequestBodyEngine$outboundSchema,
+  kind: RenderTemplateRequestBodyKind$outboundSchema,
+  prompt: z.string(),
 });
 export function renderTemplateRequestBodyToJSON(renderTemplateRequestBody) {
-    return JSON.stringify(RenderTemplateRequestBody$outboundSchema.parse(renderTemplateRequestBody));
+  return JSON.stringify(
+    RenderTemplateRequestBody$outboundSchema.parse(renderTemplateRequestBody),
+  );
 }
 //# sourceMappingURL=rendertemplaterequestbody.js.map

@@ -23,6 +23,6 @@ let value: ListRiskEvalReviewsResult = {
 
 ## Fields
 
-| Field                                                                                | Type                                                                                 | Required                                                                             | Description                                                                          |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| `reviews`                                                                            | [components.RiskPolicyEvalReview](../../models/components/riskpolicyevalreview.md)[] | :heavy_check_mark:                                                                   | The active review set for the policy.                                                |
+| Field     | Type                                                                                 | Required           | Description                           |
+| --------- | ------------------------------------------------------------------------------------ | ------------------ | ------------------------------------- |
+| `reviews` | [components.RiskPolicyEvalReview](../../models/components/riskpolicyevalreview.md)[] | :heavy_check_mark: | The active review set for the policy. |

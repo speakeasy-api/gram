@@ -4,29 +4,56 @@
 import { pluginsDownloadCodexInstallScript } from "../funcs/pluginsDownloadCodexInstallScript.js";
 import { combineSignals } from "../lib/primitives.js";
 import { unwrapAsync } from "../types/fp.js";
-export function prefetchPluginsDownloadCodexInstallScript(queryClient, client$, request, security, options) {
-    return queryClient.prefetchQuery({
-        ...buildPluginsDownloadCodexInstallScriptQuery(client$, request, security, options),
-    });
+export function prefetchPluginsDownloadCodexInstallScript(
+  queryClient,
+  client$,
+  request,
+  security,
+  options,
+) {
+  return queryClient.prefetchQuery({
+    ...buildPluginsDownloadCodexInstallScriptQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+  });
 }
-export function buildPluginsDownloadCodexInstallScriptQuery(client$, request, security, options) {
-    return {
-        queryKey: queryKeyPluginsDownloadCodexInstallScript({
-            gramSession: request?.gramSession,
-            gramProject: request?.gramProject,
-        }),
-        queryFn: async function pluginsDownloadCodexInstallScriptQueryFn(ctx) {
-            const sig = combineSignals(ctx.signal, options?.signal, options?.fetchOptions?.signal);
-            const mergedOptions = {
-                ...options?.fetchOptions,
-                ...options,
-                signal: sig,
-            };
-            return unwrapAsync(pluginsDownloadCodexInstallScript(client$, request, security, mergedOptions));
-        },
-    };
+export function buildPluginsDownloadCodexInstallScriptQuery(
+  client$,
+  request,
+  security,
+  options,
+) {
+  return {
+    queryKey: queryKeyPluginsDownloadCodexInstallScript({
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
+    }),
+    queryFn: async function pluginsDownloadCodexInstallScriptQueryFn(ctx) {
+      const sig = combineSignals(
+        ctx.signal,
+        options?.signal,
+        options?.fetchOptions?.signal,
+      );
+      const mergedOptions = {
+        ...options?.fetchOptions,
+        ...options,
+        signal: sig,
+      };
+      return unwrapAsync(
+        pluginsDownloadCodexInstallScript(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ),
+      );
+    },
+  };
 }
 export function queryKeyPluginsDownloadCodexInstallScript(parameters) {
-    return ["@gram/client", "plugins", "downloadCodexInstallScript", parameters];
+  return ["@gram/client", "plugins", "downloadCodexInstallScript", parameters];
 }
 //# sourceMappingURL=pluginsDownloadCodexInstallScript.core.js.map

@@ -3,61 +3,109 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { RiskPolicyBypassApprovalRequestBody$outboundSchema, } from "../components/riskpolicybypassapprovalrequestbody.js";
+import { RiskPolicyBypassApprovalRequestBody$outboundSchema } from "../components/riskpolicybypassapprovalrequestbody.js";
 /** @internal */
-export const ApproveRiskPolicyBypassRequestSecurityOption1$outboundSchema = z.pipe(z.object({
-    apikeyHeaderGramKey: z.string(),
-    projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
-    return remap$(v, {
+export const ApproveRiskPolicyBypassRequestSecurityOption1$outboundSchema =
+  z.pipe(
+    z.object({
+      apikeyHeaderGramKey: z.string(),
+      projectSlugHeaderGramProject: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         apikeyHeaderGramKey: "apikey_header_Gram-Key",
         projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    });
-}));
-export function approveRiskPolicyBypassRequestSecurityOption1ToJSON(approveRiskPolicyBypassRequestSecurityOption1) {
-    return JSON.stringify(ApproveRiskPolicyBypassRequestSecurityOption1$outboundSchema.parse(approveRiskPolicyBypassRequestSecurityOption1));
+      });
+    }),
+  );
+export function approveRiskPolicyBypassRequestSecurityOption1ToJSON(
+  approveRiskPolicyBypassRequestSecurityOption1,
+) {
+  return JSON.stringify(
+    ApproveRiskPolicyBypassRequestSecurityOption1$outboundSchema.parse(
+      approveRiskPolicyBypassRequestSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const ApproveRiskPolicyBypassRequestSecurityOption2$outboundSchema = z.pipe(z.object({
-    projectSlugHeaderGramProject: z.string(),
-    sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
-    return remap$(v, {
+export const ApproveRiskPolicyBypassRequestSecurityOption2$outboundSchema =
+  z.pipe(
+    z.object({
+      projectSlugHeaderGramProject: z.string(),
+      sessionHeaderGramSession: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
         projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
         sessionHeaderGramSession: "session_header_Gram-Session",
-    });
-}));
-export function approveRiskPolicyBypassRequestSecurityOption2ToJSON(approveRiskPolicyBypassRequestSecurityOption2) {
-    return JSON.stringify(ApproveRiskPolicyBypassRequestSecurityOption2$outboundSchema.parse(approveRiskPolicyBypassRequestSecurityOption2));
+      });
+    }),
+  );
+export function approveRiskPolicyBypassRequestSecurityOption2ToJSON(
+  approveRiskPolicyBypassRequestSecurityOption2,
+) {
+  return JSON.stringify(
+    ApproveRiskPolicyBypassRequestSecurityOption2$outboundSchema.parse(
+      approveRiskPolicyBypassRequestSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const ApproveRiskPolicyBypassRequestSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => ApproveRiskPolicyBypassRequestSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => ApproveRiskPolicyBypassRequestSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const ApproveRiskPolicyBypassRequestSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(
+        () => ApproveRiskPolicyBypassRequestSecurityOption1$outboundSchema,
+      ),
+    ),
+    option2: z.optional(
+      z.lazy(
+        () => ApproveRiskPolicyBypassRequestSecurityOption2$outboundSchema,
+      ),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
-export function approveRiskPolicyBypassRequestSecurityToJSON(approveRiskPolicyBypassRequestSecurity) {
-    return JSON.stringify(ApproveRiskPolicyBypassRequestSecurity$outboundSchema.parse(approveRiskPolicyBypassRequestSecurity));
+  }),
+);
+export function approveRiskPolicyBypassRequestSecurityToJSON(
+  approveRiskPolicyBypassRequestSecurity,
+) {
+  return JSON.stringify(
+    ApproveRiskPolicyBypassRequestSecurity$outboundSchema.parse(
+      approveRiskPolicyBypassRequestSecurity,
+    ),
+  );
 }
 /** @internal */
-export const ApproveRiskPolicyBypassRequestRequest$outboundSchema = z.pipe(z.object({
+export const ApproveRiskPolicyBypassRequestRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    riskPolicyBypassApprovalRequestBody: RiskPolicyBypassApprovalRequestBody$outboundSchema,
-}), z.transform((v) => {
+    riskPolicyBypassApprovalRequestBody:
+      RiskPolicyBypassApprovalRequestBody$outboundSchema,
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        riskPolicyBypassApprovalRequestBody: "RiskPolicyBypassApprovalRequestBody",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      riskPolicyBypassApprovalRequestBody:
+        "RiskPolicyBypassApprovalRequestBody",
     });
-}));
-export function approveRiskPolicyBypassRequestRequestToJSON(approveRiskPolicyBypassRequestRequest) {
-    return JSON.stringify(ApproveRiskPolicyBypassRequestRequest$outboundSchema.parse(approveRiskPolicyBypassRequestRequest));
+  }),
+);
+export function approveRiskPolicyBypassRequestRequestToJSON(
+  approveRiskPolicyBypassRequestRequest,
+) {
+  return JSON.stringify(
+    ApproveRiskPolicyBypassRequestRequest$outboundSchema.parse(
+      approveRiskPolicyBypassRequestRequest,
+    ),
+  );
 }
 //# sourceMappingURL=approveriskpolicybypassrequest.js.map

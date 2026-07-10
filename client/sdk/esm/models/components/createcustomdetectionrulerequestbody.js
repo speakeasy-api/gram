@@ -7,29 +7,38 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Severity level for findings produced by this rule.
  */
 export const Severity = {
-    Info: "info",
-    Low: "low",
-    Medium: "medium",
-    High: "high",
-    Critical: "critical",
+  Info: "info",
+  Low: "low",
+  Medium: "medium",
+  High: "high",
+  Critical: "critical",
 };
 /** @internal */
 export const Severity$outboundSchema = z.enum(Severity);
 /** @internal */
-export const CreateCustomDetectionRuleRequestBody$outboundSchema = z.pipe(z.object({
+export const CreateCustomDetectionRuleRequestBody$outboundSchema = z.pipe(
+  z.object({
     description: z.optional(z.string()),
     detectionExpr: z.optional(z.string()),
     regex: z.optional(z.string()),
     ruleId: z.string(),
     severity: z._default(Severity$outboundSchema, "medium"),
     title: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        detectionExpr: "detection_expr",
-        ruleId: "rule_id",
+      detectionExpr: "detection_expr",
+      ruleId: "rule_id",
     });
-}));
-export function createCustomDetectionRuleRequestBodyToJSON(createCustomDetectionRuleRequestBody) {
-    return JSON.stringify(CreateCustomDetectionRuleRequestBody$outboundSchema.parse(createCustomDetectionRuleRequestBody));
+  }),
+);
+export function createCustomDetectionRuleRequestBodyToJSON(
+  createCustomDetectionRuleRequestBody,
+) {
+  return JSON.stringify(
+    CreateCustomDetectionRuleRequestBody$outboundSchema.parse(
+      createCustomDetectionRuleRequestBody,
+    ),
+  );
 }
 //# sourceMappingURL=createcustomdetectionrulerequestbody.js.map

@@ -10,7 +10,7 @@ let value: GetDeploymentSecurity = {};
 
 ## Fields
 
-| Field                                                                                              | Type                                                                                               | Required                                                                                           | Description                                                                                        |
-| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `option1`                                                                                          | [operations.GetDeploymentSecurityOption1](../../models/operations/getdeploymentsecurityoption1.md) | :heavy_minus_sign:                                                                                 | N/A                                                                                                |
-| `option2`                                                                                          | [operations.GetDeploymentSecurityOption2](../../models/operations/getdeploymentsecurityoption2.md) | :heavy_minus_sign:                                                                                 | N/A                                                                                                |
+| Field     | Type                                                                                               | Required           | Description |
+| --------- | -------------------------------------------------------------------------------------------------- | ------------------ | ----------- |
+| `option1` | [operations.GetDeploymentSecurityOption1](../../models/operations/getdeploymentsecurityoption1.md) | :heavy_minus_sign: | N/A         |
+| `option2` | [operations.GetDeploymentSecurityOption2](../../models/operations/getdeploymentsecurityoption2.md) | :heavy_minus_sign: | N/A         |

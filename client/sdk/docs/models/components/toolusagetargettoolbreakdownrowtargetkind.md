@@ -13,5 +13,5 @@ let value: ToolUsageTargetToolBreakdownRowTargetKind = "skill";
 ## Values
 
 ```typescript
-"server" | "local_tools" | "skill"
+"server" | "local_tools" | "skill";
 ```

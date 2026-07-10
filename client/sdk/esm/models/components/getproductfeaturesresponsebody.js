@@ -5,7 +5,8 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const GetProductFeaturesResponseBody$inboundSchema = z.pipe(z.object({
+export const GetProductFeaturesResponseBody$inboundSchema = z.pipe(
+  z.object({
     authz_challenge_logging_enabled: z.boolean(),
     logs_enabled: z.boolean(),
     observability_mode_enabled: z.boolean(),
@@ -14,18 +15,24 @@ export const GetProductFeaturesResponseBody$inboundSchema = z.pipe(z.object({
     sso_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
     webhooks: z.boolean(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
-        "logs_enabled": "logsEnabled",
-        "observability_mode_enabled": "observabilityModeEnabled",
-        "scim_enabled": "scimEnabled",
-        "session_capture_enabled": "sessionCaptureEnabled",
-        "sso_enabled": "ssoEnabled",
-        "tool_io_logs_enabled": "toolIoLogsEnabled",
+      authz_challenge_logging_enabled: "authzChallengeLoggingEnabled",
+      logs_enabled: "logsEnabled",
+      observability_mode_enabled: "observabilityModeEnabled",
+      scim_enabled: "scimEnabled",
+      session_capture_enabled: "sessionCaptureEnabled",
+      sso_enabled: "ssoEnabled",
+      tool_io_logs_enabled: "toolIoLogsEnabled",
     });
-}));
+  }),
+);
 export function getProductFeaturesResponseBodyFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GetProductFeaturesResponseBody$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GetProductFeaturesResponseBody' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => GetProductFeaturesResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetProductFeaturesResponseBody' from JSON`,
+  );
 }
 //# sourceMappingURL=getproductfeaturesresponsebody.js.map

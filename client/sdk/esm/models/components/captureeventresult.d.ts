@@ -5,12 +5,17 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  * Result of capturing a telemetry event
  */
 export type CaptureEventResult = {
-    /**
-     * Whether the event was successfully captured
-     */
-    success: boolean;
+  /**
+   * Whether the event was successfully captured
+   */
+  success: boolean;
 };
 /** @internal */
-export declare const CaptureEventResult$inboundSchema: z.ZodMiniType<CaptureEventResult, unknown>;
-export declare function captureEventResultFromJSON(jsonString: string): SafeParseResult<CaptureEventResult, SDKValidationError>;
+export declare const CaptureEventResult$inboundSchema: z.ZodMiniType<
+  CaptureEventResult,
+  unknown
+>;
+export declare function captureEventResultFromJSON(
+  jsonString: string,
+): SafeParseResult<CaptureEventResult, SDKValidationError>;
 //# sourceMappingURL=captureeventresult.d.ts.map

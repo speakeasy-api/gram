@@ -5,36 +5,49 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const LogoutSecurity$outboundSchema = z.pipe(z.object({
+export const LogoutSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
+  }),
+);
 export function logoutSecurityToJSON(logoutSecurity) {
-    return JSON.stringify(LogoutSecurity$outboundSchema.parse(logoutSecurity));
+  return JSON.stringify(LogoutSecurity$outboundSchema.parse(logoutSecurity));
 }
 /** @internal */
-export const LogoutRequest$outboundSchema = z.pipe(z.object({
+export const LogoutRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
+  }),
+);
 export function logoutRequestToJSON(logoutRequest) {
-    return JSON.stringify(LogoutRequest$outboundSchema.parse(logoutRequest));
+  return JSON.stringify(LogoutRequest$outboundSchema.parse(logoutRequest));
 }
 /** @internal */
-export const LogoutResponse$inboundSchema = z.pipe(z.object({
+export const LogoutResponse$inboundSchema = z.pipe(
+  z.object({
     Headers: z._default(z.record(z.string(), z.array(z.string())), {}),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "Headers": "headers",
+      Headers: "headers",
     });
-}));
+  }),
+);
 export function logoutResponseFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => LogoutResponse$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'LogoutResponse' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => LogoutResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'LogoutResponse' from JSON`,
+  );
 }
 //# sourceMappingURL=logout.js.map

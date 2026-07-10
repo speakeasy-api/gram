@@ -13,7 +13,7 @@ let value: SetPinnedRequestBody = {
 
 ## Fields
 
-| Field                                   | Type                                    | Required                                | Description                             |
-| --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- |
-| `id`                                    | *string*                                | :heavy_check_mark:                      | The ID of the chat to pin or unpin      |
-| `pinned`                                | *boolean*                               | :heavy_check_mark:                      | True to pin the chat, false to unpin it |
+| Field    | Type      | Required           | Description                             |
+| -------- | --------- | ------------------ | --------------------------------------- |
+| `id`     | _string_  | :heavy_check_mark: | The ID of the chat to pin or unpin      |
+| `pinned` | _boolean_ | :heavy_check_mark: | True to pin the chat, false to unpin it |

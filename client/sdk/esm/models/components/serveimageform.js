@@ -4,9 +4,9 @@
 import * as z from "zod/v4-mini";
 /** @internal */
 export const ServeImageForm$outboundSchema = z.object({
-    id: z.string(),
+  id: z.string(),
 });
 export function serveImageFormToJSON(serveImageForm) {
-    return JSON.stringify(ServeImageForm$outboundSchema.parse(serveImageForm));
+  return JSON.stringify(ServeImageForm$outboundSchema.parse(serveImageForm));
 }
 //# sourceMappingURL=serveimageform.js.map

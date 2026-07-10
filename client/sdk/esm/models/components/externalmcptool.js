@@ -5,17 +5,24 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 /** @internal */
-export const ExternalMCPTool$inboundSchema = z.pipe(z.object({
+export const ExternalMCPTool$inboundSchema = z.pipe(
+  z.object({
     annotations: z.optional(z.any()),
     description: z.optional(z.string()),
     input_schema: z.optional(z.any()),
     name: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "input_schema": "inputSchema",
+      input_schema: "inputSchema",
     });
-}));
+  }),
+);
 export function externalMCPToolFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ExternalMCPTool$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ExternalMCPTool' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ExternalMCPTool$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ExternalMCPTool' from JSON`,
+  );
 }
 //# sourceMappingURL=externalmcptool.js.map

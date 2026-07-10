@@ -4,18 +4,25 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { DeploymentLogEvent$inboundSchema, } from "./deploymentlogevent.js";
+import { DeploymentLogEvent$inboundSchema } from "./deploymentlogevent.js";
 /** @internal */
-export const GetDeploymentLogsResult$inboundSchema = z.pipe(z.object({
+export const GetDeploymentLogsResult$inboundSchema = z.pipe(
+  z.object({
     events: z.array(DeploymentLogEvent$inboundSchema),
     next_cursor: z.optional(z.string()),
     status: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "next_cursor": "nextCursor",
+      next_cursor: "nextCursor",
     });
-}));
+  }),
+);
 export function getDeploymentLogsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => GetDeploymentLogsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'GetDeploymentLogsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => GetDeploymentLogsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetDeploymentLogsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=getdeploymentlogsresult.js.map

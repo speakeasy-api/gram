@@ -12,7 +12,7 @@ let value: UpsertAllowedOriginForm = {
 
 ## Fields
 
-| Field                                                                                                | Type                                                                                                 | Required                                                                                             | Description                                                                                          |
-| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `origin`                                                                                             | *string*                                                                                             | :heavy_check_mark:                                                                                   | The origin URL to upsert                                                                             |
-| `status`                                                                                             | [components.UpsertAllowedOriginFormStatus](../../models/components/upsertallowedoriginformstatus.md) | :heavy_minus_sign:                                                                                   | N/A                                                                                                  |
+| Field    | Type                                                                                                 | Required           | Description              |
+| -------- | ---------------------------------------------------------------------------------------------------- | ------------------ | ------------------------ |
+| `origin` | _string_                                                                                             | :heavy_check_mark: | The origin URL to upsert |
+| `status` | [components.UpsertAllowedOriginFormStatus](../../models/components/upsertallowedoriginformstatus.md) | :heavy_minus_sign: | N/A                      |

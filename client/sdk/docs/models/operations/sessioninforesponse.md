@@ -22,7 +22,7 @@ let value: SessionInfoResponse = {
 
 ## Fields
 
-| Field                                                                      | Type                                                                       | Required                                                                   | Description                                                                |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `headers`                                                                  | Record<string, *string*[]>                                                 | :heavy_check_mark:                                                         | N/A                                                                        |
-| `result`                                                                   | [components.InfoResponseBody](../../models/components/inforesponsebody.md) | :heavy_check_mark:                                                         | N/A                                                                        |
+| Field     | Type                                                                       | Required           | Description |
+| --------- | -------------------------------------------------------------------------- | ------------------ | ----------- |
+| `headers` | Record<string, _string_[]>                                                 | :heavy_check_mark: | N/A         |
+| `result`  | [components.InfoResponseBody](../../models/components/inforesponsebody.md) | :heavy_check_mark: | N/A         |

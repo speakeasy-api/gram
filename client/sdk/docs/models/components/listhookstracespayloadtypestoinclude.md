@@ -11,5 +11,5 @@ let value: ListHooksTracesPayloadTypesToInclude = "mcp";
 ## Values
 
 ```typescript
-"mcp" | "local" | "skill"
+"mcp" | "local" | "skill";
 ```

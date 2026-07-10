@@ -4,29 +4,39 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const ListCollectionsSecurity$outboundSchema = z.pipe(z.object({
+export const ListCollectionsSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
     apikeyHeaderGramKey: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
     });
-}));
+  }),
+);
 export function listCollectionsSecurityToJSON(listCollectionsSecurity) {
-    return JSON.stringify(ListCollectionsSecurity$outboundSchema.parse(listCollectionsSecurity));
+  return JSON.stringify(
+    ListCollectionsSecurity$outboundSchema.parse(listCollectionsSecurity),
+  );
 }
 /** @internal */
-export const ListCollectionsRequest$outboundSchema = z.pipe(z.object({
+export const ListCollectionsRequest$outboundSchema = z.pipe(
+  z.object({
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
     });
-}));
+  }),
+);
 export function listCollectionsRequestToJSON(listCollectionsRequest) {
-    return JSON.stringify(ListCollectionsRequest$outboundSchema.parse(listCollectionsRequest));
+  return JSON.stringify(
+    ListCollectionsRequest$outboundSchema.parse(listCollectionsRequest),
+  );
 }
 //# sourceMappingURL=listcollections.js.map

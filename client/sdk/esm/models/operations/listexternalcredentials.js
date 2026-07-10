@@ -7,32 +7,50 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * Only return credentials for this provider.
  */
 export const Provider = {
-    AwsIam: "aws_iam",
-    GcpIam: "gcp_iam",
+  AwsIam: "aws_iam",
+  GcpIam: "gcp_iam",
 };
 /** @internal */
-export const ListExternalCredentialsSecurity$outboundSchema = z.pipe(z.object({
+export const ListExternalCredentialsSecurity$outboundSchema = z.pipe(
+  z.object({
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function listExternalCredentialsSecurityToJSON(listExternalCredentialsSecurity) {
-    return JSON.stringify(ListExternalCredentialsSecurity$outboundSchema.parse(listExternalCredentialsSecurity));
+  }),
+);
+export function listExternalCredentialsSecurityToJSON(
+  listExternalCredentialsSecurity,
+) {
+  return JSON.stringify(
+    ListExternalCredentialsSecurity$outboundSchema.parse(
+      listExternalCredentialsSecurity,
+    ),
+  );
 }
 /** @internal */
 export const Provider$outboundSchema = z.enum(Provider);
 /** @internal */
-export const ListExternalCredentialsRequest$outboundSchema = z.pipe(z.object({
+export const ListExternalCredentialsRequest$outboundSchema = z.pipe(
+  z.object({
     provider: z.optional(Provider$outboundSchema),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramSession: "Gram-Session",
+      gramSession: "Gram-Session",
     });
-}));
-export function listExternalCredentialsRequestToJSON(listExternalCredentialsRequest) {
-    return JSON.stringify(ListExternalCredentialsRequest$outboundSchema.parse(listExternalCredentialsRequest));
+  }),
+);
+export function listExternalCredentialsRequestToJSON(
+  listExternalCredentialsRequest,
+) {
+  return JSON.stringify(
+    ListExternalCredentialsRequest$outboundSchema.parse(
+      listExternalCredentialsRequest,
+    ),
+  );
 }
 //# sourceMappingURL=listexternalcredentials.js.map

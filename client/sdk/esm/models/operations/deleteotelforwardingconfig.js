@@ -4,29 +4,47 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const DeleteOtelForwardingConfigSecurity$outboundSchema = z.pipe(z.object({
+export const DeleteOtelForwardingConfigSecurity$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function deleteOtelForwardingConfigSecurityToJSON(deleteOtelForwardingConfigSecurity) {
-    return JSON.stringify(DeleteOtelForwardingConfigSecurity$outboundSchema.parse(deleteOtelForwardingConfigSecurity));
+  }),
+);
+export function deleteOtelForwardingConfigSecurityToJSON(
+  deleteOtelForwardingConfigSecurity,
+) {
+  return JSON.stringify(
+    DeleteOtelForwardingConfigSecurity$outboundSchema.parse(
+      deleteOtelForwardingConfigSecurity,
+    ),
+  );
 }
 /** @internal */
-export const DeleteOtelForwardingConfigRequest$outboundSchema = z.pipe(z.object({
+export const DeleteOtelForwardingConfigRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
     });
-}));
-export function deleteOtelForwardingConfigRequestToJSON(deleteOtelForwardingConfigRequest) {
-    return JSON.stringify(DeleteOtelForwardingConfigRequest$outboundSchema.parse(deleteOtelForwardingConfigRequest));
+  }),
+);
+export function deleteOtelForwardingConfigRequestToJSON(
+  deleteOtelForwardingConfigRequest,
+) {
+  return JSON.stringify(
+    DeleteOtelForwardingConfigRequest$outboundSchema.parse(
+      deleteOtelForwardingConfigRequest,
+    ),
+  );
 }
 //# sourceMappingURL=deleteotelforwardingconfig.js.map

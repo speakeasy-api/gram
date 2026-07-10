@@ -27,6 +27,6 @@ let value: ListUserSessionsResponse = {
 
 ## Fields
 
-| Field                                                                                  | Type                                                                                   | Required                                                                               | Description                                                                            |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `result`                                                                               | [components.ListUserSessionsResult](../../models/components/listusersessionsresult.md) | :heavy_check_mark:                                                                     | N/A                                                                                    |
+| Field    | Type                                                                                   | Required           | Description |
+| -------- | -------------------------------------------------------------------------------------- | ------------------ | ----------- |
+| `result` | [components.ListUserSessionsResult](../../models/components/listusersessionsresult.md) | :heavy_check_mark: | N/A         |

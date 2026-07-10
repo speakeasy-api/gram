@@ -4,19 +4,22 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { WorkflowAgentResponseText$inboundSchema, } from "./workflowagentresponsetext.js";
+import { WorkflowAgentResponseText$inboundSchema } from "./workflowagentresponsetext.js";
 /**
  * Status of the response
  */
 export const WorkflowAgentResponseOutputStatus = {
-    InProgress: "in_progress",
-    Completed: "completed",
-    Failed: "failed",
+  InProgress: "in_progress",
+  Completed: "completed",
+  Failed: "failed",
 };
 /** @internal */
-export const WorkflowAgentResponseOutputStatus$inboundSchema = z.enum(WorkflowAgentResponseOutputStatus);
+export const WorkflowAgentResponseOutputStatus$inboundSchema = z.enum(
+  WorkflowAgentResponseOutputStatus,
+);
 /** @internal */
-export const WorkflowAgentResponseOutput$inboundSchema = z.pipe(z.object({
+export const WorkflowAgentResponseOutput$inboundSchema = z.pipe(
+  z.object({
     created_at: z.int(),
     error: z.optional(z.string()),
     id: z.string(),
@@ -29,13 +32,19 @@ export const WorkflowAgentResponseOutput$inboundSchema = z.pipe(z.object({
     status: WorkflowAgentResponseOutputStatus$inboundSchema,
     temperature: z.number(),
     text: WorkflowAgentResponseText$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "created_at": "createdAt",
-        "previous_response_id": "previousResponseId",
+      created_at: "createdAt",
+      previous_response_id: "previousResponseId",
     });
-}));
+  }),
+);
 export function workflowAgentResponseOutputFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => WorkflowAgentResponseOutput$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'WorkflowAgentResponseOutput' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => WorkflowAgentResponseOutput$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'WorkflowAgentResponseOutput' from JSON`,
+  );
 }
 //# sourceMappingURL=workflowagentresponseoutput.js.map

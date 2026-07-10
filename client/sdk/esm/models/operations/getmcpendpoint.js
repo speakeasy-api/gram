@@ -4,61 +4,93 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const GetMcpEndpointSecurityOption1$outboundSchema = z.pipe(z.object({
+export const GetMcpEndpointSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function getMcpEndpointSecurityOption1ToJSON(getMcpEndpointSecurityOption1) {
-    return JSON.stringify(GetMcpEndpointSecurityOption1$outboundSchema.parse(getMcpEndpointSecurityOption1));
+  }),
+);
+export function getMcpEndpointSecurityOption1ToJSON(
+  getMcpEndpointSecurityOption1,
+) {
+  return JSON.stringify(
+    GetMcpEndpointSecurityOption1$outboundSchema.parse(
+      getMcpEndpointSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const GetMcpEndpointSecurityOption2$outboundSchema = z.pipe(z.object({
+export const GetMcpEndpointSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function getMcpEndpointSecurityOption2ToJSON(getMcpEndpointSecurityOption2) {
-    return JSON.stringify(GetMcpEndpointSecurityOption2$outboundSchema.parse(getMcpEndpointSecurityOption2));
+  }),
+);
+export function getMcpEndpointSecurityOption2ToJSON(
+  getMcpEndpointSecurityOption2,
+) {
+  return JSON.stringify(
+    GetMcpEndpointSecurityOption2$outboundSchema.parse(
+      getMcpEndpointSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const GetMcpEndpointSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => GetMcpEndpointSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => GetMcpEndpointSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const GetMcpEndpointSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => GetMcpEndpointSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => GetMcpEndpointSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function getMcpEndpointSecurityToJSON(getMcpEndpointSecurity) {
-    return JSON.stringify(GetMcpEndpointSecurity$outboundSchema.parse(getMcpEndpointSecurity));
+  return JSON.stringify(
+    GetMcpEndpointSecurity$outboundSchema.parse(getMcpEndpointSecurity),
+  );
 }
 /** @internal */
-export const GetMcpEndpointRequest$outboundSchema = z.pipe(z.object({
+export const GetMcpEndpointRequest$outboundSchema = z.pipe(
+  z.object({
     id: z.optional(z.string()),
     customDomainId: z.optional(z.string()),
     slug: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        customDomainId: "custom_domain_id",
-        gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
-        gramProject: "Gram-Project",
+      customDomainId: "custom_domain_id",
+      gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
+      gramProject: "Gram-Project",
     });
-}));
+  }),
+);
 export function getMcpEndpointRequestToJSON(getMcpEndpointRequest) {
-    return JSON.stringify(GetMcpEndpointRequest$outboundSchema.parse(getMcpEndpointRequest));
+  return JSON.stringify(
+    GetMcpEndpointRequest$outboundSchema.parse(getMcpEndpointRequest),
+  );
 }
 //# sourceMappingURL=getmcpendpoint.js.map

@@ -13,5 +13,5 @@ let value: ProviderType = "custom";
 ## Values
 
 ```typescript
-"custom" | "gram"
+"custom" | "gram";
 ```

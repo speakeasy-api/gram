@@ -6,26 +6,39 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { TUMPeriod$inboundSchema } from "./tumperiod.js";
 /** @internal */
-export const TokensUnderManagement$inboundSchema = z.pipe(z.object({
+export const TokensUnderManagement$inboundSchema = z.pipe(
+  z.object({
     alert_email: z.optional(z.string()),
     billing_cycle_anchor_day: z.int(),
     history: z.array(TUMPeriod$inboundSchema),
     monthly_token_limit: z.optional(z.int()),
-    period_end: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-    period_start: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    period_end: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
+    period_start: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform((v) => new Date(v)),
+    ),
     tokens: z.int(),
     tunneled_mcp_server_limit: z.optional(z.int()),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "alert_email": "alertEmail",
-        "billing_cycle_anchor_day": "billingCycleAnchorDay",
-        "monthly_token_limit": "monthlyTokenLimit",
-        "period_end": "periodEnd",
-        "period_start": "periodStart",
-        "tunneled_mcp_server_limit": "tunneledMcpServerLimit",
+      alert_email: "alertEmail",
+      billing_cycle_anchor_day: "billingCycleAnchorDay",
+      monthly_token_limit: "monthlyTokenLimit",
+      period_end: "periodEnd",
+      period_start: "periodStart",
+      tunneled_mcp_server_limit: "tunneledMcpServerLimit",
     });
-}));
+  }),
+);
 export function tokensUnderManagementFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TokensUnderManagement$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TokensUnderManagement' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TokensUnderManagement$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TokensUnderManagement' from JSON`,
+  );
 }
 //# sourceMappingURL=tokensundermanagement.js.map

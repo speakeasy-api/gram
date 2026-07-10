@@ -8,24 +8,31 @@ import { safeParse } from "../../lib/schemas.js";
  * Type of user ID
  */
 export const UserType = {
-    Internal: "internal",
-    External: "external",
+  Internal: "internal",
+  External: "external",
 };
 /** @internal */
 export const UserType$inboundSchema = z.enum(UserType);
 /** @internal */
-export const TopUser$inboundSchema = z.pipe(z.object({
+export const TopUser$inboundSchema = z.pipe(
+  z.object({
     activity_count: z.int(),
     user_id: z.string(),
     user_type: UserType$inboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        "activity_count": "activityCount",
-        "user_id": "userId",
-        "user_type": "userType",
+      activity_count: "activityCount",
+      user_id: "userId",
+      user_type: "userType",
     });
-}));
+  }),
+);
 export function topUserFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => TopUser$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'TopUser' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => TopUser$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'TopUser' from JSON`,
+  );
 }
 //# sourceMappingURL=topuser.js.map

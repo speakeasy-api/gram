@@ -7,19 +7,25 @@ import { safeParse } from "../../lib/schemas.js";
  * Child-log lookup strategy for a tool usage trace row
  */
 export const ToolUsageTraceLogGroupKind = {
-    TraceId: "trace_id",
-    CorrelationId: "correlation_id",
-    TriggerEventId: "trigger_event_id",
-    LogId: "log_id",
+  TraceId: "trace_id",
+  CorrelationId: "correlation_id",
+  TriggerEventId: "trigger_event_id",
+  LogId: "log_id",
 };
 /** @internal */
-export const ToolUsageTraceLogGroupKind$inboundSchema = z.enum(ToolUsageTraceLogGroupKind);
+export const ToolUsageTraceLogGroupKind$inboundSchema = z.enum(
+  ToolUsageTraceLogGroupKind,
+);
 /** @internal */
 export const ToolUsageTraceLogGroup$inboundSchema = z.object({
-    kind: ToolUsageTraceLogGroupKind$inboundSchema,
-    value: z.string(),
+  kind: ToolUsageTraceLogGroupKind$inboundSchema,
+  value: z.string(),
 });
 export function toolUsageTraceLogGroupFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ToolUsageTraceLogGroup$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ToolUsageTraceLogGroup' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) => ToolUsageTraceLogGroup$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolUsageTraceLogGroup' from JSON`,
+  );
 }
 //# sourceMappingURL=toolusagetraceloggroup.js.map

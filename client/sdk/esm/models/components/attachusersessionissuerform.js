@@ -4,15 +4,22 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 /** @internal */
-export const AttachUserSessionIssuerForm$outboundSchema = z.pipe(z.object({
+export const AttachUserSessionIssuerForm$outboundSchema = z.pipe(
+  z.object({
     id: z.string(),
     userSessionIssuerId: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        userSessionIssuerId: "user_session_issuer_id",
+      userSessionIssuerId: "user_session_issuer_id",
     });
-}));
+  }),
+);
 export function attachUserSessionIssuerFormToJSON(attachUserSessionIssuerForm) {
-    return JSON.stringify(AttachUserSessionIssuerForm$outboundSchema.parse(attachUserSessionIssuerForm));
+  return JSON.stringify(
+    AttachUserSessionIssuerForm$outboundSchema.parse(
+      attachUserSessionIssuerForm,
+    ),
+  );
 }
 //# sourceMappingURL=attachusersessionissuerform.js.map

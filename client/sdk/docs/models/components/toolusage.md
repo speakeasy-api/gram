@@ -17,9 +17,9 @@ let value: ToolUsage = {
 
 ## Fields
 
-| Field                         | Type                          | Required                      | Description                   |
-| ----------------------------- | ----------------------------- | ----------------------------- | ----------------------------- |
-| `count`                       | *number*                      | :heavy_check_mark:            | Total call count              |
-| `failureCount`                | *number*                      | :heavy_check_mark:            | Failed calls (4xx/5xx status) |
-| `successCount`                | *number*                      | :heavy_check_mark:            | Successful calls (2xx status) |
-| `urn`                         | *string*                      | :heavy_check_mark:            | Tool URN                      |
+| Field          | Type     | Required           | Description                   |
+| -------------- | -------- | ------------------ | ----------------------------- |
+| `count`        | _number_ | :heavy_check_mark: | Total call count              |
+| `failureCount` | _number_ | :heavy_check_mark: | Failed calls (4xx/5xx status) |
+| `successCount` | _number_ | :heavy_check_mark: | Successful calls (2xx status) |
+| `urn`          | _string_ | :heavy_check_mark: | Tool URN                      |

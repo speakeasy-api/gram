@@ -3,12 +3,17 @@
  */
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { RiskPolicyBypassRequest$inboundSchema, } from "./riskpolicybypassrequest.js";
+import { RiskPolicyBypassRequest$inboundSchema } from "./riskpolicybypassrequest.js";
 /** @internal */
 export const ListRiskPolicyBypassRequestsResult$inboundSchema = z.object({
-    requests: z.array(RiskPolicyBypassRequest$inboundSchema),
+  requests: z.array(RiskPolicyBypassRequest$inboundSchema),
 });
 export function listRiskPolicyBypassRequestsResultFromJSON(jsonString) {
-    return safeParse(jsonString, (x) => ListRiskPolicyBypassRequestsResult$inboundSchema.parse(JSON.parse(x)), `Failed to parse 'ListRiskPolicyBypassRequestsResult' from JSON`);
+  return safeParse(
+    jsonString,
+    (x) =>
+      ListRiskPolicyBypassRequestsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListRiskPolicyBypassRequestsResult' from JSON`,
+  );
 }
 //# sourceMappingURL=listriskpolicybypassrequestsresult.js.map

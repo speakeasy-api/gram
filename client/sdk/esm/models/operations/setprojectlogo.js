@@ -3,61 +3,93 @@
  */
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { GetSignedAssetURLForm$outboundSchema, } from "../components/getsignedasseturlform.js";
+import { GetSignedAssetURLForm$outboundSchema } from "../components/getsignedasseturlform.js";
 /** @internal */
-export const SetProjectLogoSecurityOption1$outboundSchema = z.pipe(z.object({
+export const SetProjectLogoSecurityOption1$outboundSchema = z.pipe(
+  z.object({
     apikeyHeaderGramKey: z.string(),
     projectSlugHeaderGramProject: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
     });
-}));
-export function setProjectLogoSecurityOption1ToJSON(setProjectLogoSecurityOption1) {
-    return JSON.stringify(SetProjectLogoSecurityOption1$outboundSchema.parse(setProjectLogoSecurityOption1));
+  }),
+);
+export function setProjectLogoSecurityOption1ToJSON(
+  setProjectLogoSecurityOption1,
+) {
+  return JSON.stringify(
+    SetProjectLogoSecurityOption1$outboundSchema.parse(
+      setProjectLogoSecurityOption1,
+    ),
+  );
 }
 /** @internal */
-export const SetProjectLogoSecurityOption2$outboundSchema = z.pipe(z.object({
+export const SetProjectLogoSecurityOption2$outboundSchema = z.pipe(
+  z.object({
     projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
-}));
-export function setProjectLogoSecurityOption2ToJSON(setProjectLogoSecurityOption2) {
-    return JSON.stringify(SetProjectLogoSecurityOption2$outboundSchema.parse(setProjectLogoSecurityOption2));
+  }),
+);
+export function setProjectLogoSecurityOption2ToJSON(
+  setProjectLogoSecurityOption2,
+) {
+  return JSON.stringify(
+    SetProjectLogoSecurityOption2$outboundSchema.parse(
+      setProjectLogoSecurityOption2,
+    ),
+  );
 }
 /** @internal */
-export const SetProjectLogoSecurity$outboundSchema = z.pipe(z.object({
-    option1: z.optional(z.lazy(() => SetProjectLogoSecurityOption1$outboundSchema)),
-    option2: z.optional(z.lazy(() => SetProjectLogoSecurityOption2$outboundSchema)),
-}), z.transform((v) => {
+export const SetProjectLogoSecurity$outboundSchema = z.pipe(
+  z.object({
+    option1: z.optional(
+      z.lazy(() => SetProjectLogoSecurityOption1$outboundSchema),
+    ),
+    option2: z.optional(
+      z.lazy(() => SetProjectLogoSecurityOption2$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        option1: "Option1",
-        option2: "Option2",
+      option1: "Option1",
+      option2: "Option2",
     });
-}));
+  }),
+);
 export function setProjectLogoSecurityToJSON(setProjectLogoSecurity) {
-    return JSON.stringify(SetProjectLogoSecurity$outboundSchema.parse(setProjectLogoSecurity));
+  return JSON.stringify(
+    SetProjectLogoSecurity$outboundSchema.parse(setProjectLogoSecurity),
+  );
 }
 /** @internal */
-export const SetProjectLogoRequest$outboundSchema = z.pipe(z.object({
+export const SetProjectLogoRequest$outboundSchema = z.pipe(
+  z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     getSignedAssetURLForm: GetSignedAssetURLForm$outboundSchema,
-}), z.transform((v) => {
+  }),
+  z.transform((v) => {
     return remap$(v, {
-        gramKey: "Gram-Key",
-        gramSession: "Gram-Session",
-        gramProject: "Gram-Project",
-        getSignedAssetURLForm: "GetSignedAssetURLForm",
+      gramKey: "Gram-Key",
+      gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
+      getSignedAssetURLForm: "GetSignedAssetURLForm",
     });
-}));
+  }),
+);
 export function setProjectLogoRequestToJSON(setProjectLogoRequest) {
-    return JSON.stringify(SetProjectLogoRequest$outboundSchema.parse(setProjectLogoRequest));
+  return JSON.stringify(
+    SetProjectLogoRequest$outboundSchema.parse(setProjectLogoRequest),
+  );
 }
 //# sourceMappingURL=setprojectlogo.js.map
